@@ -1,0 +1,23 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmGlobals:
+  chartHome: ../../helm/airm/charts
+
+helmCharts:
+  - name: airm-dispatcher
+    releaseName: airm
+    valuesFile: values.yaml
+    namespace: airm
+
+resources:
+  - namespace.yaml
+  - vault-token-secret.yaml
+  - cluster-secretstore.yaml
+
+patchesStrategicMerge:
+  - deployment.yaml

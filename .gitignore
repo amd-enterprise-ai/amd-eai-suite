@@ -1,0 +1,117 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# ============================================================
+# Python
+# ============================================================
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments (uv)
+.venv/
+venv/
+
+# Testing / coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.pytest_cache/
+.hypothesis/
+
+# Type checking / linting
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# Logs
+*.log
+
+# ============================================================
+# TypeScript / Node.js
+# ============================================================
+
+# Dependencies
+**/node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Turbo
+.turbo/
+
+# Testing
+coverage/
+test-results/
+
+# Build output
+build/
+dist/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ============================================================
+# Environment & Secrets
+# ============================================================
+
+.env
+.env.dev
+.env*.local
+.env.secret
+
+# SSL Certs for keycloak (local setup)
+**/.kc-certs/
+
+# ============================================================
+# IDEs & Editors
+# ============================================================
+
+.idea/
+.vscode/
+.cursor/
+.windsurf/
+.aider*/
+.claude*/
+.cline*/
+
+# ============================================================
+# OS
+# ============================================================
+
+.DS_Store
+*.pem
+Thumbs.db
+
+# ============================================================
+# Project-specific
+# ============================================================
+
+# Repositories
+ai-workloads*/
+
+# Robot Framework
+output.xml
+log.html
+report.html
+
+# Helm
+services/airm/helm/airm-helm-generated.yaml

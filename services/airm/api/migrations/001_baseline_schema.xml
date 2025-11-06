@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+
+<changeSet author="akshay" id="create-baseline-schema">
+    <createTable tableName="organizations">
+        <column name="name" type="character varying">
+            <constraints nullable="false" unique="true" uniqueConstraintName="organizations_name_key"/>
+        </column>
+        <column name="id" type="uuid">
+            <constraints primaryKey="true" primaryKeyName="organizations_pkey"/>
+        </column>
+        <column name="created_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="updated_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="created_by" type="character varying" />
+        <column name="updated_by" type="character varying" />
+    </createTable>
+
+    <createTable tableName="user_groups">
+        <column name="name" type="character varying">
+            <constraints nullable="false"/>
+        </column>
+        <column name="organization_id" type="uuid">
+            <constraints references="organizations(id)" foreignKeyName="user_groups_organization_id_fkey" nullable="false" deleteCascade="true"/>
+        </column>
+        <column name="description" type="character varying" />
+        <column name="id" type="uuid">
+            <constraints primaryKey="true" primaryKeyName="user_groups_pkey"/>
+        </column>
+        <column name="created_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="updated_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="created_by" type="character varying" />
+        <column name="updated_by" type="character varying" />
+    </createTable>
+    <createIndex indexName="ix_user_group_name_organization_id" tableName="user_groups" unique="true">
+      <column name="name"/>
+      <column name="organization_id"/>
+    </createIndex>
+    <createIndex indexName="ix_user_groups_organization_id" tableName="user_groups">
+      <column name="organization_id"/>
+    </createIndex>
+
+    <createTable tableName="users">
+        <column name="email" type="character varying">
+            <constraints nullable="false" unique="true" uniqueConstraintName="users_email_key"/>
+        </column>
+        <column name="id" type="uuid">
+            <constraints primaryKey="true" primaryKeyName="users_pkey"/>
+        </column>
+         <column name="created_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="updated_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="created_by" type="character varying" />
+        <column name="updated_by" type="character varying" />
+        <column name="organization_id" type="uuid">
+            <constraints references="organizations(id)" foreignKeyName="users_organization_id_fkey" nullable="false" deleteCascade="true"/>
+        </column>
+        <column name="user_group_id" type="uuid" />
+    </createTable>
+    <createIndex indexName="ix_users_organization_id" tableName="users">
+      <column name="organization_id"/>
+    </createIndex>
+    <createIndex indexName="ix_users_user_group_id" tableName="users">
+      <column name="user_group_id"/>
+    </createIndex>
+    <addForeignKeyConstraint baseTableName="users" baseColumnNames="user_group_id" constraintName="users_user_group_id_fkey"
+                             referencedTableName="user_groups" referencedColumnNames="id" onDelete="SET NULL"/>
+
+    <createTable tableName="clusters">
+        <column name="name" type="character varying">
+            <constraints nullable="false"/>
+        </column>
+        <column name="organization_id" type="uuid">
+            <constraints references="organizations(id)" foreignKeyName="clusters_organization_id_fkey" nullable="false" deleteCascade="true"/>
+        </column>
+        <column name="id" type="uuid">
+            <constraints primaryKey="true" primaryKeyName="clusters_pkey"/>
+        </column>
+        <column name="created_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="updated_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="created_by" type="character varying" />
+        <column name="updated_by" type="character varying" />
+        <column name="last_heartbeat_at" type="timestamp with time zone" />
+    </createTable>
+    <createIndex indexName="ix_cluster_organization_id" tableName="clusters">
+      <column name="organization_id"/>
+    </createIndex>
+    <createIndex indexName="ix_cluster_name_organization_id" tableName="clusters" unique="true">
+      <column name="name"/>
+      <column name="organization_id"/>
+  </createIndex>
+</changeSet>
+</databaseChangeLog>

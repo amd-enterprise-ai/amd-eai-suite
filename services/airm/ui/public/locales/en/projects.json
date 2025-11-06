@@ -1,0 +1,437 @@
+{
+  "title": "Projects",
+  "tab": {
+    "title": "Project sections",
+    "users": {
+      "title": "Users"
+    },
+    "overview": {
+      "title": "Overview"
+    },
+    "secrets": {
+      "title": "Secrets"
+    },
+    "storages": {
+      "title": "Storage"
+    },
+    "quota": {
+      "title": "Quota"
+    },
+    "general": {
+      "title": "General"
+    }
+  },
+  "actions": {
+    "createProject": "Create project"
+  },
+  "list": {
+    "headers": {
+      "name": {
+        "title": "Project"
+      },
+      "description": {
+        "title": "Description"
+      },
+      "status": {
+        "title": "Status"
+      },
+      "project": {
+        "title": "Name"
+      },
+      "actions": {
+        "title": ""
+      }
+    },
+    "filter": {
+      "search": {
+        "placeholder": "Search"
+      },
+      "cluster": {
+        "placeholder": "Cluster"
+      },
+      "status": {
+        "placeholder": "Status"
+      }
+    },
+    "pagination": {
+      "showing": "Showing {{from}} to {{to}} of {{total}} projects",
+      "pageSize": {
+        "label": "Show",
+        "entities": "projects"
+      }
+    },
+    "sort": {
+      "name": {
+        "asc": "Sort Project by Ascending",
+        "desc": "Sort Project by Descending"
+      },
+      "description": {
+        "asc": "Sort Description by Ascending",
+        "desc": "Sort Description by Descending"
+      },
+      "users": {
+        "asc": "Sort Total users by Ascending",
+        "desc": "Sort Total users by Descending"
+      }
+    },
+    "empty": {
+      "description": "Clear filters or add a new project.",
+      "title": "No projects found"
+    },
+    "workloads": {
+      "title": "Workloads",
+      "empty": {
+        "description": "No workloads in this project."
+      },
+      "headers": {
+        "displayName": { "title": "Name" },
+        "type": { "title": "Type" },
+        "status": { "title": "Status" },
+        "gpuCount": { "title": "GPUs" },
+        "vram": { "title": "VRAM" },
+        "runTime": { "title": "Run Time" },
+        "createdAt": { "title": "Created At" },
+        "createdBy": { "title": "Created By" },
+        "actions": { "title": "" }
+      },
+      "actions": {
+        "delete": {
+          "title": "Delete",
+          "notification": {
+            "success": "Workload deleted successfully.",
+            "error": "Error deleting workload."
+          }
+        }
+      },
+      "pagination": {
+        "showing": "Showing {{from}} to {{to}} of {{total}} workloads",
+        "pageSize": {
+          "label": "Show",
+          "entities": "workloads"
+        }
+      }
+    },
+    "users": {
+      "title": "Users",
+      "empty": {
+        "description": "No users in this project."
+      },
+      "headers": {
+        "name": { "title": "Name" },
+        "email": { "title": "Email" },
+        "role": { "title": "Role" },
+        "lastActive": { "title": "Last Active" },
+        "actions": { "title": "Actions" }
+      },
+      "pagination": {
+        "showing": "Showing {{from}} to {{to}} of {{total}} users",
+        "pageSize": {
+          "label": "Show",
+          "entities": "users"
+        }
+      }
+    },
+    "projects": {
+      "headers": {
+        "name": {
+          "title": "Project"
+        },
+        "status": {
+          "title": "Status"
+        },
+        "project": {
+          "title": "Name"
+        },
+        "cpu": {
+          "title": "CPU Allocation"
+        },
+        "gpu": {
+          "title": "GPU Allocation"
+        },
+        "memory": {
+          "title": "Memory Allocation"
+        },
+        "actions": {
+          "title": ""
+        }
+      },
+      "filter": {
+        "name": {
+          "placeholder": "Search by identifier..."
+        },
+        "cluster": {
+          "placeholder": "Filter by Cluster"
+        },
+        "project": {
+          "placeholder": "Filter by Assignee"
+        }
+      },
+      "clusters": {
+        "unavailable": "{{name}} (Unavailable)"
+      },
+      "empty": {
+        "title": "No projects found",
+        "description": "There are no projects available for this cluster."
+      },
+      "warnings": {
+        "gpuWarning": "This quota has exceeded the available GPUs on the target cluster.",
+        "cpuWarning": "This quota has exceeded the available CPUs on the target cluster.",
+        "memoryWarning": "This quota has exceeded the available memory on the target cluster."
+      },
+      "pagination": {
+        "showing": "Showing {{from}} to {{to}} of {{total}} projects",
+        "pageSize": {
+          "label": "Show",
+          "entities": "projects"
+        }
+      },
+      "actions": {
+        "delete": {
+          "label": "Delete"
+        },
+        "edit": {
+          "label": "View and Edit"
+        }
+      }
+    },
+    "clusterUnavailable": "{{name}} (Unavailable)"
+  },
+  "status": {
+    "Ready": "Ready",
+    "Failed": "Error",
+    "Deleting": "Deleting",
+    "Pending": "Syncing",
+    "PartiallyReady": "Partially Ready"
+  },
+  "statusReason": {
+    "messageTrigger": "more info",
+    "messageHeader": "There was an error processing the project. The system returned the following error message:"
+  },
+  "modal": {
+    "create": {
+      "title": "Create project",
+      "actions": {
+        "confirm": "Create project",
+        "cancel": "Cancel"
+      },
+      "form": {
+        "name": {
+          "label": "Name",
+          "placeholder": "Eg. project-name",
+          "description": "Provide a unique name for the project. Only lowercase letters, numbers and hyphens are allowed.",
+          "validation": {
+            "unique": "A project with the same name already exists.",
+            "format": "A project name can only consist of lowercase characters, numbers and '-' character (and not start or end with '-').",
+            "length": "The name of the project must be between 2 and 41 characters."
+          }
+        },
+        "cluster": {
+          "label": "Cluster",
+          "placeholder": "Select an available cluster",
+          "validation": {
+            "required": "Please select a cluster.",
+            "exceedProjectsCount": "This cluster has reached the limit of {{num}} projects."
+          }
+        },
+        "description": {
+          "label": "Description",
+          "placeholder": "Short description of the project",
+          "validation": {
+            "required": "Please enter a description for the project.",
+            "length": "The description must be between 2 and 1024 characters."
+          }
+        }
+      },
+      "notification": {
+        "success": "Project created successfully!",
+        "error": "Failed to create project. Please try again later."
+      }
+    }
+  },
+  "settings": {
+    "navigation": "Project settings",
+    "title": "Project settings",
+    "delete": {
+      "title": "Danger Zone",
+      "message": "These changes are permanent and cannot be undone. Please make sure the project is not in use, prior to deletion.",
+      "action": "Delete project",
+      "confirmation": {
+        "title": "Confirm Deletion",
+        "description": "Are you sure you want to delete this project <strong>{{project}}</strong>? The action is permanent and cannot be undone."
+      },
+      "notification": {
+        "success": "Project successfully deleted.",
+        "error": "Failed to delete project. Please try again."
+      }
+    },
+    "form": {
+      "basicInfo": {
+        "name": {
+          "label": "Name"
+        },
+        "cluster": {
+          "label": "Cluster"
+        },
+        "description": {
+          "label": "Description",
+          "placeholder": "Short description of the project",
+          "validation": {
+            "required": "Please enter a description for the project.",
+            "length": "The description must be between 2 and 1024 characters."
+          }
+        }
+      },
+      "guaranteedQuota": {
+        "info": "Define a quota below to guarantee a fixed amount of compute resources for the assigned project. Setting a quota category to 0 means no resources are guaranteed exclusively for that project — its workloads will still use any available resource.  Even with a quota in place, workloads may temporarily exceed their quota if additional resources are available.",
+        "groups": {
+          "resource": "Resource",
+          "allocation": "Guaranteed Allocation",
+          "available": "Available to Allocate"
+        },
+        "fields": {
+          "cpu": "CPU Cores",
+          "ram": "System Memory",
+          "gpu": "GPUs",
+          "disk": "Ephemeral Disk"
+        }
+      },
+      "deleteProject": {
+        "title": "Delete project"
+      },
+      "actions": {
+        "confirm": "Save changes",
+        "reset": "Discard changes"
+      },
+      "notification": {
+        "success": "Project updated successfully!",
+        "error": "Failed to update project. Please try again later."
+      }
+    },
+    "membersAndInvitedUsers": {
+      "title": "Assigned Users",
+      "members": {
+        "title": "Members",
+        "empty": "This project has no members.",
+        "actions": {
+          "add": {
+            "title": "Add Member",
+            "modal": {
+              "intro": "Search and select user(s) you want to add to the <strong>{{project}}</strong> project.",
+              "title": "Add User(s) to Project",
+              "confirm": "Add to project",
+              "cancel": "Cancel"
+            },
+            "form": {
+              "users": {
+                "label": "Users",
+                "placeholder": "Select user(s)",
+                "section": {
+                  "users": "Users",
+                  "invitedUsers": "Invited Users"
+                }
+              }
+            },
+            "validation": {
+              "users": {
+                "selected": "Please select at least one user."
+              }
+            },
+            "notification": {
+              "success": "User(s) added to the project successfully! Please note that it may take up to 5 minutes for the changes to take effect.",
+              "error": "Failed to add User(s) to the project! Please try again later."
+            }
+          },
+          "remove": {
+            "label": "Remove from project",
+            "description": "Are you sure you want to remove <strong>{{firstName}}</strong> <strong>{{lastName}}</strong> from <strong>{{project}}</strong> project?",
+            "confirm": "Remove",
+            "notification": {
+              "success": "User(s) deleted from the project. Please note that it may take up to 5 minutes for the changes to take effect.",
+              "error": "Failed to delete User(s) from the project! Please try again later."
+            }
+          }
+        },
+        "form": {
+          "project": {
+            "label": "Project",
+            "placeholder": "Please select a project to assign to this user."
+          }
+        },
+        "validation": {
+          "project": {
+            "selected": "Please select a project to be assigned to this user"
+          }
+        }
+      },
+      "invitedUsers": {
+        "title": "Invited users",
+        "actions": {
+          "add": {
+            "title": "Invite user"
+          },
+          "remove": {
+            "label": "Remove from project",
+            "description": "Are you sure you want to remove <strong>{{email}}</strong> from <strong>{{project}}</strong> project?",
+            "confirm": "Remove",
+            "notification": {
+              "success": "User(s) deleted from the project. Please note that it may take up to 5 minutes for the changes to take effect.",
+              "error": "Failed to delete User(s) from the project! Please try again later."
+            }
+          }
+        },
+        "disabled": "Disabled when organization has an identity provider",
+        "empty": "This project has no invitees."
+      }
+    }
+  },
+  "dashboard": {
+    "action": {
+      "projectSettings": "Project settings",
+      "manageSecrets": "Manage Secrets"
+    },
+    "overview": {
+      "title": "Overview",
+      "workloadStates": {
+        "title": "Project work on cluster",
+        "total": "total workloads",
+        "subtitle": "Workload states",
+        "states": {
+          "failed": "Failed",
+          "pending": "Pending",
+          "running": "Running",
+          "completed": "Completed"
+        }
+      },
+      "waitTimeAvg": {
+        "title": "Wait Time (Avg)",
+        "description": "The average time a workload spends waiting to be executed, prior to execution."
+      },
+      "quotaUtilizationAvg": {
+        "title": "Quota Utilization (Avg)",
+        "description": "The average ratio of utilized GPUs versus the allocated GPUs for all workloads running within the project, submitted in the selected time range."
+      },
+      "gpuIdleTimeAvg": {
+        "title": "GPU Idle Time (Avg)",
+        "description": "The average time each GPU devices allocated to the project is in an idling state. Idle state meaning running workloads not utilizing GPUs quota allocated to the project."
+      },
+      "gpuDeviceUsage": {
+        "title": "GPU Device Usage",
+        "description": "The number of GPU devices utilized by workloads in this project versus the GPUs allocated to it, over specified timeframe.",
+        "upperLimit": "/ {{num}} allocated",
+        "upperLimitUnallocated": "/ no allocation"
+      },
+      "vramDeviceUsage": {
+        "title": "GPU VRAM Usage",
+        "description": "The amount of GPU VRAM GPU utilized by workloads in this project versus the VRAM allocated to them, via the allocated GPUs, over specified timeframe.",
+        "upperLimit": "/ {{num}} allocated",
+        "upperLimitUnallocated": "/ no allocation"
+      }
+    },
+    "workloads": {
+      "title": "Workloads"
+    },
+    "users": {
+      "title": "Users"
+    }
+  }
+}

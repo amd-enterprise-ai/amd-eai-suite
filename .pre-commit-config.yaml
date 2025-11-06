@@ -1,0 +1,120 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+repos:
+  - repo: local
+    hooks:
+      - id: copyright-check
+        name: AMD Copyright Check
+        description: Check that all files have the required AMD copyright
+        entry: tooling/check_copyright.py
+        language: python
+        pass_filenames: true
+        always_run: false
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^packages/workloads_manager/workloads_manager/data/patches
+      - id: end-of-file-fixer
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: v3.6.2
+    hooks:
+      - id: prettier
+        args: ["--write", "--config", ".prettierrc"]
+        exclude: ^(services/airm/ui|docs|services/airm/helm|.github/workflows/.*.yml)
+  - repo: https://github.com/biomejs/pre-commit
+    rev: v2.2.6
+    hooks:
+      - id: biome-format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.1
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          [
+            types-redis,
+            types-PyYAML,
+            types-requests,
+            types-tabulate,
+            types-docker,
+          ]
+        args: ["--config-file=pyproject.toml"]
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.11.0
+    hooks:
+      - id: shellcheck
+        args: ["--severity=warning"]
+  - repo: local
+    hooks:
+      - id: airm-ui-typecheck
+        name: AIRM UI typecheck
+        entry: pnpm --dir services/airm/ui typecheck
+        language: system
+        pass_filenames: false
+        files: ^services/airm/ui/.*$
+      - id: airm-ui-lint
+        name: AIRM UI lint
+        entry: pnpm --dir services/airm/ui lint
+        language: system
+        pass_filenames: false
+        files: ^services/airm/ui/.*$
+      - id: shellcheck-with-message
+        name: shellcheck with fixer message
+        description: Run shellcheck and suggest using the fixer when issues are found
+        language: python
+        entry: tooling/shellcheck/shellcheck_with_message.py
+        types: [shell]
+        pass_filenames: true
+        additional_dependencies: ["shellcheck-py==0.9.0.6"]
+      - id: shellcheck-fixer
+        name: Fix common ShellCheck issues
+        description: Automatically fixes common ShellCheck issues in shell scripts
+        entry: tooling/shellcheck/shellcheck_fixer_wrapper.py
+        language: python
+        types: [shell]
+        stages: [manual]
+        pass_filenames: true
+        always_run: false
+        verbose: true
+      - id: plantuml
+        name: UML diagram rendering
+        description: Renders plantuml diagrams (*.puml) into pngs
+        entry: tooling/plantuml/.pre-commit-plantuml.sh
+        language: script
+        types:
+          - text
+      - id: airm-ui-test-coverage
+        name: AIRM UI test coverage
+        entry: pnpm --dir services/airm/ui test -- --coverage --bail=1
+        language: system
+        pass_filenames: false
+        files: ^services/airm/ui/.*$
+        stages: [pre-push]
+        verbose: true
+        fail_fast: true
+      - id: airm-api-test
+        name: AIRM API tests
+        entry: bash -c 'cd services/airm/api && uv run pytest -x'
+        language: system
+        pass_filenames: false
+        files: ^services/airm/api/.*$
+        stages: [pre-push]
+        verbose: true
+        fail_fast: true
+      - id: airm-dispatcher-test
+        name: AIRM Dispatcher tests
+        entry: bash -c 'cd services/airm/dispatcher && uv run pytest -x'
+        language: system
+        pass_filenames: false
+        files: ^services/airm/dispatcher/.*$
+        stages: [pre-push]
+        verbose: true
+        fail_fast: true

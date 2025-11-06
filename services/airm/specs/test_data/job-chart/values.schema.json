@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Image repository to use for the job"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag to use for the job"
+        }
+      },
+      "required": ["repository", "tag"]
+    },
+    "sleepSeconds": {
+      "type": "integer",
+      "description": "Number of seconds to sleep",
+      "minimum": 1
+    }
+  },
+  "required": ["image", "sleepSeconds"]
+}

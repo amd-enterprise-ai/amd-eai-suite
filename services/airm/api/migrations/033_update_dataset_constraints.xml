@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="30" author="claude">
+        <comment>Update dataset constraints to use project_id instead of user_group_id</comment>
+
+        <!-- Add new constraints with proper naming convention -->
+        <createIndex tableName="datasets" indexName="datasets_name_project_id_key" unique="true">
+            <column name="lower((name)::text)"/>
+            <column name="project_id"/>
+        </createIndex>
+
+        <createIndex tableName="datasets" indexName="datasets_path_key" unique="true">
+            <column name="path"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

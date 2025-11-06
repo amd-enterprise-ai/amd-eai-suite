@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+<changeSet author="oksana" id="add-user-group-id-to-workload">
+        <validCheckSum>9:0eb2f1a0f311e4725edda24027a619f6</validCheckSum>
+    <addColumn tableName="workloads">
+        <column name="user_group_id" type="uuid">
+            <constraints nullable="true" uniqueConstraintName="workloads_user_group_id_key"/>
+        </column>
+    </addColumn>
+    <addForeignKeyConstraint baseTableName="workloads" baseColumnNames="user_group_id" constraintName="workloads_user_group_id_fkey"
+                             referencedTableName="user_groups" referencedColumnNames="id" onDelete="SET NULL"/>
+</changeSet>
+</databaseChangeLog>

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="remove-cluster-index-from-models" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <indexExists tableName="inference_models" indexName="inference_models_name_cluster_id_project_id_key"/>
+        </preConditions>
+        <dropIndex indexName="inference_models_name_cluster_id_project_id_key" tableName="inference_models"/>
+    </changeSet>
+
+    <changeSet id="remove-cluster-fk-from-models" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <foreignKeyConstraintExists foreignKeyName="inference_models_cluster_id_fkey"/>
+        </preConditions>
+        <dropForeignKeyConstraint baseTableName="inference_models" constraintName="inference_models_cluster_id_fkey"/>
+    </changeSet>
+
+    <changeSet id="remove-cluster-column-from-models" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="inference_models" columnName="cluster_id"/>
+        </preConditions>
+        <dropColumn tableName="inference_models" columnName="cluster_id"/>
+    </changeSet>
+
+    <changeSet id="remove-cluster-index-from-datasets" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <indexExists tableName="datasets" indexName="datasets_name_cluster_id_key"/>
+        </preConditions>
+        <dropIndex indexName="datasets_name_cluster_id_key" tableName="datasets"/>
+    </changeSet>
+
+    <changeSet id="remove-cluster-fk-from-datasets" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <foreignKeyConstraintExists foreignKeyName="datasets_cluster_id_fkey"/>
+        </preConditions>
+        <dropForeignKeyConstraint baseTableName="datasets" constraintName="datasets_cluster_id_fkey"/>
+    </changeSet>
+
+    <changeSet id="remove-cluster-column-from-datasets" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="datasets" columnName="cluster_id"/>
+        </preConditions>
+        <dropColumn tableName="datasets" columnName="cluster_id"/>
+    </changeSet>
+
+    <!-- Re-create unique constraints that were lost when cluster_id columns were removed. -->
+
+    <changeSet id="add-project-constraint-to-models" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="inference_models" indexName="inference_models_name_project_id_key"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="inference_models_name_project_id_key" tableName="inference_models" unique="true">
+            <column name="name"/>
+            <column name="project_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="add-project-constraint-to-datasets" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="datasets" indexName="datasets_name_project_id_key"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="datasets_name_project_id_key" tableName="datasets" unique="true">
+            <column name="lower(name::text)"/>
+            <column name="project_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

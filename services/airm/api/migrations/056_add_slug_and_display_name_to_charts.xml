@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <changeSet id="add-slug-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="slug"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="slug" type="character varying">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+  <changeSet id="add-display-name-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="display_name"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="display_name" type="character varying">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+</databaseChangeLog>

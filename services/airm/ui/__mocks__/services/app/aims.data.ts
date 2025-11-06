@@ -1,0 +1,128 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates.
+//
+// SPDX-License-Identifier: MIT
+
+import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
+import { Aim, AimWorkloadStatus } from '@/types/aims';
+
+export const mockAims: Aim[] = [
+  {
+    id: 'aim-1',
+    createdAt: '2023-01-01T00:00:00Z',
+    updatedAt: '2023-01-01T00:00:00Z',
+    createdBy: 'test-user',
+    updatedBy: 'test-user',
+    imageName: 'meta-llama/llama-2-7b',
+    imageTag: 'v1.0',
+    image: 'meta-llama/llama-2-7b:v1.0',
+    labels: {
+      'app.kubernetes.io/name': 'llama-2-7b',
+      'com.amd.aim.model.canonicalName': 'meta-llama/llama-2-7b',
+    },
+    description: {
+      short: 'A large language model for text generation',
+      full: 'Llama 2 is a family of large language models that use an optimized transformer architecture.',
+    },
+    title: 'Llama 2 7B',
+    imageVersion: 'v1.0',
+    canonicalName: 'meta-llama/llama-2-7b',
+    tags: ['llm', 'text-generation', 'chat'],
+    workloadStatus: AimWorkloadStatus.DEPLOYED,
+    isPreview: false,
+    isHfTokenRequired: true,
+    workload: {
+      id: 'workload-1',
+      status: WorkloadStatus.RUNNING,
+      type: WorkloadType.INFERENCE,
+      name: 'Llama 2 7B Inference',
+      displayName: 'Llama 2 7B Inference',
+      createdAt: '2023-01-01T00:00:00Z',
+      updatedAt: '2023-01-01T00:00:00Z',
+      createdBy: 'test-user',
+      chartId: 'chart-1',
+      clusterId: 'cluster-1',
+      cluster: {
+        id: 'cluster-1',
+        name: 'Test Cluster',
+        lastHeartbeatAt: '2023-01-01T00:00:00Z',
+        status: 'HEALTHY' as any,
+      },
+      allocatedResources: {
+        gpuCount: 1,
+        vram: 8589934592,
+      },
+    },
+  },
+  {
+    id: 'aim-2',
+    createdAt: '2023-01-02T00:00:00Z',
+    updatedAt: '2023-01-02T00:00:00Z',
+    createdBy: 'test-user',
+    updatedBy: 'test-user',
+    imageName: 'stabilityai/stable-diffusion-xl',
+    imageTag: 'v1.0',
+    image: 'stabilityai/stable-diffusion-xl:v1.0',
+    labels: {
+      'app.kubernetes.io/name': 'stable-diffusion-xl',
+      'com.amd.aim.model.canonicalName': 'stable-diffusion-xl',
+    },
+    description: {
+      short: 'Text to image generation model',
+      full: 'Stable Diffusion XL is a powerful text-to-image model.',
+    },
+    title: 'Stable Diffusion XL',
+    imageVersion: 'v1.0',
+    canonicalName: 'stable-diffusion-xl',
+    tags: ['image-generation', 'diffusion'],
+    workloadStatus: AimWorkloadStatus.NOT_DEPLOYED,
+    isPreview: false,
+    isHfTokenRequired: false,
+  },
+  {
+    id: 'aim-3',
+    createdAt: '2023-01-03T00:00:00Z',
+    updatedAt: '2023-01-03T00:00:00Z',
+    createdBy: 'test-user',
+    updatedBy: 'test-user',
+    imageName: 'vision/detection-model',
+    imageTag: 'v1.0',
+    image: 'vision/detection-model:v1.0',
+    labels: {
+      'app.kubernetes.io/name': 'detection-model',
+      'com.amd.aim.model.canonicalName': 'detection-model',
+    },
+    description: {
+      short: 'Object detection model',
+      full: 'A vision model for detecting objects in images.',
+    },
+    title: 'Vision Detection Model',
+    imageVersion: 'v1.0',
+    canonicalName: 'detection-model',
+    tags: ['vision', 'object-detection'],
+    workloadStatus: AimWorkloadStatus.PENDING,
+    isPreview: true,
+    isHfTokenRequired: false,
+    workload: {
+      id: 'workload-3',
+      status: WorkloadStatus.PENDING,
+      type: WorkloadType.INFERENCE,
+      name: 'Vision Detection Inference',
+      displayName: 'Vision Detection Inference',
+      createdAt: '2023-01-03T00:00:00Z',
+      updatedAt: '2023-01-03T00:00:00Z',
+      createdBy: 'test-user',
+      chartId: 'chart-3',
+      clusterId: 'cluster-1',
+      cluster: {
+        id: 'cluster-1',
+        name: 'Test Cluster',
+        lastHeartbeatAt: '2023-01-03T00:00:00Z',
+        status: 'HEALTHY' as any,
+      },
+      allocatedResources: {
+        gpuCount: 1,
+        vram: 6442450944,
+      },
+    },
+  },
+];

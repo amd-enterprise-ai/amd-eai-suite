@@ -1,0 +1,41 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airm-dispatcher
+  namespace: airm
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: check-rabbitmq-is-ready
+          env:
+            - name: ENDPOINT_URL_TO_CHECK
+              value: "host.docker.internal"
+      containers:
+        - name: airm-dispatcher
+          workingDir: /code/services/airm/dispatcher
+          command: ["uv", "run", "-m", "app"]
+          env:
+            - name: RABBITMQ_HOST
+              value: "host.docker.internal"
+            - name: RABBITMQ_USER
+              $patch: delete
+            - name: RABBITMQ_PASSWORD
+              $patch: delete
+            - name: KUBE_CLUSTER_NAME
+              $patch: delete
+            - name: ORG_NAME
+              $patch: delete
+            - name: HTTP_PORT
+              value: "8080"
+          volumeMounts:
+            - name: code
+              mountPath: /code
+      volumes:
+        - name: code
+          hostPath:
+            path: /code

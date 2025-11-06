@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+<changeSet author="clyde" id="make_cluster_name_optional">
+    <dropIndex indexName="cluster_nodes_name_cluster_id_key" tableName="clusters"  />
+
+    <modifyDataType tableName="clusters" columnName="name" newDataType="character varying"/>
+    <dropNotNullConstraint tableName="clusters" columnName="name" columnDataType="character varying"/>
+
+    <sql>
+        CREATE UNIQUE INDEX cluster_nodes_name_cluster_id_key
+        ON clusters (LOWER(name), organization_id)
+        WHERE name IS NOT NULL;
+    </sql>
+</changeSet>
+</databaseChangeLog>

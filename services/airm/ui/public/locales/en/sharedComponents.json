@@ -1,0 +1,10 @@
+{
+  "filterDropdown": {
+    "selectAll": {
+      "label": "Select all"
+    },
+    "clear": {
+      "label": "Clear"
+    }
+  }
+}

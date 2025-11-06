@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="add-cluster-id-to-project" author="eugenek">
+        <addColumn tableName="projects">
+            <column name="cluster_id" type="uuid">
+                <constraints
+                    foreignKeyName="projects_cluster_id_fkey"
+                    references="clusters(id)"
+                    nullable="true"
+                    deleteCascade="true"/>
+            </column>
+        </addColumn>
+        <createIndex indexName="projects_cluster_id" tableName="projects">
+            <column name="cluster_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

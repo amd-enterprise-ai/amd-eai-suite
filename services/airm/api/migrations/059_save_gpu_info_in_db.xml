@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="save-gpu-info-in-db" author="akshay">
+        <addColumn tableName="cluster_nodes">
+            <column name="gpu_vram_bytes_per_device" type="BIGINT" />
+            <column name="gpu_product_name" type="character varying" />
+        </addColumn>
+        <addDefaultValue tableName="cluster_nodes" columnDataType="SMALLINT" columnName="gpu_count" defaultValueNumeric="0"/>
+
+        <update tableName="cluster_nodes">
+            <column name="gpu_product_name"
+                    valueComputed="CASE
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '74a5' THEN 'Instinct MI325X'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '74a0' THEN 'Instinct MI300A'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '74a1' THEN 'Instinct MI300X'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '74a9' THEN 'Instinct MI300X'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '74bd' THEN 'Instinct MI300X'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '74b5' THEN 'Instinct MI300X'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '740c' THEN 'Instinct MI250X'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '7408' THEN 'Instinct MI250X'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '740f' THEN 'Instinct MI210'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '738c' THEN 'Instinct MI100'
+                                      WHEN gpu_vendor = 'AMD' AND gpu_type = '738e' THEN 'Instinct MI100'
+                                      ELSE NULL
+                                   END"/>
+        </update>
+
+        <update tableName="cluster_nodes">
+            <column name="gpu_vram_bytes_per_device"
+                valueComputed="CASE
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '74a5' THEN 256::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '74a0' THEN 128::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '74a1' THEN 192::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '74a9' THEN 192::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '74bd' THEN 192::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '74b5' THEN 192::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '740c' THEN 64::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '7408' THEN 32::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '740f' THEN 64::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '738c' THEN 32::BIGINT * 1024 * 1024 * 1024
+                                  WHEN gpu_vendor = 'AMD' AND gpu_type = '738e' THEN 32::BIGINT * 1024 * 1024 * 1024
+                                  ELSE NULL
+                               END"/>
+        </update>
+    </changeSet>
+</databaseChangeLog>

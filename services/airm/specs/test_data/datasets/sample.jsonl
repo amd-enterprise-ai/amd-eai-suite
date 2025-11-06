@@ -1,0 +1,7 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+{"prompt": "What is the capital of France?", "completion": "Paris"}
+{"prompt": "Who wrote Hamlet?", "completion": "William Shakespeare"}
+{"prompt": "What is the square root of 144?", "completion": "12"}

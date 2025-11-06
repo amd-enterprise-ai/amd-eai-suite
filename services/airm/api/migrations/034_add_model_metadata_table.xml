@@ -1,0 +1,649 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+<changeSet author="tomas" id="add-model-metadata-table">
+    <createTable tableName="model_metadata">
+        <column name="canonical_name" type="character varying">
+            <constraints nullable="false" unique="true" uniqueConstraintName="model_metadata_canonical_name_key"/>
+        </column>
+        <column name="display_name" type="character varying">
+            <constraints nullable="false"/>
+        </column>
+        <column name="description" type="character varying"/>
+        <column name="compatible_inference_engines" type="character varying[]">
+            <constraints nullable="false"/>
+        </column>
+        <column name="capabilities" type="character varying[]"/>
+        <column name="model_url" type="character varying"/>
+        <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+            <constraints primaryKey="true" primaryKeyName="model_metadata_pkey"/>
+        </column>
+        <column name="created_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="updated_at" type="timestamp with time zone">
+            <constraints nullable="false"/>
+        </column>
+        <column name="created_by" type="character varying"/>
+        <column name="updated_by" type="character varying"/>
+    </createTable>
+
+    <createIndex indexName="idx_model_metadata_canonical_name" tableName="model_metadata">
+        <column name="canonical_name"/>
+    </createIndex>
+
+    <!-- Llama 3.1 Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.1-8B"/>
+        <column name="display_name" value="Llama 3.1 8B"/>
+        <column name="description" value="Meta's Llama 3.1 8B base model with improved performance and capabilities."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.1-8B"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.1-8B-Instruct"/>
+        <column name="display_name" value="Llama 3.1 8B Instruct"/>
+        <column name="description" value="Instruction-tuned version of Llama 3.1 8B optimized for chat and instruction following."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.1-70B-Instruct"/>
+        <column name="display_name" value="Llama 3.1 70B Instruct"/>
+        <column name="description" value="Large instruction-tuned version of Llama 3.1 with 70B parameters for complex tasks."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.1-70B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.1-405B-Instruct"/>
+        <column name="display_name" value="Llama 3.1 405B Instruct"/>
+        <column name="description" value="Massive instruction-tuned version of Llama 3.1 with 405B parameters for the most demanding tasks."/>
+
+        <column name="compatible_inference_engines" value="{vLLM}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.1-405B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Llama 3.2 Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.2-1B-Instruct"/>
+        <column name="display_name" value="Llama 3.2 1B Instruct"/>
+        <column name="description" value="Compact instruction-tuned Llama 3.2 model with 1B parameters for edge deployment."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.2-3B-Instruct"/>
+        <column name="display_name" value="Llama 3.2 3B Instruct"/>
+        <column name="description" value="Balanced instruction-tuned Llama 3.2 model with 3B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.2-11B-Vision-Instruct"/>
+        <column name="display_name" value="Llama 3.2 11B Vision Instruct"/>
+        <column name="description" value="Multimodal instruction-tuned Llama 3.2 model with vision capabilities."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction,vision}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.2-90B-Vision-Instruct"/>
+        <column name="display_name" value="Llama 3.2 90B Vision Instruct"/>
+        <column name="description" value="Large multimodal instruction-tuned Llama 3.2 model with advanced vision capabilities."/>
+
+        <column name="compatible_inference_engines" value="{vLLM}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction,vision}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.2-90B-Vision-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Unsloth Vision Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="unsloth/Llama-3.2-11B-Vision-Instruct"/>
+        <column name="display_name" value="Unsloth Llama 3.2 11B Vision Instruct"/>
+        <column name="description" value="Optimized version of Llama 3.2 11B Vision model for multimodal applications."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction,vision}"/>
+        <column name="model_url" value="https://huggingface.co/unsloth/Llama-3.2-11B-Vision-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="unsloth/Llama-3.2-90B-Vision-Instruct"/>
+        <column name="display_name" value="Unsloth Llama 3.2 90B Vision Instruct"/>
+        <column name="description" value="Optimized version of Llama 3.2 90B Vision model for advanced multimodal tasks."/>
+        <column name="compatible_inference_engines" value="{vLLM}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction,vision}"/>
+        <column name="model_url" value="https://huggingface.co/unsloth/Llama-3.2-90B-Vision-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Llama 3.3 Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-3.3-70B-Instruct"/>
+        <column name="display_name" value="Llama 3.3 70B Instruct"/>
+        <column name="description" value="Latest instruction-tuned Llama 3.3 model with 70B parameters and improved performance."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Llama 4 Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-4-Scout-17B-16E-Instruct"/>
+        <column name="display_name" value="Llama 4 Scout 17B Instruct"/>
+        <column name="description" value="Next-generation Llama 4 Scout model with 17B parameters and 16 experts architecture."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="meta-llama/Llama-4-Maverick-17B-128E-Instruct"/>
+        <column name="display_name" value="Llama 4 Maverick 17B Instruct"/>
+        <column name="description" value="Advanced Llama 4 Maverick model with 17B parameters and 128 experts architecture."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Gemma 3 Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="google/gemma-3-1b-it"/>
+        <column name="display_name" value="Gemma 3 1B Instruct"/>
+        <column name="description" value="Google's Gemma 3 instruction-tuned model with 1B parameters for efficient inference."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/google/gemma-3-1b-it"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="google/gemma-3-4b-it"/>
+        <column name="display_name" value="Gemma 3 4B Instruct"/>
+        <column name="description" value="Google's Gemma 3 instruction-tuned model with 4B parameters for balanced performance."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/google/gemma-3-4b-it"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="google/gemma-3-12b-it"/>
+        <column name="display_name" value="Gemma 3 12B Instruct"/>
+        <column name="description" value="Google's Gemma 3 instruction-tuned model with 12B parameters for advanced tasks."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/google/gemma-3-12b-it"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="google/gemma-3-27b-it"/>
+        <column name="display_name" value="Gemma 3 27B Instruct"/>
+        <column name="description" value="Google's largest Gemma 3 instruction-tuned model with 27B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/google/gemma-3-27b-it"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Qwen 2.5 Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="Qwen/Qwen2.5-0.5B-Instruct"/>
+        <column name="display_name" value="Qwen 2.5 0.5B Instruct"/>
+        <column name="description" value="Ultra-lightweight Qwen 2.5 instruction-tuned model with 0.5B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="Qwen/Qwen2.5-1.5B-Instruct"/>
+        <column name="display_name" value="Qwen 2.5 1.5B Instruct"/>
+        <column name="description" value="Compact Qwen 2.5 instruction-tuned model with 1.5B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="Qwen/Qwen2.5-3B-Instruct"/>
+        <column name="display_name" value="Qwen 2.5 3B Instruct"/>
+        <column name="description" value="Efficient Qwen 2.5 instruction-tuned model with 3B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="Qwen/Qwen2.5-7B-Instruct"/>
+        <column name="display_name" value="Qwen 2.5 7B Instruct"/>
+        <column name="description" value="Popular Qwen 2.5 instruction-tuned model with 7B parameters for general use."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="Qwen/Qwen2.5-14B-Instruct"/>
+        <column name="display_name" value="Qwen 2.5 14B Instruct"/>
+        <column name="description" value="Advanced Qwen 2.5 instruction-tuned model with 14B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/Qwen/Qwen2.5-14B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="Qwen/Qwen2.5-32B-Instruct"/>
+        <column name="display_name" value="Qwen 2.5 32B Instruct"/>
+        <column name="description" value="Large Qwen 2.5 instruction-tuned model with 32B parameters for complex tasks."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/Qwen/Qwen2.5-32B-Instruct"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- DeepSeek R1 Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"/>
+        <column name="display_name" value="DeepSeek R1 Distill Qwen 1.5B"/>
+        <column name="description" value="Distilled version of DeepSeek R1 based on Qwen architecture with 1.5B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"/>
+        <column name="display_name" value="DeepSeek R1 Distill Qwen 7B"/>
+        <column name="description" value="Distilled version of DeepSeek R1 based on Qwen architecture with 7B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-Distill-Llama-8B"/>
+        <column name="display_name" value="DeepSeek R1 Distill Llama 8B"/>
+        <column name="description" value="Distilled version of DeepSeek R1 based on Llama architecture with 8B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"/>
+        <column name="display_name" value="DeepSeek R1 Distill Qwen 14B"/>
+        <column name="description" value="Distilled version of DeepSeek R1 based on Qwen architecture with 14B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"/>
+        <column name="display_name" value="DeepSeek R1 Distill Qwen 32B"/>
+        <column name="description" value="Distilled version of DeepSeek R1 based on Qwen architecture with 32B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-Distill-Llama-70B"/>
+        <column name="display_name" value="DeepSeek R1 Distill Llama 70B"/>
+        <column name="description" value="Distilled version of DeepSeek R1 based on Llama architecture with 70B parameters."/>
+
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Additional DeepSeek Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1"/>
+        <column name="display_name" value="DeepSeek R1"/>
+        <column name="description" value="DeepSeek R1 reasoning model trained on diverse data for exceptional reasoning capabilities."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-0528"/>
+        <column name="display_name" value="DeepSeek R1 0528"/>
+        <column name="description" value="DeepSeek R1 reasoning model (May 2025 version) with enhanced performance."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-0528"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-Zero"/>
+        <column name="display_name" value="DeepSeek R1 Zero"/>
+        <column name="description" value="DeepSeek R1 reasoning model optimized for zero-shot learning capabilities."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-Zero"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"/>
+        <column name="display_name" value="DeepSeek R1 0528 Qwen3 8B"/>
+        <column name="description" value="DeepSeek R1 reasoning model (May 2025 version) built on Qwen3 8B architecture."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation,chat,reasoning}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-V3"/>
+        <column name="display_name" value="DeepSeek V3"/>
+        <column name="description" value="DeepSeek V3 model with enhanced performance across various NLP tasks."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-V3"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="deepseek-ai/DeepSeek-V3-0324"/>
+        <column name="display_name" value="DeepSeek V3 0324"/>
+        <column name="description" value="DeepSeek V3 model (March 2025 version) with optimized performance."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/deepseek-ai/DeepSeek-V3-0324"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Additional Mistral Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="mistralai/Mistral-Small-3.1-24B-Base-2503"/>
+        <column name="display_name" value="Mistral Small 3.1 24B Base 2503"/>
+        <column name="description" value="Mistral Small 3.1 base model with 24B parameters (March 2025 version)."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation}"/>
+        <column name="model_url" value="https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Base-2503"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Mixtral Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="mistralai/Mixtral-8x22B-Instruct-v0.1"/>
+        <column name="display_name" value="Mixtral 8x22B Instruct"/>
+        <column name="description" value="Mixture of experts model with 8 experts of 22B parameters each for efficient scaling."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Qwen3 Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="qwen/qwen3-4b"/>
+        <column name="display_name" value="Qwen3 4B"/>
+        <column name="description" value="Qwen3 base model with 4B parameters for efficient text generation."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation}"/>
+        <column name="model_url" value="https://huggingface.co/qwen/qwen3-4b"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="qwen/qwen3-8b"/>
+        <column name="display_name" value="Qwen3 8B"/>
+        <column name="description" value="Qwen3 base model with 8B parameters for balanced text generation."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI,LlamaCpp}"/>
+        <column name="capabilities" value="{text-generation}"/>
+        <column name="model_url" value="https://huggingface.co/qwen/qwen3-8b"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="qwen/qwen3-14b"/>
+        <column name="display_name" value="Qwen3 14B"/>
+        <column name="description" value="Qwen3 base model with 14B parameters for advanced text generation."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation}"/>
+        <column name="model_url" value="https://huggingface.co/qwen/qwen3-14b"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="qwen/qwen3-30b-a3b"/>
+        <column name="display_name" value="Qwen3 30B A3B"/>
+        <column name="description" value="Qwen3 30B model with activated 3B parameters for efficient large-scale text generation."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation}"/>
+        <column name="model_url" value="https://huggingface.co/qwen/qwen3-30b-a3b"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="qwen/qwen3-32b"/>
+        <column name="display_name" value="Qwen3 32B"/>
+        <column name="description" value="Qwen3 base model with 32B parameters for high-quality text generation."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation}"/>
+        <column name="model_url" value="https://huggingface.co/qwen/qwen3-32b"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="qwen/qwen3-235b-a22b"/>
+        <column name="display_name" value="Qwen3 235B A22B"/>
+        <column name="description" value="Qwen3 235B model with activated 22B parameters for extremely powerful text generation."/>
+        <column name="compatible_inference_engines" value="{vLLM}"/>
+        <column name="capabilities" value="{text-generation}"/>
+        <column name="model_url" value="https://huggingface.co/qwen/qwen3-235b-a22b"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+
+    <!-- Mistral Large Models -->
+    <insert tableName="model_metadata">
+        <column name="canonical_name" value="mistralai/Mistral-Large-Instruct-2411"/>
+        <column name="display_name" value="Mistral Large Instruct 2411"/>
+        <column name="description" value="Latest Mistral Large instruction-tuned model with enhanced capabilities and performance."/>
+        <column name="compatible_inference_engines" value="{vLLM,TGI}"/>
+        <column name="capabilities" value="{text-generation,chat,instruction}"/>
+        <column name="model_url" value="https://huggingface.co/mistralai/Mistral-Large-Instruct-2411"/>
+        <column name="created_at" value="NOW()"/>
+        <column name="updated_at" value="NOW()"/>
+        <column name="created_by" value="system"/>
+        <column name="updated_by" value="system"/>
+    </insert>
+</changeSet>
+</databaseChangeLog>

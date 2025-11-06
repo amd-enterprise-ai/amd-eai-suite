@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.1.xsd">
+
+    <changeSet id="024" author="cascade">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT count(*) FROM pg_indexes WHERE indexname = 'overlays_chart_id_canonical_name_key' AND tablename = 'overlays';
+            </sqlCheck>
+        </preConditions>
+
+        <createIndex indexName="overlays_chart_id_canonical_name_key" tableName="overlays" unique="true">
+            <column name="chart_id"/>
+            <column name="canonical_name"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

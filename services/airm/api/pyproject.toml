@@ -1,0 +1,60 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+[project]
+name = "api"
+version = "0.2.3"
+description = "AMD Resource Manager API"
+readme = "README.md"
+requires-python = ">=3.13"
+
+dependencies = [
+    "airm",
+    "workloads_manager",
+    "asyncpg~=0.30.0",
+    "fastapi>=0.115.12",
+    "fastapi-mcp>=0.4.0",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "minio>=7.2.15",
+    "prometheus-api-client>=0.5.7",
+    "psycopg2-binary~=2.9.10",
+    "PyYAML>=6.0.2",
+    "python-dotenv>=1.1.0",
+    "python-keycloak>=5.5.0",
+    "python-multipart>=0.0.20",
+    "sqlalchemy[asyncio]~=2.0.36",
+    "tenacity>=9.1.2",
+    "uvicorn[standard]>=0.34.0",
+    "prometheus-fastapi-instrumentator>=7.1.0",
+    "websockets>=15.0.1",
+]
+
+[tool.uv.sources]
+airm = { path = "../../../packages/airm", editable = true }
+workloads_manager = { path = "../../../packages/workloads_manager", editable = true }
+
+[dependency-groups]
+dev = [
+    "async-asgi-testclient>=1.4.11",
+    "coverage>=7.8.0",
+    "docker>=7.1.0",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.1.1",
+    "pytest-docker>=3.2.1",
+    "pytest-env>=1.1.5",
+    "pytest-httpx>=0.35.0",
+    "pytest-xdist>=3.6.0",
+    "pytest-loguru>=0.4.0",
+    "responses>=0.25.7",
+    "types-docker>=7.1.0.20250705",
+    "robotframework>=7.1.1",
+    "robotframework-requests>=0.9.7",
+    "requests>=2.32.3",
+    "certifi>=2025.1.31",
+    "PyJWT>=2.10.1",
+    "oras>=0.2.38",
+    "tqdm>=4.67.1",
+]

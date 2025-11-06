@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+<changeSet author="akshay" id="fix-cluster-indexes">
+    <dropIndex indexName="cluster_nodes_name_cluster_id_key" tableName="clusters"  />
+    <dropIndex indexName="clusters_name_organization_id_key" tableName="clusters"  />
+    <sql>
+        CREATE UNIQUE INDEX clusters_name_organization_id_key
+        ON clusters (LOWER(name), organization_id)
+        WHERE name IS NOT NULL;
+    </sql>
+
+    <createIndex indexName="cluster_nodes_name_cluster_id_key" tableName="cluster_nodes" unique="true">
+        <column name="lower(name::text)"/>
+        <column name="cluster_id"/>
+    </createIndex>
+</changeSet>
+</databaseChangeLog>

@@ -1,0 +1,53 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_configs = true
+ignore_missing_imports = true
+strict = false
+pretty = true
+show_column_numbers = true
+no_implicit_optional = false
+explicit_package_bases = true
+scripts_are_modules = true
+check_untyped_defs = false
+
+[tool.robocop]
+
+[tool.robocop.lint]
+select = []
+ignore = ["all"]
+
+[tool.robocop.format]
+select = [
+  "NormalizeSeparators",
+  "NormalizeNewLines",
+  "NormalizeSectionHeaderName",
+  "OrderSettings",
+  "AlignVariablesSection",
+  "AlignSettingsSection",
+  "AlignTestCasesSection",
+  "AlignKeywordsSection",
+]
+line_length = 120
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+ignore = [
+  "F841",  # Local variable assigned but never used
+]
+extend-select = ["F401", "I", "UP"]
+extend-safe-fixes = [
+  "UP006", # https://docs.astral.sh/ruff/rules/non-pep585-annotation/#fix-safety; we are using Python 3.13 and no libraries that rely on runtime type annotations
+  "UP007", # https://docs.astral.sh/ruff/rules/non-pep604-annotation-union/#fix-safety; we are using Python 3.13 and no libraries that rely on runtime type annotations, there are no types that do not support `|` operator either
+  "UP008", # https://docs.astral.sh/ruff/rules/super-call-with-parameters/#fix-safety; we don't have comments on these lines
+  "UP035", # https://docs.astral.sh/ruff/rules/deprecated-import/#why-is-this-bad; we don't use typing_extensions
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "airm", "workloads_manager"]

@@ -1,0 +1,11 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+.env
+.env.local
+.env.gcp
+node_modules
+test-results
+.next
+kustomize

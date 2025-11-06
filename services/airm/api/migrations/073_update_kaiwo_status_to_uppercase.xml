@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <changeSet id="update-kaiwo-status-to-uppercase" author="volen">
+
+    <!-- Update KaiwoJobStatus enum values in workload_components table -->
+    <!-- The Kaiwo CRDs use uppercase status values, so we need to update the database
+         to match. Previously the Python enums used title case (e.g., "Failed") but
+         Kaiwo resources send uppercase (e.g., "FAILED").
+
+         Title case to Uppercase mappings:
+         Failed -> FAILED
+         Pending -> PENDING
+         Error -> ERROR
+         Starting -> STARTING
+         Running -> RUNNING
+         Complete -> COMPLETE
+    -->
+
+    <!-- Update KaiwoJob statuses -->
+    <update tableName="workload_components">
+      <column name="status" value="FAILED"/>
+      <where>kind = 'KaiwoJob' AND status = 'Failed'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="PENDING"/>
+      <where>kind = 'KaiwoJob' AND status = 'Pending'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="ERROR"/>
+      <where>kind = 'KaiwoJob' AND status = 'Error'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="STARTING"/>
+      <where>kind = 'KaiwoJob' AND status = 'Starting'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="RUNNING"/>
+      <where>kind = 'KaiwoJob' AND status = 'Running'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="COMPLETE"/>
+      <where>kind = 'KaiwoJob' AND status = 'Complete'</where>
+    </update>
+
+    <!-- Update KaiwoService statuses -->
+    <!-- KaiwoService previously had a 'Ready' status which is now mapped to RUNNING -->
+    <update tableName="workload_components">
+      <column name="status" value="FAILED"/>
+      <where>kind = 'KaiwoService' AND status = 'Failed'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="PENDING"/>
+      <where>kind = 'KaiwoService' AND status = 'Pending'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="ERROR"/>
+      <where>kind = 'KaiwoService' AND status = 'Error'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="STARTING"/>
+      <where>kind = 'KaiwoService' AND status = 'Starting'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="RUNNING"/>
+      <where>kind = 'KaiwoService' AND status = 'Ready'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="RUNNING"/>
+      <where>kind = 'KaiwoService' AND status = 'Running'</where>
+    </update>
+
+    <update tableName="workload_components">
+      <column name="status" value="COMPLETE"/>
+      <where>kind = 'KaiwoService' AND status = 'Complete'</where>
+    </update>
+
+  </changeSet>
+</databaseChangeLog>

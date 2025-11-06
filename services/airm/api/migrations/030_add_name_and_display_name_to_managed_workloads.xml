@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="add-name-to-managed-workloads" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="workloads" columnName="name"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="workloads">
+      <column name="name" type="character varying" />
+    </addColumn>
+  </changeSet>
+
+  <changeSet id="add-display-name-to-managed-workloads" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="workloads" columnName="display_name"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="workloads">
+      <column name="display_name" type="character varying" />
+    </addColumn>
+  </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <changeSet id="switch-to-project-id" author="datasets">
+        <!-- Standardize index names -->
+        <dropIndex indexName="project_memberships_user_id" tableName="project_memberships" />
+        <dropIndex indexName="project_memberships_project_id" tableName="project_memberships" />
+        <createIndex indexName="ix_project_memberships_project_id" tableName="project_memberships">
+          <column name="project_id"/>
+        </createIndex>
+
+        <createIndex indexName="ix_project_memberships_user_id" tableName="project_memberships">
+          <column name="user_id"/>
+        </createIndex>
+
+        <!-- datasets -->
+        <addColumn tableName="datasets">
+            <column name="project_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="datasets_project_id_fkey" references="projects(id)" deleteCascade="true" />
+            </column>
+        </addColumn>
+
+        <createIndex tableName="datasets" indexName="ix_datasets_project_id">
+            <column name="project_id"/>
+        </createIndex>
+        <dropColumn tableName="datasets" columnName="user_group_id"/>
+
+        <!-- Models -->
+        <addColumn tableName="inference_models">
+            <column name="project_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="inference_models_project_id_fkey" references="projects(id)" deleteCascade="true"/>
+            </column>
+        </addColumn>
+
+        <createIndex tableName="inference_models" indexName="ix_inference_models_project_id">
+            <column name="project_id"/>
+        </createIndex>
+        <dropColumn tableName="inference_models" columnName="user_group_id"/>
+
+        <!-- Quotas -->
+        <addColumn tableName="quotas">
+            <column name="project_id" type="uuid">
+                <constraints nullable="false" unique="true" uniqueConstraintName="quotas_project_id_key"  foreignKeyName="quotas_project_id_fkey" references="projects(id)" deleteCascade="true"/>
+            </column>
+        </addColumn>
+        <dropColumn tableName="quotas" columnName="user_group_id"/>
+
+
+        <!-- Workloads -->
+        <addColumn tableName="workloads">
+            <column name="project_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="workloads_project_id_fkey" references="projects(id)" deleteCascade="true"/>
+            </column>
+        </addColumn>
+
+        <createIndex tableName="workloads" indexName="ix_workloads_project_id">
+            <column name="project_id"/>
+        </createIndex>
+        <dropColumn tableName="workloads" columnName="user_group_id"/>
+
+    </changeSet>
+</databaseChangeLog>

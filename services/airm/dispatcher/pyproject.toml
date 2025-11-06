@@ -1,0 +1,36 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+[project]
+name = "dispatcher"
+version = "0.2.3"
+description = "AMD Resource Manager Dispatcher"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "airm",
+    "fastapi>=0.115.12",
+    "httpx>=0.28.1",
+    "kubernetes>=32.0.1",
+    "loguru>=0.7.3",
+    "python-dotenv>=1.1.0",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[tool.uv.sources]
+airm = { path = "../../../packages/airm", editable = true }
+
+[dependency-groups]
+dev = [
+    "async-asgi-testclient>=1.4.11",
+    "coverage>=7.8.0",
+    "docker>=7.1.0",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.1.1",
+    "pytest-docker>=3.2.1",
+    "pytest-env>=1.1.5",
+    "pytest-httpx>=0.35.0",
+    "responses>=0.25.7",
+]

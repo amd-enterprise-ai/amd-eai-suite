@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.1.xsd">
+
+    <changeSet author="lorenzo" id="remove-dataset_path-add-dataset_id-1">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="dc_workloads" columnName="dataset_path"/>
+        </preConditions>
+        <dropColumn tableName="dc_workloads" columnName="dataset_path"/>
+    </changeSet>
+
+    <changeSet author="lorenzo" id="remove-dataset_path-add-dataset_id-2">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="dc_workloads" columnName="dataset_id"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="dc_workloads">
+            <column name="dataset_id" type="uuid">
+                <constraints nullable="true" foreignKeyName="dc_workloads_dataset_id_fkey" referencedTableName="datasets" referencedColumnNames="id" deleteCascade="true"/>
+            </column>
+        </addColumn>
+        <createIndex indexName="ix_dc_workloads_dataset_id" tableName="dc_workloads">
+            <column name="dataset_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

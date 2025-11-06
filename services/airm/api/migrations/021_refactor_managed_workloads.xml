@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet author="lorenzo" id="021-add-kind-column-to-workloads">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="workloads"/>
+            <not>
+                <columnExists tableName="workloads" columnName="kind"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="workloads">
+            <column name="kind" type="VARCHAR(255)" defaultValue="generic">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <comment>Add kind column for single table inheritance, default to generic.</comment>
+    </changeSet>
+
+    <changeSet author="lorenzo" id="021-add-managed-columns-to-workloads">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="workloads"/>
+            <not>
+                <columnExists tableName="workloads" columnName="type"/>
+            </not>
+            <not>
+                <columnExists tableName="workloads" columnName="chart_id"/>
+            </not>
+            <not>
+                <columnExists tableName="workloads" columnName="model_id"/>
+            </not>
+            <not>
+                <columnExists tableName="workloads" columnName="dataset_id"/>
+            </not>
+            <not>
+                <columnExists tableName="workloads" columnName="user_inputs"/>
+            </not>
+            <not>
+                <columnExists tableName="workloads" columnName="manifest"/>
+            </not>
+            <not>
+                <columnExists tableName="workloads" columnName="output"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="workloads">
+            <column name="type" type="VARCHAR(255)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="chart_id" type="UUID" remarks="Foreign key to charts table, specific to managed workloads">
+                <constraints nullable="true"/>
+            </column>
+            <column name="model_id" type="UUID" remarks="Foreign key to inference_models table, specific to managed workloads">
+                <constraints nullable="true"/>
+            </column>
+            <column name="dataset_id" type="UUID" remarks="Foreign key to datasets table, specific to managed workloads">
+                <constraints nullable="true"/>
+            </column>
+            <column name="user_inputs" type="JSONB" remarks="User inputs for managed workloads">
+                <constraints nullable="true"/>
+            </column>
+            <column name="manifest" type="TEXT" remarks="Generated manifest for managed workloads">
+                <constraints nullable="true"/>
+            </column>
+            <column name="output" type="JSONB" remarks="Output data from managed workloads">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <comment>Add columns from the old dc_workloads table to the workloads table for STI.</comment>
+    </changeSet>
+
+    <changeSet id="021-add-managed-fks" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="workloads"/>
+            <columnExists tableName="workloads" columnName="chart_id"/>
+            <columnExists tableName="workloads" columnName="model_id"/>
+            <columnExists tableName="workloads" columnName="dataset_id"/>
+            <tableExists tableName="charts"/>
+            <tableExists tableName="inference_models"/>
+            <tableExists tableName="datasets"/>
+            <not>
+                <foreignKeyConstraintExists foreignKeyName="workloads_chart_id_fkey"/>
+            </not>
+            <not>
+                <foreignKeyConstraintExists foreignKeyName="workloads_model_id_fkey"/>
+            </not>
+            <not>
+                <foreignKeyConstraintExists foreignKeyName="workloads_dataset_id_fkey"/>
+            </not>
+            <not>
+                <indexExists indexName="ix_workloads_chart_id" tableName="workloads"/>
+            </not>
+            <not>
+                <indexExists indexName="ix_workloads_model_id" tableName="workloads"/>
+            </not>
+            <not>
+                <indexExists indexName="ix_workloads_dataset_id" tableName="workloads"/>
+            </not>
+        </preConditions>
+        <addForeignKeyConstraint baseTableName="workloads" baseColumnNames="chart_id" constraintName="workloads_chart_id_fkey" referencedTableName="charts" referencedColumnNames="id" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="workloads" baseColumnNames="model_id" constraintName="workloads_model_id_fkey" referencedTableName="inference_models" referencedColumnNames="id" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="workloads" baseColumnNames="dataset_id" constraintName="workloads_dataset_id_fkey" referencedTableName="datasets" referencedColumnNames="id" onDelete="CASCADE"/>
+        <createIndex tableName="workloads" indexName="ix_workloads_chart_id">
+            <column name="chart_id"/>
+        </createIndex>
+        <createIndex tableName="workloads" indexName="ix_workloads_model_id">
+            <column name="model_id"/>
+        </createIndex>
+        <createIndex tableName="workloads" indexName="ix_workloads_dataset_id">
+            <column name="dataset_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="021-drop-dc-workloads-table" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="dc_workloads"/>
+        </preConditions>
+        <dropTable tableName="dc_workloads" cascadeConstraints="true"/>
+    </changeSet>
+
+</databaseChangeLog>

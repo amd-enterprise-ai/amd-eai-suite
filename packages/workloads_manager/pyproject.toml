@@ -1,0 +1,63 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workloads_manager"
+version = "0.2.3"
+description = "A package to manage AI workloads, patches, and registering"
+readme = "README.md"
+authors = [
+    { name = "Lorenzo Andraghetti", email = "lorenzo.andraghetti@amd.com" },
+]
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.2.0",
+    "rich-click>=1.6.1",
+    "gitpython>=3.1.44",
+    "inquirer>=3.4.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0.2",
+    "httpx>=0.25.0",
+    "loguru>=0.7.3",
+    "python-dotenv>=1.0.0",
+    "dotenv>=0.9.9",
+    "pydantic>=2.0.0"
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0.0"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"workloads_manager" = ["data/**/*"]
+
+[tool.setuptools.data-files]
+"data/patches" = ["data/patches/*.patch"]
+
+[tool.setuptools.packages.find]
+include = ["workloads_manager*"]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.10.2",
+    "pytest>=8.4.1",
+]
+
+[project.scripts]
+workloads-manager = "workloads_manager.cli:main"
+wm = "workloads_manager.cli:main"
+
+[tool.pytest.ini_options]
+# Ignore data directory to avoid tests in workloads repo
+addopts = [
+    "--ignore=workloads_manager/data",
+    "--strict-markers",
+    "--strict-config",
+]

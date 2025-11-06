@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+<changeSet author="akshay" id="standardize-index-names">
+    <dropIndex indexName="user_group_name_organization_id_key" tableName="user_groups" />
+    <dropIndex indexName="cluster_name_organization_id_key" tableName="clusters"  />
+    <dropIndex indexName="cluster_node_name_cluster_id_key" tableName="cluster_nodes"  />
+
+    <createIndex indexName="user_groups_name_organization_id_key" tableName="user_groups" unique="true">
+        <column name="lower(name::text)"/>
+        <column name="organization_id"/>
+    </createIndex>
+    <createIndex indexName="clusters_name_organization_id_key" tableName="clusters" unique="true">
+        <column name="lower(name::text)"/>
+        <column name="organization_id"/>
+    </createIndex>
+
+    <createIndex indexName="cluster_nodes_name_cluster_id_key" tableName="cluster_nodes" unique="true">
+        <column name="lower(name::text)"/>
+        <column name="cluster_id"/>
+    </createIndex>
+
+</changeSet>
+</databaseChangeLog>

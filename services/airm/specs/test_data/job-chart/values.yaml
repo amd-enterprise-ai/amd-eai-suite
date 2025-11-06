@@ -1,0 +1,10 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Default values for test-sleep-job
+image:
+  repository: busybox
+  tag: latest
+
+sleepSeconds: 10

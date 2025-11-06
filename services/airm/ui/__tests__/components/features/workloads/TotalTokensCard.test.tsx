@@ -1,0 +1,93 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates.
+//
+// SPDX-License-Identifier: MIT
+
+import { render, screen } from '@testing-library/react';
+import { vi } from 'vitest';
+
+import { MetricScalarResponse, TimeRange } from '@/types/metrics';
+import { Workload } from '@/types/workloads';
+import { WorkloadType, WorkloadStatus } from '@/types/enums/workloads';
+import TotalTokensCard from '@/components/features/workloads/TotalTokensCard';
+
+import wrapper from '@/__tests__/ProviderWrapper';
+
+// Mock the shared Metrics components
+vi.mock('@/components/shared/Metrics/StatisticsCard', () => ({
+  StatisticsCard: vi.fn(
+    ({ title, tooltip, statistic, statisticFormatter, isLoading }) => (
+      <div data-testid="statistics-card">
+        <div data-testid="title">{title}</div>
+        <div data-testid="tooltip">{tooltip}</div>
+        <div data-testid="statistic">{statistic}</div>
+        <div data-testid="loading">{isLoading ? 'true' : 'false'}</div>
+        <div data-testid="formatter">
+          {statisticFormatter ? 'formatTokens' : 'none'}
+        </div>
+      </div>
+    ),
+  ),
+}));
+
+// Mock formatTokens utility
+vi.mock('@/utils/app/strings', () => ({
+  formatTokens: vi.fn((value) => `${value} tokens`),
+}));
+
+// Mock next-i18next
+vi.mock('next-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
+}));
+
+describe('TotalTokensCard', () => {
+  const mockMetricScalarResponse: MetricScalarResponse = {
+    data: 125000,
+    range: {
+      start: '2023-01-01T00:00:00Z',
+      end: '2023-01-01T02:00:00Z',
+    },
+  };
+
+  const mockWorkload: Workload = {
+    id: 'test-workload-id',
+    type: WorkloadType.INFERENCE,
+    name: 'test-workload',
+    displayName: 'Test Inference Workload',
+    createdBy: 'test-user',
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    status: WorkloadStatus.RUNNING,
+    chartId: 'test-chart-id',
+    clusterId: 'test-cluster-id',
+    cluster: {
+      id: 'test-cluster-id',
+      name: 'Test Cluster',
+      lastHeartbeatAt: '2024-01-01T00:00:00Z',
+      status: 'online' as any,
+    },
+  };
+
+  const mockTimeRange: TimeRange = {
+    start: new Date('2023-01-01T00:00:00Z'),
+    end: new Date('2023-01-01T02:00:00Z'),
+  };
+
+  const defaultProps = {
+    workload: mockWorkload,
+    timeRange: mockTimeRange,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders the card with default props', () => {
+    render(<TotalTokensCard {...defaultProps} />, { wrapper });
+
+    expect(
+      screen.getByText('details.metrics.totalTokens.title'),
+    ).toBeInTheDocument();
+  });
+});

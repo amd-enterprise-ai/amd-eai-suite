@@ -1,0 +1,8 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+replicaCount: 2
+image:
+  repository: sample/image
+  tag: latest

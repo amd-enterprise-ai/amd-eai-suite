@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="add-more-community-models" author="lorenzo">
+        <comment>Add gpt oss models to model_metadata table. Uses ON CONFLICT DO NOTHING for idempotency.</comment>
+        <sql>
+      -- OpenAI GPT-OSS 120B (open-weight)
+      INSERT INTO model_metadata (
+          canonical_name, display_name, description,
+          compatible_inference_engines, capabilities, model_url,
+          created_at, updated_at, created_by, updated_by
+      ) VALUES (
+          'openai/gpt-oss-120b',
+          'GPT-OSS 120B',
+          'OpenAI''s open-weight 120B parameter model designed for powerful reasoning, agentic tasks, and general-purpose use.',
+          '{vLLM,TGI}',
+          '{text-generation,chat,reasoning}',
+          'https://huggingface.co/openai/gpt-oss-120b',
+          NOW(), NOW(), 'system', 'system'
+      )
+      ON CONFLICT (canonical_name) DO NOTHING;
+
+      -- OpenAI GPT-OSS 20B (open-weight)
+      INSERT INTO model_metadata (
+          canonical_name, display_name, description,
+          compatible_inference_engines, capabilities, model_url,
+          created_at, updated_at, created_by, updated_by
+      ) VALUES (
+          'openai/gpt-oss-20b',
+          'GPT-OSS 20B',
+          'OpenAI''s open-weight 20B parameter model from the GPT-OSS family for efficient general-purpose and reasoning tasks.',
+          '{vLLM,TGI}',
+          '{text-generation,chat,reasoning}',
+          'https://huggingface.co/openai/gpt-oss-20b',
+          NOW(), NOW(), 'system', 'system'
+      )
+      ON CONFLICT (canonical_name) DO NOTHING;
+        </sql>
+    </changeSet>
+</databaseChangeLog>

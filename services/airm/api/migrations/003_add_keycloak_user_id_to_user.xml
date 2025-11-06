@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+<changeSet author="eugene" id="add-keycloak-user-id-to-user">
+    <addColumn tableName="users">
+        <column name="keycloak_user_id" type="character varying">
+            <constraints nullable="false" unique="true" uniqueConstraintName="users_keycloak_user_id_key"/>
+        </column>
+    </addColumn>
+</changeSet>
+</databaseChangeLog>

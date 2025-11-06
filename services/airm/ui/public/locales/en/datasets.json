@@ -1,0 +1,118 @@
+{
+  "title": "Datasets",
+  "list": {
+    "headers": {
+      "type": {
+        "title": "Data type"
+      },
+      "name": {
+        "title": "Name"
+      },
+      "description": {
+        "title": "Description"
+      },
+      "organization": {
+        "title": "Organization"
+      },
+      "createdBy": {
+        "title": "Created by"
+      },
+      "createdAt": {
+        "title": "Created at"
+      },
+      "actions": {
+        "title": ""
+      }
+    },
+    "pagination": {
+      "showing": "Showing {{from}} to {{to}} of {{total}} datasets",
+      "pageSize": {
+        "label": "Show",
+        "entities": "datasets"
+      }
+    },
+    "sort": {
+      "name": {
+        "asc": "Sort name by ascending",
+        "desc": "Sort name by descending"
+      },
+      "dataType": {
+        "asc": "Sort data type by ascending",
+        "desc": "Sort data type by descending"
+      }
+    },
+    "empty": {
+      "description": "List of datasets is empty."
+    },
+    "actions": {
+      "download": {
+        "label": "Download"
+      },
+      "delete": {
+        "label": "Delete"
+      }
+    }
+  },
+  "actions": {
+    "upload": "Upload",
+    "refresh": "Refresh",
+    "datasetTypeFilter": "Type",
+    "actionsDropdown": "Actions",
+    "delete": {
+      "label": "Delete",
+      "success": "Selected datasets successfully deleted.",
+      "error": "Failed to delete selected datasets. Please try again.",
+      "confirm": {
+        "title": "Are you sure?",
+        "description": "This action cannot be undone. Are you sure you want to delete selected dataset?"
+      }
+    }
+  },
+  "modals": {
+    "upload": {
+      "title": "Upload a dataset",
+      "body": "Upload a dataset to use in fine-tuning.",
+      "docs": "Dataset documentation",
+      "actions": {
+        "confirm": "Upload",
+        "cancel": "Cancel"
+      },
+      "messages": {
+        "success": "Dataset successfully uploaded",
+        "error": "Failed to upload dataset"
+      },
+      "form": {
+        "datasetName": {
+          "label": "Dataset name",
+          "placeholder": "Provide a name for the dataset",
+          "emptyNameError": "Dataset name can't be empty",
+          "nonUniqueNameError": "Another dataset with the same name already exists",
+          "invalidCharactersError": "Dataset name can only contain letters, numbers, underscores, periods, and dashes"
+        },
+        "datasetType": {
+          "label": "Data type",
+          "placeholder": "Select the type of data you are uploading"
+        },
+        "description": {
+          "label": "Description",
+          "placeholder": "Provide a description for the dataset"
+        },
+        "fileUpload": {
+          "label": "Upload file",
+          "placeholder": "JSONL file containing data in the appropriate format, up to {{value}} in size. Please refer to our documentation to determine the format for each row.",
+          "emptyError": "A file is required",
+          "filesizeError": "File size must be less than {{value}}",
+          "formatError": "Only JSONL files with data in the appropriate format are allowed"
+        }
+      }
+    }
+  },
+  "selector": {
+    "label": "Dataset"
+  },
+  "types": {
+    "Evaluation": "Evaluation",
+    "Fine-tuning": "Fine-tuning",
+    "unknown": "Unknown"
+  }
+}

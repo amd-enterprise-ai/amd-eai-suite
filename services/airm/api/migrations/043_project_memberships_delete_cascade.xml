@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="project-memberships-delete-cascade" author="akshay">
+        <dropForeignKeyConstraint baseTableName="project_memberships" constraintName="user_project_user_id_fkey" />
+        <dropForeignKeyConstraint baseTableName="project_memberships" constraintName="user_project_project_id_fkey" />
+
+        <addForeignKeyConstraint
+            baseTableName="project_memberships"
+            baseColumnNames="user_id"
+            constraintName="project_memberships_user_id_fkey"
+            referencedTableName="users"
+            referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="project_memberships"
+            baseColumnNames="project_id"
+            constraintName="project_memberships_project_id_fkey"
+            referencedTableName="projects"
+            referencedColumnNames="id"
+            deleteCascade="true"/>
+    </changeSet>
+</databaseChangeLog>

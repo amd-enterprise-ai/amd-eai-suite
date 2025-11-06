@@ -1,0 +1,224 @@
+{
+  "title": "Storage",
+  "list": {
+    "title": "Storage",
+    "filter": {
+      "search": {
+        "label": "Search",
+        "placeholder": "Search"
+      },
+      "scope": {
+        "label": "Scope",
+        "placeholder": "Scope",
+        "options": {
+          "Organization": "Organization",
+          "Project": "Project",
+          "User": "User"
+        }
+      },
+      "type": {
+        "label": "Type",
+        "placeholder": "Type",
+        "options": {
+          "S3": "S3 Bucket",
+          "PVC": "PVC"
+        }
+      }
+    },
+    "headers": {
+      "name": {
+        "title": "Name"
+      },
+      "type": {
+        "title": "Type"
+      },
+      "status": {
+        "title": "Status"
+      },
+      "scope": {
+        "title": "Scope"
+      },
+      "assignedTo": {
+        "title": "Assigned To"
+      },
+      "createdAt": {
+        "title": "Created At"
+      },
+      "createdBy": {
+        "title": "Created By"
+      },
+      "actions": {
+        "title": ""
+      }
+    },
+    "empty": {
+      "description": "No data available."
+    },
+    "pagination": {
+      "showing": "Showing {{from}} to {{to}} of {{total}} entries",
+      "pageSize": {
+        "label": "Show",
+        "entities": "entries"
+      }
+    },
+    "actions": {
+      "assign": {
+        "label": "Edit assignment"
+      },
+      "delete": {
+        "label": "Delete"
+      },
+      "deleteFromProject": {
+        "label": "Remove from project"
+      }
+    }
+  },
+  "actions": {
+    "add": {
+      "label": "Add storage",
+      "options": {
+        "S3": {
+          "label": "S3 Bucket"
+        }
+      }
+    },
+    "addProjectStorage": {
+      "label": "Add project storage",
+      "disabled": "You cannot add a project storage since project is not ready."
+    }
+  },
+  "form": {
+    "add": {
+      "title": "Connect S3 Bucket",
+      "description": "You can define access to an existing local or remote S3 bucket. In order to prepare the bucket for access, please refer to",
+      "documentLink": "this documentation page.",
+      "field": {
+        "name": {
+          "label": "Name",
+          "placeholder": "Enter a unique name for the storage bucket",
+          "error": {
+            "minLength": "The storage name must be at least {{min}} characters long.",
+            "maxLength": "The storage name must be at most {{max}} characters long.",
+            "required": "The storage name is required.",
+            "invalidName": "The storage name must be lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character.",
+            "duplicateName": "The storage name is already in use."
+          }
+        },
+        "accessKeyName": {
+          "label": "Access Key Name",
+          "description": "This field is optional and default access key name in secret is '{{defaultAccessKeyName}}'"
+        },
+        "secretKeyName": {
+          "label": "Secret Key Name",
+          "description": "This field is optional and default secret key name in secret is '{{defaultSecretKeyName}}'"
+        },
+        "bucketUrl": {
+          "label": "Bucket URL",
+          "placeholder": "Enter the S3 bucket connection URL",
+          "error": {
+            "required": "The bucket URL is required.",
+            "maxLength": "The storage name must be at most {{max}} characters long.",
+            "invalidUrl": "The bucket URL is not a valid URL."
+          }
+        },
+        "secretId": {
+          "label": "Storage secret",
+          "placeholder": "Select a secret",
+          "actions": {
+            "createSecret": "+ Add a new secret"
+          }
+        },
+        "projectIds": {
+          "label": "Assign To",
+          "placeholder": "Select project(s)"
+        }
+      },
+      "notification": {
+        "success": "Storage added successfully.",
+        "error": "Failed to add storage."
+      },
+      "actions": {
+        "add": {
+          "label": "Add bucket"
+        },
+        "cancel": {
+          "label": "Cancel"
+        }
+      }
+    },
+    "assign": {
+      "title": "Edit storage assignment",
+      "description": "You are editing the storage assignments for",
+      "field": {
+        "projectIds": {
+          "label": "Assign to",
+          "placeholder": "Select project(s)"
+        }
+      },
+      "action": {
+        "save": "Save changes",
+        "cancel": "Cancel"
+      },
+      "notification": {
+        "success": "Storage requested to be assigned successfully.",
+        "error": "Failed to reassign storage."
+      }
+    },
+    "delete": {
+      "title": "Remove S3 bucket",
+      "description": "Are you sure you want to remove <strong>{{name}}</strong>? All users and workloads will lose access to this storage option until you reconfigure it.",
+      "notification": {
+        "success": "Storage deleted successfully.",
+        "error": "Failed to delete storage."
+      },
+      "actions": {
+        "remove": {
+          "label": "Remove"
+        },
+        "cancel": {
+          "label": "Cancel"
+        }
+      }
+    },
+    "deleteProjectStorage": {
+      "title": "Remove S3 bucket from project",
+      "description": "Are you sure you want to remove <strong>{{name}}</strong> from the project? The action is permanent and cannot be undone.",
+      "notification": {
+        "success": "Storage removed from project successfully.",
+        "error": "Failed to remove storage from project."
+      },
+      "actions": {
+        "remove": {
+          "label": "Remove"
+        },
+        "cancel": {
+          "label": "Cancel"
+        }
+      }
+    }
+  },
+  "storageType": {
+    "S3": "S3",
+    "PVC": "PVC"
+  },
+  "storageStatus": {
+    "Unassigned": "-",
+    "PartiallySynced": "Partially Synced",
+    "Pending": "Pending",
+    "Synced": "Synced",
+    "SyncedError": "Sync Failed",
+    "Failed": "Failed",
+    "Deleting": "Deleting",
+    "Deleted": "Deleted",
+    "DeleteFailed": "Delete Failed"
+  },
+  "storageScope": {
+    "Organization": "Organization",
+    "Project": "Project"
+  },
+
+  "statusReason": {
+    "messageTrigger": "more info",
+    "messageHeader": "There was an error with this storage. The system returned the following error message:"
+  }
+}

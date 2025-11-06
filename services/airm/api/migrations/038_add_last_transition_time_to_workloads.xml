@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+<changeSet author="akshay" id="add-last-status-transition-at-column">
+    <addColumn tableName="workloads">
+        <column name="last_status_transition_at" type="timestamp with time zone" defaultValue="NOW()">
+            <constraints nullable="true"/>
+        </column>
+    </addColumn>
+
+    <createIndex indexName="ix_workloads_project_id_created_at" tableName="workloads">
+      <column name="project_id"/>
+      <column name="created_at"/>
+    </createIndex>
+  </changeSet>
+</databaseChangeLog>

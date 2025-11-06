@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <changeSet author="lorenzo" id="catalog-baseline-schema">
+        <!-- Charts table -->
+        <createTable tableName="charts">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="charts_pkey" nullable="false"/>
+            </column>
+            <column name="name" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="type" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_inputs" type="jsonb"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying"/>
+            <column name="updated_by" type="character varying"/>
+        </createTable>
+        <createIndex indexName="charts_name_key" tableName="charts" unique="true">
+            <column name="lower(name::text)"/>
+        </createIndex>
+
+        <!-- Chart Files table -->
+        <createTable tableName="chart_files">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="chart_files_pkey" nullable="false"/>
+            </column>
+            <column name="path" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="chart_id" type="uuid">
+                <constraints foreignKeyName="chart_files_chart_id_fkey" references="charts(id)" deleteCascade="true"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying"/>
+            <column name="updated_by" type="character varying"/>
+        </createTable>
+        <createIndex indexName="ix_chart_files_chart_id" tableName="chart_files">
+            <column name="chart_id"/>
+        </createIndex>
+
+        <!-- Overlays table -->
+        <createTable tableName="overlays">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="overlays_pkey" nullable="false"/>
+            </column>
+            <column name="canonical_name" type="character varying"/>
+            <column name="overlay" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="chart_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="overlays_chart_id_fkey" references="charts(id)" deleteCascade="true"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying"/>
+            <column name="updated_by" type="character varying"/>
+        </createTable>
+        <createIndex indexName="ix_overlays_chart_id" tableName="overlays">
+            <column name="chart_id"/>
+        </createIndex>
+
+        <!-- Datasets table -->
+        <createTable tableName="datasets">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="datasets_pkey" nullable="false"/>
+            </column>
+            <column name="cluster_id" type="uuid">
+                <constraints references="clusters(id)" foreignKeyName="datasets_cluster_id_fkey" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="user_group_id" type="uuid">
+                <constraints references="user_groups(id)" foreignKeyName="datasets_user_group_id_fkey" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="name" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="path" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="type" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying"/>
+            <column name="updated_by" type="character varying"/>
+        </createTable>
+
+        <!-- Inference Models table -->
+        <createTable tableName="inference_models">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="inference_models_pkey" nullable="false"/>
+            </column>
+            <column name="cluster_id" type="uuid">
+                <constraints references="clusters(id)" foreignKeyName="inference_models_cluster_id_fkey" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="user_group_id" type="uuid">
+                <constraints references="user_groups(id)" foreignKeyName="inference_models_user_group_id_fkey" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="type" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="onboarding_status" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="model_weights_path" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="canonical_name" type="character varying"/>
+            <column name="base_model_id" type="uuid">
+                <constraints foreignKeyName="inference_models_base_model_id_fkey" references="inference_models(id)"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying"/>
+            <column name="updated_by" type="character varying"/>
+        </createTable>
+
+        <!-- Workloads table -->
+        <createTable tableName="dc_workloads">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" primaryKeyName="dc_workloads_pkey" nullable="false"/>
+            </column>
+            <column name="cluster_id" type="uuid">
+                <constraints references="clusters(id)" foreignKeyName="dc_workloads_cluster_id_fkey" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="user_group_id" type="uuid">
+                <constraints references="user_groups(id)" foreignKeyName="dc_workloads_user_group_id_fkey" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="status" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="type" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="chart_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="dc_workloads_chart_id_fkey" references="charts(id)" deleteCascade="true"/>
+            </column>
+            <column name="model_id" type="uuid">
+                <constraints foreignKeyName="dc_workloads_model_id_fkey" references="inference_models(id)" deleteCascade="true"/>
+            </column>
+            <column name="dataset_path" type="character varying"/>
+            <column name="user_inputs" type="jsonb"/>
+            <column name="manifest" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="output" type="jsonb"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying"/>
+            <column name="updated_by" type="character varying"/>
+        </createTable>
+        <createIndex indexName="ix_dc_workloads_chart_id" tableName="dc_workloads">
+            <column name="chart_id"/>
+        </createIndex>
+        <createIndex indexName="ix_dc_workloads_model_id" tableName="dc_workloads">
+            <column name="model_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,0 +1,14 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Default values for test-health-service
+replicaCount: 1
+
+image:
+  repository: nginx
+  tag: alpine
+
+service:
+  type: ClusterIP
+  port: 80

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <changeSet id="schema-updates-post-projects" author="eugenek">
+    <sql>
+      UPDATE projects
+      SET
+          name = LOWER(REPLACE(name, ' ', '-')),
+          updated_at = NOW(),
+          updated_by = 'system'
+      WHERE
+          name &lt;&gt; LOWER(REPLACE(name, ' ', '-'));
+    </sql>
+    <sql>
+      UPDATE projects
+      SET
+          cluster_id = (
+              SELECT id FROM clusters ORDER BY id ASC LIMIT 1
+          ),
+          updated_at = NOW(),
+          updated_by = 'system'
+      WHERE
+          cluster_id IS NULL;
+    </sql>
+  </changeSet>
+  <changeSet id="make-cluster-id-non-nullable" author="eugenek">
+    <addNotNullConstraint
+      tableName="projects"
+      columnName="cluster_id"
+      columnDataType="uuid"/>
+  </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,8 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: v2
+name: llm-inference-vllm
+description: A Helm chart for vLLM inference
+version: 0.2.0

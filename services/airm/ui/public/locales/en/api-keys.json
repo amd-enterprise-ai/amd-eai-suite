@@ -1,0 +1,134 @@
+{
+  "list": {
+    "title": "API Keys",
+    "filters": {
+      "search": {
+        "placeholder": "Search API keys"
+      }
+    },
+    "actions": {
+      "create": {
+        "title": "Create API Key"
+      },
+      "edit": {
+        "title": "Edit API Key"
+      },
+      "delete": {
+        "title": "Delete API Key",
+        "confirmation": {
+          "title": "Delete API key",
+          "description": "Are you sure you want to delete the API key <strong>{{name}}</strong>? This action is permanent and will immediately revoke access for any clients using this key."
+        },
+        "notification": {
+          "success": "API key deleted successfully",
+          "error": "Failed to delete API key"
+        }
+      }
+    },
+    "apiKeys": {
+      "headers": {
+        "name": { "title": "Name" },
+        "secretKey": { "title": "Secret Key" },
+        "createdAt": { "title": "Created At" },
+        "createdBy": { "title": "Created By" },
+        "actions": { "title": "" }
+      },
+      "empty": {
+        "description": "No API keys found for this project."
+      },
+      "pagination": {
+        "showing": "Showing {{from}} to {{to}} of {{total}} API keys",
+        "pageSize": {
+          "label": "Show",
+          "entities": "API keys"
+        }
+      }
+    }
+  },
+  "form": {
+    "create": {
+      "title": "Create API Key",
+      "action": {
+        "create": "Create API key",
+        "cancel": "Discard changes"
+      },
+      "field": {
+        "name": {
+          "label": "Name",
+          "placeholder": "Enter API key name",
+          "error": {
+            "minLength": "Name must be at least 3 characters",
+            "maxLength": "Name must not exceed 64 characters"
+          }
+        },
+        "expiresAt": {
+          "label": "Expires at"
+        },
+        "validityPeriod": {
+          "label": "Validity period",
+          "placeholder": "Select validity period",
+          "description": "Default is set to never expire.",
+          "options": {
+            "1day": "1 day",
+            "1week": "1 week",
+            "2weeks": "2 weeks",
+            "30days": "30 days",
+            "60days": "60 days",
+            "90days": "90 days",
+            "never": "Never"
+          }
+        },
+        "modelDeployment": {
+          "label": "Model deployments",
+          "placeholder": "Select model deployments",
+          "description": "Select which model deployments this API key can access"
+        }
+      },
+      "section": {
+        "endpointAccess": "ENDPOINT ACCESS"
+      },
+      "notification": {
+        "success": "API key created successfully",
+        "error": "Failed to create API key"
+      }
+    },
+    "edit": {
+      "title": "Edit API Key",
+      "action": {
+        "save": "Save API key",
+        "cancel": "Discard changes"
+      },
+      "section": {
+        "linkedDeployments": "Linked deployments",
+        "noLinkedDeployments": "No deployments linked to this API key"
+      },
+      "notification": {
+        "success": "API key updated successfully",
+        "error": "Failed to update API key"
+      }
+    },
+    "keyCreated": {
+      "title": "Key created",
+      "description": "The following API key has been created and saved to the secrets vault.",
+      "warning": "The API key will be visible only once so make sure to store it in a safe but accessible place to use it!",
+      "field": {
+        "name": {
+          "label": "Name"
+        },
+        "key": {
+          "label": "API key"
+        }
+      },
+      "action": {
+        "done": "Done"
+      },
+      "notification": {
+        "copySuccess": "API key copied to clipboard",
+        "copyError": "Failed to copy API key"
+      },
+      "aria": {
+        "copyButton": "Copy API key"
+      }
+    }
+  }
+}

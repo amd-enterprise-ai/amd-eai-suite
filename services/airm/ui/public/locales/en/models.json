@@ -1,0 +1,307 @@
+{
+  "title": "Models",
+  "status": {
+    "ready": "Ready",
+    "pending": "Pending",
+    "failed": "Failed"
+  },
+  "capabilities": {
+    "chat": "Chat",
+    "vision": "Vision",
+    "browser": "Browser",
+    "image": "Image",
+    "video": "Video",
+    "fine-tune": "Fine-tune"
+  },
+  "notifications": {
+    "refresh": {
+      "error": "Failed to fetch custom models. {{error, default='Please try again'}}."
+    }
+  },
+  "customModels": {
+    "list": {
+      "headers": {
+        "name": {
+          "title": "Model name"
+        },
+        "canonicalName": {
+          "title": "Canonical name"
+        },
+        "createdBy": {
+          "title": "Created by"
+        },
+        "createdAt": {
+          "title": "Created at"
+        },
+        "type": {
+          "title": "Type"
+        },
+        "onboardingStatus": {
+          "title": "Status"
+        },
+        "workloads": {
+          "title": "Workloads"
+        },
+        "actions": {
+          "title": ""
+        }
+      },
+      "filters": {
+        "type": {
+          "label": "Types"
+        },
+        "status": {
+          "label": "Statuses"
+        },
+        "search": {
+          "placeholder": "Search by name..."
+        }
+      },
+      "pagination": {
+        "showing": "Showing {{from}} to {{to}} of {{total}} models",
+        "pageSize": {
+          "label": "Show",
+          "entities": "models"
+        }
+      },
+      "sort": {
+        "name": {
+          "asc": "Sort name by ascending",
+          "desc": "Sort name by descending"
+        },
+        "status": {
+          "asc": "Sort status by ascending",
+          "desc": "Sort status by descending"
+        }
+      },
+      "empty": {
+        "description": "List of models is empty."
+      },
+      "actions": {
+        "delete": {
+          "label": "Delete",
+          "confirmation": {
+            "title": "Confirm deletion",
+            "description": "Are you sure you want to delete <strong>{{name}}</strong> model? This action is irreversible."
+          },
+          "notification": {
+            "success": "Model successfully deleted.",
+            "error": "Failed to delete model. Please try again."
+          }
+        },
+        "deploy": {
+          "label": "Deploy",
+          "confirmation": {
+            "title": "Confirm deployment",
+            "description": "Are you sure you want to deploy <strong>{{name}}</strong> model?"
+          }
+        },
+        "undeploy": {
+          "label": "Undeploy",
+          "confirmation": {
+            "title": "Undeploy model",
+            "description": "Are you sure you want to undeploy <strong>{{name}}</strong>?"
+          }
+        },
+        "details": {
+          "label": "Show details",
+          "modal": {
+            "title": "{{modelName}} details",
+            "close": "Close",
+            "modelNotFound": "Model is not found"
+          }
+        },
+        "finetune": {
+          "title": "Fine-tune model",
+          "label": "Fine-tune",
+          "modal": {
+            "title": "Create fine-tuned model",
+            "body": "Configure your model below",
+            "cancel": "Cancel",
+            "confirm": "Start training",
+            "baseModel": {
+              "label": "Base model",
+              "placeholder": "Select base model"
+            },
+            "dataset": {
+              "label": "Training dataset",
+              "placeholder": "Select the training dataset"
+            },
+            "modelName": {
+              "label": "Model name",
+              "placeholder": "Provide a name for the model",
+              "description": "The name must be unique and can only contain letters, numbers, underscores, periods, and dashes.",
+              "emptyNameError": "Model name can't be empty",
+              "nonUniqueNameError": "Another model with the same name already exists",
+              "invalidCharactersError": "Model name can only contain letters, numbers, underscores, periods, and dashes"
+            },
+            "modelDescription": {
+              "label": "Model description",
+              "placeholder": "Provide a description for the model"
+            },
+            "advancedSettingsAccordion": {
+              "title": "Advanced settings"
+            },
+            "batchSize": {
+              "label": "Batch size",
+              "description": "Range of 1-128 is recommended",
+              "placeholder": "Auto"
+            },
+            "learningRateMultiplier": {
+              "label": "Learning rate multiplier",
+              "description": "Range of 0.1-10 is recommended",
+              "placeholder": "Auto"
+            },
+            "epochs": {
+              "label": "Number of epochs",
+              "description": "Range of 1-10 is recommended",
+              "placeholder": "Auto"
+            }
+          }
+        }
+      }
+    }
+  },
+  "aimCatalog": {
+    "list": {
+      "title": "AIM Catalog",
+      "description": "Ready-to-deploy open source models created by the worldwide AI community. You can easily deploy these models as inference services.",
+      "filter": {
+        "search": {
+          "placeholder": "Search models..."
+        },
+        "deploymentStatus": {
+          "placeholder": "Deployment status",
+          "deployed": "Deployed",
+          "notDeployed": "Not deployed",
+          "pending": "Pending"
+        },
+        "type": {
+          "placeholder": "Model type",
+          "baseModel": "Base model",
+          "mergedModel": "Merged model",
+          "adapter": "Adapter"
+        },
+        "tag": {
+          "placeholder": "Tag"
+        }
+      },
+      "empty": {
+        "description": "No community models found."
+      },
+      "sections": {
+        "llm": "Large Language Models",
+        "image": "Image and Video Generation Models",
+        "vision": "Vision and Robotics"
+      },
+      "capabilities": {
+        "text-generation": "Text",
+        "chat": "Chat",
+        "instruction": "Instruction",
+        "reasoning": "Reasoning",
+        "vision": "Vision"
+      }
+    },
+    "actions": {
+      "deploy": {
+        "label": "Deploy"
+      },
+      "undeploy": {
+        "label": "Undeploy",
+        "confirmation": {
+          "title": "Undeploy model",
+          "description": "Are you sure you want to undeploy model <strong>{{name}}</strong>?"
+        }
+      },
+      "connect": {
+        "label": "Connect",
+        "modal": {
+          "title": "Connect to model",
+          "externalUrl": "External URL (accessible from outside the cluster)",
+          "internalUrl": "Internal URL (accessible only within the cluster)",
+          "codeExample": "The code snippet below uses the external URL. To access from within the cluster (e.g., from VSCode or JupyterLab workspaces), replace with the internal URL.",
+          "inferenceUrl": "Inference URL",
+          "openChat": "Open in chat"
+        }
+      },
+      "notifications": {
+        "downloadError": "Failed to download {{modelName}} model. Please try again.",
+        "downloadSuccess": "Model {{modelName}} download started.",
+        "fetchError": "Failed to fetch AIM Catalog. {{error, default='Please try again'}}.",
+        "fetchSecretsError": "Failed to fetch secrets. {{error, default='Please try again'}}.",
+        "noActiveProject": "No active project selected",
+        "deleteSuccess": "AIM undeployed successfully.",
+        "deleteError": "Failed to undeploy AIM. Please try again."
+      }
+    },
+    "status": {
+      "deployed": "Deployed",
+      "deploying": "Deploying…",
+      "undeploying": "Undeploying…"
+    }
+  },
+  "huggingFaceTokenDrawer": {
+    "title": "Hugging Face Authentication",
+    "actions": {
+      "cancel": "Cancel",
+      "apply": "Apply"
+    },
+    "fields": {
+      "selectMode": "Token selection mode",
+      "selectExisting": "Select existing token",
+      "addNew": "Add new token",
+      "selectToken": {
+        "label": "Select a token",
+        "placeholder": "Choose an existing token"
+      },
+      "name": {
+        "label": "Name",
+        "placeholder": "Enter a display name for the token"
+      },
+      "token": {
+        "label": "Token",
+        "placeholder": "Enter your Hugging Face token"
+      }
+    },
+    "validation": {
+      "selectTokenOrProvideNameAndToken": "Please select an existing token or provide both name and token",
+      "nameRequired": "Name is required when entering a new token",
+      "invalidSecretName": "The secret name must be lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character",
+      "tokenRequired": "Token is required when entering a new token",
+      "invalidTokenFormat": "Please enter a valid Hugging Face token (starts with 'hf_')",
+      "nameTooLong": "Name cannot exceed 253 characters (Kubernetes limit)"
+    },
+    "notifications": {
+      "secretCreated": "Hugging Face token secret '{{name}}' created successfully",
+      "secretCreateError": "Failed to create Hugging Face token secret: {{error}}",
+      "downloadStarted": "Model download started with Hugging Face token",
+      "invalidSecretResponse": "Failed to create secret: Invalid response from server",
+      "noTokenSelected": "No Hugging Face token selected or created"
+    }
+  },
+  "deployAIMDrawer": {
+    "title": "Deploy AIM",
+    "actions": {
+      "cancel": "Cancel",
+      "deploy": "Deploy"
+    },
+    "fields": {
+      "title": "Deployment settings",
+      "huggingFaceToken": {
+        "title": "Hugging Face authentication",
+        "description": "This model requires a Hugging Face token for deployment. Please provide a valid token to proceed with the deployment.",
+        "label": "Hugging Face token",
+        "placeholder": "Select Hugging Face token"
+      }
+    },
+    "notifications": {
+      "success": "Workload deployment started",
+      "error": "Error deploying workload"
+    }
+  },
+  "tabs": {
+    "aimCatalog": "AIM Catalog",
+    "customModels": "Custom Models",
+    "deployedModels": "Deployed Models"
+  }
+}

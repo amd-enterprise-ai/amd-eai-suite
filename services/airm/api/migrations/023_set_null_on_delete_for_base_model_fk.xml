@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="021-set-null-on-delete-base-model-fk" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <!-- Check if the constraint exists before trying to drop it -->
+            <foreignKeyConstraintExists foreignKeyTableName="inference_models" foreignKeyName="inference_models_base_model_id_fkey"/>
+        </preConditions>
+
+        <!-- Drop the existing foreign key constraint -->
+        <dropForeignKeyConstraint baseTableName="inference_models" constraintName="inference_models_base_model_id_fkey"/>
+
+        <!-- Add the foreign key constraint with ON DELETE SET NULL -->
+        <addForeignKeyConstraint baseColumnNames="base_model_id" baseTableName="inference_models" constraintName="inference_models_base_model_id_fkey" referencedColumnNames="id" referencedTableName="inference_models" onDelete="SET NULL" onUpdate="NO ACTION"/>
+    </changeSet>
+
+</databaseChangeLog>

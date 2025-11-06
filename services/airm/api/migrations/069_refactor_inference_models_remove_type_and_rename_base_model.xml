@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="drop-base-model-fk-constraint" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <foreignKeyConstraintExists foreignKeyTableName="inference_models" foreignKeyName="inference_models_base_model_id_fkey"/>
+        </preConditions>
+        <dropForeignKeyConstraint baseTableName="inference_models" constraintName="inference_models_base_model_id_fkey"/>
+    </changeSet>
+
+    <changeSet id="drop-base-model-id-index" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <indexExists tableName="inference_models" indexName="ix_inference_models_base_model_id"/>
+        </preConditions>
+        <dropIndex tableName="inference_models" indexName="ix_inference_models_base_model_id"/>
+    </changeSet>
+
+    <changeSet id="drop-base-model-id-column" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="inference_models" columnName="base_model_id"/>
+        </preConditions>
+        <dropColumn tableName="inference_models" columnName="base_model_id"/>
+    </changeSet>
+
+    <changeSet id="drop-type-column" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="inference_models" columnName="type"/>
+        </preConditions>
+        <dropColumn tableName="inference_models" columnName="type"/>
+    </changeSet>
+
+    <changeSet id="drop-type-related-indexes" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <indexExists tableName="inference_models" indexName="ix_inference_models_type"/>
+        </preConditions>
+        <dropIndex tableName="inference_models" indexName="ix_inference_models_type"/>
+    </changeSet>
+
+    <changeSet id="ensure-name-project-unique-constraint" author="lorenzo">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="inference_models" indexName="inference_models_name_project_id_key"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="inference_models_name_project_id_key" tableName="inference_models" unique="true">
+            <column name="name"/>
+            <column name="project_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

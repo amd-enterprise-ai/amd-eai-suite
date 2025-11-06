@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <changeSet id="create-aims-table" author="lorenzo" >
+        <createTable tableName="aims">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying" />
+            <column name="updated_by" type="character varying" />
+            <column name="image_name" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="image_tag" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="labels" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="aims" indexName="aims_image_name_image_tag_key" unique="true">
+            <column name="image_name"/>
+            <column name="image_tag"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="add-aim-id-to-workloads" author="lorenzo">
+        <addColumn tableName="workloads">
+            <column name="aim_id" type="UUID">
+                <constraints nullable="true" foreignKeyName="fk_workloads_aim_id" references="aims(id)" deleteCascade="false"/>
+            </column>
+        </addColumn>
+
+        <createIndex tableName="workloads" indexName="ix_workloads_aim_id">
+            <column name="aim_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

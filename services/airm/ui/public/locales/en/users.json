@@ -1,0 +1,323 @@
+{
+  "title": "Users",
+  "tabs": {
+    "active": "Active Users",
+    "invited": "Invited Users"
+  },
+  "actions": {
+    "addUser": "Invite user"
+  },
+  "list": {
+    "headers": {
+      "name": {
+        "title": "Name"
+      },
+      "email": {
+        "title": "Email"
+      },
+      "lastSeenAt": {
+        "title": "Last Seen At"
+      },
+      "roles": {
+        "title": "Roles"
+      }
+    },
+    "filter": {
+      "placeholder": "Search"
+    },
+    "pagination": {
+      "showing": "Showing {{from}} to {{to}} of {{total}} users",
+      "pageSize": {
+        "label": "Show",
+        "entities": "users"
+      }
+    },
+    "sort": {
+      "name": {
+        "asc": "Sort Name by Ascending",
+        "desc": "Sort Name by Descending"
+      },
+      "email": {
+        "asc": "Sort Email by Ascending",
+        "desc": "Sort Email by Descending"
+      },
+      "team": {
+        "asc": "Sort Team by Ascending",
+        "desc": "Sort Team by Descending"
+      },
+      "role": {
+        "asc": "Sort Role by Ascending",
+        "desc": "Sort Role by Descending"
+      }
+    },
+    "lastSeenAt": {
+      "never": "Never"
+    },
+    "empty": {
+      "description": "List of users is empty."
+    }
+  },
+  "modal": {
+    "addUser": {
+      "title": "Invite user",
+      "form": {
+        "email": {
+          "label": "Email",
+          "placeholder": "Email of the user you are inviting...",
+          "validation": {
+            "required": "Please enter the email of the user you are inviting.",
+            "format": "Please enter the correct email format.",
+            "unique": "The user email already exists in the system."
+          }
+        },
+        "projects": {
+          "label": "Projects",
+          "placeholder": "Optionally select project(s) for this invited user"
+        },
+        "roles": {
+          "label": "Roles",
+          "placeholder": "Please select a role for this invited user.",
+          "validation": {
+            "required": "Please select one of the roles for this user to be invited."
+          },
+          "options": {
+            "platformAdmin": "Platform Administrator",
+            "teamMember": "Team Member"
+          }
+        }
+      },
+      "instruction": "We will send an email with first time login and account activation details to the new user.",
+      "actions": {
+        "confirm": "Send invite",
+        "cancel": "Cancel"
+      },
+      "notification": {
+        "success": "User has been successfully invited.",
+        "error": "Failed to invite user. Please try again later."
+      }
+    }
+  },
+  "roles": {
+    "values": {
+      "team_member": "Team Member"
+    }
+  },
+  "detail": {
+    "title": "User Details",
+    "delete": {
+      "title": "Danger Zone",
+      "message": "These changes are permanent and cannot be undone.",
+      "action": {
+        "label": "Delete user",
+        "disabled": {
+          "sameUser": "Same logged in account can't be deleted."
+        }
+      },
+      "confirmation": {
+        "title": "Confirm Deletion",
+        "description": "Are you sure you want to delete this user?"
+      },
+      "notification": {
+        "success": "User deleted successfully.",
+        "error": "Failed to delete user. Please try again later."
+      }
+    },
+    "edit": {
+      "notification": {
+        "success": "User updated successfully.",
+        "error": "Failed to update user. Please try again later."
+      }
+    },
+    "form": {
+      "firstName": {
+        "label": "First Name",
+        "placeholder": "First name",
+        "validation": {
+          "length": "The user's first name must be between 2 and 64 characters."
+        }
+      },
+      "lastName": {
+        "label": "Last Name",
+        "placeholder": "Last name",
+        "validation": {
+          "length": "The user's last name must be between 2 and 64 characters."
+        }
+      },
+      "email": {
+        "label": "Email",
+        "placeholder": "Email"
+      },
+      "actions": {
+        "submit": "Save changes",
+        "reset": "Discard changes"
+      },
+      "notification": {
+        "success": "User information saved successfully.",
+        "error": "Problems saving user information. Please retry again."
+      }
+    },
+    "projectsAndRoles": {
+      "title": "Projects and Roles",
+      "projects": {
+        "title": "Projects",
+        "empty": "User is not a member of any project.",
+        "actions": {
+          "add": {
+            "title": "Add to project",
+            "confirm": "Assign to project",
+            "cancel": "Cancel"
+          },
+          "delete": {
+            "title": "Remove from project",
+            "description": "Are you sure you want to remove this user from <strong>{{project}}</strong> project?",
+            "confirm": "Remove"
+          }
+        },
+        "form": {
+          "project": {
+            "label": "Project",
+            "placeholder": "Please select a project to assign to this user"
+          }
+        },
+        "validation": {
+          "project": {
+            "selected": "Please select a project to be assigned to this user"
+          }
+        },
+        "notification": {
+          "add": {
+            "success": "User has been successfully assigned to the project. Please note that it may take up to 5 minutes for the changes to take effect.",
+            "error": "Failed to assign user to the project. Please try again later."
+          },
+          "delete": {
+            "success": "User has been removed from project successfully. Please note that it may take up to 5 minutes for the changes to take effect.",
+            "error": "Failed to remove user from project. Please try again later."
+          }
+        }
+      },
+      "roles": {
+        "title": "Roles",
+        "actions": {
+          "edit": {
+            "title": "Edit role",
+            "confirm": "Assign role",
+            "cancel": "Cancel"
+          }
+        },
+        "options": {
+          "teamMember": {
+            "name": "Team Member",
+            "description": "This role is assigned to the user by default."
+          },
+          "platformAdministrator": {
+            "name": "Platform Admin",
+            "description": "Manages platform and cluster."
+          }
+        },
+        "form": {
+          "role": {
+            "placeholder": "Please select a role to assign the user",
+            "label": "Role",
+            "selected": "Please select a role",
+            "options": {
+              "platformAdmin": "Platform Administrator",
+              "teamMember": "Team Member"
+            }
+          }
+        },
+        "notification": {
+          "success": "User role has been successfully updated.",
+          "error": "Failed to update user role. Please try again later."
+        }
+      }
+    }
+  },
+  "invited": {
+    "actions": {
+      "addUser": "Invite user"
+    },
+    "list": {
+      "headers": {
+        "email": {
+          "title": "Email"
+        },
+        "projects": {
+          "title": "Projects"
+        },
+        "roles": {
+          "title": "Roles"
+        },
+        "invitedAt": {
+          "title": "Invite Sent"
+        },
+        "invitedBy": {
+          "title": "Invited By"
+        },
+        "actions": {
+          "title": ""
+        }
+      },
+      "actions": {
+        "resend": {
+          "label": "Resend Invite",
+          "confirmation": {
+            "title": "Resend Invite?",
+            "description": "A new invite will be sent. Link will be valid for 12 hours.",
+            "confirm": "Resend Invite"
+          },
+          "notification": {
+            "success": "Invitation resent successfully.",
+            "error": "Failed to resend invitation. Please try again."
+          }
+        },
+        "cancel": {
+          "label": "Cancel",
+          "confirmation": {
+            "title": "Cancel Invite?",
+            "description": "Are you sure you want to cancel the invite for this user? This action cannot be undone.",
+            "confirm": "Cancel Invite"
+          },
+          "notification": {
+            "success": "Invitation cancelled successfully.",
+            "error": "Failed to cancel invitation. Please try again."
+          }
+        }
+      },
+      "filter": {
+        "placeholder": "Search"
+      },
+      "pagination": {
+        "showing": "Showing {{from}} to {{to}} of {{total}} invited users",
+        "pageSize": {
+          "label": "Show",
+          "entities": "invited users"
+        }
+      },
+      "sort": {
+        "email": {
+          "asc": "Sort Email by Ascending",
+          "desc": "Sort Email by Descending"
+        },
+        "team": {
+          "asc": "Sort Team by Ascending",
+          "desc": "Sort Team by Descending"
+        },
+        "roles": {
+          "asc": "Sort Roles by Ascending",
+          "desc": "Sort Roles by Descending"
+        },
+        "invitedAt": {
+          "asc": "Sort Invite Sent by Ascending",
+          "desc": "Sort Invite Sent by Descending"
+        },
+        "invitedBy": {
+          "asc": "Sort Invited By by Ascending",
+          "desc": "Sort Invited By by Descending"
+        }
+      },
+      "empty": {
+        "description": "No users currently invited."
+      }
+    }
+  }
+}

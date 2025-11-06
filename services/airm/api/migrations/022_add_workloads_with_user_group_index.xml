@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+
+<changeSet author="akshay" id="add-workloads-stat-with-user-group-index">
+    <createIndex indexName="ix_workload_cluster_id_status_user_group_id" tableName="workloads">
+      <column name="cluster_id"/>
+      <column name="status"/>
+      <column name="user_group_id"/>
+    </createIndex>
+</changeSet>
+</databaseChangeLog>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="rename-project-indexes" author="akshay">
+        <dropIndex tableName="projects" indexName="projects_name_organization_id"/>
+        <createIndex indexName="projects_name_organization_id_key" tableName="projects" unique="true">
+            <column name="lower(name::text)"/>
+            <column name="organization_id"/>
+        </createIndex>
+
+        <dropIndex tableName="projects" indexName="projects_cluster_id" />
+        <createIndex indexName="ix_projects_cluster_id" tableName="projects">
+            <column name="cluster_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

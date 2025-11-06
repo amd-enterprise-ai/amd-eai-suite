@@ -1,0 +1,327 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+services:
+  postgres:
+    container_name: postgres
+    image: postgres:17
+    environment:
+      PG_HOST: localhost
+      PG_PORT: 5432
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: airm
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql
+    networks:
+      - airm_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  liquibase:
+    container_name: liquibase
+    image: docker.io/liquibase/liquibase:4.31
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: --url="jdbc:postgresql://postgres:5432/airm" --username="postgres" --password="postgres" --changeLogFile=changelog/changelog.xml --logLevel=info update
+    volumes:
+      - ./migrations:/liquibase/changelog
+    networks:
+      - airm_network
+  seed-db:
+    container_name: seed-db
+    image: postgres:17
+    environment:
+      PGPASSWORD: postgres
+    depends_on:
+      liquibase:
+        condition: service_completed_successfully
+    command: psql --host=postgres --username=postgres --dbname=airm --file=/seed-db.sql
+    networks:
+      - airm_network
+    volumes:
+      - ./seed-db.sql:/seed-db.sql
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    container_name: rabbitmq
+    ports:
+      # The AMQP protocol port
+      - "5672:5672"
+      # HTTP Management UI
+      - "15672:15672"
+    environment:
+      RABBITMQ_ADMIN_USER: guest
+      RABBITMQ_ADMIN_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - airm_network
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmqctl status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  prometheus:
+    image: prom/prometheus:v3.3.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus_config.yaml:/etc/prometheus/prometheus.yml
+    networks:
+      - airm_network
+  loki:
+    image: grafana/loki:3.3.1
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    networks:
+      - airm_network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  log-generator:
+    image: curlimages/curl:latest
+    profiles: [log]
+    container_name: log-generator
+    networks:
+      - airm_network
+    depends_on:
+      - loki
+    entrypoint: |
+      sh -c '
+        while true; do
+          ts="$(date +%s000000000)"
+          case $$(($$RANDOM % 5)) in
+            0) level="debug" ;;
+            1) level="info" ;;
+            2) level="warn" ;;
+            3) level="error" ;;
+            4) level="fatal" ;;
+          esac
+          payload="{\"streams\": [{\"stream\": {\"k8s_pod_name\": \"custom-app-demo\", \"level\": \"$$level\"}, \"values\": [[\"$$ts\", \"New log entry at $(date)\"]]}]}"
+          echo "$$payload" | curl -s -H "Content-Type: application/json" \
+        -X POST --data-binary @- http://loki:3100/loki/api/v1/push
+          sleep 2
+        done
+      '
+  keycloak-certgen:
+    image: alpine/openssl:3.5.2
+    container_name: keycloak-certgen
+    volumes:
+      - ./.kc-certs:/out
+    command: >
+      req -x509 -nodes -days 3650 -newkey rsa:2048
+          -subj /CN=localhost
+          -addext subjectAltName=DNS:host.docker.internal,IP:127.0.0.1,IP:0.0.0.0
+          -keyout /out/tls.key
+          -out /out/tls.crt
+    restart: "no"
+  keycloak:
+    image: keycloak/keycloak:26.2
+    container_name: keycloak
+    user: root
+    depends_on:
+      keycloak-certgen:
+        condition: service_completed_successfully
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+      - "8443:8443" # HTTPS required by kube-apiserver OIDC
+    volumes:
+      - keycloak_data:/opt/keycloak/data/h2
+      - ./airm-realm.json:/opt/keycloak/data/import/airm-realm.json
+      - ./.kc-certs/:/certs/:ro
+    command: ["start-dev", "--import-realm"]
+    networks:
+      - airm_network
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server --console-address ":9001" /data
+    networks:
+      - airm_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+  minio-setup:
+    image: minio/mc:latest
+    container_name: minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - airm_network
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/default-bucket --ignore-existing;
+      exit 0;
+      "
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    ports:
+      - "8200:8200"
+    volumes:
+      - vault-data:/vault/data
+      - ./dev-vault-config:/vault/config
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "local-dev-access" # For development only
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK # Required for Vault's memory locking
+    entrypoint: >
+      sh -c "
+      vault server -dev -dev-root-token-id=local-dev-access &
+      VAULT_PID=$!;
+      sleep 5 &&
+      export VAULT_ADDR=http://127.0.0.1:8200 &&
+      export VAULT_TOKEN=local-dev-access &&
+      sh /vault/config/load-secrets.sh;
+      wait $VAULT_PID"
+  mock-cluster-auth:
+    build:
+      context: ../../../tooling/mock-cluster-auth
+      dockerfile: Dockerfile
+    container_name: mock-cluster-auth
+    ports:
+      - "8081:8081"
+    environment:
+      ADMIN_TOKEN: ${CLUSTER_AUTH_ADMIN_TOKEN:-mock-admin-token}
+      LOG_LEVEL: INFO
+    networks:
+      - airm_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  keycloak-export:
+    image: keycloak/keycloak:26.2
+    container_name: keycloak-export
+    user: root
+    profiles:
+      - export
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    volumes:
+      - keycloak_data:/opt/keycloak/data/h2
+      - .:/opt/keycloak/data/export
+    command:
+      [
+        "export",
+        "--file",
+        "/opt/keycloak/data/export/airm-realm.json",
+        "--realm",
+        "airm",
+      ]
+    networks:
+      - airm_network
+  charts-registration:
+    container_name: charts-registration
+    image: ghcr.io/astral-sh/uv:python3.13-bookworm
+    networks: [airm_network]
+    profiles: [workbench]
+    working_dir: /app/services/airm/api
+    volumes:
+      - ../../..:/app:delegated
+      - uv_cache:/root/.cache/uv
+      - reg_env:/app/services/airm/api/.venv
+      - ~/.ssh:/root/.ssh:ro
+    environment:
+      PYTHONPATH: /app/services/airm/api
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      POSTGRES_DB: airm
+    command: >
+      sh -c "uv run wm init && uv run -m app.charts.registration"
+    depends_on:
+      seed-db:
+        condition: service_completed_successfully
+
+  aims-registration:
+    container_name: aims-registration
+    image: ghcr.io/astral-sh/uv:python3.13-bookworm
+    networks: [airm_network]
+    profiles: [workbench]
+    working_dir: /app/services/airm/api
+    volumes:
+      - ../../..:/app:delegated
+      - uv_cache:/root/.cache/uv
+      - reg_env:/app/services/airm/api/.venv
+      - ~/.ssh:/root/.ssh:ro
+    environment:
+      PYTHONPATH: /app/services/airm/api
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      POSTGRES_DB: airm
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      AIM_METADATA_FILE_PATH: /app/services/airm/api/app/aims/aim-metadata.yaml
+    command: >
+      sh -c '
+        if [ -f "$$AIM_METADATA_FILE_PATH" ]; then
+          echo "Metadata file exists, running registration...";
+          uv run wm init && uv run -m app.aims.registration;
+        else
+          echo "Metadata file not found, fetching and registering...";
+          uv run wm init && uv run -m app.aims.fetching && uv run -m app.aims.registration;
+        fi
+      '
+    depends_on:
+      seed-db:
+        condition: service_completed_successfully
+
+networks:
+  airm_network:
+    name: airm_network
+volumes:
+  rabbitmq_data:
+    name: rabbitmq_data
+  keycloak_data:
+    name: keycloak_data
+  pg_data:
+    name: pg_data
+  minio_data:
+    name: minio_data
+  vault-data:
+    name: vault-data
+  loki_data:
+    name: loki_data
+  uv_cache:
+    name: uv_cache
+  reg_env:
+    name: reg_env

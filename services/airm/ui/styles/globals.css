@@ -1,0 +1,126 @@
+/*
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+*/
+
+/* Globals */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  border: 0 solid transparent;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  font-size: 16px;
+  letter-spacing: -0.012em;
+}
+
+body {
+  min-height: 100vh;
+  line-height: 1;
+  text-rendering: optimizeSpeed;
+  overflow: hidden;
+}
+
+/* Imports */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .uppercase {
+    text-transform: uppercase;
+    letter-spacing: 0.012em;
+  }
+}
+
+/* Firefox scroll fix */
+:root {
+  scrollbar-color: rgba(100, 100, 110, 0.2) transparent !important;
+  scrollbar-width: thin !important;
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-default-200;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-default-300;
+}
+
+::-webkit-scrollbar-track:hover {
+  @apply bg-default-100;
+}
+
+::-webkit-scrollbar-corner {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+
+/* Typography */
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-sans;
+    @apply text-default-800;
+  }
+
+  h1 {
+    @apply text-2xl;
+    @apply font-semibold;
+  }
+
+  h2 {
+    @apply text-xl;
+    @apply font-semibold;
+  }
+
+  h3 {
+    @apply text-lg;
+  }
+
+  h4 {
+    @apply text-base;
+  }
+
+  h5 {
+    @apply text-sm;
+  }
+
+  h6 {
+    @apply text-xs;
+  }
+
+  p {
+    @apply text-base;
+    @apply font-normal;
+    @apply font-sans;
+    @apply text-default-600;
+    @apply dark:text-default-500;
+  }
+
+  a {
+    @apply font-sans;
+  }
+}

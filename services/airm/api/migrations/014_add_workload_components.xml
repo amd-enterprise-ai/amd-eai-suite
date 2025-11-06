@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+  <changeSet author="eugenek" id="add-workload-components-table">
+      <createTable tableName="workload_components">
+          <column name="id" type="uuid">
+              <constraints primaryKey="true" primaryKeyName="workload_components_pkey"/>
+          </column>
+          <column name="workload_id" type="uuid">
+              <constraints references="workloads(id)" foreignKeyName="workloads_id_fkey" nullable="false" deleteCascade="true"/>
+          </column>
+          <column name="name" type="character varying">
+              <constraints nullable="false"/>
+          </column>
+          <column name="status" type="character varying">
+              <constraints nullable="false"/>
+          </column>
+          <column name="api_version" type="character varying">
+              <constraints nullable="false"/>
+          </column>
+          <column name="kind" type="character varying">
+              <constraints nullable="false"/>
+          </column>
+          <column name="created_at" type="timestamp with time zone">
+              <constraints nullable="false"/>
+          </column>
+          <column name="updated_at" type="timestamp with time zone">
+              <constraints nullable="false"/>
+          </column>
+          <column name="updated_by" type="character varying" />
+          <column name="created_by" type="character varying" />
+      </createTable>
+      <createIndex indexName="ix_workload_component_workload_id" tableName="workload_components">
+        <column name="workload_id"/>
+    </createIndex>
+  </changeSet>
+</databaseChangeLog>

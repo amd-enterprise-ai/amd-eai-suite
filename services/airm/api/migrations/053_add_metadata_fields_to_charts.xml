@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <!-- Add description column if it doesn't exist -->
+  <changeSet id="add-description-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="description"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="description" type="character varying">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+  <!-- Add long_description column if it doesn't exist -->
+  <changeSet id="add-long-description-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="long_description"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="long_description" type="text">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+  <!-- Add category column if it doesn't exist -->
+  <changeSet id="add-category-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="category"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="category" type="character varying">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+  <!-- Add tags column if it doesn't exist -->
+  <changeSet id="add-tags-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="tags"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="tags" type="jsonb">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+  <!-- Add featured_image column if it doesn't exist -->
+  <changeSet id="add-featured-image-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="featured_image"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="featured_image" type="character varying">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+  <!-- Add required_resources column if it doesn't exist -->
+  <changeSet id="add-required-resources-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="required_resources"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="required_resources" type="jsonb">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+  <!-- Add external_url column if it doesn't exist -->
+  <changeSet id="add-external-url-to-charts" author="lorenzo">
+    <preConditions onFail="MARK_RAN">
+      <not>
+        <columnExists tableName="charts" columnName="external_url"/>
+      </not>
+    </preConditions>
+    <addColumn tableName="charts">
+      <column name="external_url" type="character varying">
+        <constraints nullable="true"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+  <!-- Rename user_inputs column to signature if it exists -->
+  <changeSet id="rename-user-inputs-to-signature" author="cascade">
+    <preConditions onFail="MARK_RAN">
+      <columnExists tableName="charts" columnName="user_inputs"/>
+    </preConditions>
+    <renameColumn tableName="charts" oldColumnName="user_inputs" newColumnName="signature"/>
+  </changeSet>
+
+</databaseChangeLog>

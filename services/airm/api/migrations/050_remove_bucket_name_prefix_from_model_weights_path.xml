@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <changeSet id="fix-remove-bucket-name-prefix-from-model-weights-path" author="rinflian">
+    <sql>
+      UPDATE inference_models
+      SET
+          model_weights_path = CASE
+            WHEN model_weights_path LIKE 'default-bucket/%'
+            THEN SUBSTRING(model_weights_path FROM 16)  -- Remove 'default-bucket/' (15 chars + 1)
+            ELSE model_weights_path
+          END,
+          updated_at = NOW(),
+          updated_by = 'system'
+      WHERE model_weights_path LIKE 'default-bucket/%';
+    </sql>
+  </changeSet>
+</databaseChangeLog>

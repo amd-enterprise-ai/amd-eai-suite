@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+<changeSet author="akshay" id="add-missing-indexes">
+    <createIndex indexName="ix_quotas_cluster_id" tableName="quotas">
+      <column name="cluster_id"/>
+    </createIndex>
+    <createIndex indexName="ix_quotas_user_group_id" tableName="quotas">
+      <column name="user_group_id"/>
+    </createIndex>
+    <createIndex indexName="ix_clusters_organization_id" tableName="clusters">
+      <column name="organization_id"/>
+    </createIndex>
+    <createIndex indexName="ix_cluster_nodes_cluster_id" tableName="cluster_nodes">
+      <column name="cluster_id"/>
+    </createIndex>
+    <createIndex indexName="ix_workloads_cluster_id" tableName="workloads">
+      <column name="cluster_id"/>
+    </createIndex>
+    <createIndex indexName="ix_workloads_user_group_id" tableName="workloads">
+      <column name="user_group_id"/>
+    </createIndex>
+</changeSet>
+</databaseChangeLog>

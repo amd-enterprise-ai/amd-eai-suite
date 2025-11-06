@@ -1,0 +1,40 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates.
+//
+// SPDX-License-Identifier: MIT
+
+export enum SecretScope {
+  USER = 'User',
+  ORGANIZATION = 'Organization',
+  PROJECT = 'Project',
+}
+
+export enum SecretStatus {
+  UNASSIGNED = 'Unassigned',
+  PENDING = 'Pending',
+  SYNCED = 'Synced',
+  PARTIALLY_SYNCED = 'PartiallySynced',
+  FAILED = 'Failed',
+  SYNCED_ERROR = 'SyncedError',
+  DELETING = 'Deleting',
+  DELETED = 'Deleted',
+  DELETE_FAILED = 'DeleteFailed',
+}
+
+export enum SecretType {
+  EXTERNAL = 'External',
+  KUBERNETES_SECRET = 'KubernetesSecret',
+}
+
+export enum SecretUseCase {
+  HUGGING_FACE = 'HuggingFace',
+}
+
+export enum ProjectSecretStatus {
+  PENDING = 'Pending',
+  SYNCED = 'Synced',
+  FAILED = 'Failed',
+  SYNCED_ERROR = 'SyncedError',
+  DELETING = 'Deleting',
+  DELETED = 'Deleted',
+  DELETE_FAILED = 'DeleteFailed',
+}

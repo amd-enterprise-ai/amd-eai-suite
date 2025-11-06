@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <changeSet id="update-enum-values-to-use-str-enum" author="rominf">
+
+    <!-- Update WorkloadType enum values in charts table -->
+    <!-- Key to Value mappings:
+         MODEL_DOWNLOAD -> MODEL_DOWNLOAD (no change)
+         INFERENCE -> INFERENCE (no change)
+         FINE_TUNING -> FINE_TUNING (no change)
+         WORKSPACE -> WORKSPACE (no change)
+         CUSTOM -> CUSTOM (no change)
+    -->
+    <!-- No updates needed for WorkloadType in charts table as keys equal values -->
+
+    <!-- Update DatasetType enum values in datasets table -->
+    <!-- Key to Value mappings:
+         FINETUNING -> Fine-tuning
+    -->
+    <update tableName="datasets">
+      <column name="type" value="Fine-tuning"/>
+      <where>type = 'FINETUNING'</where>
+    </update>
+
+    <!-- Update ModelTypes enum values in inference_models table -->
+    <!-- Key to Value mappings:
+         BaseModel -> BaseModel (no change)
+         MergedModel -> MergedModel (no change)
+    -->
+    <!-- No updates needed for ModelTypes as keys equal values -->
+
+    <!-- Update OnboardingStatus enum values in inference_models table -->
+    <!-- Key to Value mappings:
+         pending -> pending (no change)
+         ready -> ready (no change)
+         failed -> failed (no change)
+    -->
+    <!-- No updates needed for OnboardingStatus as keys equal values -->
+
+    <!-- Update GPUVendor enum values in cluster_nodes table -->
+    <!-- Key to Value mappings:
+         NVIDIA -> NVIDIA (no change)
+         AMD -> AMD (no change)
+    -->
+    <!-- No updates needed for GPUVendor as keys equal values -->
+
+    <!-- Update WorkloadType enum values in workloads table -->
+    <!-- Same as charts table - no changes needed -->
+
+    <!-- Update ProjectStatus enum values in projects table -->
+    <!-- Key to Value mappings:
+         PENDING -> Pending
+         FAILED -> Failed
+         PARTIALLY_READY -> PartiallyReady
+         READY -> Ready
+         DELETING -> Deleting
+    -->
+    <update tableName="projects">
+      <column name="status" value="Pending"/>
+      <where>status = 'PENDING'</where>
+    </update>
+    <update tableName="projects">
+      <column name="status" value="Failed"/>
+      <where>status = 'FAILED'</where>
+    </update>
+    <update tableName="projects">
+      <column name="status" value="PartiallyReady"/>
+      <where>status = 'PARTIALLY_READY'</where>
+    </update>
+    <update tableName="projects">
+      <column name="status" value="Ready"/>
+      <where>status = 'READY'</where>
+    </update>
+    <update tableName="projects">
+      <column name="status" value="Deleting"/>
+      <where>status = 'DELETING'</where>
+    </update>
+
+    <!-- Update StorageType enum values in storages table -->
+    <!-- Key to Value mappings:
+         S3 -> S3 (no change)
+    -->
+    <!-- No updates needed for StorageType as keys equal values -->
+
+    <!-- Update StorageScope enum values in storages table -->
+    <!-- Key to Value mappings:
+         ORGANIZATION -> Organization
+    -->
+    <update tableName="storages">
+      <column name="scope" value="Organization"/>
+      <where>scope = 'ORGANIZATION'</where>
+    </update>
+
+    <!-- Update StorageStatus enum values in storages table -->
+    <!-- Key to Value mappings:
+         UNASSIGNED -> Unassigned
+         PENDING -> Pending
+         SYNCED -> Synced
+         PARTIALLY_SYNCED -> PartiallySynced
+         SYNCED_ERROR -> SyncedError
+         FAILED -> Failed
+         DELETING -> Deleting
+         DELETED -> Deleted
+         DELETE_FAILED -> DeleteFailed
+    -->
+    <update tableName="storages">
+      <column name="status" value="Unassigned"/>
+      <where>status = 'UNASSIGNED'</where>
+    </update>
+    <update tableName="storages">
+      <column name="status" value="Pending"/>
+      <where>status = 'PENDING'</where>
+    </update>
+    <update tableName="storages">
+      <column name="status" value="Synced"/>
+      <where>status = 'SYNCED'</where>
+    </update>
+    <update tableName="storages">
+      <column name="status" value="PartiallySynced"/>
+      <where>status = 'PARTIALLY_SYNCED'</where>
+    </update>
+    <update tableName="storages">
+      <column name="status" value="SyncedError"/>
+      <where>status = 'SYNCED_ERROR'</where>
+    </update>
+    <update tableName="storages">
+      <column name="status" value="Failed"/>
+      <where>status = 'FAILED'</where>
+    </update>
+    <update tableName="storages">
+      <column name="status" value="Deleting"/>
+      <where>status = 'DELETING'</where>
+    </update>
+    <update tableName="storages">
+      <column name="status" value="Deleted"/>
+      <where>status = 'DELETED'</where>
+    </update>
+    <update tableName="storages">
+      <column name="status" value="DeleteFailed"/>
+      <where>status = 'DELETE_FAILED'</where>
+    </update>
+
+    <!-- Update ProjectStorageStatus enum values in project_storages table -->
+    <!-- Key to Value mappings:
+         PENDING -> Pending
+         SYNCED -> Synced
+         FAILED -> Failed
+         SYNCED_ERROR -> SyncedError
+         DELETE_FAILED -> DeleteFailed
+         DELETED -> Deleted
+         DELETING -> Deleting
+         UNKNOWN -> Unknown
+    -->
+    <update tableName="project_storages">
+      <column name="status" value="Pending"/>
+      <where>status = 'PENDING'</where>
+    </update>
+    <update tableName="project_storages">
+      <column name="status" value="Synced"/>
+      <where>status = 'SYNCED'</where>
+    </update>
+    <update tableName="project_storages">
+      <column name="status" value="Failed"/>
+      <where>status = 'FAILED'</where>
+    </update>
+    <update tableName="project_storages">
+      <column name="status" value="SyncedError"/>
+      <where>status = 'SYNCED_ERROR'</where>
+    </update>
+    <update tableName="project_storages">
+      <column name="status" value="DeleteFailed"/>
+      <where>status = 'DELETE_FAILED'</where>
+    </update>
+    <update tableName="project_storages">
+      <column name="status" value="Deleted"/>
+      <where>status = 'DELETED'</where>
+    </update>
+    <update tableName="project_storages">
+      <column name="status" value="Deleting"/>
+      <where>status = 'DELETING'</where>
+    </update>
+    <update tableName="project_storages">
+      <column name="status" value="Unknown"/>
+      <where>status = 'UNKNOWN'</where>
+    </update>
+
+    <!-- Update ConfigMapStatus enum values in project_storages_configmap table -->
+    <!-- Key to Value mappings:
+         ADDED -> Added
+    -->
+    <update tableName="project_storages_configmap">
+      <column name="status" value="Added"/>
+      <where>status = 'ADDED'</where>
+    </update>
+
+    <!-- Update SecretType enum values in secrets table -->
+    <!-- Key to Value mappings:
+         EXTERNAL -> External
+    -->
+    <update tableName="secrets">
+      <column name="type" value="External"/>
+      <where>type = 'EXTERNAL'</where>
+    </update>
+
+    <!-- Update SecretScope enum values in secrets table -->
+    <!-- Key to Value mappings:
+         ORGANIZATION -> Organization
+    -->
+    <update tableName="secrets">
+      <column name="scope" value="Organization"/>
+      <where>scope = 'ORGANIZATION'</where>
+    </update>
+
+    <!-- Update SecretStatus enum values in secrets table -->
+    <!-- Same as StorageStatus - apply same mappings -->
+    <update tableName="secrets">
+      <column name="status" value="Unassigned"/>
+      <where>status = 'UNASSIGNED'</where>
+    </update>
+    <update tableName="secrets">
+      <column name="status" value="Pending"/>
+      <where>status = 'PENDING'</where>
+    </update>
+    <update tableName="secrets">
+      <column name="status" value="Synced"/>
+      <where>status = 'SYNCED'</where>
+    </update>
+    <update tableName="secrets">
+      <column name="status" value="PartiallySynced"/>
+      <where>status = 'PARTIALLY_SYNCED'</where>
+    </update>
+    <update tableName="secrets">
+      <column name="status" value="SyncedError"/>
+      <where>status = 'SYNCED_ERROR'</where>
+    </update>
+    <update tableName="secrets">
+      <column name="status" value="Failed"/>
+      <where>status = 'FAILED'</where>
+    </update>
+    <update tableName="secrets">
+      <column name="status" value="Deleting"/>
+      <where>status = 'DELETING'</where>
+    </update>
+    <update tableName="secrets">
+      <column name="status" value="Deleted"/>
+      <where>status = 'DELETED'</where>
+    </update>
+    <update tableName="secrets">
+      <column name="status" value="DeleteFailed"/>
+      <where>status = 'DELETE_FAILED'</where>
+    </update>
+
+    <!-- Update ProjectSecretStatus enum values in project_secrets table -->
+    <!-- Same as ProjectStorageStatus - apply same mappings -->
+    <update tableName="project_secrets">
+      <column name="status" value="Pending"/>
+      <where>status = 'PENDING'</where>
+    </update>
+    <update tableName="project_secrets">
+      <column name="status" value="Synced"/>
+      <where>status = 'SYNCED'</where>
+    </update>
+    <update tableName="project_secrets">
+      <column name="status" value="Failed"/>
+      <where>status = 'FAILED'</where>
+    </update>
+    <update tableName="project_secrets">
+      <column name="status" value="SyncedError"/>
+      <where>status = 'SYNCED_ERROR'</where>
+    </update>
+    <update tableName="project_secrets">
+      <column name="status" value="DeleteFailed"/>
+      <where>status = 'DELETE_FAILED'</where>
+    </update>
+    <update tableName="project_secrets">
+      <column name="status" value="Deleted"/>
+      <where>status = 'DELETED'</where>
+    </update>
+    <update tableName="project_secrets">
+      <column name="status" value="Deleting"/>
+      <where>status = 'DELETING'</where>
+    </update>
+    <update tableName="project_secrets">
+      <column name="status" value="Unknown"/>
+      <where>status = 'UNKNOWN'</where>
+    </update>
+
+    <!-- Update QuotaStatus enum values in quotas table -->
+    <!-- Key to Value mappings:
+         PENDING -> Pending
+         READY -> Ready
+         DELETING -> Deleting
+         FAILED -> Failed
+         DELETED -> Deleted
+    -->
+    <update tableName="quotas">
+      <column name="status" value="Pending"/>
+      <where>status = 'PENDING'</where>
+    </update>
+    <update tableName="quotas">
+      <column name="status" value="Ready"/>
+      <where>status = 'READY'</where>
+    </update>
+    <update tableName="quotas">
+      <column name="status" value="Deleting"/>
+      <where>status = 'DELETING'</where>
+    </update>
+    <update tableName="quotas">
+      <column name="status" value="Failed"/>
+      <where>status = 'FAILED'</where>
+    </update>
+    <update tableName="quotas">
+      <column name="status" value="Deleted"/>
+      <where>status = 'DELETED'</where>
+    </update>
+
+    <!-- Update NamespaceStatus enum values in namespaces table -->
+    <!-- Key to Value mappings:
+         ACTIVE -> Active
+         TERMINATING -> Terminating
+         PENDING -> Pending
+         FAILED -> Failed
+         DELETED -> Deleted
+         DELETE_FAILED -> DeleteFailed
+    -->
+    <update tableName="namespaces">
+      <column name="status" value="Active"/>
+      <where>status = 'ACTIVE'</where>
+    </update>
+    <update tableName="namespaces">
+      <column name="status" value="Terminating"/>
+      <where>status = 'TERMINATING'</where>
+    </update>
+    <update tableName="namespaces">
+      <column name="status" value="Pending"/>
+      <where>status = 'PENDING'</where>
+    </update>
+    <update tableName="namespaces">
+      <column name="status" value="Failed"/>
+      <where>status = 'FAILED'</where>
+    </update>
+    <update tableName="namespaces">
+      <column name="status" value="Deleted"/>
+      <where>status = 'DELETED'</where>
+    </update>
+    <update tableName="namespaces">
+      <column name="status" value="DeleteFailed"/>
+      <where>status = 'DELETE_FAILED'</where>
+    </update>
+
+  </changeSet>
+</databaseChangeLog>

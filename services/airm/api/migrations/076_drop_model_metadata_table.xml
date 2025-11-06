@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+
+    <changeSet id="073-drop-model-metadata-table" author="system">
+        <comment>Drop the model_metadata table as it's no longer needed</comment>
+        <dropTable tableName="model_metadata" cascadeConstraints="true"/>
+    </changeSet>
+
+</databaseChangeLog>

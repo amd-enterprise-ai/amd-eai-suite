@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <changeSet id="add-project-memberships-table" author="">
+        <createTable tableName="project_memberships">
+            <column name="user_id" type="uuid">
+                <constraints references="users(id)" foreignKeyName="user_project_user_id_fkey" nullable="false"/>
+            </column>
+            <column name="project_id" type="uuid">
+                <constraints references="projects(id)" foreignKeyName="user_project_project_id_fkey" nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+              <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying" />
+            <column name="updated_by" type="character varying" />
+        </createTable>
+          <addPrimaryKey
+            tableName="project_memberships"
+            columnNames="user_id, project_id"
+            constraintName="project_memberships_pkey"/>
+          <createIndex
+            tableName="project_memberships"
+            indexName="project_memberships_user_id">
+            <column name="user_id"/>
+        </createIndex>
+          <createIndex
+            tableName="project_memberships"
+            indexName="project_memberships_project_id">
+            <column name="project_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

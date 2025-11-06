@@ -1,0 +1,9 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+airm:
+  dispatcher:
+    image:
+      repository: ghcr.io/astral-sh/uv
+      tag: python3.13-alpine

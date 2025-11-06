@@ -1,0 +1,8 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: v2
+name: test-health-service
+description: A simple service chart for testing with a health endpoint
+version: 0.1.0

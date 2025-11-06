@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+  <changeSet author="akshay" id="add-status-reason-to-quota">
+    <addColumn tableName="quotas">
+        <column name="status_reason" type="character varying" />
+    </addColumn>
+    <modifyDataType columnName="cpu_milli_cores" newDataType="int" tableName="quotas"/>
+    <modifyDataType columnName="cpu_milli_cores" newDataType="int" tableName="cluster_nodes"/>
+  </changeSet>
+</databaseChangeLog>

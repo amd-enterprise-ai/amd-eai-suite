@@ -1,0 +1,155 @@
+{
+  "actions": {
+    "search": {
+      "placeholder": "Search workspaces",
+      "label": "Search"
+    },
+    "categoryFilter": {
+      "label": "Category"
+    },
+    "displayStyle": {
+      "label": "Display style"
+    },
+    "refresh": "Refresh"
+  },
+  "categories": {
+    "development": "Development tools",
+    "mlops": "MLOps tools",
+    "genai": "GenAI tools"
+  },
+  "displayStyle": {
+    "grid": "Grid",
+    "list": "List"
+  },
+  "list": {
+    "headers": {
+      "displayName": {
+        "title": "Name"
+      },
+      "status": {
+        "title": "Status"
+      },
+      "description": {
+        "title": "Description"
+      },
+      "createdAt": {
+        "title": "Created At"
+      },
+      "category": {
+        "title": "Category"
+      },
+      "vram": {
+        "title": "VRAM"
+      },
+      "gpu": {
+        "title": "GPUs"
+      },
+      "workloadsCount": {
+        "title": "Workloads"
+      },
+      "actions": {
+        "title": ""
+      }
+    },
+    "valueTemplates": {
+      "gpu": "{{value}}",
+      "vram": "{{value}}"
+    },
+    "actions": {
+      "deploy": "View and deploy",
+      "pending": "Pending...",
+      "launch": "Launch",
+      "view": "View details",
+      "undeploy": "Undeploy",
+      "cancel": "Cancel"
+    },
+    "errors": {
+      "noLaunchUrl": "Could not launch workload, workload missing a launch URL.",
+      "undeployError": "Error while undeploying workload. Please try again later.",
+      "noRunningWorkload": "Workload is not running. Can't open workspace."
+    },
+    "notifications": {
+      "undeploySuccess": "Workload undeployed successfully."
+    }
+  },
+  "status": {
+    "Added": "Added",
+    "Complete": "Complete",
+    "Failed": "Failed",
+    "Deleting": "Deleting",
+    "DeleteFailed": "Delete failed",
+    "Deleted": "Deleted",
+    "Pending": "Pending",
+    "Running": "Running",
+    "Terminated": "Terminated",
+    "Unknown": "Unknown"
+  },
+  "deployModal": {
+    "title": "Deploy workload",
+    "settings": {
+      "title": "Deployment settings",
+      "displayName": {
+        "label": "Workload name",
+        "placeholder": "Provide a memorable name for your workload",
+        "emptyNameError": "Workload name can't be empty"
+      },
+      "containerImage": {
+        "label": "Container image",
+        "tooltip": "The name of the container image that will be used for this workload, \n with possible registry host and version tag included. You can change this to override the default image.",
+        "emptyNameError": "This field cannot be empty",
+        "formatError": "Container image name format is invalid, please check the syntax"
+      },
+      "imagePullSecrets": {
+        "label": "Image pull secrets",
+        "tooltip": "Image pull secrets to use for this workload. \n This is required if the container image is hosted in a private registry.",
+        "placeholder": "Select secret(s)",
+        "noSecrets": "No secrets available"
+      },
+      "resourceAllocation": {
+        "req": "req.",
+        "belowRequiredWarning": "You are assigning resources which is below the recommended value. The workload may not run as expected.",
+        "exceedsQuotaWarning": "You are allocating more resources than your project's guaranteed quota includes. If the cluster is busy, your workload may be preempted or remain in a pending state for an extended period.",
+        "belowRequiredExceedsQuotaWarning": "You are assigning resources below the recommended value and exceeding your guaranteed quota. The workload may not run as expected and could be preempted if the cluster is busy.",
+        "belowRequiredTooltip": "The resource is below the recommended value",
+        "exceedsQuotaTooltip": "The resource is exceeding the guaranteed quota",
+        "belowRequiredExceedsQuotaTooltip": "The resource is below the recommended value and is exceeding the guaranteed quota",
+        "perGPU": "{{value}} per GPU",
+        "quotaFormatted": "{{value}} guaranteed",
+        "cpuFormattedValue_one": "{{count}} core",
+        "cpuFormattedValue_other": "{{count}} cores",
+        "ramFormattedValue": "{{count}} GB",
+        "ramLabel": "RAM",
+        "gpuLabel": "GPUs",
+        "cpuLabel": "CPUs",
+        "label": "Customize resource allocation",
+        "totalResourceAllocation": "Total resource allocation",
+        "gpuCount": "Number of GPUs",
+        "gpuCountValue": "{{value}} / {{maxValue}} GPUs",
+        "systemMemory": "Amount of system memory (RAM) per GPU",
+        "systemMemoryValue": "{{value}} / {{maxValue}} GB",
+        "cpuCoreCount": "Number of CPU Cores per GPU",
+        "cpuCoreCountValue": "{{value}} / {{maxValue}} cores"
+      }
+    },
+    "deploymentStatus": {
+      "deployingMessage": "This workload is being deployed. You can wait for it to be completed or close this window and check the status from the workloads view.",
+      "readyMessage": "The workload has been deployed successfully. You can now access it from the link below.",
+      "launchButtonReady": "Launch",
+      "launchButtonPending": "Deploying..."
+    },
+    "actions": {
+      "deploy": "Quick deploy",
+      "cancel": "Cancel"
+    }
+  },
+  "undeployModal": {
+    "title": "Undeploy workspace",
+    "description": "Are you sure you want to undeploy this workspace? Data stored in the persistent workspace storage will be accessible when you deploy it again."
+  },
+  "notifications": {
+    "deployWorkload": {
+      "success": "Workload deployment started",
+      "error": "Error deploying workload"
+    }
+  }
+}

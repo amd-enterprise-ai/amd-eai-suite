@@ -1,0 +1,48 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Python
+**/.env*
+**/*.egg-info/
+**/__pycache__
+**/.coverage
+**/.workspace
+**/.pytest_cache
+**/.mypy_cache
+**/build
+**/htmlcov
+**/tests/
+!testing/
+**/tmp_trainer
+**/venv
+**/.venv
+
+# Node.js
+**/node_modules
+**/test-results
+**/.next
+**/dist
+**/.turbo
+
+# Development tools
+**/.github
+**/.vscode
+**/.cursor
+**/.git
+**/.DS_Store
+
+# Documentation and configs that aren't needed in containers
+**/README.md
+**/docs
+**/*.md
+**/.*rc
+**/.pre-commit-config.yaml
+**/.prettierrc
+**/.shellcheckrc
+
+# Exclude other services when building specific ones
+# (This will be overridden by specific COPY commands)
+tooling/
+!tooling/codeql/
+docker/

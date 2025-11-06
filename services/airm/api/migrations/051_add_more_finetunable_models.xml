@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="add-more-finetunable-community-models" author="lorenzo">
+        <comment>Add additional finetunable models to model_metadata table. Uses ON CONFLICT DO NOTHING for idempotency.</comment>
+        <sql>
+      -- Llama 3.1 70B
+      INSERT INTO model_metadata (
+          canonical_name, display_name, description,
+          compatible_inference_engines, capabilities, model_url,
+          created_at, updated_at, created_by, updated_by
+      ) VALUES (
+          'meta-llama/Llama-3.1-70B',
+          'Llama 3.1 70B',
+          'Meta''s Llama 3.1 70B base model with exceptional performance for complex tasks.',
+          '{vLLM,TGI}',
+          '{text-generation}',
+          'https://huggingface.co/meta-llama/Llama-3.1-70B',
+          NOW(), NOW(), 'system', 'system'
+      )
+      ON CONFLICT (canonical_name) DO NOTHING;
+
+      -- TinyLlama-v1.1 Chat
+      INSERT INTO model_metadata (
+          canonical_name, display_name, description,
+          compatible_inference_engines, capabilities, model_url,
+          created_at, updated_at, created_by, updated_by
+      ) VALUES (
+          'TinyLlama/TinyLlama-1.1B-Chat-v1.0',
+          'TinyLlama-v1.1 Chat',
+          'Ultra-compact chat model with 1.1B parameters optimized for conversational AI on resource-constrained devices.',
+          '{vLLM,TGI,LlamaCpp}',
+          '{text-generation,chat}',
+          'https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0',
+          NOW(), NOW(), 'system', 'system'
+      )
+      ON CONFLICT (canonical_name) DO NOTHING;
+
+      -- Qwen 1.5 Odia 7B
+      INSERT INTO model_metadata (
+          canonical_name, display_name, description,
+          compatible_inference_engines, capabilities, model_url,
+          created_at, updated_at, created_by, updated_by
+      ) VALUES (
+          'OdiaGenAI-LLM/qwen_1.5_odia_7b',
+          'Qwen 1.5 Odia 7B',
+          'Qwen 1.5 model with 7B parameters fine-tuned for Odia language.',
+          '{vLLM,TGI,LlamaCpp}',
+          '{text-generation}',
+          'https://huggingface.co/OdiaGenAI-LLM/qwen_1.5_odia_7b',
+          NOW(), NOW(), 'system', 'system'
+      )
+      ON CONFLICT (canonical_name) DO NOTHING;
+        </sql>
+    </changeSet>
+</databaseChangeLog>

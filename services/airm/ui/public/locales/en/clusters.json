@@ -1,0 +1,276 @@
+{
+  "title": "Clusters",
+  "connectCluster": {
+    "title": "Connect a new cluster",
+    "start": {
+      "title": "Start",
+      "content": {
+        "description": "Triggering this process connects a cluster to the AMD Resource Manager. The subsequent steps will provide an installation script that must be run on the compute cluster, requiring kubectl access.",
+        "confirmation": "Do you want to continue?"
+      },
+      "actions": {
+        "cancel": "Cancel",
+        "next": "Next"
+      }
+    },
+    "script": {
+      "title": "Install Dispatcher",
+      "content": {
+        "description": "Install AMD Resource Manager Dispatcher on the compute cluster by copying and executing the following script.",
+        "note": "Note that this script will only be displayed once with the connection secret!",
+        "confirmation": "I have copied to execute the installation script on the target cluster."
+      },
+      "actions": {
+        "next": "Next"
+      }
+    },
+    "final": {
+      "title": "Finalize",
+      "content": {
+        "description": "After the script has been executed and the dispatcher has been successfully installed, the cluster will attempt to establish a connection with the AMD Resource Manager. You should see the cluster become active in the list of connected clusters. The process might take some time to complete.",
+        "instruction": "If you face any errors during the installation process, please refer to",
+        "helppage": "this help page"
+      },
+      "actions": {
+        "complete": "Done"
+      }
+    },
+    "notifications": {
+      "failure": "Failed to request to connect a new cluster. Please try again later."
+    }
+  },
+  "form": {
+    "edit": {
+      "title": "Edit Cluster",
+      "field": {
+        "baseUrl": {
+          "label": "Base URL for the cluster.",
+          "placeholder": "Provide base URL for the cluster",
+          "emptyError": "Base URL must not be empty",
+          "error": {
+            "invalid": "Base URL must be a valid URL (must start with http:// or https://)"
+          }
+        }
+      },
+      "action": {
+        "cancel": "Cancel",
+        "save": "Save Changes"
+      },
+      "notification": {
+        "success": "Cluster updated successfully.",
+        "error": "Failed to update cluster."
+      }
+    }
+  },
+  "list": {
+    "pending": {
+      "title": "Pending Clusters Requests",
+      "headers": {
+        "requestedAt": {
+          "title": "Request created at"
+        },
+        "requestExpiry": {
+          "title": "Request expires at"
+        },
+        "status": {
+          "title": "Status"
+        },
+        "actions": {
+          "title": "Actions"
+        }
+      },
+      "empty": {
+        "description": "No pending cluster requests."
+      },
+      "pagination": {
+        "showing": "Showing {{from}} to {{to}} of {{total}} clusters",
+        "pageSize": {
+          "label": "Show",
+          "entities": "clusters"
+        }
+      },
+      "actions": {
+        "cancel": "Cancel"
+      }
+    },
+    "active": {
+      "title": "Active Clusters"
+    },
+    "headers": {
+      "name": {
+        "title": "Name"
+      },
+      "status": {
+        "title": "Status"
+      },
+      "nodes": {
+        "title": "Nodes",
+        "description": "healthy / total"
+      },
+      "gpuAllocation": {
+        "title": "GPU Allocation"
+      },
+      "cpuAllocation": {
+        "title": "CPU Allocation"
+      },
+      "memoryAllocation": {
+        "title": "Memory Allocation"
+      },
+      "actions": {
+        "title": ""
+      }
+    },
+    "filter": {
+      "search": {
+        "placeholder": "Search"
+      },
+      "status": {
+        "placeholder": "Status"
+      }
+    },
+    "pagination": {
+      "showing": "Showing {{from}} to {{to}} of {{total}} clusters",
+      "pageSize": {
+        "label": "Show",
+        "entities": "clusters"
+      }
+    },
+    "sort": {
+      "name": {
+        "asc": "Sort Name by Ascending",
+        "desc": "Sort Name by Descending"
+      },
+      "status": {
+        "asc": "Sort Status by Ascending",
+        "desc": "Sort Status by Descending"
+      }
+    },
+    "empty": {
+      "description": "List of clusters is empty."
+    },
+    "actions": {
+      "delete": {
+        "label": "Delete",
+        "confirmation": {
+          "title": "Confirm Deletion",
+          "description": "Are you sure you want to delete this cluster? This action is irreversible."
+        },
+        "notification": {
+          "success": "Cluster successfully deleted.",
+          "error": "Failed to delete cluster. Please try again."
+        }
+      },
+      "edit": {
+        "label": "Edit"
+      },
+      "cancel": {
+        "label": "Cancel",
+        "confirmation": {
+          "title": "Confirm Cancellation",
+          "description": "Are you sure you want to cancel this cluster connection request?"
+        },
+        "notification": {
+          "success": "Cluster connection request successfully cancelled.",
+          "error": "Failed to cancel cluster request. Please try again."
+        }
+      }
+    }
+  },
+  "nodes": {
+    "title": "Nodes",
+    "list": {
+      "headers": {
+        "name": {
+          "title": "Name"
+        },
+        "status": {
+          "title": "Status"
+        },
+        "cpuMilliCores": {
+          "title": "CPU Cores"
+        },
+        "memoryBytes": {
+          "title": "CPU Memory"
+        },
+        "gpuName": {
+          "title": "GPU Type"
+        },
+        "gpuCount": {
+          "title": "GPU Devices"
+        },
+        "gpuMemory": {
+          "title": "GPU Memory"
+        }
+      },
+      "filter": {
+        "placeholder": "Search"
+      },
+      "pagination": {
+        "showing": "Showing {{from}} to {{to}} of {{total}} nodes",
+        "pageSize": {
+          "label": "Show",
+          "entities": "nodes"
+        }
+      },
+      "empty": {
+        "description": "List of nodes is empty."
+      }
+    }
+  },
+  "projects": {
+    "title": "Projects"
+  },
+  "statistics": {
+    "cluster": {
+      "nodes": {
+        "title": "Available nodes",
+        "tooltip": "Total number of nodes available in the cluster. AMD Resource Manager routinely pulls node information from the cluster including resources and health."
+      },
+      "projects": {
+        "title": "Assigned projects",
+        "tooltip": "Projects assigned to the cluster resources. Projects can be assigned guaranteed resources on cluster, or can assiged no resources and run on best-effort basis."
+      },
+      "gpus": {
+        "title": "Allocated GPUs",
+        "tooltip": "Total number of GPUs allocated to quotas in the cluster. Users belonging to projects with GPU quotas are guaranteed allocated GPU resources for their workloads."
+      },
+      "workloads": {
+        "title": "Running workloads",
+        "tooltip": "Total number of active workloads running on the cluster. Workloads submitted via AMD Resource Manager optimally scheduled, and tracked and monitored for resource usage and health."
+      }
+    },
+    "clusters": {
+      "clusters": {
+        "title": "Clusters",
+        "tooltip": "Clusters for your organization that have been connected to AMD Resource Manager. Connecting clusters allows you to manage resources, quotas, and workloads on them."
+      },
+      "nodes": {
+        "title": "Available nodes",
+        "tooltip": "Total number of nodes available across all clusters. AMD Resource Manager routinely pulls node information from clusters including resources and health."
+      },
+      "gpus": {
+        "title": "Allocated GPUs",
+        "tooltip": "Total number of GPUs allocated to quotas, across all clusters. Users belonging to projects with GPU quotas are guaranteed allocated GPU resources for their workloads, in the corresponding clusters."
+      },
+      "workloads": {
+        "title": "Running workloads",
+        "tooltip": "Total number of active workloads across all clusters. Workloads submitted via AMD Resource Manager optimally scheduled, and tracked and monitored for resource usage and health."
+      }
+    }
+  },
+  "allocationAndWorkloads": {
+    "charts": {
+      "gpuDeviceUtilization": {
+        "title": "GPU device utilization"
+      }
+    }
+  },
+  "actions": {
+    "connect": "Connect a cluster"
+  },
+  "status": {
+    "healthy": "Connected",
+    "unhealthy": "Failed to connect",
+    "verifying": "Verifying connection"
+  }
+}

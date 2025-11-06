@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <changeSet author="lorenzo" id="add-case-insensitive-unique-index-datasets-1">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT count(*) FROM pg_indexes WHERE indexname = 'datasets_name_cluster_id_key' AND tablename = 'datasets';
+            </sqlCheck>
+        </preConditions>
+        <createIndex indexName="datasets_name_cluster_id_key" tableName="datasets" unique="true">
+            <column name="lower(name::text)"/>
+            <column name="cluster_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet author="lorenzo" id="add-case-insensitive-unique-index-inference-models-2">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT count(*) FROM pg_indexes WHERE indexname = 'inference_models_name_cluster_id_key' AND tablename = 'inference_models';
+            </sqlCheck>
+        </preConditions>
+        <createIndex indexName="inference_models_name_cluster_id_key" tableName="inference_models" unique="true">
+            <column name="lower(name::text)"/>
+            <column name="cluster_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

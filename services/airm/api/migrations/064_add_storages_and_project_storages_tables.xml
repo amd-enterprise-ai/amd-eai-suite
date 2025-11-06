@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <changeSet id="add-storages-and-project-storages-tables" author="clydehoang1">
+        <!-- Create Storages table -->
+        <createTable tableName="storages">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="organization_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="secret_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="type" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="scope" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="bucket_url" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="access_key_name" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="secret_key_name" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status_reason" type="character varying"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+              <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying" />
+            <column name="updated_by" type="character varying" />
+        </createTable>
+
+        <!-- Unique constraint on (organization_id, name) -->
+        <addUniqueConstraint
+            columnNames="organization_id, name"
+            tableName="storages"
+            constraintName="uq_storage_org_name"/>
+
+        <!-- FK: storage.organization_id → organization.id -->
+        <addForeignKeyConstraint
+            baseTableName="storages"
+            baseColumnNames="organization_id"
+            referencedTableName="organizations"
+            referencedColumnNames="id"
+            constraintName="fk_storage_to_organization"/>
+
+        <!-- FK: storage.secret_id → secrets.id -->
+        <addForeignKeyConstraint
+            baseTableName="storages"
+            baseColumnNames="secret_id"
+            referencedTableName="secrets"
+            referencedColumnNames="id"
+            constraintName="fk_storage_to_secret"/>
+
+        <!-- Create ProjectStorages table -->
+        <createTable tableName="project_storages">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="project_id" type="uuid">
+                <constraints references="projects(id)" foreignKeyName="fk_project_storage_to_project" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="storage_id" type="uuid">
+                <constraints references="storages(id)" foreignKeyName="fk_project_storage_to_storage" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="status" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status_reason" type="character varying"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+              <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying" />
+            <column name="updated_by" type="character varying" />
+        </createTable>
+
+        <!-- Unique constraint on (project_secret_id, storage_id) -->
+        <addUniqueConstraint
+            columnNames="project_id, storage_id"
+            tableName="project_storages"
+            constraintName="uq_project_storage_combination"/>
+
+        <createIndex indexName="ix_project_storage_storage_id" tableName="project_storages">
+            <column name="storage_id"/>
+        </createIndex>
+
+        <!-- Create project_storages_configmap table -->
+        <createTable tableName="project_storages_configmap">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="project_storage_id" type="uuid">
+                <constraints references="project_storages(id)" foreignKeyName="fk_project_storage_configmap_to_project_storage" nullable="false" deleteCascade="true"/>
+            </column>
+            <column name="status" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status_reason" type="character varying"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone">
+              <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying" />
+            <column name="updated_by" type="character varying" />
+        </createTable>
+
+        <createIndex indexName="ix_project_storages_configmap_project_storage_id" tableName="project_storages_configmap">
+            <column name="project_storage_id"/>
+        </createIndex>
+
+  </changeSet>
+</databaseChangeLog>

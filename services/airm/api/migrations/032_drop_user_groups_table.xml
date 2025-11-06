@@ -1,0 +1,18 @@
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="drop-user-groups-table" author="eugenek">
+        <dropForeignKeyConstraint
+            baseTableName="user_groups"
+            constraintName="user_groups_organization_id_fkey" />
+        <dropIndex
+            indexName="ix_user_groups_organization_id"
+            tableName="user_groups" />
+        <dropTable
+            tableName="user_groups" />
+    </changeSet>
+
+</databaseChangeLog>

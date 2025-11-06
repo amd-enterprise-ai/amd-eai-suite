@@ -1,0 +1,81 @@
+{
+  "title": "Dashboard",
+  "clusterAndNodes": {
+    "title": "Clusters and Nodes",
+    "cards": {
+      "clusters": {
+        "title": "Clusters",
+        "tooltip": "Total number of clusters connected to AMD Resource Manager."
+      },
+      "gpuNodes": {
+        "title": "GPU Nodes",
+        "tooltip": "Number of nodes on the connected clusters which have a detectable GPU."
+      },
+      "availableGPUs": {
+        "title": "Available GPUs",
+        "tooltip": "The total number of GPUs detected across all nodes on clusters connected to AMD Resource Manager."
+      },
+      "allocatedGPUs": {
+        "title": "Allocated GPUs",
+        "tooltip": "The number of GPUs, across nodes, which have been allocated via quotas to different projects."
+      }
+    }
+  },
+  "list": {
+    "headers": {
+      "name": {
+        "title": "Project"
+      },
+      "gpuAllocation": {
+        "title": "GPU Allocation"
+      },
+      "gpuUtilization": {
+        "title": "GPU Utilization"
+      },
+      "running": {
+        "title": "Running Workloads"
+      },
+      "pending": {
+        "title": "Pending Workloads"
+      }
+    },
+    "empty": {
+      "description": "No data available."
+    },
+    "pagination": {
+      "showing": "Showing {{from}} to {{to}} of {{total}} entries",
+      "pageSize": {
+        "label": "Show",
+        "entities": "entries"
+      }
+    }
+  },
+  "allocationAndWorkloads": {
+    "title": "Allocations and Workloads",
+    "consumptionByProject": {
+      "title": "Consumption by project"
+    },
+    "cards": {
+      "gpuUtilization": {
+        "title": "GPU Utilization",
+        "tooltip": "Number of GPUs currently in use."
+      },
+      "runningWorkloads": {
+        "title": "Running Workloads",
+        "tooltip": "Number of running workloads in all the clusters."
+      },
+      "pendingWorkloads": {
+        "title": "Pending Workloads",
+        "tooltip": "Number of pending workloads in all the clusters."
+      }
+    },
+    "charts": {
+      "gpuMemoryUtilization": {
+        "title": "GPU memory utilization"
+      },
+      "gpuDeviceUtilization": {
+        "title": "GPU device utilization"
+      }
+    }
+  }
+}

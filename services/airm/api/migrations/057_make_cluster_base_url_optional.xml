@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="cluster-base-url-optional" author="akshay">
+        <modifyDataType tableName="clusters" columnName="base_url" newDataType="character varying"/>
+        <dropDefaultValue tableName="clusters" columnName="base_url" columnDataType="character varying"/>
+        <dropNotNullConstraint tableName="clusters" columnName="base_url" columnDataType="character varying"/>
+        <update tableName="clusters">
+            <column name="base_url" valueComputed="NULL"/>
+        </update>
+    </changeSet>
+</databaseChangeLog>

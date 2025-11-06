@@ -1,0 +1,215 @@
+{
+  "app": {
+    "title": "AMD Enterprise AI"
+  },
+  "sections": {
+    "aiWorkbench": {
+      "title": "AI Workbench"
+    },
+    "resourceManagement": {
+      "title": "Resource Manager"
+    }
+  },
+  "sharedComponents": {
+    "filterDropdown": {
+      "selectAll": {
+        "label": "Select all"
+      }
+    },
+    "FormFileUpload": {
+      "remove": "Remove",
+      "add_one": "Choose a file",
+      "add_other": "Add files",
+      "drop_one": "Drop a file here to upload",
+      "drop_other": "Drop files here to upload",
+      "dropFail_one": "The file cannot be uploaded",
+      "dropFail_other": "These files cannot be uploaded",
+      "footerFiles_one": "{{count}} file",
+      "footerFiles_other": "{{count}} files"
+    }
+  },
+  "pages": {
+    "collections": {
+      "title": "Collections"
+    },
+    "dashboard": {
+      "title": "Dashboard"
+    },
+    "clusters": {
+      "title": "Clusters"
+    },
+    "projects": {
+      "title": "Projects"
+    },
+    "secrets": {
+      "title": "Secrets"
+    },
+    "storages": {
+      "title": "Storage"
+    },
+    "chat": {
+      "title": "Chat"
+    },
+    "models": {
+      "title": "Models"
+    },
+    "datasets": {
+      "title": "Datasets"
+    },
+    "workloads": {
+      "title": "Workloads"
+    },
+    "workspaces": {
+      "title": "Workspaces"
+    },
+    "workbenchSecrets": {
+      "title": "Secrets"
+    },
+    "accessControl": {
+      "title": "Access control"
+    },
+    "users": {
+      "title": "Users"
+    },
+    "apiKeys": {
+      "title": "API Keys"
+    }
+  },
+  "menu": {
+    "actions": {
+      "open": "Open menu",
+      "close": "Close ,enu",
+      "themeToggle": "Toggle light/dark mode",
+      "theme": "Theme: {{theme}}",
+      "logout": "Logout"
+    }
+  },
+  "actions": {
+    "add": "Add",
+    "back": {
+      "title": "Back"
+    },
+    "confirm": {
+      "title": "Confirm",
+      "message": "Are you sure?"
+    },
+    "close": {
+      "title": "Close"
+    },
+    "cancel": {
+      "title": "Cancel"
+    },
+    "clear": {
+      "title": "Clear"
+    },
+    "clearFilters": {
+      "title": "Clear filters"
+    },
+    "create": {
+      "title": "create"
+    },
+    "delete": {
+      "title": "Delete"
+    },
+    "download": {
+      "title": "Download"
+    },
+    "refresh": {
+      "title": "Refresh"
+    },
+    "remove": {
+      "title": "Remove"
+    },
+    "save": {
+      "title": "Save"
+    },
+    "start": {
+      "title": "Start"
+    },
+    "upload": {
+      "title": "Upload"
+    }
+  },
+  "list": {
+    "actions": {
+      "label": "Actions",
+      "assign": {
+        "label": "Edit assignment"
+      },
+      "delete": {
+        "label": "Delete"
+      }
+    }
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "links": {
+    "home": "Home",
+    "documentation": "Documentation",
+    "support": "Support",
+    "about": "About"
+  },
+  "error": {
+    "label": "Error",
+    "noSubmittableProjects": {
+      "title": "No projects available",
+      "description": "You don't have access to any projects that allow using the AI Workbench. Please contact your administrator to request access."
+    },
+    "network": {
+      "title": "Network error occurred",
+      "description": "Please check your connection and try again."
+    },
+    "unknown": {
+      "title": "Something went wrong",
+      "description": "We're having trouble connecting to our services. Please try again in a few moments."
+    },
+    "showDetailsActionLabel": "Show details",
+    "refreshActionLabel": "Try again",
+    "misc": {
+      "unknownEntity": "Unknown entity"
+    }
+  },
+  "statistics": {
+    "upperLimitPrefix": "out of",
+    "noData": "No data"
+  },
+  "projectSelection": {
+    "placeholder": "Select project",
+    "label": "Selected project",
+    "tooltip": "Select a target project you want to work in"
+  },
+  "timeRange": {
+    "description": "Time range selection",
+    "range": {
+      "1h": "1 hour",
+      "24h": "24 hours",
+      "7d": "7 days"
+    },
+    "lastUpdated": "Last update: {{timestamp}}"
+  },
+  "charts": {
+    "category": {
+      "others": "Others"
+    },
+    "loading": "Loading ...",
+    "nodata": "Data not available",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing ..."
+  },
+  "data": {
+    "lastUpdated": "Last update: {{timestamp}}",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing ..."
+  },
+  "status": {
+    "errorDetail": {
+      "title": "Error details",
+      "action": {
+        "next": "Next error",
+        "prev": "Previous error"
+      }
+    }
+  }
+}

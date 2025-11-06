@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <changeSet id="create-api-keys-table" author="Roman Inflianskas">
+        <createTable tableName="api_keys">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="character varying" />
+            <column name="updated_by" type="character varying" />
+            <column name="name" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="truncated_key" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cluster_auth_key_id" type="character varying">
+                <constraints nullable="false"/>
+            </column>
+            <column name="project_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+            baseTableName="api_keys"
+            baseColumnNames="project_id"
+            constraintName="api_keys_project_id_fkey"
+            referencedTableName="projects"
+            referencedColumnNames="id"
+            onDelete="CASCADE"/>
+
+        <createIndex tableName="api_keys" indexName="ix_api_keys_project_id">
+            <column name="project_id"/>
+        </createIndex>
+
+        <createIndex tableName="api_keys" indexName="ix_api_keys_cluster_auth_key_id" unique="true">
+            <column name="cluster_auth_key_id"/>
+        </createIndex>
+
+        <createIndex tableName="api_keys" indexName="api_keys_name_project_id_key" unique="true">
+            <column name="name"/>
+            <column name="project_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

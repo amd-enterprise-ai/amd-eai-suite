@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+  <changeSet author="akshay" id="add-quotas-table">
+      <createTable tableName="quotas">
+          <column name="id" type="uuid">
+              <constraints primaryKey="true" primaryKeyName="quotas_pkey"/>
+          </column>
+          <column name="cluster_id" type="uuid">
+              <constraints references="clusters(id)" foreignKeyName="quotas_clusters_id_fkey" nullable="false" deleteCascade="true"/>
+          </column>
+          <column name="user_group_id" type="uuid">
+              <constraints references="user_groups(id)" foreignKeyName="quotas_user_group_id_fkey" nullable="false" deleteCascade="true"/>
+          </column>
+          <column name="name" type="character varying">
+              <constraints nullable="false"/>
+          </column>
+          <column name="cpu_milli_cores" type="SMALLINT">
+              <constraints nullable="false"/>
+          </column>
+          <column name="memory_bytes" type="BIGINT">
+              <constraints nullable="false"/>
+          </column>
+          <column name="ephemeral_storage_bytes" type="BIGINT">
+              <constraints nullable="false"/>
+          </column>
+          <column name="gpu_count" type="SMALLINT">
+              <constraints nullable="false"/>
+          </column>
+          <column name="status" type="character varying">
+              <constraints nullable="false"/>
+          </column>
+           <column name="created_at" type="timestamp with time zone">
+              <constraints nullable="false"/>
+          </column>
+          <column name="updated_at" type="timestamp with time zone">
+              <constraints nullable="false"/>
+          </column>
+          <column name="updated_by" type="character varying" />
+          <column name="created_by" type="character varying" />
+      </createTable>
+
+    <createIndex indexName="quotas_name_cluster_id_key" tableName="quotas" unique="true">
+        <column name="lower(name::text)"/>
+        <column name="cluster_id"/>
+    </createIndex>
+  </changeSet>
+</databaseChangeLog>

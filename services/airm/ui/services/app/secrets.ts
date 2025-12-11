@@ -6,6 +6,7 @@ import { APIRequestError } from '@/utils/app/errors';
 
 import {
   AssignSecretRequest,
+  CreateProjectSecretRequest,
   CreateSecretRequest,
   SecretsResponse,
 } from '@/types/secrets';
@@ -84,6 +85,27 @@ export const createSecret = async (request: CreateSecretRequest) => {
       response.status,
     );
   }
+  return response.json();
+};
+export const createProjectSecret = async (
+  projectId: string,
+  request: CreateProjectSecretRequest,
+) => {
+  const response = await fetch(`/api/projects/${projectId}/secrets`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    throw new APIRequestError(
+      `Failed to create project secret: ${await getErrorMessage(response)}`,
+      response.status,
+    );
+  }
+
   return response.json();
 };
 

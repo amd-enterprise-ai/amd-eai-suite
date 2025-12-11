@@ -52,6 +52,8 @@ async def test_run_model_deployment_success(db_session: AsyncSession):
         name="mw-test-deployment",
     )
 
+    mock_message_sender = AsyncMock()
+
     with (
         patch("app.charts.repository.select_chart", return_value=inference_chart),
         patch("app.models.service.submit_chart_workload", return_value=chart_workload),
@@ -63,6 +65,7 @@ async def test_run_model_deployment_success(db_session: AsyncSession):
             creator=env.user,
             token="token123",
             project=env.project,
+            message_sender=mock_message_sender,
         )
 
     # Verify workload was returned
@@ -106,6 +109,8 @@ async def test_run_model_deployment_with_different_specs(db_session: AsyncSessio
         },
     )
 
+    mock_message_sender = AsyncMock()
+
     with (
         patch("app.charts.repository.select_chart", return_value=inference_chart),
         patch("app.models.service.submit_chart_workload", return_value=chart_workload),
@@ -117,6 +122,7 @@ async def test_run_model_deployment_with_different_specs(db_session: AsyncSessio
             env.user,
             "token123",
             env.project,
+            message_sender=mock_message_sender,
             request=ModelDeployRequest(
                 image="custom/ml-image:latest",
                 gpus=2,
@@ -147,6 +153,7 @@ async def test_run_model_deployment_replica_validation(db_session: AsyncSession)
 
     # Test invalid replica counts
     test_cases = [0, -1, 11, 100]
+    mock_message_sender = AsyncMock()
 
     for replicas in test_cases:
         with pytest.raises(ValidationError):
@@ -156,6 +163,7 @@ async def test_run_model_deployment_replica_validation(db_session: AsyncSession)
                 env.user,
                 "token123",
                 env.project,
+                message_sender=mock_message_sender,
                 request=ModelDeployRequest(replicas=replicas),
             )
 
@@ -203,6 +211,8 @@ async def test_run_finetune_model_workload_success(db_session: AsyncSession, mod
         name="mw-test-finetune-canonical",
     )
 
+    mock_message_sender = AsyncMock()
+
     with (
         patch("app.charts.repository.select_chart", return_value=finetune_chart),
         patch("app.models.service.submit_chart_workload", return_value=chart_workload),
@@ -216,6 +226,7 @@ async def test_run_finetune_model_workload_success(db_session: AsyncSession, mod
             creator=env.creator,
             token="token123",
             project=env.project,
+            message_sender=mock_message_sender,
         )
 
     # Verify workload was returned
@@ -239,6 +250,7 @@ async def test_run_finetune_model_workload_model_not_found(db_session: AsyncSess
         epochs=3,
         batch_size=8,
     )
+    mock_message_sender = AsyncMock()
 
     with pytest.raises(NotFoundException, match=f"Model {non_existent_model_id} not found"):
         await run_finetune_model_workload(
@@ -246,6 +258,7 @@ async def test_run_finetune_model_workload_model_not_found(db_session: AsyncSess
             model_id=non_existent_model_id,
             finetuning_data=finetune_data,
             creator=env.creator,
+            message_sender=mock_message_sender,
             token="token123",
             project=env.project,
         )
@@ -333,6 +346,7 @@ async def test_run_model_deployment_model_not_found(db_session: AsyncSession):
     env = await factory.create_full_test_environment(db_session)
 
     non_existent_model_id = uuid4()
+    mock_message_sender = AsyncMock()
 
     with pytest.raises(NotFoundException, match="Model.*not found"):
         await run_model_deployment(
@@ -341,6 +355,7 @@ async def test_run_model_deployment_model_not_found(db_session: AsyncSession):
             env.user,
             "token123",
             env.project,
+            message_sender=mock_message_sender,
         )
 
 
@@ -582,6 +597,8 @@ async def test_finetune_with_mlflow_running(db_session: AsyncSession):
         learning_rate=0.001,
     )
 
+    mock_message_sender = AsyncMock()
+
     with (
         patch("app.charts.repository.select_chart", return_value=finetune_chart),
         patch("app.managed_workloads.service.render_helm_template", return_value="whatever") as mock_render,
@@ -596,6 +613,7 @@ async def test_finetune_with_mlflow_running(db_session: AsyncSession):
             creator="test-user",
             token="test-token",
             project=env.project,
+            message_sender=mock_message_sender,
             display_name="my-custom-job-name",
         )
 
@@ -632,6 +650,8 @@ async def test_finetune_without_mlflow_running(db_session: AsyncSession):
         learning_rate=0.001,
     )
 
+    mock_message_sender = AsyncMock()
+
     with (
         patch("app.managed_workloads.service.render_helm_template", return_value="whatever"),
         patch("app.managed_workloads.service.validate_and_parse_workload_manifest", return_value=[{}]),
@@ -644,6 +664,7 @@ async def test_finetune_without_mlflow_running(db_session: AsyncSession):
             finetuning_data=finetuning_data,
             creator="test-user",
             token="test-token",
+            message_sender=mock_message_sender,
             project=env.project,
             display_name="my-job-without-mlflow",
         )

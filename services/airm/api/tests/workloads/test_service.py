@@ -5,7 +5,7 @@
 """Workloads service tests."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -79,6 +79,7 @@ async def test_create_and_submit_workload_success(db_session: AsyncSession):
     manifest = [{"apiVersion": "v1", "kind": "Deployment", "metadata": {"name": "test-deployment"}}]
     token = "test-token"
     display_name = "Test Workload Display"
+    mock_message_sender = AsyncMock()
 
     with patch("app.workloads.service.extract_components_and_submit_workload") as mock_extract:
         result = await create_and_submit_workload(
@@ -89,6 +90,7 @@ async def test_create_and_submit_workload_success(db_session: AsyncSession):
             token,
             workload_type,
             display_name,
+            mock_message_sender,
         )
     mock_extract.assert_awaited_once()
 
@@ -110,20 +112,20 @@ async def test_submit_delete_workload_success(db_session: AsyncSession):
     )
 
     user = "test@example.com"
+    mock_message_sender = AsyncMock()
 
-    with patch("app.workloads.service.submit_message_to_cluster_queue") as mock_submit:
-        await submit_delete_workload(db_session, workload, user)
+    await submit_delete_workload(db_session, workload, user, mock_message_sender)
 
-        mock_submit.assert_called_once()
+    mock_message_sender.enqueue.assert_called_once()
 
-        call_args = mock_submit.call_args
-        cluster_id, message = call_args[0]
-        assert cluster_id == env.cluster.id
-        assert isinstance(message, DeleteWorkloadMessage)
-        assert message.workload_id == workload.id
+    call_args = mock_message_sender.enqueue.call_args
+    cluster_id, message = call_args[0]
+    assert cluster_id == env.cluster.id
+    assert isinstance(message, DeleteWorkloadMessage)
+    assert message.workload_id == workload.id
 
-        await db_session.refresh(workload)
-        assert workload.status == WorkloadStatus.DELETING.value
+    await db_session.refresh(workload)
+    assert workload.status == WorkloadStatus.DELETING.value
 
 
 @pytest.mark.asyncio
@@ -133,12 +135,12 @@ async def test_submit_delete_workload_already_pending_deletion(db_session: Async
     workload = await factory.create_workload(db_session, env.cluster, env.project, status=WorkloadStatus.DELETING.value)
 
     user = "test@example.com"
+    mock_message_sender = AsyncMock()
 
-    with patch("app.workloads.service.submit_message_to_cluster_queue") as mock_submit:
-        with pytest.raises(Exception, match="Workload is already marked for deletion"):
-            await submit_delete_workload(db_session, workload, user)
+    with pytest.raises(Exception, match="Workload is already marked for deletion"):
+        await submit_delete_workload(db_session, workload, user, mock_message_sender)
 
-        mock_submit.assert_not_called()
+    mock_message_sender.enqueue.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -148,12 +150,12 @@ async def test_submit_delete_workload_already_deleted(db_session: AsyncSession):
     workload = await factory.create_workload(db_session, env.cluster, env.project, status=WorkloadStatus.DELETED.value)
 
     user = "test@example.com"
+    mock_message_sender = AsyncMock()
 
-    with patch("app.workloads.service.submit_message_to_cluster_queue") as mock_submit:
-        with pytest.raises(Exception, match="Workload has already been deleted"):
-            await submit_delete_workload(db_session, workload, user)
+    with pytest.raises(Exception, match="Workload has already been deleted"):
+        await submit_delete_workload(db_session, workload, user, mock_message_sender)
 
-        mock_submit.assert_not_called()
+    mock_message_sender.enqueue.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -253,8 +255,8 @@ async def test_get_workloads_by_project_success(db_session: AsyncSession):
     result = await get_workloads_by_project(db_session, env.project.id)
 
     # Verify only project workloads are returned
-    assert len(result.workloads) == 2
-    workload_names = {w.display_name for w in result.workloads}
+    assert len(result.data) == 2
+    workload_names = {w.display_name for w in result.data}
     assert "Workload 1" in workload_names
     assert "Workload 2" in workload_names
     assert "Other Workload" not in workload_names
@@ -286,9 +288,9 @@ async def test_get_workloads_accessible_to_user_success(db_session: AsyncSession
     result = await get_workloads_accessible_to_user(db_session, [accessible_project])
 
     # Verify only accessible workloads are returned
-    assert len(result.workloads) == 1
-    assert result.workloads[0].display_name == "Accessible Workload"
-    assert result.workloads[0].id == accessible_workload.id
+    assert len(result.data) == 1
+    assert result.data[0].display_name == "Accessible Workload"
+    assert result.data[0].id == accessible_workload.id
 
 
 @pytest.mark.asyncio
@@ -549,32 +551,32 @@ async def test_extract_components_and_submit_workload(db_session: AsyncSession):
 
     creator = "test@example.com"
     token = "test-token"
+    mock_message_sender = AsyncMock()
 
-    with (
-        patch("app.workloads.service.submit_message_to_cluster_queue") as mock_submit,
-    ):
-        await extract_components_and_submit_workload(db_session, workload, env.project, manifest, creator, token)
+    await extract_components_and_submit_workload(
+        db_session, workload, env.project, manifest, creator, token, mock_message_sender
+    )
 
-        # Verify message submission
-        mock_submit.assert_called_once()
-        call_args = mock_submit.call_args[0]
-        cluster_id, message = call_args
-        assert cluster_id == env.project.cluster_id
-        assert message.message_type == "workload"
-        assert message.workload_id == workload.id
-        assert message.user_token == token
+    # Verify message submission
+    mock_message_sender.enqueue.assert_called_once()
+    call_args = mock_message_sender.enqueue.call_args[0]
+    cluster_id, message = call_args
+    assert cluster_id == env.project.cluster_id
+    assert message.message_type == "workload"
+    assert message.workload_id == workload.id
+    assert message.user_token == token
 
-        workload_with_components = await get_workload_with_components(db_session, workload)
-        components = workload_with_components.components
-        service = next((c for c in components if c.kind == WorkloadComponentKind.SERVICE), None)
-        deployment = next((c for c in components if c.kind == WorkloadComponentKind.DEPLOYMENT), None)
+    workload_with_components = await get_workload_with_components(db_session, workload)
+    components = workload_with_components.components
+    service = next((c for c in components if c.kind == WorkloadComponentKind.SERVICE), None)
+    deployment = next((c for c in components if c.kind == WorkloadComponentKind.DEPLOYMENT), None)
 
-        assert service is not None
-        assert deployment is not None
+    assert service is not None
+    assert deployment is not None
 
-        assert (
-            message.manifest
-            == f"""apiVersion: apps/v1
+    assert (
+        message.manifest
+        == f"""apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -606,7 +608,7 @@ spec:
   ports:
   - port: 80
 """
-        )
+    )
 
 
 @pytest.mark.asyncio

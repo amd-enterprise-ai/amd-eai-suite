@@ -43,7 +43,7 @@ def test_update_last_watch_attempt_raises_for_unknown():
 
 
 @pytest.mark.asyncio
-async def test_all_watchers_healthy_true_when_recent():
+async def test_all_watchers_healthy_true_when_recent() -> None:
     watcher_health.register_watcher("job_watcher")
     watcher_health.register_watcher("service_watcher")
     watcher_health.update_last_watch_attempt("job_watcher")
@@ -53,7 +53,7 @@ async def test_all_watchers_healthy_true_when_recent():
 
 
 @pytest.mark.asyncio
-async def test_all_watchers_healthy_false_when_stale(monkeypatch):
+async def test_all_watchers_healthy_false_when_stale(monkeypatch: pytest.MonkeyPatch) -> None:
     watcher_health.register_watcher("job_watcher")
     # Simulate stale time (6 minutes ago)
     stale_time = datetime.now() - timedelta(minutes=6)

@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ config.set_config("test_org", "test_cluster")
 
 
 @pytest.fixture
-def mock_connection_dependency():
+def mock_connection_dependency() -> Iterator[tuple[AsyncMock, AsyncMock]]:
     mock_connection = AsyncMock()
     mock_channel = AsyncMock()
 
@@ -34,7 +35,7 @@ def mock_connection_dependency():
 
 
 @pytest.mark.asyncio
-async def test_send_heartbeat_success(mock_connection_dependency):
+async def test_send_heartbeat_success(mock_connection_dependency: tuple[AsyncMock, AsyncMock]) -> None:
     mock_connection, mock_channel = mock_connection_dependency
 
     with patch("app.heartbeats.router.publish_heartbeat_message_to_queue") as mock_publish:
@@ -59,7 +60,7 @@ async def test_send_heartbeat_success(mock_connection_dependency):
 
 
 @pytest.mark.asyncio
-async def test_send_heartbeat_exception(mock_connection_dependency):
+async def test_send_heartbeat_exception(mock_connection_dependency: tuple[AsyncMock, AsyncMock]) -> None:
     mock_connection, mock_channel = mock_connection_dependency
     with patch(
         "app.heartbeats.router.publish_heartbeat_message_to_queue",

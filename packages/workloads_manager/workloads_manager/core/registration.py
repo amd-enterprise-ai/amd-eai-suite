@@ -227,7 +227,7 @@ def process_single_overlay(overlay_file: Path, rel_path_str: str, api_url: httpx
             if canonical_name:
                 data["canonical_name"] = canonical_name
 
-            files = {"overlay_file": [temp_path]}
+            files = {"overlay_file": [Path(temp_path)]}
 
             existing_id = get_overlay_id(chart_id, canonical_name, api_url)
             endpoint = f"overlays/{existing_id}" if existing_id else "overlays"

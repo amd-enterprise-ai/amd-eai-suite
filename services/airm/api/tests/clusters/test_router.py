@@ -15,6 +15,7 @@ from app import app  # type: ignore
 from app.clusters.models import Cluster
 from app.clusters.schemas import (
     ClusterIn,
+    ClusterKubeConfig,
     ClusterNodeResponse,
     ClusterNodes,
     ClusterResources,
@@ -134,7 +135,8 @@ default_timeseries_metrics = MetricsTimeseries(
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        base_url="https://example.com",
+        workloads_base_url="https://example.com",
+        kube_api_url="https://k8s.example.com",
     ),
 )
 async def test_create_cluster_success(_):
@@ -153,7 +155,10 @@ async def test_create_cluster_success(_):
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
 
     with TestClient(app) as client:
-        response = client.post("/v1/clusters", json={"base_url": "https://example.com"})
+        response = client.post(
+            "/v1/clusters",
+            json={"workloads_base_url": "https://example.com", "kube_api_url": "https://k8s.example.com"},
+        )
 
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json() == {
@@ -166,7 +171,8 @@ async def test_create_cluster_success(_):
         "updated_at": "2025-01-01T12:00:00Z",
         "created_by": "test@example.com",
         "updated_by": "test@example.com",
-        "base_url": "https://example.com",
+        "workloads_base_url": "https://example.com",
+        "kube_api_url": "https://k8s.example.com",
     }
 
 
@@ -214,7 +220,7 @@ async def test_create_cluster_no_organization():
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
 
     with TestClient(app) as client:
-        response = client.post("/v1/clusters", json={"base_url": "https://example.com"})
+        response = client.post("/v1/clusters", json={"workloads_base_url": "https://example.com"})
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -239,7 +245,7 @@ async def test_create_cluster_exception(session_maker_mock, __):
     app.dependency_overrides[track_user_activity_from_token] = lambda: MagicMock()
 
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.post("/v1/clusters", json={"base_url": "https://example.com"})
+        response = client.post("/v1/clusters", json={"workloads_base_url": "https://example.com"})
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     session_maker_mock().rollback.assert_called_once()
 
@@ -286,7 +292,8 @@ async def test_create_cluster_no_base_url(_):
         "updated_at": "2025-01-01T12:00:00Z",
         "created_by": "test@example.com",
         "updated_by": "test@example.com",
-        "base_url": None,
+        "workloads_base_url": None,
+        "kube_api_url": None,
     }
 
 
@@ -323,7 +330,8 @@ async def test_create_cluster_no_base_url(_):
                 updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                 created_by="test@example.com",
                 updated_by="test@example.com",
-                base_url="https://example.com",
+                workloads_base_url="https://example.com",
+                kube_api_url="https://k8s.example.com",
             ),
             ClusterWithResources(
                 id="0aa18e92-002c-45b7-a06e-dcdb0277974d",
@@ -347,7 +355,8 @@ async def test_create_cluster_no_base_url(_):
                 updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                 created_by="test@example.com",
                 updated_by="test@example.com",
-                base_url="https://example.com",
+                workloads_base_url="https://example.com",
+                kube_api_url="https://k8s.example.com",
             ),
         ]
     ),
@@ -419,7 +428,8 @@ async def test_get_clusters_platform_admin_success(_, __, mock_datetime):
                 "updated_at": "2025-01-01T12:00:00Z",
                 "created_by": "test@example.com",
                 "updated_by": "test@example.com",
-                "base_url": "https://example.com",
+                "workloads_base_url": "https://example.com",
+                "kube_api_url": "https://k8s.example.com",
             },
             {
                 "allocated_resources": {
@@ -463,7 +473,8 @@ async def test_get_clusters_platform_admin_success(_, __, mock_datetime):
                 "updated_at": "2025-01-01T12:00:00Z",
                 "created_by": "test@example.com",
                 "updated_by": "test@example.com",
-                "base_url": "https://example.com",
+                "workloads_base_url": "https://example.com",
+                "kube_api_url": "https://k8s.example.com",
             },
         ]
     }
@@ -479,7 +490,8 @@ async def test_get_clusters_platform_admin_success(_, __, mock_datetime):
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        base_url="https://example.com",
+        workloads_base_url="https://example.com",
+        kube_api_url="https://k8s.example.com",
     ),
 )
 @pytest.mark.asyncio
@@ -512,7 +524,8 @@ async def test_get_clusters_platform_admin_success(_, __, mock_datetime):
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        base_url="https://example.com",
+        workloads_base_url="https://example.com",
+        kube_api_url="https://k8s.example.com",
     ),
 )
 async def test_get_cluster_success(_, __, ___):
@@ -579,7 +592,8 @@ async def test_get_cluster_success(_, __, ___):
         "updated_at": "2025-01-01T12:00:00Z",
         "created_by": "test@example.com",
         "updated_by": "test@example.com",
-        "base_url": "https://example.com",
+        "workloads_base_url": "https://example.com",
+        "kube_api_url": "https://k8s.example.com",
     }
 
 
@@ -614,7 +628,8 @@ async def test_get_cluster_success(_, __, ___):
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        base_url="https://example.com",
+        workloads_base_url="https://example.com",
+        kube_api_url="https://k8s.example.com",
     ),
 )
 @patch("app.clusters.router.validate_cluster_accessible_to_user")
@@ -650,7 +665,8 @@ async def test_get_cluster_team_member_success(_, __, ___, ____):
             "gpu_count": 8,
             "memory_bytes": 429496729600,
         },
-        "base_url": "https://example.com",
+        "workloads_base_url": "https://example.com",
+        "kube_api_url": "https://k8s.example.com",
         "created_at": "2025-01-01T12:00:00Z",
         "created_by": "test@example.com",
         "gpu_info": {
@@ -710,7 +726,7 @@ async def test_get_cluster_team_member_no_access(_, __):
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        base_url="https://example.com",
+        workloads_base_url="https://example.com",
     ),
 )
 @patch("app.clusters.router.delete_cluster_for_organization", return_value=None)
@@ -767,12 +783,14 @@ async def test_update_cluster_success(
     original_cluster = Cluster(
         id=cluster_id,
         name="original-cluster",
-        base_url="https://original.example.com",
+        workloads_base_url="https://original.example.com",
+        kube_api_url="https://k8s.example.com",
     )
     updated_cluster = Cluster(
         id=cluster_id,
         name="original-cluster",  # name should not change
-        base_url="https://updated.example.com",
+        workloads_base_url="https://updated.example.com",
+        kube_api_url="https://k8s.updated.example.com",
         updated_by="test-updater@example.com",
     )
 
@@ -781,7 +799,8 @@ async def test_update_cluster_success(
     mock_get_cluster_with_resources.return_value = ClusterWithResources(
         id=cluster_id,
         name="original-cluster",
-        base_url="https://updated.example.com",
+        workloads_base_url="https://updated.example.com",
+        kube_api_url="https://k8s.updated.example.com",
         created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         updated_at=datetime(2025, 1, 1, 12, 30, 0, tzinfo=UTC),
         created_by="test@example.com",
@@ -803,14 +822,18 @@ async def test_update_cluster_success(
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
 
     # Make request
-    cluster_update = ClusterIn(base_url="https://updated.example.com")
+    cluster_update = ClusterIn(
+        workloads_base_url="https://updated.example.com",
+        kube_api_url="https://k8s.updated.example.com",
+    )
     with TestClient(app) as client:
         response = client.put(f"/v1/clusters/{cluster_id}", json=cluster_update.model_dump())
 
     # Assertions
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["name"] == "original-cluster"  # name should not change
-    assert response.json()["base_url"] == "https://updated.example.com"
+    assert response.json()["workloads_base_url"] == "https://updated.example.com"
+    assert response.json()["kube_api_url"] == "https://k8s.updated.example.com"
     assert response.json()["updated_by"] == "test-updater@example.com"
 
     mock_get_cluster_by_id.assert_called_once()
@@ -833,7 +856,7 @@ async def test_update_cluster_not_found(mock_get_cluster_by_id):
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
 
     # Make request
-    cluster_update = ClusterIn(base_url="https://updated.example.com")
+    cluster_update = ClusterIn(workloads_base_url="https://updated.example.com")
     with TestClient(app) as client:
         response = client.put(f"/v1/clusters/{cluster_id}", json=cluster_update.model_dump())
 
@@ -1161,7 +1184,8 @@ async def test_get_clusters_stats_no_organization():
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    base_url="https://example.com",
+                    workloads_base_url="https://example.com",
+                    kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
                         memory_bytes=16 * 1024 * 1024 * 1024,  # 16 GB
@@ -1210,7 +1234,8 @@ async def test_get_clusters_stats_no_organization():
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    base_url="https://example.com",
+                    workloads_base_url="https://example.com",
+                    kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
                         memory_bytes=16 * 1024 * 1024 * 1024,  # 16 GB
@@ -1253,7 +1278,7 @@ async def test_get_clusters_stats_no_organization():
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        base_url="https://example.com",
+        workloads_base_url="https://example.com",
     ),
 )
 async def test_get_cluster_projects_success(_, __):
@@ -1289,7 +1314,8 @@ async def test_get_cluster_projects_success(_, __):
                     "updated_at": "2025-01-01T12:00:00Z",
                     "created_by": "test@example.com",
                     "updated_by": "test@example.com",
-                    "base_url": "https://example.com",
+                    "workloads_base_url": "https://example.com",
+                    "kube_api_url": "https://k8s.example.com:6443",
                     "name": "cluster1",
                     "last_heartbeat_at": "2025-03-10T12:00:00Z",
                     "available_resources": {
@@ -1355,7 +1381,8 @@ async def test_get_cluster_projects_success(_, __):
                     "updated_at": "2025-01-01T12:00:00Z",
                     "created_by": "test@example.com",
                     "updated_by": "test@example.com",
-                    "base_url": "https://example.com",
+                    "workloads_base_url": "https://example.com",
+                    "kube_api_url": "https://k8s.example.com:6443",
                     "name": "cluster1",
                     "last_heartbeat_at": "2025-03-10T12:00:00Z",
                     "available_resources": {
@@ -1650,3 +1677,66 @@ async def test_get_gpu_device_utilization_timeseries_for_cluster_no_cluster(_):
         )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+@patch("app.clusters.router.get_cluster_kubeconfig_as_yaml", return_value=ClusterKubeConfig(kube_config="config"))
+@patch(
+    "app.clusters.router.get_cluster_by_id",
+    return_value=Cluster(
+        id=uuid4(),
+        name="test-cluster",
+        organization_id=uuid4(),
+        kube_api_url="https://k8s.example.com:6443",
+        workloads_base_url="https://workloads.example.com",
+        created_by="test@example.com",
+        updated_by="test@example.com",
+    ),
+)
+async def test_get_cluster_kubeconfig_success(_, __):
+    """Test successful kubeconfig retrieval."""
+    app.dependency_overrides[get_session] = lambda: MagicMock()
+
+    cluster_id = uuid4()
+
+    mock_organization = Organization(id=uuid4(), name="Test Org", keycloak_organization_id="test-org-123")
+
+    app.dependency_overrides[get_user_organization] = lambda: mock_organization
+    app.dependency_overrides[ensure_platform_administrator] = lambda: None
+
+    with TestClient(app) as client:
+        response = client.get(f"/v1/clusters/{cluster_id}/kube-config")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {"kube_config": "config"}
+
+
+@pytest.mark.asyncio
+@patch("app.clusters.router.get_cluster_by_id", side_effect=NotFoundException("Cluster not found"))
+async def test_get_cluster_kubeconfig_not_found(_):
+    app.dependency_overrides[get_session] = lambda: MagicMock()
+    mock_organization = Organization(id=uuid4(), name="Test Org", keycloak_organization_id="test-org-123")
+
+    app.dependency_overrides[get_user_organization] = lambda: mock_organization
+    app.dependency_overrides[ensure_platform_administrator] = lambda: None
+
+    cluster_id = uuid4()
+    with TestClient(app) as client:
+        response = client.get(f"/v1/clusters/{cluster_id}/kube-config")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_get_cluster_kubeconfig_requires_admin():
+    app.dependency_overrides[get_session] = lambda: MagicMock()
+
+    mock_ensure_platform_administrator = MagicMock()
+    mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
+
+    cluster_id = uuid4()
+    with TestClient(app) as client:
+        response = client.get(f"/v1/clusters/{cluster_id}/kube-config")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN

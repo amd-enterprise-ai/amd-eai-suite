@@ -14,11 +14,19 @@ kgateway:
   airmapi:
     servicePort: 80
     prefixValue: airmapi
+    timeouts:
+      stream:
+        backendRequest: 30m
+        request: 30m
+      nonStream:
+        backendRequest: 10m
+        request: 10m
   airmui:
     servicePort: 80
     prefixValue: airmui
-  workloads:
-    prefixValue: workspaces
+    timeouts:
+      backendRequest: 1m
+      request: 1m
   keycloak:
     prefixValue: kc
 
@@ -33,7 +41,7 @@ aims:
     exporters:
       otlphttp:
         endpoint: "http://lgtm-stack.otel-lgtm-stack.svc:4318"
-    name: "vllm-sidecar-collector"
+    name: "vllm-collector"
 
 airm:
   appDomain: PUBLIC-IP
@@ -96,7 +104,7 @@ airm:
   frontend:
     image:
       repository: amdenterpriseai/airm-ui
-      tag: 0.2.4
+      tag: 0.3.0
       pullPolicy: IfNotPresent
     servicePort: 80
     resources:
@@ -109,7 +117,7 @@ airm:
   backend:
     image:
       repository: amdenterpriseai/airm-api
-      tag: 0.2.4
+      tag: 0.3.0
       pullPolicy: IfNotPresent
 
     servicePort: 80

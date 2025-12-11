@@ -73,11 +73,14 @@ async def test_list_charts(mock_repo_list_charts, sample_chart: Chart):
         response_data = response.json()
 
         assert response.status_code == status.HTTP_200_OK
-        assert isinstance(response_data, list)
-        assert len(response_data) == 1
-        assert response_data[0]["id"] == str(expected_response.id)
-        assert response_data[0]["name"] == expected_response.name
-        assert response_data[0]["usage_scope"] == expected_response.usage_scope  # Verify actual usage_scope value
+        assert isinstance(response_data, dict)
+        assert "data" in response_data
+        assert len(response_data["data"]) == 1
+        assert response_data["data"][0]["id"] == str(expected_response.id)
+        assert response_data["data"][0]["name"] == expected_response.name
+        assert (
+            response_data["data"][0]["usage_scope"] == expected_response.usage_scope
+        )  # Verify actual usage_scope value
         mock_repo_list_charts.assert_awaited_once()
 
 
@@ -92,11 +95,14 @@ async def test_list_charts_with_type_filter(mock_repo_list_charts, sample_chart:
         response_data = response.json()
 
         assert response.status_code == status.HTTP_200_OK
-        assert isinstance(response_data, list)
-        assert len(response_data) == 1
-        assert response_data[0]["id"] == str(expected_response.id)
-        assert response_data[0]["name"] == expected_response.name
-        assert response_data[0]["usage_scope"] == expected_response.usage_scope  # Verify actual usage_scope value
+        assert isinstance(response_data, dict)
+        assert "data" in response_data
+        assert len(response_data["data"]) == 1
+        assert response_data["data"][0]["id"] == str(expected_response.id)
+        assert response_data["data"][0]["name"] == expected_response.name
+        assert (
+            response_data["data"][0]["usage_scope"] == expected_response.usage_scope
+        )  # Verify actual usage_scope value
 
         mock_repo_list_charts.assert_awaited_once_with(ANY, WorkloadType.INFERENCE)
 
@@ -407,11 +413,12 @@ async def test_list_charts_workspace_usage_scope(mock_repo_list_charts, workspac
         response_data = response.json()
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response_data) == 2
+        assert "data" in response_data
+        assert len(response_data["data"]) == 2
 
         # Find charts by name and verify their usage_scope
-        vscode_data = next(chart for chart in response_data if chart["name"] == "development-workspace")
-        mlflow_data = next(chart for chart in response_data if chart["name"] == "dev-tracking-mlflow")
+        vscode_data = next(chart for chart in response_data["data"] if chart["name"] == "development-workspace")
+        mlflow_data = next(chart for chart in response_data["data"] if chart["name"] == "dev-tracking-mlflow")
 
         # Verify the actual computed values from the Chart models
         assert vscode_data["usage_scope"] == "user"  # VSCode workspace -> user scope

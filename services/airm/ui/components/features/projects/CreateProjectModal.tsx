@@ -26,7 +26,7 @@ import {
 } from '@/types/projects';
 import { UpdateQuotaRequest } from '@/types/quotas';
 
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import FormFieldComponent from '@/components/shared/ManagedForm/FormFieldComponent';
 
 import { ZodType, z } from 'zod';

@@ -16,6 +16,7 @@ import { generateMockSecrets } from '@/__mocks__/utils/secrets-mock';
 import { generateMockStorages } from '@/__mocks__/utils/storages-mock';
 
 import { StorageScope, StorageType } from '@/types/enums/storages';
+import { SecretUseCase } from '@/types/enums/secrets';
 
 import { AddS3Storage } from '@/components/features/storages/AddS3Storage';
 
@@ -103,16 +104,18 @@ const fillFormAndSubmit = async ({
 
   if (typeof secretName !== 'undefined') {
     await fireEvent.click(
-      screen.getAllByLabelText('form.add.field.secretId.label')[1],
+      screen.getByText('form.add.field.secretId.placeholder'),
     );
-    await fireEvent.click(screen.getByRole('option', { name: secretName }));
+    const options = await screen.findAllByText(secretName);
+    await fireEvent.click(options[1]);
   }
 
   if (typeof projectName !== 'undefined') {
     await fireEvent.click(
-      screen.getAllByLabelText('form.add.field.projectIds.label')[1],
+      screen.getByText('form.add.field.projectIds.placeholder'),
     );
-    await fireEvent.click(screen.getByRole('option', { name: projectName }));
+    const options = await screen.findAllByText(projectName);
+    await fireEvent.click(options[1]);
   }
 
   await fireEvent.click(screen.getByText('form.add.actions.add.label'));
@@ -122,6 +125,7 @@ describe('AddS3Storage', () => {
   const mockSecret = generateMockSecrets(1)[0];
   mockSecret.name = 'secret-001';
   mockSecret.id = 'secret-001-uuid';
+  mockSecret.useCase = SecretUseCase.S3;
 
   const mockProject = generateMockProjects(1)[0];
   mockProject.id = 'project-001-uuid';
@@ -391,7 +395,7 @@ describe('AddS3Storage', () => {
 
     await fillFormAndSubmit({
       name: 'test-storage-1',
-      bucketUrl: 'http://example.com/bucket',
+      bucketUrl: 'http://amd.com/bucket',
       accessKeyName: 'test-access-key',
       secretKeyName: 'test-secret-key',
       secretName: 'secret-001',
@@ -462,7 +466,7 @@ describe('AddS3Storage', () => {
 
     await fillFormAndSubmit({
       name: 'test-storage-1',
-      bucketUrl: 'http://example.com/bucket',
+      bucketUrl: 'http://amd.com/bucket',
       accessKeyName: 'test-access-key',
       secretKeyName: 'test-secret-key',
       secretName: 'secret-001',
@@ -477,7 +481,7 @@ describe('AddS3Storage', () => {
         scope: StorageScope.ORGANIZATION,
         type: StorageType.S3,
         spec: {
-          bucket_url: 'http://example.com/bucket',
+          bucket_url: 'http://amd.com/bucket',
           access_key_name: 'test-access-key',
           secret_key_name: 'test-secret-key',
         },
@@ -576,7 +580,7 @@ describe('AddS3Storage', () => {
     await fireEvent.change(
       screen.getByRole('textbox', { name: /form.add.field.bucketUrl.label/i }),
       {
-        target: { value: 'http://example.com/s3' },
+        target: { value: 'http://amd.com/s3' },
       },
     );
 
@@ -616,7 +620,7 @@ describe('AddS3Storage', () => {
 
     await fillFormAndSubmit({
       name: 'test-storage-1',
-      bucketUrl: 'http://example.com/bucket',
+      bucketUrl: 'http://amd.com/bucket',
       accessKeyName: 'test-access-key',
       secretKeyName: 'test-secret-key',
       secretName: 'secret-001',
@@ -650,7 +654,7 @@ describe('AddS3Storage', () => {
 
     await fillFormAndSubmit({
       name: 'test-storage-1',
-      bucketUrl: 'http://example.com/bucket',
+      bucketUrl: 'http://amd.com/bucket',
       accessKeyName: 'test-access-key',
       secretKeyName: 'test-secret-key',
       secretName: 'secret-001',
@@ -687,7 +691,7 @@ describe('AddS3Storage', () => {
 
     await fillFormAndSubmit({
       name: 'test-storage-1',
-      bucketUrl: 'http://example.com/bucket',
+      bucketUrl: 'http://amd.com/bucket',
       accessKeyName: 'test-access-key',
       secretKeyName: 'test-secret-key',
       secretName: 'secret-001',
@@ -726,5 +730,55 @@ describe('AddS3Storage', () => {
     );
 
     expect(mockOpenAddSecret).toHaveBeenCalled();
+  });
+
+  it('only displays secrets with S3 use case in the secret dropdown', async () => {
+    const mockSecrets = generateMockSecrets(3);
+
+    // Create secrets with different use cases
+    mockSecrets[0].name = 's3-secret-1';
+    mockSecrets[0].useCase = SecretUseCase.S3;
+
+    mockSecrets[1].name = 'generic-secret';
+    mockSecrets[1].useCase = SecretUseCase.GENERIC;
+
+    mockSecrets[2].name = 'huggingface-secret';
+    mockSecrets[2].useCase = SecretUseCase.HUGGING_FACE;
+
+    const onClose = vi.fn();
+
+    act(() => {
+      render(
+        <AddS3Storage
+          storages={[]}
+          secrets={mockSecrets}
+          isOpen
+          projects={[mockProject]}
+          onClose={onClose}
+          openAddSecret={mockOpenAddSecret}
+        />,
+        {
+          wrapper,
+        },
+      );
+    });
+
+    // Open the secret dropdown
+    await fireEvent.click(
+      screen.getAllByLabelText('form.add.field.secretId.label')[1],
+    );
+
+    // Verify S3 secret IS visible
+    const s3SecretOptions = await screen.findAllByText('s3-secret-1');
+    expect(s3SecretOptions.length).toBeGreaterThan(0);
+
+    // Verify non-S3 secrets are NOT visible
+    expect(
+      screen.queryByRole('option', { name: 'generic-secret' }),
+    ).not.toBeInTheDocument();
+
+    expect(
+      screen.queryByRole('option', { name: 'huggingface-secret' }),
+    ).not.toBeInTheDocument();
   });
 });

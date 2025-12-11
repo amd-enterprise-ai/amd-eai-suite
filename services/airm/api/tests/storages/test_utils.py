@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airm.messaging.schemas import ConfigMapStatus, ProjectSecretStatus, ProjectStorageStatus
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
-from app.secrets.models import ProjectSecret
+from app.secrets.models import OrganizationSecretAssignment
 from app.storages.enums import StorageStatus
 from app.storages.models import ProjectStorage, ProjectStorageConfigmap
 from app.storages.utils import resolve_project_storage_composite_status, resolve_storage_status, verify_projects_ready
@@ -166,10 +166,10 @@ async def test_resolve_project_storage_composite_status(
         updated_by="test",
     )
 
-    project_secret = ProjectSecret(
+    organization_secret_assignment = OrganizationSecretAssignment(
         id=uuid4(),
         project_id=uuid4(),
-        secret_id=uuid4(),
+        organization_secret_id=uuid4(),
         status=secret_status,
         status_reason=secret_reason,
         created_by="test",
@@ -180,7 +180,7 @@ async def test_resolve_project_storage_composite_status(
         id=uuid4(), project_id=uuid4(), storage_id=uuid4(), status="PENDING", created_by="test", updated_by="test"
     )
 
-    status, reason = await resolve_project_storage_composite_status(configmap, project_secret, project_storage)
+    status, reason = await resolve_project_storage_composite_status(configmap, organization_secret_assignment)
 
     assert status == expected_status
     for part in expected_reason_parts:

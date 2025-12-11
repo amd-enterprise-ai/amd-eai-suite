@@ -65,6 +65,8 @@ vi.mock('@/hooks/useAccessControl', () => ({
     isRoleManagementEnabled: true,
     isInviteEnabled: true,
     isAdministrator: true,
+    smtpEnabled: true,
+    isTempPasswordRequired: false,
   })),
 }));
 
@@ -84,7 +86,7 @@ describe('InvitedUsersTab', () => {
       { wrapper },
     );
 
-    mockInvitedUsersResponse.invitedUsers.forEach((user) => {
+    mockInvitedUsersResponse.data.forEach((user) => {
       expect(screen.getByText(user.email)).toBeInTheDocument();
     });
   });

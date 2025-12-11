@@ -57,7 +57,7 @@ const generateMockInvitedUsers = (count: number): InvitedUser[] => {
   }));
 };
 
-export const mockUsersResponse: UsersResponse = { users: generateMockUsers(5) };
+export const mockUsersResponse: UsersResponse = { data: generateMockUsers(5) };
 export const mockInvitedUsersResponse: InvitedUsersResponse = {
-  invitedUsers: generateMockInvitedUsers(3),
+  data: generateMockInvitedUsers(3),
 };

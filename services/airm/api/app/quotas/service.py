@@ -15,7 +15,7 @@ from airm.messaging.schemas import (
 )
 
 from ..clusters.models import Cluster
-from ..messaging.publisher import submit_quotas_allocation_to_cluster_queue
+from ..messaging.sender import MessageSender
 from ..projects.models import Project
 from ..projects.repository import get_projects_in_cluster
 from .constants import DEFAULT_CATCH_ALL_QUOTA_NAME
@@ -26,6 +26,7 @@ from .schemas import QuotaCreate, QuotaResponse, QuotaUpdate
 from .utils import (
     calculate_dynamic_catch_all_quota_allocation,
     does_quota_match_allocation,
+    format_quotas_allocation_message,
     have_quota_resources_changed,
     quota_failure_message_mismatch,
     quota_failure_message_missing,
@@ -36,6 +37,7 @@ async def send_quotas_allocation_to_cluster_queue(
     session: AsyncSession,
     cluster: Cluster,
     gpu_vendor: GPUVendor | None,
+    message_sender: MessageSender,
 ) -> None:
     projects_for_cluster = await get_projects_in_cluster(session, cluster.id)
 
@@ -55,7 +57,8 @@ async def send_quotas_allocation_to_cluster_queue(
     dynamic_catch_all_quota = await calculate_dynamic_catch_all_quota_allocation(session, cluster)
     quotas_allocations.append(dynamic_catch_all_quota)
 
-    await submit_quotas_allocation_to_cluster_queue(quotas_allocations, cluster.id, gpu_vendor)
+    message = format_quotas_allocation_message(quotas_allocations, gpu_vendor)
+    await message_sender.enqueue(cluster.id, message)
 
 
 async def create_quota_for_cluster(
@@ -65,10 +68,11 @@ async def create_quota_for_cluster(
     gpu_vendor: GPUVendor | None,
     quota: QuotaCreate,
     creator: str,
+    message_sender: MessageSender,
 ) -> Quota:
     db_quota = await create_quota_in_db(session, project.id, cluster.id, quota, QuotaStatus.PENDING, creator)
 
-    await send_quotas_allocation_to_cluster_queue(session, cluster, gpu_vendor)
+    await send_quotas_allocation_to_cluster_queue(session, cluster, gpu_vendor, message_sender)
 
     return db_quota
 
@@ -80,6 +84,7 @@ async def update_quota_for_cluster(
     edits: QuotaUpdate,
     gpu_vendor: GPUVendor | None,
     updater: str,
+    message_sender: MessageSender,
 ) -> QuotaResponse:
     # Check if any resources have changed
     resources_changed = have_quota_resources_changed(quota, edits)
@@ -88,7 +93,7 @@ async def update_quota_for_cluster(
     # Otherwise, set status directly to READY and skip sending message
     if resources_changed:
         db_quota = await update_quota(session, quota, edits, QuotaStatus.PENDING, None, updater)
-        await send_quotas_allocation_to_cluster_queue(session, cluster, gpu_vendor)
+        await send_quotas_allocation_to_cluster_queue(session, cluster, gpu_vendor, message_sender)
     else:
         # No resource changes, directly set to READY and skip cluster message
         db_quota = await update_quota(session, quota, edits, QuotaStatus.READY, None, updater)
@@ -174,9 +179,10 @@ async def delete_quota_for_cluster(
     cluster: Cluster,
     gpu_vendor: GPUVendor | None,
     updater: str,
+    message_sender: MessageSender,
 ) -> None:
     await update_quota_status(session, quota, QuotaStatus.DELETING, None, updater)
-    await send_quotas_allocation_to_cluster_queue(session, cluster, gpu_vendor)
+    await send_quotas_allocation_to_cluster_queue(session, cluster, gpu_vendor, message_sender)
 
 
 async def update_pending_quotas_to_failed(

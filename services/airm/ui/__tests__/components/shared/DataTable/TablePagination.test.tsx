@@ -48,7 +48,7 @@ describe('ClientSidePagination', () => {
           currentPage={1}
           frameSize={PageFrameSize.SMALL}
           totalItems={50}
-          // @ts-ignore
+          // @ts-expect-error
           translation={useTranslation}
           onFrameSizeChange={mockOnFrameSizeChange}
           onPageChange={mockOnPageChange}
@@ -68,7 +68,7 @@ describe('ClientSidePagination', () => {
           currentPage={1}
           frameSize={PageFrameSize.SMALL}
           totalItems={50}
-          // @ts-ignore
+          // @ts-expect-error
           translation={useTranslation}
           onFrameSizeChange={mockOnFrameSizeChange}
           onPageChange={mockOnPageChange}
@@ -104,7 +104,7 @@ describe('ClientSidePagination', () => {
           currentPage={1}
           frameSize={PageFrameSize.SMALL}
           totalItems={50}
-          // @ts-ignore
+          // @ts-expect-error
           translation={useTranslation}
           onFrameSizeChange={mockOnFrameSizeChange}
           onPageChange={mockOnPageChange}
@@ -130,7 +130,7 @@ describe('ClientSidePagination', () => {
           currentPage={1}
           frameSize={PageFrameSize.SMALL}
           totalItems={50}
-          // @ts-ignore
+          // @ts-expect-error
           translation={useTranslation}
           onFrameSizeChange={mockOnFrameSizeChange}
           onPageChange={mockOnPageChange}
@@ -146,7 +146,7 @@ describe('ClientSidePagination', () => {
           currentPage={1}
           frameSize={PageFrameSize.MEDIUM}
           totalItems={50}
-          // @ts-ignore
+          // @ts-expect-error
           translation={useTranslation}
           onFrameSizeChange={mockOnFrameSizeChange}
           onPageChange={mockOnPageChange}
@@ -161,7 +161,7 @@ describe('ClientSidePagination', () => {
           currentPage={1}
           frameSize={PageFrameSize.LARGE}
           totalItems={50}
-          // @ts-ignore
+          // @ts-expect-error
           translation={useTranslation}
           onFrameSizeChange={mockOnFrameSizeChange}
           onPageChange={mockOnPageChange}
@@ -179,7 +179,7 @@ describe('ClientSidePagination', () => {
           currentPage={1}
           frameSize={PageFrameSize.SMALL}
           totalItems={0}
-          // @ts-ignore
+          // @ts-expect-error
           translation={useTranslation}
           onFrameSizeChange={mockOnFrameSizeChange}
           onPageChange={mockOnPageChange}

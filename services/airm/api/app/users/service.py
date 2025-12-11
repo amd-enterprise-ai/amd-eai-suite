@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import asyncio
-import os
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -11,11 +10,13 @@ from keycloak import KeycloakAdmin
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..organizations.models import Organization
+from ..projects.models import Project
 from ..projects.repository import (
     get_projects_by_names_in_organization,
     get_projects_in_organization,
 )
 from ..users.repository import get_user_by_email
+from ..utilities.config import POST_REGISTRATION_REDIRECT_URL
 from ..utilities.exceptions import ConflictException, ExternalServiceError, NotFoundException
 from ..utilities.keycloak_admin import assign_roles_to_user as assign_roles_to_user_keycloak
 from ..utilities.keycloak_admin import assign_user_to_organization as assign_user_to_organization_in_keycloak
@@ -31,7 +32,6 @@ from ..utilities.keycloak_admin import (
     unassign_roles_to_user,
     update_user_details,
 )
-from ..utilities.keycloak_admin import create_user as create_user_in_keycloak
 from ..utilities.keycloak_admin import delete_user as delete_user_from_keycloak
 from ..utilities.keycloak_admin import get_user_by_username as get_user_by_username_from_keycloak
 from ..utilities.keycloak_admin import get_users_in_organization as get_users_in_organization_from_keycloak
@@ -51,14 +51,13 @@ from .schemas import (
 )
 from .utils import (
     check_valid_email_domain,
+    create_user_in_keycloak,
     is_keycloak_user_active,
     is_keycloak_user_inactive,
     merge_invited_user_details_with_projects,
     merge_user_details,
     merge_user_details_with_projects,
 )
-
-POST_REGISTRATION_REDIRECT_URL = os.environ.get("POST_REGISTRATION_REDIRECT_URL")
 
 
 async def delete_user(kc_admin: KeycloakAdmin, session: AsyncSession, user: UserModel) -> None:
@@ -130,7 +129,7 @@ async def resend_invitation(kc_admin: KeycloakAdmin, user: UserModel, logged_in_
 
 
 async def create_user_in_organization(
-    kc_admin: KeycloakAdmin, session: AsyncSession, organization, user_in: InviteUser, creator: str
+    kc_admin: KeycloakAdmin, session: AsyncSession, organization: Organization, user_in: InviteUser, creator: str
 ) -> UserModel:
     projects = await get_projects_in_organization(session, organization.id)
 
@@ -154,10 +153,7 @@ async def create_user_in_organization(
     keycloak_user_id = keycloak_user["id"] if keycloak_user else None
 
     if not keycloak_user_id:
-        keycloak_user_id = await create_user_in_keycloak(kc_admin=kc_admin, email=user_in.email)
-        await send_verify_email(
-            kc_admin=kc_admin, keycloak_user_id=keycloak_user_id, redirect_uri=POST_REGISTRATION_REDIRECT_URL
-        )
+        keycloak_user_id = await create_user_in_keycloak(kc_admin=kc_admin, user_in=user_in, organization=organization)
 
     await assign_user_to_organization_in_keycloak(
         kc_admin=kc_admin, user_id=keycloak_user_id, organization_id=organization.keycloak_organization_id
@@ -270,7 +266,7 @@ async def get_user_details(
 
 async def get_projects_for_user_groups(
     kc_admin: KeycloakAdmin, session: AsyncSession, organization_id: UUID, keycloak_user_id: str
-):
+) -> list[Project]:
     user_groups = await get_user_groups(kc_admin=kc_admin, user_id=keycloak_user_id)
     group_names = [name for group in user_groups if (name := group.get("name"))]
     user_projects = await get_projects_by_names_in_organization(session, group_names, organization_id)

@@ -32,7 +32,7 @@ export const AppBar: React.FC<AppBarProps> = ({ pageBreadcrumb }) => {
   const router = useRouter();
   const { pathname } = router;
   const { t } = useTranslation();
-  const path = pathname.split('/').pop();
+  const path = pathname.split('/').pop()?.replace(/^_/, '');
   const title = path
     ? t(`pages.${toCamelCase(path)}.title`)
     : t('pages.dashboard.title');

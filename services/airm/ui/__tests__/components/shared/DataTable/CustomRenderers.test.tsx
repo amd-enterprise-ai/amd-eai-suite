@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+// filepath: /Users/alex/dev/core/services/airm/ui/__tests__/components/shared/ClientSideDataTable/CustomRenderers.test.tsx
 import { render, screen, within } from '@testing-library/react';
 
 import {
@@ -9,11 +10,11 @@ import {
   ChipDisplay,
   DateDisplay,
   NoDataDisplay,
-  StatusBadgeDisplay,
+  StatusDisplay,
   TranslationDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Use vi.hoisted to create mock functions that are properly hoisted
 const formatMock = vi.hoisted(() => vi.fn().mockReturnValue('Formatted Date'));
@@ -42,34 +43,83 @@ vi.mock('next-i18next', () => ({
 }));
 
 // Mock HeroUI components
-vi.mock('@heroui/react', () => ({
-  Chip: ({ children, size, color, variant, startContent }: any) => (
+vi.mock('@heroui/react', async () => {
+  const original = await vi.importActual<any>('@heroui/react');
+  return {
+    ...original,
+    cn: (...args: any[]) => {
+      return original.cn(...args);
+    },
+    Chip: ({
+      children,
+      size,
+      color,
+      variant,
+      startContent,
+      classNames,
+    }: any) => (
+      <div
+        data-testid="mock-chip"
+        data-size={size}
+        data-color={color}
+        data-variant={variant}
+        className={classNames?.base}
+      >
+        {startContent && (
+          <div data-testid="chip-start-content">{startContent}</div>
+        )}
+        {children}
+      </div>
+    ),
+    Tooltip: ({ children, content }: any) => (
+      <div data-testid="mock-tooltip">
+        <div data-testid="tooltip-trigger">{children}</div>
+        <div data-testid="tooltip-content">{content}</div>
+      </div>
+    ),
+    Popover: ({ children }: any) => (
+      <div data-testid="mock-popover">{children}</div>
+    ),
+    PopoverTrigger: ({ children }: any) => (
+      <div data-testid="mock-popover-trigger">{children}</div>
+    ),
+    PopoverContent: ({ children }: any) => (
+      <div data-testid="mock-popover-content">{children}</div>
+    ),
+    Spinner: ({ size, color, className }: any) => (
+      <div
+        data-testid="mock-spinner"
+        data-size={size}
+        data-color={color}
+        className={className}
+      >
+        Spinner
+      </div>
+    ),
+  };
+});
+
+// Mock Status component
+vi.mock('@/components/shared/Status/Status', () => ({
+  default: ({
+    label,
+    icon: IconComponent,
+    color = 'primary',
+    isPending = false,
+  }: any) => (
     <div
-      data-testid="mock-chip"
-      data-size={size}
+      data-testid="mock-status-display"
       data-color={color}
-      data-variant={variant}
+      data-pending={isPending}
     >
-      {startContent && (
-        <div data-testid="chip-start-content">{startContent}</div>
-      )}
-      {children}
-    </div>
-  ),
-  Tooltip: ({ children, content }: any) => (
-    <div data-testid="mock-tooltip">
-      <div data-testid="tooltip-trigger">{children}</div>
-      <div data-testid="tooltip-content">{content}</div>
-    </div>
-  ),
-  Spinner: ({ size, color, className }: any) => (
-    <div
-      data-testid="mock-spinner"
-      data-size={size}
-      data-color={color}
-      className={className}
-    >
-      Spinner
+      {isPending ? (
+        <div data-testid="mock-spinner" data-color={color}>
+          Spinner
+        </div>
+      ) : IconComponent ? (
+        <IconComponent size={16} />
+      ) : null}
+      <span>{label}</span>
     </div>
   ),
 }));
@@ -175,15 +225,15 @@ describe('ChipDisplay', () => {
   });
 });
 
-describe('StatusBadgeDisplay', () => {
+describe('StatusDisplay', () => {
   const MockIcon = ({
     size,
-    className,
+    role,
   }: {
-    size?: string;
-    className?: string;
+    size?: string | number;
+    role?: string;
   }) => (
-    <span data-testid="mock-status-icon" data-size={size} className={className}>
+    <span data-testid="mock-status-icon" data-size={size} role={role}>
       Icon
     </span>
   );
@@ -192,34 +242,41 @@ describe('StatusBadgeDisplay', () => {
     active: {
       label: 'Active',
       color: 'success' as const,
-      textColor: 'success' as const,
       icon: MockIcon,
+      isPending: false as const,
     },
     processing: {
       label: 'Processing',
       color: 'primary' as const,
-      icon: 'spinner' as const,
+      isPending: true as const,
     },
     default: {
       label: 'Default',
       icon: MockIcon,
+      isPending: false as const,
     },
   };
 
   it('renders status badge with icon component', () => {
-    render(<StatusBadgeDisplay variants={variants} type="active" />);
+    render(<StatusDisplay variants={variants} type="active" />);
 
-    const container = screen.getByText('Active');
-    expect(container).toBeInTheDocument();
-    // Just verify the element is rendered without checking for class
-    expect(screen.getByTestId('mock-status-icon')).toBeInTheDocument();
+    const statusDisplay = screen.getByTestId('mock-status-display');
+    expect(statusDisplay).toBeInTheDocument();
+    expect(statusDisplay).toHaveAttribute('data-color', 'success');
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    // Icon is rendered directly by Status mock, so check it exists within status
+    const icon = within(statusDisplay).getByTestId('mock-status-icon');
+    expect(icon).toBeInTheDocument();
   });
 
   it('renders status badge with spinner', () => {
-    render(<StatusBadgeDisplay variants={variants} type="processing" />);
+    render(<StatusDisplay variants={variants} type="processing" />);
 
-    const container = screen.getByText('Processing');
-    expect(container).toBeInTheDocument();
+    const statusDisplay = screen.getByTestId('mock-status-display');
+    expect(statusDisplay).toBeInTheDocument();
+    expect(statusDisplay).toHaveAttribute('data-color', 'primary');
+    expect(statusDisplay).toHaveAttribute('data-pending', 'true');
+    expect(screen.getByText('Processing')).toBeInTheDocument();
     expect(screen.getByTestId('mock-spinner')).toBeInTheDocument();
     expect(screen.getByTestId('mock-spinner')).toHaveAttribute(
       'data-color',
@@ -228,15 +285,18 @@ describe('StatusBadgeDisplay', () => {
   });
 
   it('renders status badge with default styling', () => {
-    render(<StatusBadgeDisplay variants={variants} type="default" />);
+    render(<StatusDisplay variants={variants} type="default" />);
 
-    const container = screen.getByText('Default');
-    expect(container).toBeInTheDocument();
-    expect(screen.getByTestId('mock-status-icon')).toBeInTheDocument();
+    const statusDisplay = screen.getByTestId('mock-status-display');
+    expect(statusDisplay).toBeInTheDocument();
+    expect(screen.getByText('Default')).toBeInTheDocument();
+    // Icon is rendered directly by Status mock, so check it exists within status
+    const icon = within(statusDisplay).getByTestId('mock-status-icon');
+    expect(icon).toBeInTheDocument();
   });
 
   it('renders fallback chip when variant does not exist', () => {
-    render(<StatusBadgeDisplay variants={variants} type="nonexistent" />);
+    render(<StatusDisplay variants={variants} type="nonexistent" />);
 
     const chip = screen.getByTestId('mock-chip');
     expect(chip).toBeInTheDocument();
@@ -429,10 +489,11 @@ describe('BadgeStackDisplay', () => {
     expect(tooltipContent).toHaveTextContent('nonexistent'); // The span with the label
   });
 
-  it('passes isOneChar={false} to InlineBadge for multi-character labels without icon', () => {
+  it('passes isOneChar={true} to InlineBadge for multi-character labels without icon', () => {
     render(<BadgeStackDisplay variants={variants} types={['cpu']} />); // 'cpu' label "CPU"
     const tooltipTrigger = screen.getByTestId('tooltip-trigger');
     const badge = within(tooltipTrigger).getByTestId('mock-inline-badge');
+    // Implementation always passes isOneChar={true} regardless of label length
     expect(badge).toHaveAttribute('data-isonechar', 'true');
   });
 

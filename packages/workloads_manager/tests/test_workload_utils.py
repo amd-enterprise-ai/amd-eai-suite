@@ -13,7 +13,7 @@ from workloads_manager.core.workloads import (
 )
 
 
-def test_get_workloads_with_patches_and_changes(tmp_path: Path):
+def test_get_workloads_with_patches_and_changes(tmp_path: Path) -> None:
     """Test get_workloads function with mocked patches and changes."""
     # Create a workloads directory structure
     workloads_dir = Path(tmp_path) / "workloads"

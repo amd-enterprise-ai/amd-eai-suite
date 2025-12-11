@@ -220,7 +220,7 @@ async def test_create_project_storage_configmap_sets_status_and_links(db_session
     )
 
     # Create a project storage to attach the configmap to
-    project_secret = await factory.create_project_secret(db_session, env.project, secret)
+    project_secret = await factory.create_organization_secret_assignment(db_session, env.project, secret)
 
     ps = await create_project_storage(
         session=db_session,
@@ -420,26 +420,26 @@ async def test_get_project_storage_by_id(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_get_project_storages_by_project_secret(db_session: AsyncSession):
+async def test_get_project_storages_by_secret_assignments(db_session: AsyncSession):
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
     storage = await factory.create_storage_with_project_assignment(
         db_session, env.organization, env.project, secret, storage_status=StorageStatus.SYNCED.value
     )
 
-    project_secret = await factory.create_project_secret(db_session, env.project, secret)
+    org_secret_assignment = await factory.create_organization_secret_assignment(db_session, env.project, secret)
 
-    result = await get_project_storages_by_project_secret(db_session, project_secret)
+    result = await get_project_storages_by_project_secret(db_session, secret.id, env.project.id)
 
     assert isinstance(result, list)
     assert len(result) == 1
-    assert result[0].project_id == project_secret.project_id
-    assert result[0].storage.secret_id == project_secret.secret_id
+    assert result[0].project_id == org_secret_assignment.project_id
+    assert result[0].storage.secret_id == org_secret_assignment.organization_secret_id
 
     other_secret = await factory.create_secret(db_session, env.organization, name="other-secret")
-    other_project_secret = await factory.create_project_secret(db_session, env.project, other_secret)
+    other_secret_assignment = await factory.create_organization_secret_assignment(db_session, env.project, other_secret)
 
-    no_result = await get_project_storages_by_project_secret(db_session, other_project_secret)
+    no_result = await get_project_storages_by_project_secret(db_session, other_secret.id, env.project.id)
     assert no_result == []
 
 

@@ -12,10 +12,12 @@ import {
 
 import { streamChatResponse } from '@/services/app/chat';
 
-import { ClusterStatus } from '@/types/enums/cluster-status';
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
 import { Model, ModelOnboardingStatus } from '@/types/models';
 import { Workload } from '@/types/workloads';
+import { Aim } from '@/types/aims';
+import { mockProject1 } from '@/__mocks__/services/app/projects.data';
+import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 
 import { ChatView } from '@/components/features/chat/ChatView';
 import ProviderWrapper from '@/__tests__/ProviderWrapper';
@@ -25,6 +27,26 @@ import { Mock, vi } from 'vitest';
 
 vi.mock('@/services/app/chat', () => ({
   streamChatResponse: vi.fn(),
+}));
+
+vi.mock('@/services/app/aims', () => ({
+  getAims: vi.fn(() => Promise.resolve([])),
+}));
+
+vi.mock('@/services/app/models', () => ({
+  getModels: vi.fn(() =>
+    Promise.resolve([
+      {
+        id: '1',
+        name: 'Model 1',
+        canonicalName: 'test-org/test-model-1',
+        createdAt: '',
+        onboardingStatus: 'ready',
+        createdBy: '',
+        modelWeightsPath: '',
+      },
+    ]),
+  ),
 }));
 
 const mockToast = {
@@ -40,18 +62,12 @@ vi.mock('@/hooks/useSystemToast', () => ({
   }),
 }));
 
-vi.mock('@/services/app/collections', () => ({
-  getCollections: vi.fn(() => Promise.resolve([])),
-}));
-
 vi.mock('@/utils/app/chat-settings', () => ({
   getChatSettings: vi.fn(() => ({
     temperature: 0.7,
     frequencyPenalty: 0,
     presencePenalty: 0,
     systemPrompt: '',
-    ragEnabled: false,
-    userPromptTemplate: '',
   })),
   saveChatSettings: vi.fn(),
 }));
@@ -74,7 +90,7 @@ describe('ChatView Component', () => {
     {
       id: '1',
       name: 'Model 1',
-      canonicalName: '',
+      canonicalName: 'test-org/test-model-1',
       createdAt: '',
       onboardingStatus: ModelOnboardingStatus.READY,
       createdBy: '',
@@ -82,27 +98,23 @@ describe('ChatView Component', () => {
     },
   ];
 
+  const mockAims: Aim[] = [];
+
   const mockWorkloads: Workload[] = [
     {
       id: '1',
       chartId: '',
-      clusterId: '',
-      cluster: {
-        name: '',
-        id: '',
-        lastHeartbeatAt: '',
-        status: ClusterStatus.HEALTHY,
-      },
+      project: mockProject1,
       capabilities: ['chat'],
       type: WorkloadType.INFERENCE,
       createdBy: 'test-user',
+      updatedBy: 'test-user',
       createdAt: '',
       updatedAt: '',
       status: WorkloadStatus.RUNNING,
       modelId: '1',
       displayName: 'Model 1',
       name: 'mw-test-workload',
-      model: mockModels[0],
       output: {
         internalHost: 'localhost:8080',
       },
@@ -142,7 +154,6 @@ describe('ChatView Component', () => {
             content: 'Hello, world!',
           },
         ],
-        rag_sources: [],
         model: 'model',
       }),
     });
@@ -511,6 +522,93 @@ describe('ChatView Component', () => {
 
     // Wait for response to complete
     await waitFor(() => delayedPromise, { timeout: 200 });
+  });
+
+  it('includes canonical name in chatBody when sending message with modelId', async () => {
+    (streamChatResponse as Mock).mockResolvedValue({
+      responseStream: getStream(['Response'], false),
+      context: Promise.resolve({}),
+    });
+
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={mockWorkloads} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const input = screen.getByTestId('chat-input');
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'Test message' } });
+      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    });
+
+    // Wait for the message to be sent
+    await waitFor(() => {
+      expect(streamChatResponse).toHaveBeenCalled();
+    });
+
+    // Verify that streamChatResponse was called with chatBody containing the model field
+    const callArgs = (streamChatResponse as Mock).mock.calls[0];
+    const chatBody = callArgs[1]; // Second argument is chatBody
+
+    expect(chatBody).toHaveProperty('model');
+    expect(chatBody.model).toBe('test-org/test-model-1');
+  });
+
+  it('includes canonical name in chatBody when sending message with aimId', async () => {
+    const workloadWithAim: Workload = {
+      ...mockWorkloads[0],
+      id: 'aim-workload-1',
+      aimId: 'aim-1',
+      modelId: undefined,
+    };
+
+    const { getAims } = await import('@/services/app/aims');
+    (getAims as Mock).mockResolvedValue([
+      {
+        id: 'aim-1',
+        canonicalName: 'aim-org/aim-model-1',
+        workload: {
+          id: 'aim-workload-1',
+        },
+        tags: ['chat'],
+      },
+    ]);
+
+    (streamChatResponse as Mock).mockResolvedValue({
+      responseStream: getStream(['Response'], false),
+      context: Promise.resolve({}),
+    });
+
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={[workloadWithAim]} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const input = screen.getByTestId('chat-input');
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'Test message' } });
+      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    });
+
+    // Wait for the message to be sent
+    await waitFor(() => {
+      expect(streamChatResponse).toHaveBeenCalled();
+    });
+
+    // Verify that streamChatResponse was called with chatBody containing the model field from AIM
+    const callArgs = (streamChatResponse as Mock).mock.calls[0];
+    const chatBody = callArgs[1];
+
+    expect(chatBody).toHaveProperty('model');
+    expect(chatBody.model).toBe('aim-org/aim-model-1');
   });
 });
 

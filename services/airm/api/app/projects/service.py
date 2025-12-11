@@ -13,6 +13,7 @@ from airm.messaging.schemas import NamespaceStatus, QuotaStatus
 from ..clusters.models import Cluster
 from ..clusters.schemas import ClusterResponse, ClusterStatus
 from ..clusters.service import get_cluster_with_resources
+from ..messaging.sender import MessageSender
 from ..namespaces.models import Namespace
 from ..namespaces.repository import get_namespace_by_project_and_cluster
 from ..namespaces.service import delete_namespace_in_cluster
@@ -32,7 +33,7 @@ from ..users.utils import (
     merge_invited_user_details,
     merge_user_details,
 )
-from ..utilities.exceptions import NotFoundException, UnhealthyException, ValidationException
+from ..utilities.exceptions import ConflictException, NotFoundException, UnhealthyException, ValidationException
 from ..utilities.keycloak_admin import (
     assign_users_to_group,
     create_group,
@@ -42,7 +43,9 @@ from ..utilities.keycloak_admin import (
     unassign_users_from_group,
 )
 from ..utilities.keycloak_admin import get_users_in_organization as get_users_in_organization_from_keycloak
-from ..utilities.security import Roles
+from ..utilities.security import (
+    Roles,
+)
 from .constants import MAX_PROJECTS_PER_CLUSTER
 from .enums import ProjectStatus
 from .models import Project
@@ -50,6 +53,7 @@ from .repository import create_project as create_project_in_db
 from .repository import (
     delete_project,
     get_active_project_count_per_cluster,
+    get_project_by_name_in_organization,
     get_project_in_organization,
     get_projects_in_organization,
     update_project_status,
@@ -197,6 +201,11 @@ async def create_project(
     if ClusterResponse.model_validate(cluster).status is not ClusterStatus.HEALTHY:
         raise UnhealthyException("Project cannot be created for an unhealthy cluster.")
 
+    if await get_project_by_name_in_organization(
+        session, organization_id=cluster.organization_id, project_name=project.name
+    ):
+        raise ConflictException(f"Project with name {project.name} already exists.")
+
     project_count = await get_active_project_count_per_cluster(session, cluster.id)
     # There is always a default quota "kaiwo" created on the cluster, so account for that
     if project_count >= MAX_PROJECTS_PER_CLUSTER - 1:
@@ -236,7 +245,12 @@ async def remove_user_from_project_and_keycloak_group(
 
 
 async def create_quota(
-    session: AsyncSession, project: Project, cluster: Cluster, quota_data: QuotaBase, user: str
+    session: AsyncSession,
+    project: Project,
+    cluster: Cluster,
+    quota_data: QuotaBase,
+    user: str,
+    message_sender: MessageSender,
 ) -> Quota:
     quota_create = QuotaCreate(**quota_data.model_dump(), cluster_id=cluster.id, project_id=project.id)
 
@@ -247,11 +261,16 @@ async def create_quota(
         raise ValidationException(f"Quota exceeds available cluster resources: {', '.join(validation_errors)}")
 
     gpu_vendor = cluster_with_resources.gpu_info.vendor if cluster_with_resources.gpu_info else None
-    return await create_quota_for_cluster(session, project, cluster, gpu_vendor, quota_create, user)
+    return await create_quota_for_cluster(session, project, cluster, gpu_vendor, quota_create, user, message_sender)
 
 
 async def update_project_quota(
-    session: AsyncSession, project: Project, cluster: Cluster, quota_edit: QuotaUpdate, user: str
+    session: AsyncSession,
+    project: Project,
+    cluster: Cluster,
+    quota_edit: QuotaUpdate,
+    user: str,
+    message_sender: MessageSender,
 ) -> QuotaResponse:
     cluster_with_resources = await get_cluster_with_resources(session, cluster)
     current_quota = project.quota
@@ -263,7 +282,9 @@ async def update_project_quota(
         raise ValidationException(f"Quota exceeds available cluster resources: {', '.join(validation_errors)}")
 
     gpu_vendor = cluster_with_resources.gpu_info.vendor if cluster_with_resources.gpu_info else None
-    quota = await update_quota_for_cluster(session, project.cluster, project.quota, quota_edit, gpu_vendor, user)
+    quota = await update_quota_for_cluster(
+        session, project.cluster, project.quota, quota_edit, gpu_vendor, user, message_sender
+    )
 
     return quota
 
@@ -299,10 +320,12 @@ async def update_project_status_from_components(
     await update_project_status(session, project, project_status, status_reason, "system")
 
 
-async def submit_delete_project(session: AsyncSession, project: Project, user: str, gpu_vendor: str | None) -> None:
+async def submit_delete_project(
+    session: AsyncSession, project: Project, user: str, gpu_vendor: str | None, message_sender: MessageSender
+) -> None:
     ensure_project_safe_to_delete(project)
-    await delete_quota_for_cluster(session, project.quota, project.cluster, gpu_vendor, user)
-    await delete_namespace_in_cluster(session, project, user)
+    await delete_quota_for_cluster(session, project.quota, project.cluster, gpu_vendor, user, message_sender)
+    await delete_namespace_in_cluster(session, project, user, message_sender)
     await update_project_status(session, project, ProjectStatus.DELETING, "Project is being deleted", user)
 
 

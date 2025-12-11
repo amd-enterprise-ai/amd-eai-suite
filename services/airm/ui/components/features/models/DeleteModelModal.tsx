@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 
 import { Model } from '@/types/models';
 
@@ -51,13 +51,9 @@ export default function DeleteModelModal({
   return (
     <ConfirmationModal
       confirmationButtonColor="danger"
-      description={
-        <Trans parent="span">
-          {t('list.actions.delete.confirmation.description', {
-            name: model.name || '',
-          })}
-        </Trans>
-      }
+      description={t('list.actions.delete.confirmation.description', {
+        name: model.name || '',
+      })}
       title={t('list.actions.delete.confirmation.title')}
       isOpen={isOpen}
       loading={isLoading}

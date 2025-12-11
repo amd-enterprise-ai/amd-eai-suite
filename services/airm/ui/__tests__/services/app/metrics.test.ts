@@ -123,8 +123,6 @@ describe('fetchGPUDeviceUtilizationByClusterId', () => {
     const end = new Date();
     await expect(
       fetchGPUDeviceUtilizationByClusterId(clusterId, start, end),
-    ).rejects.toThrow(
-      new RegExp(`Failed to get GPU Device Utilization for cluster`),
-    );
+    ).rejects.toThrow(/Failed to get GPU Device Utilization for cluster/);
   });
 });

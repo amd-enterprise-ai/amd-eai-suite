@@ -4,7 +4,7 @@
 
 """Workspaces service tests."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,6 +72,7 @@ async def test_create_development_workspace_success(db_session: AsyncSession):
         mock_external_host.return_value = "host.example.com"
         mock_internal_host.return_value = "internal.svc.cluster.local"
         mock_validate.return_value = {"key": "value"}
+        mock_message_sender = AsyncMock()
 
         result = await create_development_workspace(
             db_session,
@@ -80,6 +81,7 @@ async def test_create_development_workspace_success(db_session: AsyncSession):
             "token",
             env.project,
             WorkspaceType.VSCODE,
+            mock_message_sender,
         )
 
         # Verify workspace was created successfully (would fail with AttributeError if chart not loaded)
@@ -112,6 +114,7 @@ async def test_create_development_workspace_mlflow_conflict(db_session: AsyncSes
     )
 
     request = DevelopmentWorkspaceRequest()
+    mock_message_sender = AsyncMock()
 
     with pytest.raises(ConflictException, match="Mlflow workspace already running in this project"):
         await create_development_workspace(
@@ -121,6 +124,7 @@ async def test_create_development_workspace_mlflow_conflict(db_session: AsyncSes
             "token",
             env.project,
             WorkspaceType.MLFLOW,
+            mock_message_sender,
         )
 
 
@@ -157,6 +161,7 @@ async def test_create_development_workspace_url_suffixes(db_session: AsyncSessio
         mock_external_host.return_value = "host.example.com"
         mock_internal_host.return_value = "internal.svc.cluster.local"
         mock_validate.return_value = {"key": "value"}
+        mock_message_sender = AsyncMock()
 
         result = await create_development_workspace(
             db_session,
@@ -165,6 +170,7 @@ async def test_create_development_workspace_url_suffixes(db_session: AsyncSessio
             "token",
             env.project,
             workspace_type,
+            mock_message_sender,
         )
 
         # Just verify the function completes successfully
@@ -201,6 +207,7 @@ async def test_create_development_workspace_mlflow_success(db_session: AsyncSess
         mock_external_host.return_value = "host.example.com"
         mock_internal_host.return_value = "internal.svc.cluster.local"
         mock_validate.return_value = {"key": "value"}
+        mock_message_sender = AsyncMock()
 
         result = await create_development_workspace(
             db_session,
@@ -209,6 +216,7 @@ async def test_create_development_workspace_mlflow_success(db_session: AsyncSess
             "token",
             env.project,
             WorkspaceType.MLFLOW,
+            mock_message_sender,
         )
 
         assert result.id == mock_workload.id

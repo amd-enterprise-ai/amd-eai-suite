@@ -253,7 +253,7 @@ describe('Members', () => {
 
   it('calls addUsersToProjectAPI with the correct value there are candidates and users are added', async () => {
     mockFetchUsers.mockResolvedValue({
-      users: [
+      data: [
         {
           id: 'user1',
           firstName: 'User',
@@ -282,7 +282,7 @@ describe('Members', () => {
     });
 
     mockFetchInvitedUsers.mockResolvedValue({
-      invitedUsers: [
+      data: [
         {
           id: 'invUser1',
           email: 'invUser1@company.com',
@@ -308,28 +308,20 @@ describe('Members', () => {
     await waitFor(() => expect(addButton.disabled).toBeFalsy());
     fireEvent.click(addButton);
 
-    fireEvent.click(
-      screen.getAllByLabelText(
-        'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
-      )[1],
-    );
-    fireEvent.click(screen.getByRole('option', { name: 'user2@company.com' }));
+    const selectButton = screen.getAllByLabelText(
+      'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
+    )[1];
+    fireEvent.click(selectButton);
+    const user2Options = await screen.findAllByText('user2@company.com');
+    fireEvent.click(user2Options[1]);
 
-    fireEvent.click(
-      screen.getAllByLabelText(
-        'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
-      )[1],
-    );
-    fireEvent.click(screen.getByRole('option', { name: 'user3@company.com' }));
+    fireEvent.click(selectButton);
+    const user3Options = await screen.findAllByText('user3@company.com');
+    fireEvent.click(user3Options[1]);
 
-    fireEvent.click(
-      screen.getAllByLabelText(
-        'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
-      )[1],
-    );
-    fireEvent.click(
-      screen.getByRole('option', { name: 'invUser3@company.com' }),
-    );
+    fireEvent.click(selectButton);
+    const invUser3Options = await screen.findAllByText('invUser3@company.com');
+    fireEvent.click(invUser3Options[1]);
 
     const confirmButton = screen.getByText(
       'settings.membersAndInvitedUsers.members.actions.add.modal.confirm',
@@ -606,7 +598,7 @@ describe('Members', () => {
 
     it('refreshes token when user removes themselves from project', async () => {
       mockFetchUsers.mockResolvedValue({
-        users: [
+        data: [
           {
             id: 'test-user-id',
             firstName: 'Test',
@@ -712,7 +704,7 @@ describe('Members', () => {
 
     it('refreshes token when user adds themselves to project', async () => {
       mockFetchUsers.mockResolvedValue({
-        users: [
+        data: [
           {
             id: 'test-user-id',
             firstName: 'Test',
@@ -729,7 +721,7 @@ describe('Members', () => {
       });
 
       mockFetchInvitedUsers.mockResolvedValue({
-        invitedUsers: [],
+        data: [],
       });
 
       await act(async () => {
@@ -742,12 +734,12 @@ describe('Members', () => {
       await waitFor(() => expect(addButton).not.toBeDisabled());
       fireEvent.click(addButton);
 
-      fireEvent.click(
-        screen.getAllByLabelText(
-          'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
-        )[1],
-      );
-      fireEvent.click(screen.getByRole('option', { name: 'test@example.com' }));
+      const selectButton = screen.getAllByLabelText(
+        'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
+      )[1];
+      fireEvent.click(selectButton);
+      const testOptions = await screen.findAllByText('test@example.com');
+      fireEvent.click(testOptions[1]);
 
       const confirmButton = screen.getByText(
         'settings.membersAndInvitedUsers.members.actions.add.modal.confirm',
@@ -765,7 +757,7 @@ describe('Members', () => {
 
     it('does not refresh token when user adds others to project', async () => {
       mockFetchUsers.mockResolvedValue({
-        users: [
+        data: [
           {
             id: 'test-user-id',
             firstName: 'Test',
@@ -782,7 +774,7 @@ describe('Members', () => {
       });
 
       mockFetchInvitedUsers.mockResolvedValue({
-        invitedUsers: [],
+        data: [],
       });
 
       await act(async () => {
@@ -795,14 +787,12 @@ describe('Members', () => {
       await waitFor(() => expect(addButton).not.toBeDisabled());
       fireEvent.click(addButton);
 
-      fireEvent.click(
-        screen.getAllByLabelText(
-          'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
-        )[1],
-      );
-      fireEvent.click(
-        screen.getByRole('option', { name: 'user2@company.com' }),
-      );
+      const selectButton = screen.getAllByLabelText(
+        'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
+      )[1];
+      fireEvent.click(selectButton);
+      const user2Options = await screen.findAllByText('user2@company.com');
+      fireEvent.click(user2Options[1]);
 
       const confirmButton = screen.getByText(
         'settings.membersAndInvitedUsers.members.actions.add.modal.confirm',
@@ -865,7 +855,7 @@ describe('Members', () => {
 
     it('shows error toast when adding users fails', async () => {
       mockFetchUsers.mockResolvedValue({
-        users: [
+        data: [
           {
             id: 'user2',
             firstName: 'User',
@@ -876,7 +866,7 @@ describe('Members', () => {
       });
 
       mockFetchInvitedUsers.mockResolvedValue({
-        invitedUsers: [],
+        data: [],
       });
 
       mockAddUsersToProject.mockImplementation(() =>
@@ -893,14 +883,12 @@ describe('Members', () => {
       await waitFor(() => expect(addButton).not.toBeDisabled());
       fireEvent.click(addButton);
 
-      fireEvent.click(
-        screen.getAllByLabelText(
-          'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
-        )[1],
-      );
-      fireEvent.click(
-        screen.getByRole('option', { name: 'user2@company.com' }),
-      );
+      const selectButton = screen.getAllByLabelText(
+        'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
+      )[1];
+      fireEvent.click(selectButton);
+      const user2Options = await screen.findAllByText('user2@company.com');
+      fireEvent.click(user2Options[1]);
 
       const confirmButton = screen.getByText(
         'settings.membersAndInvitedUsers.members.actions.add.modal.confirm',
@@ -920,7 +908,7 @@ describe('Members', () => {
 
     it('does not refresh token when user removal fails', async () => {
       mockFetchUsers.mockResolvedValue({
-        users: [
+        data: [
           {
             id: 'test-user-id',
             firstName: 'Test',
@@ -980,7 +968,7 @@ describe('Members', () => {
 
     it('does not refresh token when user addition fails', async () => {
       mockFetchUsers.mockResolvedValue({
-        users: [
+        data: [
           {
             id: 'test-user-id',
             firstName: 'Test',
@@ -991,7 +979,7 @@ describe('Members', () => {
       });
 
       mockFetchInvitedUsers.mockResolvedValue({
-        invitedUsers: [],
+        data: [],
       });
 
       mockAddUsersToProject.mockImplementation(() =>
@@ -1008,12 +996,12 @@ describe('Members', () => {
       await waitFor(() => expect(addButton).not.toBeDisabled());
       fireEvent.click(addButton);
 
-      fireEvent.click(
-        screen.getAllByLabelText(
-          'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
-        )[1],
-      );
-      fireEvent.click(screen.getByRole('option', { name: 'test@example.com' }));
+      const selectButton = screen.getAllByLabelText(
+        'settings.membersAndInvitedUsers.members.actions.add.form.users.label',
+      )[1];
+      fireEvent.click(selectButton);
+      const testOptions = await screen.findAllByText('test@example.com');
+      fireEvent.click(testOptions[1]);
 
       const confirmButton = screen.getByText(
         'settings.membersAndInvitedUsers.members.actions.add.modal.confirm',

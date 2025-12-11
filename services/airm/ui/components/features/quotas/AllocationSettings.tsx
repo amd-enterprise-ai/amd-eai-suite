@@ -132,7 +132,7 @@ export const AllocationSettings: React.FC<Props> = ({
         <TableColumn>
           {t('settings.form.guaranteedQuota.groups.allocation')}
         </TableColumn>
-        <TableColumn className="w-36 text-wrap">
+        <TableColumn className="w-36 whitespace-normal">
           {t('settings.form.guaranteedQuota.groups.available')}
         </TableColumn>
       </TableHeader>
@@ -166,7 +166,9 @@ export const AllocationSettings: React.FC<Props> = ({
               />
             </TableCell>
             <TableCell>
-              {`${displayFixedNumber(item.availableToAllocate)} ${item.displayCapacityUnit ? 'GB' : ''}`}
+              {`${displayFixedNumber(item.availableToAllocate)} ${
+                item.displayCapacityUnit ? 'GB' : ''
+              }`}
             </TableCell>
           </TableRow>
         )}

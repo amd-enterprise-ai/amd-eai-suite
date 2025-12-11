@@ -1,0 +1,131 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: s3-writer-test-job
+  labels:
+    app: s3-writer-test
+    test-type: storage-e2e
+spec:
+  # Don't retry - we want to see immediate failures
+  backoffLimit: 0
+  # Clean up completed jobs after 5 minutes
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: s3-writer-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: s3-writer
+          image: python:3.12-alpine
+          # Environment variables will be injected by Robot Framework
+          # TEST_DATA_KEY: S3 object key to write (e.g., e2e-test-storage-123/test-file.txt)
+          # TEST_DATA_CONTENT: Content to write to the object
+          env:
+            - name: BUCKET_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: BUCKET_URL
+            - name: ACCESS_KEY_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: ACCESS_KEY_NAME
+            - name: SECRET_KEY_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: SECRET_KEY_NAME
+            - name: SECRET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: SECRET_NAME
+            # Get actual credentials from the ExternalSecret
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: SECRET_NAME_PLACEHOLDER # Will be replaced by Robot
+                  key: ACCESS_KEY_NAME_PLACEHOLDER # Will be replaced by Robot
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: SECRET_NAME_PLACEHOLDER # Will be replaced by Robot
+                  key: SECRET_KEY_NAME_PLACEHOLDER # Will be replaced by Robot
+            # These will be set by Robot Framework
+            - name: TEST_DATA_KEY
+              value: "PLACEHOLDER"
+            - name: TEST_DATA_CONTENT
+              value: "PLACEHOLDER"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "=== S3 Writer Test Job ==="
+              echo "Installing boto3..."
+              pip install -q boto3
+
+              echo "Writing test data to S3..."
+              python3 <<'EOF'
+              import os
+              import boto3
+              from urllib.parse import urlparse
+
+              # Parse bucket URL
+              bucket_url = os.environ['BUCKET_URL']
+              parsed = urlparse(bucket_url)
+              bucket_name = parsed.path.lstrip('/')
+              endpoint_url = f"{parsed.scheme}://{parsed.netloc}"
+
+              print(f"Bucket: {bucket_name}")
+              print(f"Endpoint: {endpoint_url}")
+              print(f"Object Key: {os.environ['TEST_DATA_KEY']}")
+
+              # Create S3 client
+              s3 = boto3.client(
+                  's3',
+                  endpoint_url=endpoint_url,
+                  aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+                  aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+                  # For Minio
+                  region_name='us-east-1'
+              )
+
+              # Create bucket if it doesn't exist
+              try:
+                  s3.head_bucket(Bucket=bucket_name)
+                  print(f"Bucket {bucket_name} exists")
+              except Exception:
+                  print(f"Creating bucket {bucket_name}")
+                  s3.create_bucket(Bucket=bucket_name)
+                  print(f"✓ Created bucket {bucket_name}")
+
+              # Write test data
+              test_key = os.environ['TEST_DATA_KEY']
+              test_content = os.environ['TEST_DATA_CONTENT']
+
+              s3.put_object(
+                  Bucket=bucket_name,
+                  Key=test_key,
+                  Body=test_content.encode('utf-8')
+              )
+
+              print(f"✓ Successfully wrote data to s3://{bucket_name}/{test_key}")
+              print(f"✓ Content: {test_content}")
+              EOF
+
+              echo "=== S3 Write Complete ==="
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

@@ -1,0 +1,9 @@
+model_name,image_name,docker_image,gpu_count,requires_hf_token
+meta-llama/Llama-3.1-405B-Instruct,aim-meta-llama-llama-3-1-405b-instruct,amdenterpriseai/aim-meta-llama-llama-3-1-405b-instruct:0.8.4,8,true
+meta-llama/Llama-3.1-8B-Instruct,aim-meta-llama-llama-3-1-8b-instruct,amdenterpriseai/aim-meta-llama-llama-3-1-8b-instruct:0.8.4,1,true
+meta-llama/Llama-3.2-1B-Instruct,aim-meta-llama-llama-3-2-1b-instruct,amdenterpriseai/aim-meta-llama-llama-3-2-1b-instruct:0.8.4,1,true
+meta-llama/Llama-3.2-3B-Instruct,aim-meta-llama-llama-3-2-3b-instruct,amdenterpriseai/aim-meta-llama-llama-3-2-3b-instruct:0.8.4,1,true
+meta-llama/Llama-3.3-70B-Instruct,aim-meta-llama-llama-3-3-70b-instruct,amdenterpriseai/aim-meta-llama-llama-3-3-70b-instruct:0.8.4-preview,1,true
+mistralai/Mistral-Small-3.2-24B-Instruct-2506,aim-mistralai-mistral-small-3-2-24b-instruct-2506,amdenterpriseai/aim-mistralai-mistral-small-3-2-24b-instruct-2506:0.8.4,1,false
+mistralai/Mixtral-8x22B-Instruct-v0.1,aim-mistralai-mixtral-8x22b-instruct-v0-1,amdenterpriseai/aim-mistralai-mixtral-8x22b-instruct-v0-1:0.8.4,8,false
+mistralai/Mixtral-8x7B-Instruct-v0.1,aim-mistralai-mixtral-8x7b-instruct-v0-1,amdenterpriseai/aim-mistralai-mixtral-8x7b-instruct-v0-1:0.8.4,1,false

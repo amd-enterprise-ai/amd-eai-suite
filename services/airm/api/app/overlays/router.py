@@ -12,7 +12,7 @@ from ..utilities.exceptions import NotFoundException, ValidationException
 from ..utilities.schema import DeleteOverlaysBatchRequest
 from ..utilities.security import ensure_super_administrator, get_user_email
 from .repository import delete_overlays, list_overlays
-from .schemas import OverlayResponse, OverlayUpdate
+from .schemas import OverlayResponse, OverlaysResponse, OverlayUpdate
 from .service import create_overlay, delete_overlay_by_id_service, get_overlay_by_id, parse_overlay_file, update_overlay
 
 router = APIRouter(tags=["Overlays"])
@@ -38,16 +38,17 @@ async def create_overlay_endpoint(
     ),
     session: Session = Depends(get_session),
     creator: str = Depends(get_user_email),
-    _=Depends(ensure_super_administrator),
+    _: None = Depends(ensure_super_administrator),
 ) -> OverlayResponse:
     overlay_data = await parse_overlay_file(overlay_file)
-    return await create_overlay(
+    overlay = await create_overlay(
         session=session,
         chart_id=chart_id,
         overlay_data=overlay_data,
         canonical_name=canonical_name,
         creator=creator,
     )
+    return overlay
 
 
 @router.put(
@@ -71,7 +72,7 @@ async def update_overlay_endpoint(
     ),
     session: Session = Depends(get_session),
     updater: str = Depends(get_user_email),
-    _=Depends(ensure_super_administrator),
+    _: None = Depends(ensure_super_administrator),
 ) -> OverlayResponse:
     overlay_data = None
     if overlay_file:
@@ -82,16 +83,17 @@ async def update_overlay_endpoint(
         chart_id=chart_id, overlay=overlay_data, canonical_name=canonical_name, updated_by=updater
     )
 
-    return await update_overlay(
+    overlay = await update_overlay(
         session=session,
         overlay_id=overlay_id,
         overlay_update=overlay_update,
     )
+    return overlay
 
 
 @router.get(
     "/overlays",
-    response_model=list[OverlayResponse],
+    response_model=OverlaysResponse,
     summary="List deployment overlays",
     description="""
         List all available YAML overlays for AI model deployment customization.
@@ -106,8 +108,8 @@ async def list_overlays_endpoint(
         description="Optionally filter by overlays compatible to models with a specific canonical name. This also includes overlays with no canonical name specified.",
     ),
     session: Session = Depends(get_session),
-    _=Depends(get_user_email),
-) -> list[OverlayResponse]:
+    _: str = Depends(get_user_email),
+) -> OverlaysResponse:
     """
     List all model overlays.
     """
@@ -116,7 +118,7 @@ async def list_overlays_endpoint(
         chart_id=chart_id,
         canonical_name=canonical_name,
     )
-    return items
+    return OverlaysResponse(data=items)
 
 
 @router.get(
@@ -132,9 +134,10 @@ async def list_overlays_endpoint(
 async def get_overlay_endpoint(
     overlay_id: UUID,
     session: Session = Depends(get_session),
-    _=Depends(get_user_email),
+    _: str = Depends(get_user_email),
 ) -> OverlayResponse:
-    return await get_overlay_by_id(session, overlay_id)
+    overlay = await get_overlay_by_id(session, overlay_id)
+    return overlay
 
 
 @router.delete(
@@ -150,8 +153,8 @@ async def get_overlay_endpoint(
 async def delete_overlay_endpoint(
     overlay_id: UUID,
     session: Session = Depends(get_session),
-    _=Depends(get_user_email),
-    __=Depends(ensure_super_administrator),
+    _: str = Depends(get_user_email),
+    __: None = Depends(ensure_super_administrator),
 ) -> None:
     await delete_overlay_by_id_service(session, overlay_id)
 
@@ -169,9 +172,9 @@ async def delete_overlay_endpoint(
 async def batch_delete_overlays(
     data: DeleteOverlaysBatchRequest,
     session: Session = Depends(get_session),
-    _=Depends(get_user_email),
-    __=Depends(ensure_super_administrator),
-):
+    _: str = Depends(get_user_email),
+    __: None = Depends(ensure_super_administrator),
+) -> None:
     deleted_ids = await delete_overlays(session=session, ids=data.ids)
     missing_ids = set(data.ids) - set(deleted_ids)
     if missing_ids:

@@ -24,7 +24,7 @@ parsed_mock_yaml = yaml.safe_load(mock_yaml)
 
 
 @pytest.mark.asyncio
-async def test_process_workload_message_valid_workload_message():
+async def test_process_workload_message_valid_workload_message() -> None:
     global mock_yaml
     global parsed_mock_yaml
     message = MagicMock()
@@ -49,7 +49,7 @@ async def test_process_workload_message_valid_workload_message():
 
 
 @pytest.mark.asyncio
-async def test_process_workload_message_unexpected_message_type():
+async def test_process_workload_message_unexpected_message_type() -> None:
     message = MagicMock()
     message.body.decode.return_value = '{"unexpected": "message"}'
     message.process = MagicMock()
@@ -60,7 +60,7 @@ async def test_process_workload_message_unexpected_message_type():
 
 
 @pytest.mark.asyncio
-async def test_process_delete_workload_valid_message():
+async def test_process_delete_workload_valid_message() -> None:
     message = MagicMock()
     message.body.decode.return_value = mock_yaml
     message.process = MagicMock()
@@ -81,7 +81,7 @@ async def test_process_delete_workload_valid_message():
 
 
 @pytest.mark.asyncio
-async def test_process_namespace_create_valid_message():
+async def test_process_namespace_create_valid_message() -> None:
     message = MagicMock()
     message.body.decode.return_value = (
         '{"message_type": "project_namespace_create", "name": "test-namespace", "project_id": "12345"}'
@@ -106,7 +106,7 @@ async def test_process_namespace_create_valid_message():
 
 
 @pytest.mark.asyncio
-async def test_process_namespace_delete_valid_message():
+async def test_process_namespace_delete_valid_message() -> None:
     message = MagicMock()
     message.body.decode.return_value = (
         '{"message_type": "project_namespace_delete", "name": "test-namespace", "project_id": "12345"}'
@@ -131,7 +131,7 @@ async def test_process_namespace_delete_valid_message():
 
 
 @pytest.mark.asyncio
-async def test_process_s3_storage_create_valid_message():
+async def test_process_s3_storage_create_valid_message() -> None:
     message = MagicMock()
     message.body.decode.return_value = (
         '{"message_type": "project_s3_storage_create", '
@@ -170,7 +170,7 @@ async def test_process_s3_storage_create_valid_message():
 
 
 @pytest.mark.asyncio
-async def test_process_project_storage_delete_message():
+async def test_process_project_storage_delete_message() -> None:
     message_body = ProjectStorageDeleteMessage(
         message_type="project_storage_delete",
         project_storage_id=uuid4(),

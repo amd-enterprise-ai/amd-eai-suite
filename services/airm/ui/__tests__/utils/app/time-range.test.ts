@@ -41,7 +41,7 @@ describe('getCurrentTimeRange', () => {
   });
 
   it('should calculate the correct time range for other periods', () => {
-    // @ts-ignore
+    // @ts-expect-error
     const { start, end } = getCurrentTimeRange('OTHER');
 
     expect(end.getTime()).toBe(

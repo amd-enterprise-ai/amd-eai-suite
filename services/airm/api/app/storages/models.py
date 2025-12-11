@@ -67,7 +67,7 @@ class ProjectStorage(BaseEntity):
     )
     status_reason: Mapped[str] = mapped_column(String, nullable=True)
 
-    storage: Mapped["Storage"] = relationship("Storage", back_populates="project_storages")
+    storage: Mapped["Storage"] = relationship("Storage", back_populates="project_storages", lazy="joined")
     project: Mapped["Project"] = relationship("Project", lazy="joined")
 
 

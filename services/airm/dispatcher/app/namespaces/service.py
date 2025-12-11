@@ -22,7 +22,7 @@ from .constants import KUEUE_MANAGED_LABEL, PROJECT_ID_LABEL
 from .utils import build_namespace_manifest
 
 
-async def process_namespace_create(message: ProjectNamespaceCreateMessage):
+async def process_namespace_create(message: ProjectNamespaceCreateMessage) -> None:
     logger.info("Project namespace create handler received message")
     logger.debug(f"Processing ProjectNamespaceCreateMessage: {message}")
     try:
@@ -37,7 +37,7 @@ async def process_namespace_create(message: ProjectNamespaceCreateMessage):
         await _publish_namespace_status(message.project_id, NamespaceStatus.FAILED, f"Failed to create namespace: {e}")
 
 
-async def process_namespace_delete(message: ProjectNamespaceDeleteMessage):
+async def process_namespace_delete(message: ProjectNamespaceDeleteMessage) -> None:
     logger.info("Project namespace delete handler received message")
     logger.debug(f"Processing ProjectNamespaceDeleteMessage: {message}")
     try:
@@ -68,7 +68,7 @@ async def process_namespace_delete(message: ProjectNamespaceDeleteMessage):
         )
 
 
-async def _publish_namespace_status(project_id: UUID, status: NamespaceStatus, reason: str):
+async def _publish_namespace_status(project_id: UUID, status: NamespaceStatus, reason: str) -> None:
     connection, channel = await get_common_vhost_connection_and_channel()
     await publish_to_common_feedback_queue(
         ProjectNamespaceStatusMessage(

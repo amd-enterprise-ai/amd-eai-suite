@@ -11,7 +11,12 @@ import { StoragesListFilter } from '@/components/features/storages';
 describe('StoragesListFilter', () => {
   it('renders StoragesListFilter with correct filters', () => {
     const onFilterChange = vi.fn();
-    render(<StoragesListFilter onFilterChange={onFilterChange} />);
+    render(
+      <StoragesListFilter
+        onFilterChange={onFilterChange}
+        onRefresh={() => {}}
+      />,
+    );
     expect(
       screen.getByPlaceholderText('list.filter.search.placeholder'),
     ).toBeInTheDocument();
@@ -23,7 +28,12 @@ describe('StoragesListFilter', () => {
 
   it('can clear filters', async () => {
     const onFilterChange = vi.fn();
-    render(<StoragesListFilter onFilterChange={onFilterChange} />);
+    render(
+      <StoragesListFilter
+        onFilterChange={onFilterChange}
+        onRefresh={() => {}}
+      />,
+    );
 
     // Then change search input
     const searchInput = screen.getByPlaceholderText(
@@ -46,7 +56,13 @@ describe('StoragesListFilter', () => {
 
   it('if in project scope do not show scope filter', async () => {
     const onFilterChange = vi.fn();
-    render(<StoragesListFilter onFilterChange={onFilterChange} isInProjects />);
+    render(
+      <StoragesListFilter
+        onFilterChange={onFilterChange}
+        isInProjects
+        onRefresh={() => {}}
+      />,
+    );
 
     const searchInput = screen.getByPlaceholderText(
       'list.filter.search.placeholder',
@@ -57,5 +73,23 @@ describe('StoragesListFilter', () => {
       name: 'list.filter.scope.label',
     });
     expect(scopeButton).not.toBeInTheDocument();
+  });
+
+  it('calls onRefresh when refresh button is clicked', async () => {
+    const onRefresh = vi.fn();
+    render(
+      <StoragesListFilter
+        onFilterChange={() => {}}
+        isInProjects
+        onRefresh={onRefresh}
+      />,
+    );
+
+    const refreshButton = screen.getByRole('button', {
+      name: 'data.refresh',
+    });
+    await fireEvent.click(refreshButton);
+
+    expect(onRefresh).toHaveBeenCalled();
   });
 });

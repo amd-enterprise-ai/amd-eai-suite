@@ -37,7 +37,7 @@ import ModelDetailsModal from '@/components/features/models/ModelDetailsModal';
 import ClientSideDataTable from '@/components/shared/DataTable/ClientSideDataTable';
 import {
   DateDisplay,
-  StatusBadgeDisplay,
+  StatusDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
 import { ActionsToolbar } from '@/components/shared/Toolbar/ActionsToolbar';
 
@@ -302,7 +302,7 @@ const CustomModels: React.FC<CustomModelsProps> = ({
       <DateDisplay date={item[ModelsTableField.CREATED_AT]} />
     ),
     [ModelsTableField.ONBOARDING_STATUS]: (item: Model) => (
-      <StatusBadgeDisplay
+      <StatusDisplay
         type={item[ModelsTableField.ONBOARDING_STATUS] as ModelOnboardingStatus}
         variants={getModelStatusVariants(t)}
       />

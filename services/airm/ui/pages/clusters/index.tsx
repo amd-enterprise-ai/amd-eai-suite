@@ -3,13 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { Accordion, AccordionItem, useDisclosure } from '@heroui/react';
-import {
-  IconCircleCaretRightFilled,
-  IconCircleCheck,
-  IconCircleCheckFilled,
-  IconCircleXFilled,
-  IconLoader2,
-} from '@tabler/icons-react';
+import { IconCircleCheck } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -55,9 +49,15 @@ import { ConfirmationModal } from '@/components/shared/Confirmation/Confirmation
 import ClientSideDataTable from '@/components/shared/DataTable/ClientSideDataTable';
 import { ActionsToolbar } from '@/components/shared/Toolbar/ActionsToolbar';
 import { ActionButton } from '@/components/shared/Buttons';
-import { format } from 'date-fns';
 import { doesDataNeedToBeRefreshed } from '@/utils/app/clusters';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@/utils/app/api-helpers';
+import {
+  StatusDisplay,
+  NoDataDisplay,
+  DateDisplay,
+} from '@/components/shared/DataTable';
+import getClusterStatusVariants from '@/utils/app/clusters-status-variants';
+import Status from '@/components/shared/Status/Status';
 
 const activeClusterCustomComparators: CustomComparatorConfig<
   Cluster,
@@ -152,7 +152,9 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
         queryClient.invalidateQueries({ queryKey: ['clusters'] });
         toast.success(
           t(
-            `list.actions.${clusterBeingDeleted?.name ? 'delete' : 'cancel'}.notification.success`,
+            `list.actions.${
+              clusterBeingDeleted?.name ? 'delete' : 'cancel'
+            }.notification.success`,
           ),
         );
       },
@@ -161,7 +163,9 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
 
         toast.error(
           t(
-            `list.actions.${clusterBeingDeleted?.name ? 'delete' : 'cancel'}.notification.error`,
+            `list.actions.${
+              clusterBeingDeleted?.name ? 'delete' : 'cancel'
+            }.notification.error`,
           ),
           error as APIRequestError,
         );
@@ -190,27 +194,15 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
     );
   }, [data?.clusters]);
 
-  const ClusterStatusDisplay = ({ status }: { status: ClusterStatus }) => (
-    <div className="flex items-center space-x-2">
-      {status === ClusterStatus.UNHEALTHY && (
-        <IconCircleXFilled size={20} className="text-danger" />
-      )}
-      {status === ClusterStatus.HEALTHY && (
-        <IconCircleCheckFilled size={20} className="text-success" />
-      )}
-      {status === ClusterStatus.VERIFYING && (
-        <IconCircleCaretRightFilled size={20} className="text-primary" />
-      )}
-      <span className="text-sm">{t(`status.${status}`)}</span>
-    </div>
-  );
-
   const activeClusterCustomRenderers: Partial<
     Record<ClusterTableField, (item: Cluster) => React.ReactNode | string>
   > = {
-    [ClusterTableField.STATUS]: (item) => {
-      return <ClusterStatusDisplay status={item.status} />;
-    },
+    [ClusterTableField.STATUS]: (item) => (
+      <StatusDisplay
+        type={item.status}
+        variants={getClusterStatusVariants(t)}
+      />
+    ),
     [ClusterTableField.NODES]: (item) =>
       `${item.availableNodeCount} / ${item.totalNodeCount}`,
     [ClusterTableField.GPU_ALLOCATION]: (item) =>
@@ -237,16 +229,15 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
     >
   > = {
     [PendingClusterTableField.REQUESTED_AT]: (item) => {
-      return item?.createdAt
-        ? format(new Date(item.createdAt), 'yyyy-MM-dd hh:mm')
-        : '-';
+      return item?.createdAt ? (
+        <DateDisplay date={item.createdAt} />
+      ) : (
+        <NoDataDisplay />
+      );
     },
     [PendingClusterTableField.STATUS]: () => {
       return (
-        <div className="flex items-center space-x-2">
-          <IconLoader2 size={20} className="text-warning animate-spin" />
-          <span className="text-sm">{t('status.verifying')}</span>
-        </div>
+        <Status {...getClusterStatusVariants(t)[ClusterStatus.VERIFYING]} />
       );
     },
   };
@@ -415,19 +406,25 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
         onOpenChange={onAddClusterModalOpenChange}
       />
 
-      <EditCluster
-        isOpen={!!clusterBeingEdited && isEditClusterOpen}
-        onOpenChange={onEditClusterOpenChange}
-        cluster={clusterBeingEdited!}
-      />
+      {clusterBeingEdited && (
+        <EditCluster
+          isOpen={isEditClusterOpen}
+          onOpenChange={onEditClusterOpenChange}
+          cluster={clusterBeingEdited}
+        />
+      )}
 
       <ConfirmationModal
         confirmationButtonColor="danger"
         description={t(
-          `list.actions.${clusterBeingDeleted?.name ? 'delete' : 'cancel'}.confirmation.description`,
+          `list.actions.${
+            clusterBeingDeleted?.name ? 'delete' : 'cancel'
+          }.confirmation.description`,
         )}
         title={t(
-          `list.actions.${clusterBeingDeleted?.name ? 'delete' : 'cancel'}.confirmation.title`,
+          `list.actions.${
+            clusterBeingDeleted?.name ? 'delete' : 'cancel'
+          }.confirmation.title`,
         )}
         isOpen={isDeleteClusterModalOpen}
         loading={isDeleteClusterPending}

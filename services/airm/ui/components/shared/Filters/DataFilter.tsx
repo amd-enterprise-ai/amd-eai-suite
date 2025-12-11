@@ -197,7 +197,7 @@ export const DataFilter = ({
                   ? filter.defaultSelectedValues.map((value) => String(value))
                   : undefined
               }
-              showDescription={filter.showFieldDescription ? true : false}
+              showDescription={!!filter.showFieldDescription}
               selectedKeys={
                 Array.isArray(filterValues[key])
                   ? (filterValues[key] as (string | number | boolean)[]).map(

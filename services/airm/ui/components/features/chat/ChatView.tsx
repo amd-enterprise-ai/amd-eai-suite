@@ -5,6 +5,7 @@
 import { Button, Tab, Tabs } from '@heroui/react';
 import { IconEraser, IconSettings } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { useTranslation } from 'next-i18next';
 import { useSearchParams } from 'next/navigation';
@@ -14,13 +15,22 @@ import { useChatWindowScroll } from '@/hooks/useChatWindowScroll';
 import useSystemToast from '@/hooks/useSystemToast';
 
 import { streamChatResponse } from '@/services/app/chat';
+import { getAims } from '@/services/app/aims';
+import { getModels } from '@/services/app/models';
 
-import { extractDebugInfoFromContext } from '@/utils/app/chat';
+import { getCanonicalNameFromWorkload } from '@/utils/app/chat';
 import { getChatSettings, saveChatSettings } from '@/utils/app/chat-settings';
 
-import { ChatBody, ChatContext, ChatConversation, Message } from '@/types/chat';
-import { DEFAULT_SETTINGS, InferenceSettings } from '@/types/models';
+import {
+  ChatBody,
+  ChatContext,
+  ChatConversation,
+  DebugInfo,
+  Message,
+} from '@/types/chat';
+import { DEFAULT_SETTINGS, InferenceSettings, Model } from '@/types/models';
 import { Workload } from '@/types/workloads';
+import { Aim } from '@/types/aims';
 
 import { BasicChatInput } from '@/components/features/chat/BasicChatInput';
 import { Toolbar } from '@/components/layouts/ToolbarLayout';
@@ -30,6 +40,7 @@ import ChatInfoCard from './ChatInfoCard';
 import { ChatMessages } from './ChatMessages';
 import SettingsDrawer from './SettingsDrawer';
 import { useProject } from '@/contexts/ProjectContext';
+import { DELAYED_RESPONSE_THRESHOLD_MS } from './constants';
 
 interface ChatViewProps {
   workloads: Workload[];
@@ -42,8 +53,40 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
   const searchParams = useSearchParams();
   const workloadParam = searchParams?.get('workload');
 
-  const [loading, setLoading] = useState<boolean>(false);
-  const [messageIsStreaming, setMessageIsStreaming] = useState<boolean>(false);
+  // Use cached aims and models data from React Query
+  const { data: aims = [] } = useQuery<Aim[]>({
+    queryKey: ['project', activeProject, 'aim-catalog'],
+    queryFn: () => getAims(activeProject!),
+    enabled: !!activeProject,
+  });
+
+  const { data: models = [] } = useQuery<Model[]>({
+    queryKey: ['project', activeProject, 'custom-models'],
+    queryFn: () => getModels(activeProject!),
+    enabled: !!activeProject,
+  });
+
+  const [firstLoading, setFirstLoading] = useState<boolean>(false);
+  const firstDelayedResponseTimer = useRef<
+    string | number | NodeJS.Timeout | undefined
+  >(undefined);
+  const [
+    firstDelayedResponseNotification,
+    setFirstDelayedResponseNotification,
+  ] = useState<boolean>(false);
+  const [firstMessageIsStreaming, setFirstMessageIsStreaming] =
+    useState<boolean>(false);
+
+  const [secondLoading, setSecondLoading] = useState<boolean>(false);
+  const secondDelayedResponseTimer = useRef<
+    string | number | NodeJS.Timeout | undefined
+  >(undefined);
+  const [
+    secondDelayedResponseNotification,
+    setSecondDelayedResponseNotification,
+  ] = useState<boolean>(false);
+  const [secondMessageIsStreaming, setSecondMessageIsStreaming] =
+    useState<boolean>(false);
 
   const [chatMode, setChatMode] = useState<'chat' | 'compare'>('chat');
 
@@ -103,41 +146,26 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
     );
   }
 
-  const getCanonicalName = (workload: Workload): string | undefined => {
-    if (workload.userInputs.canonicalName) {
-      return workload.userInputs.canonicalName;
-    } else if (workload.userInputs.model) {
-      // legacy implementation
-      const regex = /models\/([^\/]+\/[^\/]+)/;
-      const match = workload.userInputs.model.match(regex);
-      const canonicalName = match ? match[1] : '';
-      return canonicalName;
-    }
-  };
-
   const getChatBody = (
     settings: InferenceSettings,
     messages: Message[],
-    canonicalName: string,
+    workload: Workload,
   ): ChatBody => {
     // Prepare the system prompt message if settings.systemPrompt is not empty
-    const systemPromptMessage = !!settings.systemPrompt
+    const systemPromptMessage = settings.systemPrompt
       ? ({ role: 'system', content: settings.systemPrompt } as Message)
       : undefined;
 
+    const canonicalName = getCanonicalNameFromWorkload(workload, aims, models);
+
     const chatBody = {
       stream: true,
-      debug: true,
       stream_options: {
         include_usage: true,
       },
       temperature: settings.temperature,
       frequency_penalty: settings.frequencyPenalty,
       presence_penalty: settings.presencePenalty,
-      prompt_template:
-        !!settings.ragEnabled && !!settings.userPromptTemplate
-          ? settings.userPromptTemplate
-          : undefined,
     };
 
     return {
@@ -151,21 +179,25 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
     context: ChatContext | undefined,
     conversation: ChatConversation,
     conversationSetter: (conversation: ChatConversation) => void,
+    sentMessages: Message[],
   ): ChatConversation => {
-    const debugInfo = extractDebugInfoFromContext(context);
-    if (debugInfo) {
-      const updatedMessages = conversation.messages;
-      const lastElement = updatedMessages.pop();
-      updatedMessages.push({
-        ...lastElement,
-        debugInfo: debugInfo,
-      } as Message);
-      conversation = {
-        ...conversation,
-        messages: updatedMessages,
-      };
-      conversationSetter(conversation);
-    }
+    const debugInfo: DebugInfo = {
+      messages: sentMessages,
+      usage: context?.usage,
+    };
+
+    const updatedMessages = conversation.messages;
+    const lastElement = updatedMessages.pop();
+    updatedMessages.push({
+      ...lastElement,
+      debugInfo: debugInfo,
+    } as Message);
+    conversation = {
+      ...conversation,
+      messages: updatedMessages,
+    };
+    conversationSetter(conversation);
+
     return conversation;
   };
 
@@ -175,7 +207,21 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
       chatBody: ChatBody,
       workloadId: string,
       conversationSetter: (conversation: ChatConversation) => void,
+      conversationRef: 'first' | 'second',
     ) => {
+      if (conversationRef === 'first') {
+        setFirstDelayedResponseNotification(false);
+        firstDelayedResponseTimer.current = setTimeout(() => {
+          setFirstDelayedResponseNotification(true);
+        }, DELAYED_RESPONSE_THRESHOLD_MS);
+        setFirstLoading(true);
+      } else {
+        setSecondDelayedResponseNotification(false);
+        secondDelayedResponseTimer.current = setTimeout(() => {
+          setSecondDelayedResponseNotification(true);
+        }, DELAYED_RESPONSE_THRESHOLD_MS);
+        setSecondLoading(true);
+      }
       conversation.streaming = true;
       conversationSetter(conversation);
       try {
@@ -185,7 +231,16 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
           activeProject || '',
           stopConversationRef,
         );
-        setLoading(false);
+
+        if (conversationRef === 'first') {
+          clearTimeout(firstDelayedResponseTimer.current);
+          setFirstDelayedResponseNotification(false);
+          setFirstLoading(false);
+        } else {
+          clearTimeout(secondDelayedResponseTimer.current);
+          setSecondDelayedResponseNotification(false);
+          setSecondLoading(false);
+        }
 
         let text = '';
         let updatedMessages: Message[] = [...conversation.messages];
@@ -203,7 +258,11 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
               ...conversation,
               streaming: false,
             };
-            setMessageIsStreaming(false);
+            if (conversationRef === 'first') {
+              setFirstMessageIsStreaming(false);
+            } else {
+              setSecondMessageIsStreaming(false);
+            }
             conversationSetter(conversation);
             break;
           }
@@ -225,6 +284,7 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
           await context,
           conversation,
           conversationSetter,
+          chatBody.messages,
         );
       } catch (error) {
         console.error('Error streaming chat response: ', error);
@@ -232,8 +292,18 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
         if (conversation.messages.at(-1)?.role === 'user') {
           conversation.messages.pop();
         }
-        setMessageIsStreaming(false);
-        setLoading(false);
+
+        if (conversationRef === 'first') {
+          setFirstMessageIsStreaming(false);
+          setFirstLoading(false);
+          clearTimeout(firstDelayedResponseTimer.current);
+          setFirstDelayedResponseNotification(false);
+        } else {
+          setSecondMessageIsStreaming(false);
+          setSecondLoading(false);
+          clearTimeout(secondDelayedResponseTimer.current);
+          setSecondDelayedResponseNotification(false);
+        }
         conversationSetter({
           ...conversation,
           streaming: false,
@@ -286,17 +356,10 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
   };
 
   const onMessage = (message: Message) => {
-    setMessageIsStreaming(true);
-    setLoading(false);
+    setFirstMessageIsStreaming(true);
+    setFirstLoading(false);
 
     if (!firstModelWorkload) {
-      return;
-    }
-
-    const canonicalName = getCanonicalName(firstModelWorkload);
-
-    if (!canonicalName) {
-      toast.error('errors.noCanonicalName');
       return;
     }
 
@@ -305,7 +368,7 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
     const firstChatBody = getChatBody(
       firstSettings,
       firstConversation.messages,
-      canonicalName,
+      firstModelWorkload,
     );
 
     handleSend(
@@ -313,28 +376,26 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
       firstChatBody,
       firstModelWorkload.id,
       setFirstConversation,
+      'first',
     );
 
     if (chatMode === 'compare' && secondModelWorkload) {
+      setSecondMessageIsStreaming(true);
+      setSecondLoading(false);
+
       secondConversation.messages = [...secondConversation.messages, message];
-
-      const secondCanonicalName = getCanonicalName(secondModelWorkload);
-
-      if (!secondCanonicalName) {
-        toast.error('errors.noCanonicalName');
-        return;
-      }
 
       const secondChatBody = getChatBody(
         secondSettings,
         secondConversation.messages,
-        secondCanonicalName,
+        secondModelWorkload,
       );
       handleSend(
         secondConversation,
         secondChatBody,
         secondModelWorkload.id,
         setSecondConversation,
+        'second',
       );
     }
   };
@@ -388,7 +449,8 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
               className="ml-auto lg:ml-0"
               startContent={<IconEraser size={16} stroke="2" />}
               isDisabled={
-                messageIsStreaming ||
+                firstMessageIsStreaming ||
+                secondMessageIsStreaming ||
                 (firstConversation.messages.length === 0 &&
                   secondConversation.messages.length === 0)
               }
@@ -499,8 +561,9 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
             conversation={firstConversation}
             onConversationUpdated={setFirstConversation}
             messagesEndRef={messagesEndRef1}
-            loading={loading}
-            messageIsStreaming={messageIsStreaming}
+            loading={firstLoading}
+            delayedResponseNotification={firstDelayedResponseNotification}
+            messageIsStreaming={firstMessageIsStreaming}
           />
         </div>
         {chatMode === 'compare' && (
@@ -514,8 +577,9 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
               conversation={secondConversation}
               onConversationUpdated={setSecondConversation}
               messagesEndRef={messagesEndRef2}
-              loading={loading}
-              messageIsStreaming={messageIsStreaming}
+              loading={secondLoading}
+              delayedResponseNotification={secondDelayedResponseNotification}
+              messageIsStreaming={secondMessageIsStreaming}
             />
           </div>
         )}
@@ -529,7 +593,7 @@ export const ChatView = ({ workloads }: ChatViewProps) => {
         onSend={onMessage}
         onScrollDownClick={handleScrollDown}
         showScrollDownButton={showScrollDownButton}
-        messageIsStreaming={messageIsStreaming}
+        messageIsStreaming={firstMessageIsStreaming || secondMessageIsStreaming}
         disabled={
           !firstModelWorkload ||
           (chatMode === 'compare' && !secondModelWorkload)

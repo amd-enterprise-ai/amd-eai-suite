@@ -39,18 +39,22 @@ export const useAccessControl = () => {
     ? !organization.idpLinked
     : false;
 
-  const isInviteEnabled = organization
-    ? organization.smtpEnabled && !organization.idpLinked
-    : false;
+  const isInviteEnabled = organization ? !organization.idpLinked : false;
 
   const isAdministrator =
-    (session?.user?.roles &&
-      session.user.roles.includes(UserRole.PLATFORM_ADMIN)) ||
-    false;
+    session?.user?.roles.includes(UserRole.PLATFORM_ADMIN) || false;
+
+  const isTempPasswordRequired = organization
+    ? !organization.smtpEnabled && !organization.idpLinked
+    : false;
+
+  const smtpEnabled = organization ? organization.smtpEnabled : false;
 
   return {
     isRoleManagementEnabled,
     isInviteEnabled,
     isAdministrator,
+    smtpEnabled,
+    isTempPasswordRequired,
   };
 };

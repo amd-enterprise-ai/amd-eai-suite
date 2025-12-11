@@ -208,4 +208,28 @@ describe('AIM Catalog', () => {
       expect(getAims).toHaveBeenCalled();
     });
   });
+
+  it('filters out deleted AIMs from catalog', async () => {
+    (getAims as Mock).mockResolvedValue(mockAims);
+
+    await act(async () => {
+      render(<AIMCatalog />, {
+        wrapper,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getAims).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      // Should show non-deleted AIMs
+      expect(screen.getByText('Llama 2 7B')).toBeInTheDocument();
+      expect(screen.getByText('Stable Diffusion XL')).toBeInTheDocument();
+      expect(screen.getByText('Vision Detection Model')).toBeInTheDocument();
+
+      // Should NOT show deleted AIM
+      expect(screen.queryByText('Deleted Old Model')).not.toBeInTheDocument();
+    });
+  });
 });

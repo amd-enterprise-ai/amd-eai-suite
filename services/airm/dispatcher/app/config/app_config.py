@@ -22,7 +22,7 @@ class AppConfig:
             self.org_name = None
             self.cluster_name = None
 
-    def set_config(self, org_name: str, cluster_name: str):
+    def set_config(self, org_name: str, cluster_name: str) -> None:
         self.org_name = org_name
         self.cluster_name = cluster_name
 

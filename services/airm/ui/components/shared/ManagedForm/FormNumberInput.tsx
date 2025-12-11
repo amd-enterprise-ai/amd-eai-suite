@@ -43,7 +43,7 @@ export const FormNumberInput = <T extends FieldValues>({
 
   // remove form value when the component unmounts
   const unregisterField = useCallback(() => {
-    if (!!name) {
+    if (name) {
       form.unregister(name, {
         keepValue: false,
       });

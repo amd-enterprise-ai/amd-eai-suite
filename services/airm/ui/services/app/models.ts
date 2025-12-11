@@ -32,12 +32,12 @@ interface FinetuneModelRequest {
  * Retrieves a list of models that can be fine-tuned.
  *
  * @param {string} projectId - The active project ID
- * @returns {Promise<{models: string[]}>} A promise that resolves to an object containing an array of canonical names of models that can be fine-tuned.
+ * @returns {Promise<string[]>} A promise that resolves to an array of canonical names of models that can be fine-tuned.
  * @throws {APIRequestError} If the API request fails.
  */
 export const getFinetunableModels = async (
   projectId: string,
-): Promise<{ models: string[] }> => {
+): Promise<string[]> => {
   if (!projectId) {
     throw new APIRequestError(`No project selected`, 422);
   }
@@ -60,7 +60,9 @@ export const getFinetunableModels = async (
   }
 
   const json = await response.json();
-  return convertSnakeToCamel(json);
+  const converted = convertSnakeToCamel(json);
+  // Extract data from wrapped response
+  return converted.data;
 };
 
 /**
@@ -100,6 +102,48 @@ export const getModels = async (
 
   if (!response.ok) {
     throw new APIRequestError(await getErrorMessage(response), response.status);
+  }
+
+  const json = await response.json();
+  const converted = convertSnakeToCamel(json);
+  // Extract data from wrapped response
+  return converted.data;
+};
+
+/**
+ * Retrieves a single model by ID.
+ *
+ * @param {string} id - The model ID
+ * @param {string} projectId - The active project ID
+ * @returns {Promise<Model>} A promise that resolves to a Model object.
+ * @throws {APIRequestError} If the API request fails.
+ */
+export const getModel = async (
+  id: string,
+  projectId: string,
+): Promise<Model> => {
+  if (!projectId) {
+    throw new APIRequestError(`No project selected`, 422);
+  }
+
+  const queryParams = convertCamelToSnakeParams({
+    projectId,
+  });
+
+  const url = `/api/models/${id}?${queryParams}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new APIRequestError(
+      `Failed to get model: ${await getErrorMessage(response)}`,
+      response.status,
+    );
   }
 
   const json = await response.json();
@@ -159,7 +203,9 @@ export const finetuneModel = async (
   }
 
   const json = await response.json();
-  return convertSnakeToCamel(json);
+  const converted = convertSnakeToCamel(json);
+  // Return the workload object directly (individual resource, not wrapped)
+  return converted;
 };
 
 /**
@@ -231,7 +277,9 @@ export const downloadModel = async (
   }
 
   const json = await response.json();
-  return convertSnakeToCamel(json);
+  const converted = convertSnakeToCamel(json);
+  // Return the workload object directly (individual resource, not wrapped)
+  return converted;
 };
 
 /**

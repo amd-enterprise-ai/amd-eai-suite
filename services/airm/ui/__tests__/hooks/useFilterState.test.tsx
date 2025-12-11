@@ -54,11 +54,6 @@ describe('useFilterState', () => {
     it('should initialize with default keys when no selectedKeys provided', () => {
       const { result } = renderHook(() => useFilterState(defaultConfig));
 
-      expect(result.current.internalSelectedKeys).toEqual([
-        'item1',
-        'item2',
-        'item3',
-      ]);
       expect(result.current.currentSelectedSet).toEqual(
         new Set(['item1', 'item2', 'item3']),
       );
@@ -72,7 +67,6 @@ describe('useFilterState', () => {
       };
       const { result } = renderHook(() => useFilterState(config));
 
-      expect(result.current.internalSelectedKeys).toEqual(['item1', 'item2']);
       expect(result.current.currentSelectedSet).toEqual(
         new Set(['item1', 'item2']),
       );
@@ -86,7 +80,6 @@ describe('useFilterState', () => {
       };
       const { result } = renderHook(() => useFilterState(config));
 
-      expect(result.current.internalSelectedKeys).toEqual(['item2', 'item3']);
       expect(result.current.currentSelectedSet).toEqual(
         new Set(['item2', 'item3']),
       );
@@ -101,7 +94,6 @@ describe('useFilterState', () => {
       };
       const { result } = renderHook(() => useFilterState(config));
 
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
       expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
     });
 
@@ -112,7 +104,6 @@ describe('useFilterState', () => {
       };
       const { result } = renderHook(() => useFilterState(config));
 
-      expect(result.current.internalSelectedKeys).toEqual([]);
       expect(result.current.currentSelectedSet).toEqual(new Set([]));
     });
   });
@@ -126,7 +117,7 @@ describe('useFilterState', () => {
       });
 
       // When starting with all items and deselecting item3, item3 becomes the focused item
-      expect(result.current.internalSelectedKeys).toEqual(['item3']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item3']));
       expect(result.current.hasUserInteracted).toBe(true);
       expect(mockOnSelectionChange).toHaveBeenCalledWith(new Set(['item3']));
     });
@@ -144,7 +135,9 @@ describe('useFilterState', () => {
         result.current.handleSelectionChange(new Set(['item1', 'item2']));
       });
 
-      expect(result.current.internalSelectedKeys).toEqual(['item1', 'item2']);
+      expect(result.current.currentSelectedSet).toEqual(
+        new Set(['item1', 'item2']),
+      );
       expect(mockOnSelectionChange).toHaveBeenLastCalledWith(
         new Set(['item1', 'item2']),
       );
@@ -158,7 +151,7 @@ describe('useFilterState', () => {
       });
 
       // When starting with all items and deselecting item3, item3 becomes the focused item
-      expect(result.current.internalSelectedKeys).toEqual(['item3']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item3']));
       expect(result.current.hasUserInteracted).toBe(true);
     });
 
@@ -175,7 +168,7 @@ describe('useFilterState', () => {
       });
 
       // When starting with no items and selecting multiple, first item becomes focused
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
       expect(result.current.hasUserInteracted).toBe(true);
     });
 
@@ -196,7 +189,7 @@ describe('useFilterState', () => {
         result.current.handleSelectionChange(new Set([]));
       });
 
-      expect(result.current.internalSelectedKeys).toEqual(['item2']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item2']));
       expect(result.current.hasUserInteracted).toBe(false);
       expect(mockOnSelectionChange).toHaveBeenLastCalledWith(
         new Set(['item2']),
@@ -214,7 +207,7 @@ describe('useFilterState', () => {
         result.current.handleSelectionChange(new Set(['item1', 'item2']));
       });
 
-      expect(result.current.internalSelectedKeys).toEqual(['item2']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item2']));
     });
 
     it('should determine focused item correctly for deselected items', () => {
@@ -228,7 +221,7 @@ describe('useFilterState', () => {
         result.current.handleSelectionChange(new Set(['item1']));
       });
 
-      expect(result.current.internalSelectedKeys).toEqual(['item2']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item2']));
     });
   });
 
@@ -250,7 +243,9 @@ describe('useFilterState', () => {
         result.current.handleReset();
       });
 
-      expect(result.current.internalSelectedKeys).toEqual(['item2', 'item3']);
+      expect(result.current.currentSelectedSet).toEqual(
+        new Set(['item2', 'item3']),
+      );
       expect(result.current.hasUserInteracted).toBe(false);
       expect(mockOnSelectionChange).toHaveBeenLastCalledWith(
         new Set(['item2', 'item3']),
@@ -270,26 +265,10 @@ describe('useFilterState', () => {
         result.current.handleReset();
       });
 
-      expect(result.current.internalSelectedKeys).toEqual([
-        'item1',
-        'item2',
-        'item3',
-      ]);
+      expect(result.current.currentSelectedSet).toEqual(
+        new Set(['item1', 'item2', 'item3']),
+      );
       expect(result.current.hasUserInteracted).toBe(false);
-    });
-  });
-
-  describe('onUserInteraction', () => {
-    it('should mark user as having interacted', () => {
-      const { result } = renderHook(() => useFilterState(defaultConfig));
-
-      expect(result.current.hasUserInteracted).toBe(false);
-
-      act(() => {
-        result.current.onUserInteraction();
-      });
-
-      expect(result.current.hasUserInteracted).toBe(true);
     });
   });
 
@@ -306,7 +285,7 @@ describe('useFilterState', () => {
         },
       );
 
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
 
       // Change external selectedKeys
       act(() => {
@@ -314,7 +293,9 @@ describe('useFilterState', () => {
       });
 
       // The hook should update internal state to match external state
-      expect(result.current.internalSelectedKeys).toEqual(['item2', 'item3']);
+      expect(result.current.currentSelectedSet).toEqual(
+        new Set(['item2', 'item3']),
+      );
     });
 
     it('should reset hasUserInteracted when back to defaults', () => {
@@ -336,7 +317,7 @@ describe('useFilterState', () => {
       });
 
       expect(result.current.hasUserInteracted).toBe(true);
-      expect(result.current.internalSelectedKeys).toEqual(['item2']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item2']));
 
       // Reset to defaults using the hook's reset function
       act(() => {
@@ -344,11 +325,9 @@ describe('useFilterState', () => {
       });
 
       // Should reset to defaults and clear user interaction flag
-      expect(result.current.internalSelectedKeys).toEqual([
-        'item1',
-        'item2',
-        'item3',
-      ]);
+      expect(result.current.currentSelectedSet).toEqual(
+        new Set(['item1', 'item2', 'item3']),
+      );
       expect(result.current.hasUserInteracted).toBe(false);
     });
 
@@ -367,11 +346,9 @@ describe('useFilterState', () => {
       );
 
       // Verify initial state uses all items as default
-      expect(result.current.internalSelectedKeys).toEqual([
-        'item1',
-        'item2',
-        'item3',
-      ]);
+      expect(result.current.currentSelectedSet).toEqual(
+        new Set(['item1', 'item2', 'item3']),
+      );
       expect(result.current.hasUserInteracted).toBe(false);
 
       // Change items without user interaction
@@ -385,7 +362,9 @@ describe('useFilterState', () => {
       });
 
       // Should update to new defaults since user hasn't interacted
-      expect(result.current.internalSelectedKeys).toEqual(['new1', 'new2']);
+      expect(result.current.currentSelectedSet).toEqual(
+        new Set(['new1', 'new2']),
+      );
     });
 
     it('should not apply defaults when items change but user has interacted', () => {
@@ -407,7 +386,7 @@ describe('useFilterState', () => {
       });
 
       expect(result.current.hasUserInteracted).toBe(true);
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
 
       // Change items after user interaction
       const newItems = [
@@ -420,7 +399,7 @@ describe('useFilterState', () => {
       });
 
       // Should NOT update internal state since user has interacted
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
     });
 
     it('should handle external changes without onSelectionChange callback', () => {
@@ -437,7 +416,7 @@ describe('useFilterState', () => {
         { initialProps: { selectedKeys: ['item1'] } },
       );
 
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
 
       // Change external selectedKeys
       act(() => {
@@ -445,7 +424,7 @@ describe('useFilterState', () => {
       });
 
       // Should still update internal state
-      expect(result.current.internalSelectedKeys).toEqual(['item2']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item2']));
     });
 
     it('should handle empty external selectedKeys by resetting to defaults', () => {
@@ -455,7 +434,7 @@ describe('useFilterState', () => {
         { initialProps: { selectedKeys: ['item1'] } },
       );
 
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
 
       // External state becomes empty
       act(() => {
@@ -463,11 +442,9 @@ describe('useFilterState', () => {
       });
 
       // Should reset to defaults (all items)
-      expect(result.current.internalSelectedKeys).toEqual([
-        'item1',
-        'item2',
-        'item3',
-      ]);
+      expect(result.current.currentSelectedSet).toEqual(
+        new Set(['item1', 'item2', 'item3']),
+      );
     });
   });
 
@@ -528,7 +505,6 @@ describe('useFilterState', () => {
 
       const { result } = renderHook(() => useFilterState(config));
 
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
       expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
     });
 
@@ -539,7 +515,6 @@ describe('useFilterState', () => {
       };
       const { result } = renderHook(() => useFilterState(config));
 
-      expect(result.current.internalSelectedKeys).toEqual([]);
       expect(result.current.currentSelectedSet).toEqual(new Set([]));
     });
 
@@ -550,7 +525,7 @@ describe('useFilterState', () => {
         result.current.handleSelectionChange(new Set(['item2']));
       });
 
-      expect(result.current.internalSelectedKeys).toEqual(['item2']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item2']));
       expect(result.current.hasUserInteracted).toBe(true);
     });
   });
@@ -597,7 +572,7 @@ describe('useFilterState', () => {
       });
 
       // Should use the first item as fallback
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
     });
 
     it('should handle multiple newly selected items by returning first', () => {
@@ -613,7 +588,7 @@ describe('useFilterState', () => {
       });
 
       // Should return first newly selected item - but the hook returns item1 (fallback)
-      expect(result.current.internalSelectedKeys).toEqual(['item1']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item1']));
     });
 
     it('should handle multiple deselected items by returning first', () => {
@@ -629,7 +604,7 @@ describe('useFilterState', () => {
       });
 
       // Should return first deselected item - but hook returns item3 (last deselected)
-      expect(result.current.internalSelectedKeys).toEqual(['item3']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item3']));
     });
   });
 
@@ -644,7 +619,7 @@ describe('useFilterState', () => {
         result.current.handleSelectionChange(new Set(['item3']));
       });
 
-      expect(result.current.internalSelectedKeys).toEqual(['item3']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item3']));
       expect(result.current.hasUserInteracted).toBe(true);
     });
 
@@ -671,7 +646,7 @@ describe('useFilterState', () => {
       });
 
       // After reset, defaults are all items, so selecting item1,item2 deselects item3
-      expect(result.current.internalSelectedKeys).toEqual(['item3']);
+      expect(result.current.currentSelectedSet).toEqual(new Set(['item3']));
     });
   });
 });

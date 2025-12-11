@@ -10,11 +10,13 @@ Library             RequestsLibrary
 Library             Collections
 Library             OperatingSystem
 Resource            common.resource
-Resource            ../catalog_projects.resource
+Resource            ../airm_projects.resource
 
 
 *** Variables ***
 &{HEADERS}      Content-Type=multipart/form-data
+# Default value for signature file - can be overridden by test suites
+${SIGNATURE_FILE}   ${CURDIR}/../../test_data/charts/signature.yaml
 
 
 *** Keywords ***
@@ -25,6 +27,40 @@ Charts endpoint
 
 
 *** Keywords ***
+Create chart without files
+    [Documentation]    Create a new chart via API without uploading template files
+    ...    Uses the POST /v1/charts endpoint with just name, type, and user_inputs (no files)
+    ...
+    ...    Args:
+    ...    name (str): Name of the chart
+    ...    type (str): Chart type (INFERENCE, FINE_TUNING, etc.)
+    ...    user_inputs (dict): Default user inputs for the chart
+    ...
+    ...    Returns:
+    ...    response: API response containing the created chart
+    [Arguments]             ${name}                 ${type}=INFERENCE       ${user_inputs}=${None}  ${expected_status}=any
+
+    # Prepare user_inputs
+    ${inputs}=              Set Variable If         ${user_inputs} is not None              ${user_inputs}          {}
+
+    # Create the request data (multipart/form-data format)
+    ${data}=                Create dictionary       name=${name}            type=${type}            project_id=${TEST_PROJECT_ID}                user_inputs=${inputs}
+
+    ${endpoint} =           Charts endpoint
+    ${access_token}=        Authorization token
+    &{headers}=             Create Dictionary       Authorization=Bearer ${access_token}
+
+    Log                     POST ${endpoint} with data: ${data}             DEBUG
+    ${response}=            POST                    ${endpoint}             headers=${headers}      data=${data}            expected_status=${expected_status}
+    Log                     Chart creation response: status=${response.status_code}                 DEBUG
+    IF    ${response.status_code} in [200, 201]
+        ${response_json}=       Set Variable            ${response.json()}
+        ${chart_id}=        Get From Dictionary     ${response_json}        id
+        ${chart_name}=      Get From Dictionary     ${response_json}        name
+        Log                     Created chart ${chart_id} (${chart_name})      INFO
+    END
+    RETURN                  ${response}
+
 Create chart request
     [Documentation]    Create a new chart with the provided files.
     ...
@@ -33,6 +69,7 @@ Create chart request
     ...    template_file (str): Path to chart template file
     ...    values_file (str): Path to values YAML file
     ...    values_schema_file (str): Path to values schema JSON file
+    ...    signature_file (str): Path to signature YAML file (optional, defaults to test data)
     ...    additional_files (list): Optional additional chart files
     ...
     ...    Returns:
@@ -41,29 +78,36 @@ Create chart request
     ...    Raises:
     ...    HTTPError: If chart creation fails
     ...    IOError: If any of the required files cannot be read
-    [Arguments]             ${name}                 ${template_file}        ${values_file}          ${values_schema_file}                           @{additional_files}     ${expected_status}=any
+    [Arguments]             ${name}                 ${template_file}        ${values_file}          ${values_schema_file}       ${signature_file}=${SIGNATURE_FILE}     @{additional_files}     ${expected_status}=any
     ${template_content}=    Get Binary File         ${template_file}
     ${values_content}=      Get Binary File         ${values_file}
     ${schema_content}=      Get Binary File         ${values_schema_file}
+    ${signature_content}=   Get Binary File         ${signature_file}
 
-    # Following the example from StackOverflow for multipart/form-data with files
     # Format: {'field_name': ('filename', filedata, 'content-type')}
-    ${data}=                Create dictionary       name=${name}            type=INFERENCE          project_id=${CURRENT_PROJECT_ID}
+    ${data}=                Create dictionary       name=${name}            type=INFERENCE          project_id=${TEST_PROJECT_ID}
     @{template}=            Create list             template.yaml           ${template_content}
     @{values}=              Create list             values.yaml             ${values_content}
     @{schema}=              Create list             schema.json             ${schema_content}
+    @{signature}=           Create list             signature.yaml          ${signature_content}
     &{files}=               Create dictionary
     ...                     files=${template}
     ...                     user_inputs=${values}
+    ...                     signature=${signature}
 
     ${endpoint} =           Charts endpoint
     ${access_token}=        Authorization token
     &{headers}=             Create Dictionary       Authorization=Bearer ${access_token}
 
+    Log                     POST ${endpoint} with data: ${data}             DEBUG
     ${response}=            POST                    ${endpoint}             headers=${headers}      data=${data}            files=${files}          expected_status=${expected_status}
-    # Log response for debugging, but not to console
-    ${debug_resp}=          Set Variable            Chart creation response: Status=${response.status_code}, Body=${response.text}
-    Log                     ${debug_resp}
+    Log                     Chart creation response: status=${response.status_code}                 DEBUG
+    IF    ${response.status_code} in [200, 201]
+        ${response_json}=       Set Variable            ${response.json()}
+        ${chart_id}=        Get From Dictionary     ${response_json}        id
+        ${chart_name}=      Get From Dictionary     ${response_json}        name
+        Log                     Created chart ${chart_id} (${chart_name})      INFO
+    END
     RETURN                  ${response}
 
 List charts request
@@ -86,7 +130,9 @@ List charts request
 
     Create api session
     ${endpoint} =           Charts endpoint
-    ${response}=            Get on session          ${API_SESSION}          ${endpoint}             params=${params}        expected_status=${expected_status}
+    Log                     GET ${endpoint} with params: ${params}          DEBUG
+    ${response}=            Safe Get Request          ${endpoint}             params=${params}        expected_status=${expected_status}
+    Log                     List charts response: status=${response.status_code}                    DEBUG
     RETURN                  ${response}
 
 Delete chart
@@ -101,10 +147,15 @@ Delete chart
     ...    Raises:
     ...    HTTPError: If the chart is not found or deletion fails
     [Arguments]             ${chart_id}             ${expected_status}=any
-    Create API Session
+    Create api session
     TRY
         ${endpoint} =           Charts endpoint
-        ${response}=            Delete on session       ${API_SESSION}          ${endpoint}/${chart_id}                         expected_status=${expected_status}
+        Log                     DELETE ${endpoint}/${chart_id}  DEBUG
+        ${response}=            Safe Delete Request       ${endpoint}/${chart_id}                         expected_status=${expected_status}
+        Log                     Delete chart response: status=${response.status_code}                   DEBUG
+        IF    ${response.status_code} == 204
+            Log                     Deleted chart ${chart_id}       INFO
+        END
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         ${error_msg}=           Set Variable            Failed to delete chart ${chart_id} (${error}). Response: ${error.response.text}
@@ -115,15 +166,17 @@ Delete chart
 Get charts
     [Documentation]    Get list of all charts
     [Arguments]             ${expected_status}=any
-    Create API Session
+    Create api session
     ${endpoint}=            Charts endpoint
+    Log                     GET ${endpoint}         DEBUG
     ${response}=            GET On Session          ${API_SESSION}          ${endpoint}             expected_status=${expected_status}
+    Log                     Get charts response: status=${response.status_code}                     DEBUG
     RETURN                  ${response}
 
 Create chart request is sent
     [Documentation]    Sends a request to create a new chart and stores the ID
-    [Arguments]             ${name}=${TEST_CHART_NAME}                      ${template}=${TEMPLATE_FILE}                    ${values}=${VALUES_FILE}                        ${schema}=${SCHEMA_FILE}
-    ${response}=            Create chart request    ${name}                 ${template}             ${values}               ${schema}
+    [Arguments]             ${name}=${TEST_CHART_NAME}                      ${template}=${TEMPLATE_FILE}                    ${values}=${VALUES_FILE}                        ${schema}=${SCHEMA_FILE}       ${signature}=${SIGNATURE_FILE}
+    ${response}=            Create chart request    ${name}                 ${template}             ${values}               ${schema}       ${signature}
     Set test variable       ${response}             ${response}
 
     # Initialize TEST_CHART_ID variable
@@ -134,16 +187,12 @@ Create chart request is sent
 
     # Extract chart ID from successful response
     ${json}=                Set variable            ${response.json()}
-    Log                     Chart created successfully
 
-    # Set TEST_CHART_ID from response - this is crucial
     ${chart_id}=            Get from dictionary     ${json}                 id
     Set test variable       ${TEST_CHART_ID}        ${chart_id}
-    Log                     Successfully extracted chart ID: ${chart_id}
 
-    # Track created chart ID for cleanup (import the tracking list from catalog_charts.resource)
     Append To List          ${CREATED_CHART_IDS}    ${chart_id}
-    Log                     Added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}           level=DEBUG
+    Log                     Added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}           DEBUG
 
 List charts request is sent
     [Documentation]    Sends a request to list charts with optional pagination
@@ -157,9 +206,11 @@ Delete chart request is sent
     Set test variable       ${response}             ${response}
 
 Get chart
-    [Documentation]    Get a specific chart by
+    [Documentation]    Get a specific chart by ID
     [Arguments]             ${chart_id}             ${expected_status}=any
-    Create API Session
+    Create api session
     ${endpoint}=            Catalog endpoint        charts/${chart_id}
+    Log                     GET ${endpoint}         DEBUG
     ${response}=            GET On Session          ${API_SESSION}          ${endpoint}             expected_status=${expected_status}
+    Log                     Get chart response: status=${response.status_code}                      DEBUG
     RETURN                  ${response}

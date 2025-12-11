@@ -1,7 +1,6 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.1.1/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.2.5/schema.json",
   "vcs": { "enabled": false, "clientKind": "git", "useIgnoreFile": false },
-  "files": { "ignoreUnknown": false },
   "formatter": {
     "enabled": true,
     "formatWithErrors": false,
@@ -15,7 +14,57 @@
     "expand": "auto",
     "useEditorconfig": true
   },
-  "linter": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noExportsInTest": "off",
+        "noDoubleEquals": "off",
+        "noApproximativeNumericConstant": "off",
+        "noGlobalIsNan": "off",
+        "noShadowRestrictedNames": "off",
+        "noUnknownAtRules": "off",
+        "noArrayIndexKey": "off",
+        "noAsyncPromiseExecutor": "off",
+        "noAssignInExpressions": "off",
+        "noDuplicateProperties": "off",
+        "noRedeclare": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "off",
+        "useTemplate": "off",
+        "useNodejsImportProtocol": "off",
+        "useImportType": "off",
+        "useConst": "off"
+      },
+      "correctness": {
+        "noEmptyPattern": "off",
+        "noNestedComponentDefinitions": "off",
+        "noUnusedVariables": "off",
+        "noUnusedImports": "off",
+        "noUnusedFunctionParameters": "off",
+        "noInnerDeclarations": "off",
+        "useExhaustiveDependencies": "off",
+        "useHookAtTopLevel": "off",
+        "useUniqueElementIds": "off"
+      },
+      "complexity": {
+        "noImportantStyles": "off",
+        "noBannedTypes": "off",
+        "noUselessSwitchCase": "off"
+      },
+      "a11y": {
+        "noLabelWithoutControl": "off",
+        "noNoninteractiveTabindex": "off",
+        "useButtonType": "off",
+        "noStaticElementInteractions": "off",
+        "useAriaPropsSupportedByRole": "off",
+        "useKeyWithClickEvents": "off",
+        "useGenericFontNames": "off"
+      }
+    }
+  },
   "javascript": {
     "formatter": {
       "jsxQuoteStyle": "double",
@@ -34,6 +83,7 @@
     "enabled": false
   },
   "files": {
-    "includes": ["**", "!**/.next/*"]
+    "ignoreUnknown": false,
+    "includes": ["**", "!**/.next/*", "!**/airm/ui/coverage"]
   }
 }

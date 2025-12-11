@@ -12,8 +12,6 @@ import { MutableRefObject } from 'react';
 import { useTranslation } from 'next-i18next';
 import { Button } from '@heroui/react';
 
-interface Props {}
-
 interface Props {
   content: string;
   handleChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;

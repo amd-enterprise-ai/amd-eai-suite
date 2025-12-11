@@ -2,21 +2,20 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
-
-import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
-import { Workload } from '@/types/workloads';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import WorkloadLogsModal from '@/components/features/workloads/WorkloadLogsModal';
 
 import wrapper from '@/__tests__/ProviderWrapper';
+import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import { vi } from 'vitest';
+
+// Mock setTimeout to make tests synchronous
+const mockSetTimeout = vi.fn((callback) => {
+  callback();
+  return 1; // Return a mock timer ID
+});
+global.setTimeout = mockSetTimeout as any;
 
 // Mock the WorkloadLogs component
 vi.mock('@/components/features/workloads/WorkloadLogs', () => ({
@@ -39,31 +38,11 @@ vi.mock('@/components/features/workloads/WorkloadLogs', () => ({
 describe('WorkloadLogsModal', () => {
   const mockOnOpenChange = vi.fn();
 
-  const mockWorkload: Workload = {
-    id: 'workload-1',
-    name: 'Test Workload',
-    displayName: 'Test Workload Display',
-    status: WorkloadStatus.RUNNING,
-    type: WorkloadType.INFERENCE,
-    createdAt: '2023-01-01T00:00:00Z',
-    updatedAt: '2023-01-01T00:00:00Z',
-    createdBy: 'test-user',
-    chartId: 'chart-1',
-    clusterId: 'cluster-1',
-    cluster: {
-      id: 'cluster-1',
-      name: 'Test Cluster',
-      lastHeartbeatAt: '2023-01-01T00:00:00Z',
-      status: 'HEALTHY' as any,
-    },
-    allocatedResources: {
-      gpuCount: 1,
-      vram: 2147483648.0,
-    },
-  };
+  const mockWorkload = mockWorkloads[0]; // Use first workload from shared mocks
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSetTimeout.mockClear();
   });
 
   it('renders modal when open', () => {
@@ -86,7 +65,9 @@ describe('WorkloadLogsModal', () => {
     expect(
       screen.getByText('Mocked WorkloadLogs Component'),
     ).toBeInTheDocument();
-    expect(screen.getByText('Workload: Test Workload')).toBeInTheDocument();
+    expect(
+      screen.getByText('Workload: Llama 7B Inference'),
+    ).toBeInTheDocument();
     expect(screen.getByText('IsOpen: true')).toBeInTheDocument();
 
     // Check close button is present
@@ -140,7 +121,9 @@ describe('WorkloadLogsModal', () => {
     );
 
     // Verify WorkloadLogs receives correct props
-    expect(screen.getByText('Workload: Test Workload')).toBeInTheDocument();
+    expect(
+      screen.getByText('Workload: Llama 7B Inference'),
+    ).toBeInTheDocument();
     expect(screen.getByText('IsOpen: true')).toBeInTheDocument();
   });
 

@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+from uuid import UUID
+
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +23,7 @@ from ..managed_workloads.utils import (
     get_workload_internal_host,
     render_helm_template,
 )
+from ..messaging.sender import MessageSender
 from ..projects.models import Project
 from ..users.models import User
 from ..utilities.exceptions import ConflictException
@@ -30,7 +33,7 @@ from .schemas import DevelopmentWorkspaceRequest
 
 
 async def check_workspace_availability_per_project(
-    session: AsyncSession, project_id, workspace_type: WorkspaceType
+    session: AsyncSession, project_id: UUID, workspace_type: WorkspaceType
 ) -> bool:
     """
     Check if a workspace of the given type can be created in the project.
@@ -78,6 +81,7 @@ async def create_development_workspace(
     token: str,
     project: Project,
     workspace_type: WorkspaceType,
+    message_sender: MessageSender,
     display_name: str | None = None,
 ) -> ManagedWorkload:
     """Create a new development workspace."""
@@ -94,7 +98,6 @@ async def create_development_workspace(
 
     user_inputs: dict = {
         **chart.signature,
-        "image": request.image,
         "gpus": request.gpus,
         "memory_per_gpu": request.memory_per_gpu,
         "cpu_per_gpu": request.cpu_per_gpu,
@@ -106,6 +109,9 @@ async def create_development_workspace(
             # workload_id will be filled in after the workload is created
         },
     }
+
+    if request.image:
+        user_inputs["image"] = request.image
 
     workload_data = ChartWorkloadCreate(
         chart_id=chart.id,
@@ -138,7 +144,7 @@ async def create_development_workspace(
     await session.flush()
 
     external_host = get_workload_host_from_HTTPRoute_manifest(
-        manifest=manifest, cluster_base_url=project.cluster.base_url
+        manifest=manifest, cluster_base_url=project.cluster.workloads_base_url
     )
     internal_host = get_workload_internal_host(workload.name, project.name)
 
@@ -165,7 +171,9 @@ async def create_development_workspace(
     logger.debug(f"Manifest validated for workload {workload.id}.")
 
     logger.info(f"Submitting workload {workload.id}...")
-    await extract_components_and_submit_workload(session, workload, project, yml_content, creator.email, token)
+    await extract_components_and_submit_workload(
+        session, workload, project, yml_content, creator.email, token, message_sender
+    )
 
     logger.info(f"Successfully completed managed workload submission for {workload.id}. Returning object.")
     return workload

@@ -12,11 +12,7 @@ import {
 
 import { getWorkloadLogs } from '@/services/app/workloads';
 
-import {
-  WorkloadStatus,
-  WorkloadType,
-  LogLevel,
-} from '@/types/enums/workloads';
+import { WorkloadStatus, LogLevel } from '@/types/enums/workloads';
 import {
   Workload,
   LogEntry,
@@ -27,6 +23,7 @@ import {
 import WorkloadLogs from '@/components/features/workloads/WorkloadLogs';
 
 import wrapper from '@/__tests__/ProviderWrapper';
+import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import { Mock, vi } from 'vitest';
 
 import { useWorkloadLogsStream } from '@/hooks/useWorkloadLogsStream';
@@ -59,28 +56,7 @@ vi.mock('lodash', () => ({
 }));
 
 describe('WorkloadLogs', () => {
-  const mockWorkload: Workload = {
-    id: 'workload-1',
-    name: 'Test Workload',
-    displayName: 'Test Workload Display',
-    status: WorkloadStatus.RUNNING,
-    type: WorkloadType.INFERENCE,
-    createdAt: '2023-01-01T00:00:00Z',
-    updatedAt: '2023-01-01T00:00:00Z',
-    createdBy: 'test-user',
-    chartId: 'chart-1',
-    clusterId: 'cluster-1',
-    cluster: {
-      id: 'cluster-1',
-      name: 'Test Cluster',
-      lastHeartbeatAt: '2023-01-01T00:00:00Z',
-      status: 'HEALTHY' as any,
-    },
-    allocatedResources: {
-      gpuCount: 1,
-      vram: 2147483648.0,
-    },
-  };
+  const mockWorkload = mockWorkloads[0]; // Use first workload from shared mocks
 
   const mockLogEntries: LogEntry[] = [
     {
@@ -203,17 +179,17 @@ describe('WorkloadLogs', () => {
     // Check that log levels are displayed (they are rendered in lowercase, but styled with uppercase CSS)
     expect(
       screen.getByText((content, element) => {
-        return element?.textContent === '[info]';
+        return element?.textContent === 'info';
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByText((content, element) => {
-        return element?.textContent === '[warning]';
+        return element?.textContent === 'warning';
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByText((content, element) => {
-        return element?.textContent === '[error]';
+        return element?.textContent === 'error';
       }),
     ).toBeInTheDocument();
   });
@@ -230,6 +206,7 @@ describe('WorkloadLogs', () => {
         direction: 'backward',
         pageToken: undefined,
         level: undefined,
+        logType: 'workload',
       });
     });
   });
@@ -271,7 +248,7 @@ describe('WorkloadLogs', () => {
     );
   });
 
-  it('handles pagination when scrolling', async () => {
+  it('handles pagination when scrolling to top', async () => {
     await act(async () => {
       render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
         wrapper,
@@ -289,11 +266,11 @@ describe('WorkloadLogs', () => {
     const scrollSpy = vi.fn();
     logsContainer.addEventListener('scroll', scrollSpy);
 
-    // Simulate scroll event with mocked values
+    // Simulate scroll event near the top (scrolling up to load older logs)
     Object.defineProperty(logsContainer, 'scrollTop', {
       configurable: true,
       writable: true,
-      value: 450,
+      value: 50, // Near the top, within threshold
     });
     Object.defineProperty(logsContainer, 'scrollHeight', {
       configurable: true,
@@ -584,6 +561,7 @@ describe('WorkloadLogs', () => {
           direction: 'backward',
           pageToken: undefined,
           level: undefined,
+          logType: 'workload',
         });
       });
 
@@ -608,6 +586,7 @@ describe('WorkloadLogs', () => {
           direction: 'backward',
           pageToken: undefined,
           level: LogLevel.ERROR,
+          logType: 'workload',
         });
       });
     });
@@ -645,8 +624,8 @@ describe('WorkloadLogs', () => {
         expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
           direction: 'backward',
           pageToken: undefined,
-
           level: LogLevel.WARNING,
+          logType: 'workload',
         });
       });
     });
@@ -731,10 +710,6 @@ describe('WorkloadLogs', () => {
       // The streaming hook should be called with log level in params
       expect(useWorkloadLogsStream).toHaveBeenCalledWith({
         workloadId: 'workload-1',
-        params: expect.objectContaining({
-          level: LogLevel.DEBUG,
-        }),
-        autoStart: false,
       });
     });
 
@@ -778,8 +753,8 @@ describe('WorkloadLogs', () => {
         expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
           direction: 'backward',
           pageToken: undefined,
-
           level: undefined,
+          logType: 'workload',
         });
       });
     });
@@ -810,6 +785,7 @@ describe('WorkloadLogs', () => {
           direction: 'backward',
           pageToken: undefined,
           level: LogLevel.ERROR,
+          logType: 'workload',
         });
       });
 
@@ -830,8 +806,786 @@ describe('WorkloadLogs', () => {
         expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
           direction: 'backward',
           pageToken: undefined,
-
           level: undefined,
+          logType: 'workload',
+        });
+      });
+    });
+  });
+
+  // Log Type filtering tests
+  describe('Log Type Filtering', () => {
+    it('shows log type dropdown with correct options', async () => {
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      // Find the log type dropdown button
+      const logTypeDropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+      expect(logTypeDropdown).toBeInTheDocument();
+    });
+
+    it('displays all available log types in dropdown', async () => {
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      // Find and click the log type dropdown
+      const dropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(dropdown);
+      });
+
+      // Check that both log type options are available
+      expect(
+        screen.getByRole('option', {
+          name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('option', {
+          name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('filters logs by selected log type', async () => {
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalled();
+      });
+
+      // Initial call should have workload log type by default
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'workload',
+        });
+      });
+
+      // Find and click the log type dropdown
+      const dropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(dropdown);
+      });
+
+      // Select Event type from the dropdown
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      // Should call getWorkloadLogs with event log type filter
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'event',
+        });
+      });
+    });
+
+    it('clears logs when log type filter changes', async () => {
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalled();
+      });
+
+      // Find and click the log type dropdown
+      const dropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(dropdown);
+      });
+
+      // Select Event type
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      // Logs should be cleared and reloaded with log type filter
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'event',
+        });
+      });
+    });
+
+    it('restarts streaming when log type filter changes during streaming', async () => {
+      const mockStartStreaming = vi.fn();
+      const mockStopStreaming = vi.fn();
+      const mockClearLogs = vi.fn();
+
+      vi.mocked(useWorkloadLogsStream).mockReturnValue({
+        logs: [mockLogEntries[0]],
+        isLoading: false,
+        isStreaming: true,
+        error: null,
+        startStreaming: mockStartStreaming,
+        stopStreaming: mockStopStreaming,
+        clearLogs: mockClearLogs,
+      });
+
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      // Enable streaming mode
+      const streamingToggle = screen.getByRole('switch');
+      await act(async () => {
+        fireEvent.click(streamingToggle);
+      });
+
+      // Find and click the log type dropdown
+      const dropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(dropdown);
+      });
+
+      // Select Event type
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      // Should stop and restart streaming with new log type
+      await waitFor(() => {
+        expect(mockStopStreaming).toHaveBeenCalled();
+        expect(mockClearLogs).toHaveBeenCalled();
+      });
+
+      // Should restart streaming after a delay
+      await waitFor(
+        () => {
+          expect(mockStartStreaming).toHaveBeenCalledWith(
+            expect.objectContaining({
+              logType: 'event',
+            }),
+          );
+        },
+        { timeout: 200 },
+      );
+    });
+
+    it('includes log type in streaming params', async () => {
+      const mockStartStreaming = vi.fn();
+      const mockStopStreaming = vi.fn();
+      const mockClearLogs = vi.fn();
+
+      vi.mocked(useWorkloadLogsStream).mockReturnValue({
+        logs: [],
+        isLoading: false,
+        isStreaming: false,
+        error: null,
+        startStreaming: mockStartStreaming,
+        stopStreaming: mockStopStreaming,
+        clearLogs: mockClearLogs,
+      });
+
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      // Change log type first
+      const dropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(dropdown);
+      });
+
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      // Enable streaming mode - close the dropdown first, then find the switch
+      await act(async () => {
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+      });
+
+      // Wait for the dropdown to close and then find the switch
+      await waitFor(() => {
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      });
+
+      const streamingToggle = screen.getByRole('switch');
+      await act(async () => {
+        fireEvent.click(streamingToggle);
+      });
+
+      // Should call startStreaming with the correct log type
+      await waitFor(
+        () => {
+          expect(mockStartStreaming).toHaveBeenCalledWith(
+            expect.objectContaining({
+              logType: 'event',
+            }),
+          );
+        },
+        { timeout: 200 },
+      );
+    });
+
+    it('resets log type filter during cleanup', async () => {
+      const { rerender } = render(
+        <WorkloadLogs workload={mockWorkload} isOpen={true} />,
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalled();
+      });
+
+      // Change log type to events
+      const dropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(dropdown);
+      });
+
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'event',
+        });
+      });
+
+      // Close the component
+      await act(async () => {
+        rerender(<WorkloadLogs workload={mockWorkload} isOpen={false} />);
+      });
+
+      // Reopen the component
+      await act(async () => {
+        rerender(<WorkloadLogs workload={mockWorkload} isOpen={true} />);
+      });
+
+      // Should be reset to default workload log type
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'workload',
+        });
+      });
+    });
+
+    it('maintains log type when log level filter changes', async () => {
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalled();
+      });
+
+      // Change log type to events first
+      const logTypeDropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(logTypeDropdown);
+      });
+
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'event',
+        });
+      });
+
+      // Now change log level - find by the text content rather than aria-label
+      const logLevelDropdown = screen
+        .getByText('list.actions.logs.modal.logLevelFilter.label')
+        .closest('button') as HTMLElement;
+
+      await act(async () => {
+        fireEvent.click(logLevelDropdown);
+      });
+
+      const warningOption = screen.getByRole('option', { name: 'WARNING' });
+      await act(async () => {
+        fireEvent.click(warningOption);
+      });
+
+      // Should maintain event log type while changing log level
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: LogLevel.WARNING,
+          logType: 'event',
+        });
+      });
+    });
+  });
+
+  // New tests for Log Type functionality with dynamic defaults
+  describe('Log Type Dynamic Defaults', () => {
+    it('defaults to EVENT log type for PENDING workloads', async () => {
+      const pendingWorkload: Workload = {
+        ...mockWorkload,
+        status: WorkloadStatus.PENDING,
+      };
+
+      await act(async () => {
+        render(<WorkloadLogs workload={pendingWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      // Should call with EVENT log type by default for pending workloads
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'event',
+        });
+      });
+
+      // Check that the log type dropdown shows Events as selected
+      const logTypeDropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      expect(logTypeDropdown).toBeInTheDocument();
+    });
+
+    it('includes log type in streaming parameters for PENDING workloads', async () => {
+      const mockStartStreaming = vi.fn();
+      const mockStopStreaming = vi.fn();
+      const mockClearLogs = vi.fn();
+
+      vi.mocked(useWorkloadLogsStream).mockReturnValue({
+        logs: [],
+        isLoading: false,
+        isStreaming: false,
+        error: null,
+        startStreaming: mockStartStreaming,
+        stopStreaming: mockStopStreaming,
+        clearLogs: mockClearLogs,
+      });
+
+      const pendingWorkload: Workload = {
+        ...mockWorkload,
+        status: WorkloadStatus.PENDING,
+      };
+
+      await act(async () => {
+        render(<WorkloadLogs workload={pendingWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      // Enable streaming mode
+      const streamingToggle = screen.getByRole('switch');
+      await act(async () => {
+        fireEvent.click(streamingToggle);
+      });
+
+      // Should call startStreaming with EVENT log type for pending workloads
+      await waitFor(
+        () => {
+          expect(mockStartStreaming).toHaveBeenCalledWith(
+            expect.objectContaining({
+              logType: 'event',
+            }),
+          );
+        },
+        { timeout: 200 },
+      );
+    });
+  });
+
+  // New tests for Log Type filtering behavior
+  describe('Log Type Filter Interactions', () => {
+    it('clears logs when switching from workload to events', async () => {
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'workload',
+        });
+      });
+
+      // Wait for logs to be displayed
+      await waitFor(() => {
+        expect(
+          screen.getByText('Application started successfully'),
+        ).toBeInTheDocument();
+      });
+
+      // Switch to events log type
+      const logTypeDropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(logTypeDropdown);
+      });
+
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      // Should call API with event log type
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'event',
+        });
+      });
+    });
+
+    it('preserves log level filter when changing log type', async () => {
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalled();
+      });
+
+      // Set log level filter first
+      const logLevelDropdown = screen
+        .getByText('list.actions.logs.modal.logLevelFilter.label')
+        .closest('button') as HTMLElement;
+
+      await act(async () => {
+        fireEvent.click(logLevelDropdown);
+      });
+
+      const errorOption = screen.getByRole('option', { name: 'ERROR' });
+      await act(async () => {
+        fireEvent.click(errorOption);
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: LogLevel.ERROR,
+          logType: 'workload',
+        });
+      });
+
+      // Now change log type to events - wait for dropdown to be available
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', {
+            name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+          }),
+        ).toBeInTheDocument();
+      });
+
+      const logTypeDropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(logTypeDropdown);
+      });
+
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      // Should preserve error level filter with new event log type
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: LogLevel.ERROR,
+          logType: 'event',
+        });
+      });
+    });
+
+    it('restarts streaming with correct log type when filter changes during streaming', async () => {
+      const mockStartStreaming = vi.fn();
+      const mockStopStreaming = vi.fn();
+      const mockClearLogs = vi.fn();
+
+      vi.mocked(useWorkloadLogsStream).mockReturnValue({
+        logs: [mockLogEntries[0]],
+        isLoading: false,
+        isStreaming: true,
+        error: null,
+        startStreaming: mockStartStreaming,
+        stopStreaming: mockStopStreaming,
+        clearLogs: mockClearLogs,
+      });
+
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      // Enable streaming mode first
+      const streamingToggle = screen.getByRole('switch');
+      await act(async () => {
+        fireEvent.click(streamingToggle);
+      });
+
+      // Now change log type to events
+      const logTypeDropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(logTypeDropdown);
+      });
+
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      // Should stop current streaming and restart with new log type
+      await waitFor(() => {
+        expect(mockStopStreaming).toHaveBeenCalled();
+        expect(mockClearLogs).toHaveBeenCalled();
+      });
+
+      await waitFor(
+        () => {
+          expect(mockStartStreaming).toHaveBeenCalledWith(
+            expect.objectContaining({
+              logType: 'event',
+            }),
+          );
+        },
+        { timeout: 200 },
+      );
+    });
+
+    it('resets log type to default when component is closed and reopened', async () => {
+      const pendingWorkload: Workload = {
+        ...mockWorkload,
+        status: WorkloadStatus.PENDING,
+      };
+
+      const { rerender } = await act(async () => {
+        return render(
+          <WorkloadLogs workload={pendingWorkload} isOpen={true} />,
+          {
+            wrapper,
+          },
+        );
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'event',
+        });
+      });
+
+      // User manually changes to workload log type
+      const logTypeDropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(logTypeDropdown);
+      });
+
+      const workloadOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+      await act(async () => {
+        fireEvent.click(workloadOption);
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'workload',
+        });
+      });
+
+      // Close the component
+      await act(async () => {
+        rerender(<WorkloadLogs workload={pendingWorkload} isOpen={false} />);
+      });
+
+      // Reopen the component
+      await act(async () => {
+        rerender(<WorkloadLogs workload={pendingWorkload} isOpen={true} />);
+      });
+
+      // Should reset to default EVENT log type for pending workloads
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: undefined,
+          logType: 'event',
+        });
+      });
+    });
+
+    it('includes both log type and log level in API calls', async () => {
+      await act(async () => {
+        render(<WorkloadLogs workload={mockWorkload} isOpen={true} />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalled();
+      });
+
+      // Set log level filter
+      const logLevelDropdown = screen
+        .getByText('list.actions.logs.modal.logLevelFilter.label')
+        .closest('button') as HTMLElement;
+
+      await act(async () => {
+        fireEvent.click(logLevelDropdown);
+      });
+
+      const warningOption = screen.getByRole('option', { name: 'WARNING' });
+      await act(async () => {
+        fireEvent.click(warningOption);
+      });
+
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: LogLevel.WARNING,
+          logType: 'workload',
+        });
+      });
+
+      // Then set log type filter - wait for dropdown to be available
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', {
+            name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+          }),
+        ).toBeInTheDocument();
+      });
+
+      const logTypeDropdown = screen.getByRole('button', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
+      });
+
+      await act(async () => {
+        fireEvent.click(logTypeDropdown);
+      });
+
+      const eventOption = screen.getByRole('option', {
+        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
+      });
+      await act(async () => {
+        fireEvent.click(eventOption);
+      });
+
+      // Should include both filters in the API call
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalledWith('workload-1', {
+          direction: 'backward',
+          pageToken: undefined,
+          level: LogLevel.WARNING,
+          logType: 'event',
         });
       });
     });

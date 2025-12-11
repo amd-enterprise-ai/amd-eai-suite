@@ -25,8 +25,7 @@ from app.utilities.exceptions import NotFoundException
 
 @pytest.mark.asyncio
 @patch("app.namespaces.service.create_namespace")
-@patch("app.namespaces.service.submit_message_to_cluster_queue")
-async def test_create_namespace_for_project_success(mock_submit_message, mock_create_namespace):
+async def test_create_namespace_for_project_success(mock_create_namespace):
     project = Project(
         id=uuid4(),
         name="test-project",
@@ -41,7 +40,12 @@ async def test_create_namespace_for_project_success(mock_submit_message, mock_cr
     cluster_id = uuid4()
     user = "test_user@example.com"
 
-    namespace = await create_namespace_for_project(AsyncMock(spec=AsyncSession), project, cluster_id, user)
+    # Create mock message sender
+    mock_message_sender = AsyncMock()
+
+    namespace = await create_namespace_for_project(
+        AsyncMock(spec=AsyncSession), project, cluster_id, user, mock_message_sender
+    )
 
     assert namespace.project_id == project.id
     assert namespace.name == project.name
@@ -52,8 +56,8 @@ async def test_create_namespace_for_project_success(mock_submit_message, mock_cr
     assert namespace.updated_by == user
 
     mock_create_namespace.assert_awaited_once()
-    mock_submit_message.assert_awaited_once()
-    args, kwargs = mock_submit_message.call_args
+    mock_message_sender.enqueue.assert_awaited_once()
+    args, kwargs = mock_message_sender.enqueue.call_args
     assert args[0] == project.cluster_id
     assert isinstance(args[1], ProjectNamespaceCreateMessage)
     assert args[1].message_type == "project_namespace_create"
@@ -62,8 +66,7 @@ async def test_create_namespace_for_project_success(mock_submit_message, mock_cr
 
 @pytest.mark.asyncio
 @patch("app.namespaces.service.create_namespace")
-@patch("app.namespaces.service.submit_message_to_cluster_queue")
-async def test_create_namespace_for_project_db_error(mock_submit_message, mock_create_namespace):
+async def test_create_namespace_for_project_db_error(mock_create_namespace):
     project = Project(
         id=uuid4(),
         name="test-project",
@@ -79,13 +82,14 @@ async def test_create_namespace_for_project_db_error(mock_submit_message, mock_c
     user = "test_user@example.com"
 
     mock_create_namespace.side_effect = Exception("Database error")
+    mock_message_sender = AsyncMock()
 
     with pytest.raises(Exception) as exc_info:
-        await create_namespace_for_project(AsyncMock(spec=AsyncSession), project, cluster_id, user)
+        await create_namespace_for_project(AsyncMock(spec=AsyncSession), project, cluster_id, user, mock_message_sender)
 
     assert "Database error" in str(exc_info.value)
     mock_create_namespace.assert_awaited_once()
-    mock_submit_message.assert_not_awaited()
+    mock_message_sender.enqueue.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -303,10 +307,7 @@ async def test_get_namespaces_by_cluster_for_organization(mock_get_namespaces_by
 @pytest.mark.asyncio
 @patch("app.namespaces.service.get_namespace_by_project_and_cluster")
 @patch("app.namespaces.service.update_namespace_status")
-@patch("app.namespaces.service.submit_message_to_cluster_queue")
-async def test_delete_namespace_in_cluster_success(
-    mock_submit_message, mock_update_namespace_status, mock_get_namespace
-):
+async def test_delete_namespace_in_cluster_success(mock_update_namespace_status, mock_get_namespace):
     session_mock = AsyncMock(spec=AsyncSession)
 
     project = Project(
@@ -334,16 +335,17 @@ async def test_delete_namespace_in_cluster_success(
 
     mock_get_namespace.return_value = namespace
     updater = "test_user@example.com"
+    mock_message_sender = AsyncMock()
 
-    await delete_namespace_in_cluster(session_mock, project, updater)
+    await delete_namespace_in_cluster(session_mock, project, updater, mock_message_sender)
 
     mock_get_namespace.assert_awaited_once_with(session_mock, project.id, project.cluster_id)
     mock_update_namespace_status.assert_awaited_once_with(
         session_mock, namespace, NamespaceStatus.TERMINATING, "Namespace is being deleted", updater
     )
-    mock_submit_message.assert_awaited_once()
+    mock_message_sender.enqueue.assert_awaited_once()
 
-    args, kwargs = mock_submit_message.call_args
+    args, kwargs = mock_message_sender.enqueue.call_args
     assert args[0] == project.cluster_id
     assert args[1].message_type == "project_namespace_delete"
     assert args[1].name == project.name
@@ -353,10 +355,7 @@ async def test_delete_namespace_in_cluster_success(
 @pytest.mark.asyncio
 @patch("app.namespaces.service.get_namespace_by_project_and_cluster")
 @patch("app.namespaces.service.update_namespace_status")
-@patch("app.namespaces.service.submit_message_to_cluster_queue")
-async def test_delete_namespace_in_cluster_namespace_not_found(
-    mock_submit_message, mock_update_namespace_status, mock_get_namespace
-):
+async def test_delete_namespace_in_cluster_namespace_not_found(mock_update_namespace_status, mock_get_namespace):
     session_mock = AsyncMock(spec=AsyncSession)
 
     project = Project(
@@ -373,11 +372,12 @@ async def test_delete_namespace_in_cluster_namespace_not_found(
 
     mock_get_namespace.return_value = None  # Namespace not found
     updater = "test_user@example.com"
+    mock_message_sender = AsyncMock()
 
     with pytest.raises(NotFoundException) as exc_info:
-        await delete_namespace_in_cluster(session_mock, project, updater)
+        await delete_namespace_in_cluster(session_mock, project, updater, mock_message_sender)
 
     assert f"Namespace for project {project.id} not found in cluster {project.cluster_id}." in str(exc_info.value)
     mock_get_namespace.assert_awaited_once_with(session_mock, project.id, project.cluster_id)
     mock_update_namespace_status.assert_not_awaited()
-    mock_submit_message.assert_not_awaited()
+    mock_message_sender.enqueue.assert_not_awaited()

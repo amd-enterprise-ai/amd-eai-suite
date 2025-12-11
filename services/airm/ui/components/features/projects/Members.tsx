@@ -39,7 +39,7 @@ import {
 import { InvitedUsersResponse, UsersResponse } from '@/types/users';
 import { ConfirmationModal } from '@/components/shared/Confirmation/ConfirmationModal';
 import ClientSideDataTable from '@/components/shared/DataTable/ClientSideDataTable';
-import DrawerForm from '@/components/shared/DrawerForm/DrawerForm';
+import DrawerForm from '@/components/shared/Drawer/DrawerForm';
 import FormFieldComponent from '@/components/shared/ManagedForm/FormFieldComponent';
 import { ZodType, z } from 'zod';
 import { SortDirection } from '@/types/enums/sort-direction';
@@ -127,14 +127,11 @@ export const Members: React.FC<Props> = ({ project }) => {
   });
 
   const candidateUsers = useMemo(() => {
-    return getCandidateUsersForProject(project, users?.users);
+    return getCandidateUsersForProject(project, users?.data);
   }, [project, users]);
 
   const candidateInvitedUsers = useMemo(() => {
-    return getCandidateInvitedUsersForProject(
-      project,
-      invitedUsers?.invitedUsers,
-    );
+    return getCandidateInvitedUsersForProject(project, invitedUsers?.data);
   }, [project, invitedUsers]);
 
   const customRenderers: Partial<
@@ -245,7 +242,7 @@ export const Members: React.FC<Props> = ({ project }) => {
       );
       queryClient.invalidateQueries({ queryKey: ['project'] });
 
-      const currentUser = users?.users.find(
+      const currentUser = users?.data.find(
         (u) => u.email === session?.user?.email,
       );
       const currentUserId = currentUser?.id;
@@ -281,7 +278,7 @@ export const Members: React.FC<Props> = ({ project }) => {
 
         queryClient.invalidateQueries({ queryKey: ['project'] });
 
-        const currentUser = users?.users.find(
+        const currentUser = users?.data.find(
           (u) => u.email === session?.user?.email,
         );
         const currentUserId = currentUser?.id;
@@ -388,7 +385,7 @@ export const Members: React.FC<Props> = ({ project }) => {
           }
         />
         <div className="mt-4 pb-8">
-          {!!project.users.length ? (
+          {project.users.length ? (
             <ClientSideDataTable
               data={filteredUsersData}
               columns={columns}
@@ -422,7 +419,7 @@ export const Members: React.FC<Props> = ({ project }) => {
           'settings.membersAndInvitedUsers.members.actions.add.modal.confirm',
         )}
         onFormSuccess={(values) => {
-          const users = values['users'];
+          const users = values.users;
           const userIds =
             typeof users === 'string'
               ? users.split(',').filter((id) => id.trim() !== '')
@@ -433,7 +430,7 @@ export const Members: React.FC<Props> = ({ project }) => {
         renderFields={(form) => {
           return (
             <div className="flex flex-col gap-4">
-              <Trans parent="span">
+              <Trans parent="p">
                 {t(
                   'settings.membersAndInvitedUsers.members.actions.add.modal.intro',
                   {
@@ -454,18 +451,14 @@ export const Members: React.FC<Props> = ({ project }) => {
         }}
       />
       <ConfirmationModal
-        description={
-          <Trans parent="span">
-            {t(
-              'settings.membersAndInvitedUsers.members.actions.remove.description',
-              {
-                firstName: userBeingRemoved?.firstName,
-                lastName: userBeingRemoved?.lastName,
-                project: project.name,
-              },
-            )}
-          </Trans>
-        }
+        description={t(
+          'settings.membersAndInvitedUsers.members.actions.remove.description',
+          {
+            firstName: userBeingRemoved?.firstName,
+            lastName: userBeingRemoved?.lastName,
+            project: project.name,
+          },
+        )}
         title={t(
           'settings.membersAndInvitedUsers.members.actions.remove.confirm',
         )}

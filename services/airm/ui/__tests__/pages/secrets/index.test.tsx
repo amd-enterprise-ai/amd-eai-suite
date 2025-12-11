@@ -127,7 +127,7 @@ describe('secrets page', async () => {
       );
     });
     fireEvent.click(screen.getByText('actions.add'));
-    expect(screen.getByText('form.add.title')).toBeInTheDocument();
+    expect(screen.getByText('form.add.title.general')).toBeInTheDocument();
   });
 
   it('renders the table headers correctly', () => {
@@ -204,6 +204,34 @@ describe('secrets page', async () => {
     vi.useRealTimers();
   });
 
+  it('refetches the data if the refetch button is clicked', async () => {
+    const mockSecrets = generateMockSecrets(1);
+    const mockProjects = generateMockProjects(1);
+    act(() => {
+      render(
+        <SecretsPage
+          storages={{ storages: [] }}
+          secrets={{ secrets: mockSecrets }}
+          projects={mockProjects}
+        />,
+        {
+          wrapper,
+        },
+      );
+    });
+
+    expect(fetchSecrets).toBeCalledTimes(1);
+    act(() => {
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'data.refresh',
+        }),
+      );
+    });
+
+    expect(fetchSecrets).toBeCalledTimes(2);
+  });
+
   it('delete button shows secrets delete confirm modal ', () => {
     const mockSecrets = generateMockSecrets(1);
     const mockProjects = generateMockProjects(1);
@@ -238,6 +266,71 @@ describe('secrets page', async () => {
     });
 
     expect(screen.getByText('form.delete.title')).toBeInTheDocument();
+  });
+
+  it('delete action is not disabled when secret is in pending state', () => {
+    const mockSecrets = generateMockSecrets(1);
+    const mockProjects = generateMockProjects(1);
+    mockProjects[0].status = ProjectStatus.READY;
+    mockSecrets[0].status = SecretStatus.PENDING;
+    act(() => {
+      render(
+        <SecretsPage
+          storages={{ storages: [] }}
+          secrets={{ secrets: mockSecrets }}
+          projects={mockProjects}
+        />,
+        {
+          wrapper,
+        },
+      );
+    });
+    const actionButton = screen.getByRole('button', {
+      name: 'list.actions.label',
+    });
+    expect(actionButton).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.click(actionButton);
+    });
+
+    const deleteAction = screen.getByText('list.actions.delete.label');
+    expect(deleteAction).toBeInTheDocument();
+    expect(deleteAction.parentNode).not.toHaveAttribute(
+      'data-disabled',
+      'true',
+    );
+  });
+
+  it('delete action is not disabled when secret is in deleting state', () => {
+    const mockSecrets = generateMockSecrets(1);
+    const mockProjects = generateMockProjects(1);
+    mockProjects[0].status = ProjectStatus.READY;
+    mockSecrets[0].status = SecretStatus.DELETING;
+    act(() => {
+      render(
+        <SecretsPage
+          storages={{ storages: [] }}
+          secrets={{ secrets: mockSecrets }}
+          projects={mockProjects}
+        />,
+        {
+          wrapper,
+        },
+      );
+    });
+    const actionButton = screen.getByRole('button', {
+      name: 'list.actions.label',
+    });
+    expect(actionButton).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.click(actionButton);
+    });
+
+    const deleteAction = screen.getByText('list.actions.delete.label');
+    expect(deleteAction).toBeInTheDocument();
+    expect(deleteAction.parentNode).not.toHaveAttribute('data-disabled');
   });
 
   it('assign button shows secrets edit form', async () => {

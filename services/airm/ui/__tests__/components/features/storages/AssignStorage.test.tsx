@@ -117,9 +117,10 @@ describe('AssignStorage', () => {
     );
 
     await fireEvent.click(
-      screen.getAllByLabelText('form.assign.field.projectIds.label')[1],
+      screen.getByText('form.assign.field.projectIds.placeholder'),
     );
-    await fireEvent.click(screen.getByRole('option', { name: 'project-1' }));
+    const options = await screen.findAllByText('project-1');
+    await fireEvent.click(options[1]);
 
     await fireEvent.click(screen.getByText('form.assign.action.save'));
 
@@ -222,9 +223,10 @@ describe('AssignStorage', () => {
     );
 
     await fireEvent.click(
-      screen.getAllByLabelText('form.assign.field.projectIds.label')[1],
+      screen.getByText('form.assign.field.projectIds.placeholder'),
     );
-    await fireEvent.click(screen.getByRole('option', { name: 'project-1' }));
+    const options = await screen.findAllByText('project-1');
+    await fireEvent.click(options[1]);
 
     await fireEvent.click(screen.getByText('form.assign.action.save'));
 

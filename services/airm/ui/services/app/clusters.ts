@@ -5,7 +5,11 @@
 import { getErrorMessage } from '@/utils/app/api-helpers';
 import { APIRequestError } from '@/utils/app/errors';
 
-import { ClusterStatsResponse, EditClusterRequest } from '@/types/clusters';
+import {
+  ClusterKubeConfig,
+  ClusterStatsResponse,
+  EditClusterRequest,
+} from '@/types/clusters';
 
 export const fetchClusters = async () => {
   const response = await fetch('/api/clusters');
@@ -105,3 +109,16 @@ export const fetchClusterStatistics =
     }
     return response.json();
   };
+
+export const fetchClusterKubeConfig = async (
+  clusterId: string,
+): Promise<ClusterKubeConfig> => {
+  const response = await fetch(`/api/clusters/${clusterId}/kube-config`);
+  if (!response.ok) {
+    throw new APIRequestError(
+      `Failed to get cluster kube config: ${await getErrorMessage(response)}`,
+      response.status,
+    );
+  }
+  return response.json();
+};

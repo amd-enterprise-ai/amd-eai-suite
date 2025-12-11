@@ -20,7 +20,7 @@ import { UserRole } from '@/types/enums/user-roles';
 import { FormField } from '@/types/forms/forms';
 import { AssignUserRoleFormData, User } from '@/types/users';
 
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import FormFieldComponent from '@/components/shared/ManagedForm/FormFieldComponent';
 import { ActionButton } from '@/components/shared/Buttons';
 import ProjectAndRoleEntry from './ProjectAndRoleEntry';
@@ -139,7 +139,7 @@ export const UserRoles: React.FC<Props> = ({ user }) => {
         validationSchema={createQuotaFormSchema}
         defaultValues={{ role: user.role }}
         onFormSuccess={(data: { [x: string]: unknown }) => {
-          const role = data['role'] as UserRole;
+          const role = data.role as UserRole;
           assignRoleToUser({ userId: user.id, role });
         }}
         onCancel={onOpenChange}

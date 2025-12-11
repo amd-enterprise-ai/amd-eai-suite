@@ -1,0 +1,29 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: { { .Release.Name } }
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: test-container
+          image: { { .Values.image } }
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Test workload starting (will fail)"
+              exit 1
+          resources:
+            requests:
+              cpu: { { .Values.resources.requests.cpu } }
+              memory: { { .Values.resources.requests.memory } }
+            limits:
+              cpu: { { .Values.resources.limits.cpu } }
+              memory: { { .Values.resources.limits.memory } }

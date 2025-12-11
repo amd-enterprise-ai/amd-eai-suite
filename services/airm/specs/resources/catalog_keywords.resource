@@ -15,7 +15,7 @@ Resource            api/datasets.resource
 Resource            catalog_charts.resource
 Resource            catalog_workloads.resource
 Resource            catalog_datasets.resource
-Resource            catalog_projects.resource
+Resource            airm_projects.resource
 
 
 *** Keywords ***
@@ -85,44 +85,38 @@ List response should contain key "${expected_key}"
 
 Total count should be greater than ${expected}
     [Documentation]    Verifies total_count is greater than expected value
-    ${total}=               Get length              ${response.json()}
+    ${json}=                Set Variable            ${response.json()}
+    ${data}=                Get From Dictionary     ${json}                 data
+    ${total}=               Get length              ${data}
     Should be true          ${total} >= ${expected}
 
 Multiple charts exist
     [Documentation]    Creates multiple test charts for listing tests
-    # Use the chart tracking system from catalog_charts.resource
     FOR    ${index}    IN RANGE    3
         ${random_suffix}=       Generate random string                          8                       [LETTERS][NUMBERS]
         ${chart_name}=          Set variable            test-chart-${random_suffix}
         ${response}=            Create chart request    ${chart_name}           ${TEMPLATE_FILE}        ${VALUES_FILE}          ${SCHEMA_FILE}
 
-        # Accept 201 Created as success for chart creation
         IF    ${response.status_code} != 200 and ${response.status_code} != 201
             ${error_msg}=           Set Variable            Chart creation failed with status ${response.status_code}.\nResponse body: ${response.text}
-            Log                     ${error_msg}            ERROR                   console=yes  # Keep console output for failures
+            Log                     ${error_msg}            ERROR                   console=yes
             Fail                    ${error_msg}
         END
 
-        # Log success - explicitly mention success with status 201
-        Log                     Chart created successfully with status ${response.status_code}: ${chart_name}
-
-        # Extract and store the chart ID using the proper tracking system
         ${json}=                Set Variable            ${response.json()}
         TRY
-            # Try direct ID
             ${chart_id}=            Get from dictionary     ${json}                 id
             Append to list          ${CREATED_CHART_IDS}    ${chart_id}
-            Log                     Added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}           level=DEBUG
+            Log                     Added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}           DEBUG
         EXCEPT    AS    ${error}
             TRY
-                # Try charts array
                 ${charts}=              Get from dictionary     ${json}                 charts
                 ${chart}=               Get from list           ${charts}               0
                 ${chart_id}=            Get from dictionary     ${chart}                id
                 Append to list          ${CREATED_CHART_IDS}    ${chart_id}
-                Log                     Added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}           level=DEBUG
+                Log                     Added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}           DEBUG
             EXCEPT    AS    ${nested_error}
-                Log                     Chart creation response has unexpected format.\nResponse: ${response.text}                      ERROR                   console=yes  # Keep console output for failures
+                Log                     Chart creation response has unexpected format.\nResponse: ${response.text}                      ERROR                   console=yes
                 Fail                    Chart creation response has unexpected format
             END
         END
@@ -136,13 +130,18 @@ Response should contain only base models
         Dictionary should contain item                  ${model}                type                    BaseModel
     END
 
-All models should have pending status
-    [Documentation]    Verifies all models have pending onboarding status
+All models should have status "${expected_status}"
+    [Documentation]    Verifies all models have the expected onboarding status
     ${json}=                Set variable            ${response.json()}
     @{models}=              Set variable            ${json}
     FOR    ${model}    IN    @{models}
-        Dictionary should contain item                  ${model}                onboarding_status       pending
+        Dictionary should contain item                  ${model}                onboarding_status       ${expected_status}
     END
+
+# Backward compatibility keyword (can be removed later)
+All models should have pending status
+    [Documentation]    DEPRECATED: Use 'All models should have status "pending"' instead
+    All models should have status "pending"
 
 Cleanup
     [Documentation]    Cleanup created items after test execution
@@ -159,16 +158,16 @@ Remove created items
     END
 
     IF    '${base_model_id}' != '${None}'
-        Delete model            model_id=${base_model_id}                       expected_status=204     project_id=${CURRENT_PROJECT_ID}
-        Get model               model_id=${base_model_id}                       expected_status=404     project_id=${CURRENT_PROJECT_ID}
+        Delete model            model_id=${base_model_id}                       expected_status=204     project_id=${TEST_PROJECT_ID}
+        Get model               model_id=${base_model_id}                       expected_status=404     project_id=${TEST_PROJECT_ID}
     END
 
     IF    '${managed_model_id}' != '${None}'
-        Delete model            model_id=${managed_model_id}                    expected_status=204     project_id=${CURRENT_PROJECT_ID}
-        Get model               model_id=${managed_model_id}                    expected_status=404     project_id=${CURRENT_PROJECT_ID}
+        Delete model            model_id=${managed_model_id}                    expected_status=204     project_id=${TEST_PROJECT_ID}
+        Get model               model_id=${managed_model_id}                    expected_status=404     project_id=${TEST_PROJECT_ID}
     END
 
 Finetune test variables are prepaired
     [Documentation]    Prepares finetune data for the test
-    Set Test Variable       ${MODEL_WEIGHTS_PATH}                           /workload/default-bucket/models/${CURRENT_PROJECT_SLUG}/TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    Set Test Variable       ${MODEL_WEIGHTS_PATH}                           /workload/default-bucket/models/${TEST_PROJECT_SLUG}/TinyLlama/TinyLlama-1.1B-Chat-v1.0
     Set Test Variable       ${TEST_WORKLOAD_ID}     5243353d-1511-4813-9bd0-50459b08aa28

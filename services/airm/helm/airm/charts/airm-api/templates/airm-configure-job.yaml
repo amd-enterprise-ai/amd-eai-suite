@@ -12,7 +12,7 @@ metadata:
   namespace: "{{ .Release.Namespace }}"
 data:
   configure.sh: |
-{{ .Files.Get "scripts/configure.sh" | indent 4 }}
+{{ .Files.Get "files/configure.sh" | indent 4 }}
 
 ---
 apiVersion: v1
@@ -139,8 +139,6 @@ spec:
                   name: "{{ .Release.Name }}-keycloak-admin-client"
             - name: AIRM_API_URL
               value: "http://{{ .Release.Name }}-api.{{ .Release.Namespace }}.svc.cluster.local"
-            - name: CLUSTER_BASE_URL
-              value: "https://{{ .Values.kgateway.workloads.prefixValue }}.{{ .Values.airm.appDomain }}/"
           volumeMounts:
             - name: configure-script
               mountPath: /scripts

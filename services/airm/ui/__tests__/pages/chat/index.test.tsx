@@ -9,6 +9,7 @@ import { getAims } from '@/services/app/aims';
 
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
 import { Workload } from '@/types/workloads';
+import { Aim } from '@/types/aims';
 
 import ChatPage from '@/pages/chat';
 
@@ -50,27 +51,7 @@ vi.mock('@/components/features/chat/ChatView', () => ({
 }));
 
 describe('Chat Page', () => {
-  // Create enhanced workloads with userInputs.canonicalName to match AIMs
-  // mockAims contains:
-  // - mockAims[0]: meta-llama/llama-2-7b with ['llm', 'text-generation', 'chat'] tags
-  // - mockAims[1]: stable-diffusion-xl with ['image-generation', 'diffusion'] tags (no chat)
-  // - mockAims[2]: detection-model with ['vision', 'object-detection'] tags (no chat)
-  const chatWorkloads: Workload[] = [
-    {
-      ...mockWorkloads[0], // Llama 7B Inference - RUNNING INFERENCE workload
-      userInputs: {
-        canonicalName: 'meta-llama/llama-2-7b', // matches mockAims[0] (has chat tag)
-      },
-    },
-    {
-      ...mockWorkloads[1], // SDXL Download - convert to INFERENCE and RUNNING to be eligible for chat filtering
-      type: WorkloadType.INFERENCE,
-      status: WorkloadStatus.RUNNING,
-      userInputs: {
-        canonicalName: 'stable-diffusion-xl', // matches mockAims[1] (no chat tag - should be filtered out)
-      },
-    },
-  ];
+  const chatWorkloads: Workload[] = [mockWorkloads[0], mockWorkloads[2]];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -118,12 +99,9 @@ describe('Chat Page', () => {
       expect(screen.getByTestId('chat-view')).toBeInTheDocument();
     });
 
-    // Only 1 workload should be passed to ChatView (the one matching llama-2-7b with chat tag)
-    // chatWorkloads[0] has canonicalName 'llama-2-7b' which matches mockAims[0] with chat tag
-    // chatWorkloads[1] has canonicalName 'stable-diffusion-xl' which matches mockAims[1] without chat tag
     expect(screen.getByTestId('workload-count')).toHaveTextContent('1');
     expect(screen.getByTestId('workload-workload-1')).toBeInTheDocument();
-    expect(screen.queryByTestId('workload-workload-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workload-workload-3')).not.toBeInTheDocument();
   });
 
   it('filters out workloads without chat tag in associated aim', async () => {
@@ -231,20 +209,17 @@ describe('Chat Page', () => {
   });
 
   it('shows all matching workloads when multiple chat models are available', async () => {
-    // Create a third workload that also matches a chat AIM
-    const multipleWorkloads = [
-      ...chatWorkloads,
-      {
-        ...mockWorkloads[3], // Model fine-tuning - convert to INFERENCE and RUNNING
-        type: WorkloadType.INFERENCE,
-        status: WorkloadStatus.RUNNING,
-        userInputs: {
-          canonicalName: 'meta-llama/llama-2-7b', // Also matches the chat AIM
-        },
-      },
-    ];
+    const chatAim2: Aim = {
+      ...mockAims[0],
+      id: 'aim-chat-2',
+      workload: { ...mockAims[0].workload!, id: 'workload-11' },
+    };
 
-    (listWorkloads as Mock).mockResolvedValue(multipleWorkloads);
+    (listWorkloads as Mock).mockResolvedValue([
+      ...chatWorkloads,
+      mockWorkloads[10],
+    ]);
+    (getAims as Mock).mockResolvedValue([...mockAims, chatAim2]);
 
     await act(async () => {
       render(<ChatPage />, { wrapper });
@@ -255,12 +230,10 @@ describe('Chat Page', () => {
       expect(getAims).toHaveBeenCalled();
     });
 
-    // Verify ChatView receives multiple workloads
     await waitFor(() => {
       expect(screen.getByTestId('chat-view')).toBeInTheDocument();
     });
 
-    // Should have 2 workloads (both matching meta-llama/llama-2-7b chat AIM)
     expect(screen.getByTestId('workload-count')).toHaveTextContent('2');
   });
 
@@ -269,9 +242,6 @@ describe('Chat Page', () => {
       {
         ...mockWorkloads[0],
         capabilities: ['chat'],
-        userInputs: {
-          canonicalName: 'finetuned-model',
-        },
       },
     ];
 
@@ -299,9 +269,6 @@ describe('Chat Page', () => {
       {
         ...mockWorkloads[0],
         capabilities: ['chat'],
-        userInputs: {
-          canonicalName: 'meta-llama/llama-2-7b', // Matches AIM with chat tag
-        },
       },
     ];
 
@@ -327,18 +294,12 @@ describe('Chat Page', () => {
     const mixedWorkloads: Workload[] = [
       {
         ...mockWorkloads[0],
-        userInputs: {
-          canonicalName: 'meta-llama/llama-2-7b', // Matches AIM with chat tag
-        },
       },
       {
         ...mockWorkloads[1],
         type: WorkloadType.INFERENCE,
         status: WorkloadStatus.RUNNING,
         capabilities: ['chat'],
-        userInputs: {
-          canonicalName: 'finetuned-model', // No matching AIM, but has chat capability
-        },
       },
     ];
 

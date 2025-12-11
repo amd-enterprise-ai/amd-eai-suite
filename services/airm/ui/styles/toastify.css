@@ -12,10 +12,15 @@ SPDX-License-Identifier: MIT
   --toastify-toast-min-height: 36px;
   --toastify-toast-padding: 10px;
 
-  --toastify-toast-width: 425px;
+  --toastify-toast-width: auto;
 
   --toastify-background-error: hsl(var(--heroui-danger-200));
   --toastify-text-error: hsl(var(--heroui-danger));
   --toastify-background-warning: hsl(var(--heroui-warning-50));
   --toastify-text-warning: hsl(var(--heroui-warning));
+}
+
+.Toastify__toast {
+  min-width: 400px;
+  max-width: 600px;
 }

@@ -5,4 +5,4 @@
 apiVersion: v2
 name: test-sleep-job
 description: A simple job chart for testing that just sleeps
-version: 0.1.0
+version: 0.2.0

@@ -14,15 +14,25 @@ from airm.messaging.schemas import ClusterNodesMessage, HeartbeatMessage, QuotaS
 
 from ..messaging.admin import create_vhost_and_user, delete_vhost_and_user
 from ..messaging.queues import configure_queues_for_cluster
+from ..messaging.sender import MessageSender
+from ..organizations.models import Organization
 from ..organizations.repository import get_organization_by_id
 from ..projects.models import Project
+from ..projects.repository import get_projects_in_cluster
 from ..quotas.models import Quota
 from ..quotas.repository import (
     get_quotas_for_cluster,
     get_quotas_for_organization,
 )
 from ..quotas.service import send_quotas_allocation_to_cluster_queue
-from ..utilities.exceptions import ForbiddenException, NotFoundException
+from ..utilities.exceptions import (
+    DeletionConflictException,
+    ForbiddenException,
+    NotFoundException,
+    PreconditionNotMetException,
+)
+from ..utilities.keycloak_admin import KeycloakAdmin, get_client_secret, get_client_uuid, get_public_issuer_url
+from .config import KUBE_API_KEYCLOAK_CLIENT_NAME
 from .models import Cluster, ClusterNode
 from .repository import create_cluster as create_cluster_in_db
 from .repository import (
@@ -39,6 +49,7 @@ from .repository import update_cluster_node as update_cluster_node_in_db
 from .repository import update_last_heartbeat as update_last_heartbeat_in_db
 from .schemas import (
     ClusterIn,
+    ClusterKubeConfig,
     ClusterNameEdit,
     ClusterNodeResponse,
     ClusterNodes,
@@ -50,7 +61,7 @@ from .schemas import (
     ClusterWithUserSecret,
     GPUInfo,
 )
-from .utils import has_node_changed
+from .utils import build_cluster_kube_config, has_node_changed
 
 
 async def create_cluster(
@@ -79,7 +90,7 @@ async def update_cluster(session: AsyncSession, cluster: Cluster, edits: Cluster
     return await update_cluster_in_db(session, cluster, edits, updater)
 
 
-async def get_clusters_with_resources(session: AsyncSession, organization) -> Clusters:
+async def get_clusters_with_resources(session: AsyncSession, organization: Organization) -> Clusters:
     clusters, quotas, nodes = await asyncio.gather(
         get_clusters_in_organization(session, organization.id),
         get_quotas_for_organization(session, organization.id),
@@ -174,7 +185,7 @@ def __compute_cluster_resources(
     )
 
 
-async def update_last_heartbeat(session: AsyncSession, cluster: Cluster, message: HeartbeatMessage):
+async def update_last_heartbeat(session: AsyncSession, cluster: Cluster, message: HeartbeatMessage) -> None:
     cluster_name = message.cluster_name
     organization_name = message.organization_name
     last_heartbeat_at = message.last_heartbeat_at
@@ -194,12 +205,19 @@ async def update_last_heartbeat(session: AsyncSession, cluster: Cluster, message
 
 
 async def delete_cluster(session: AsyncSession, cluster: Cluster) -> None:
+    projects = await get_projects_in_cluster(session, cluster.id)
+    if len(projects) > 0:
+        raise DeletionConflictException(
+            f"Cannot delete cluster {cluster.name} ({cluster.id}) because it has associated projects"
+        )
     await delete_connection_to_cluster_vhost(cluster.id)
     await delete_cluster_in_db(session, cluster)
     await delete_vhost_and_user(cluster.id)
 
 
-async def update_cluster_nodes(session: AsyncSession, cluster: Cluster, message: ClusterNodesMessage) -> None:
+async def update_cluster_nodes(
+    session: AsyncSession, cluster: Cluster, message: ClusterNodesMessage, message_sender: MessageSender
+) -> None:
     existing_nodes = await get_cluster_nodes_in_db(session, cluster)
     existing_nodes_by_name = {node.name.lower(): node for node in existing_nodes}
 
@@ -232,7 +250,7 @@ async def update_cluster_nodes(session: AsyncSession, cluster: Cluster, message:
         cluster_with_resources = await get_cluster_with_resources(session, cluster)
         gpu_vendor = cluster_with_resources.gpu_info.vendor if cluster_with_resources.gpu_info else None
 
-        await send_quotas_allocation_to_cluster_queue(session, cluster, gpu_vendor)
+        await send_quotas_allocation_to_cluster_queue(session, cluster, gpu_vendor, message_sender)
 
         logger.info(f"Updated quota allocations for cluster {cluster.name} ({cluster.id}) due to node changes")
 
@@ -260,9 +278,19 @@ async def get_cluster_nodes(session: AsyncSession, cluster: Cluster) -> ClusterN
     )
 
 
-async def get_cluster_by_id(session: AsyncSession, organization_id: UUID, cluster_id: UUID):
+async def get_cluster_by_id(session: AsyncSession, organization_id: UUID, cluster_id: UUID) -> Cluster:
     """Get a cluster by ID in organization, raising NotFoundException if not found."""
     cluster = await get_cluster_in_organization(session, organization_id, cluster_id)
     if not cluster:
         raise NotFoundException(f"Cluster with ID {cluster_id} not found in your organization")
     return cluster
+
+
+async def get_cluster_kubeconfig_as_yaml(cluster: Cluster, kc_admin: KeycloakAdmin) -> ClusterKubeConfig:
+    if not cluster.kube_api_url:
+        raise ValueError(f"Cluster {cluster.name} does not have a kube_api_url configured")
+    client_uuid = await get_client_uuid(kc_admin=kc_admin, client_id=KUBE_API_KEYCLOAK_CLIENT_NAME)
+    credentials = await get_client_secret(kc_admin=kc_admin, client_uuid=client_uuid)
+    if not credentials or "value" not in credentials:
+        raise PreconditionNotMetException(f"Client {KUBE_API_KEYCLOAK_CLIENT_NAME} doesn't have secret configured")
+    return build_cluster_kube_config(cluster, get_public_issuer_url(), credentials["value"])

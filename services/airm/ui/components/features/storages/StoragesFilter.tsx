@@ -14,11 +14,13 @@ interface Props {
   isInProjects?: boolean;
   onFilterChange: (filters: FilterValueMap) => void;
   actionButton?: React.ReactNode;
+  onRefresh: () => void;
 }
 
 export const StoragesListFilter: React.FC<Props> = ({
   onFilterChange,
   actionButton,
+  onRefresh,
 }) => {
   const { t } = useTranslation('storages');
 
@@ -40,6 +42,7 @@ export const StoragesListFilter: React.FC<Props> = ({
       filterConfig={filterConfig}
       onFilterChange={onFilterChange}
       endContent={actionButton}
+      onRefresh={onRefresh}
     />
   );
 };

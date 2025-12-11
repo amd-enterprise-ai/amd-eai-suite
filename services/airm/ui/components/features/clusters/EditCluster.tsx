@@ -20,10 +20,11 @@ import {
 } from '@/types/clusters';
 import { FormField } from '@/types/forms/forms';
 
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import FormFieldComponent from '@/components/shared/ManagedForm/FormFieldComponent';
 
 import { ZodType, z } from 'zod';
+import { ClusterFormFields } from '@/types/enums/cluster-form-fields';
 
 interface Props {
   isOpen: boolean;
@@ -57,33 +58,42 @@ export const EditCluster: React.FC<Props> = ({
   const handleEditClusterSubmit = useCallback(
     async (data: EditClusterFormData): Promise<void> => {
       editCluster({
-        base_url: data.baseUrl,
+        workloads_base_url: data.workloadsBaseUrl,
+        kube_api_url: data.kubeApiUrl,
       });
     },
     [editCluster],
   );
 
+  const defaultValues = {
+    [ClusterFormFields.WORKLOADS_BASE_URL]: cluster.workloadsBaseUrl,
+    [ClusterFormFields.KUBE_API_URL]: cluster.kubeApiUrl,
+  };
+
   const formSchema = useMemo(
     () =>
       z.object({
-        baseUrl: z
+        workloadsBaseUrl: z
           .string()
-          .refine(
-            (val) =>
-              val === '' || /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i.test(val),
-            {
-              message: t('form.edit.field.baseUrl.error.invalid'),
-            },
-          ),
+          .url(t('form.edit.field.workloadsBaseUrl.error.invalid')),
+        kubeApiUrl: z
+          .string()
+          .url(t('form.edit.field.kubeApiUrl.error.invalid')),
       }) as ZodType<EditClusterFormData>,
     [t],
   );
 
   const formContent: FormField<EditClusterFormData>[] = [
     {
-      name: 'baseUrl',
-      label: t('form.edit.field.baseUrl.label'),
-      placeholder: t('form.edit.field.baseUrl.placeholder'),
+      name: ClusterFormFields.WORKLOADS_BASE_URL,
+      label: t('form.edit.field.workloadsBaseUrl.label'),
+      placeholder: t('form.edit.field.workloadsBaseUrl.placeholder'),
+      isRequired: true,
+    },
+    {
+      name: ClusterFormFields.KUBE_API_URL,
+      label: t('form.edit.field.kubeApiUrl.label'),
+      placeholder: t('form.edit.field.kubeApiUrl.placeholder'),
       isRequired: true,
     },
   ];
@@ -94,7 +104,8 @@ export const EditCluster: React.FC<Props> = ({
       isActioning={isPending}
       onFormSuccess={(values) => {
         handleEditClusterSubmit({
-          baseUrl: values.baseUrl,
+          workloadsBaseUrl: values.workloadsBaseUrl,
+          kubeApiUrl: values.kubeApiUrl,
         });
         onOpenChange(false);
       }}
@@ -110,7 +121,9 @@ export const EditCluster: React.FC<Props> = ({
               formField={field}
               errorMessage={form.formState.errors[field.name]?.message}
               register={form.register}
-              defaultValue={cluster.baseUrl}
+              defaultValue={
+                defaultValues[field.name as keyof EditClusterFormData]
+              }
             />
           ))}
         </div>

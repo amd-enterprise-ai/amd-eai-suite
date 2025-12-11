@@ -34,6 +34,8 @@ export type BaseSecret = {
   scope: SecretScope;
   createdAt: string;
   updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
 };
 
 export type Secret = BaseSecret & {
@@ -46,7 +48,10 @@ export type ProjectSecretWithParentSecret = ProjectSecret & {
 
 export type AddSecretFormData = {
   type: SecretType;
+  context: SecretUseCase;
   manifest: string;
+  name?: string;
+  token?: string;
   projectIds: string[];
 };
 
@@ -54,7 +59,7 @@ export type AssignSecretFormData = {
   projectIds: string[];
 };
 
-export type AssignSecretToProjectFormData = {
+export type AssignOrgSecretToProjectFormData = {
   secretId: string;
 };
 
@@ -66,14 +71,19 @@ export type ProjectSecretsResponse = {
   projectSecrets: ProjectSecretWithParentSecret[];
 };
 
-export type CreateSecretRequest = {
+type SecretBaseRequest = {
   type: SecretType;
   name: string;
   scope: SecretScope;
   use_case?: SecretUseCase;
   manifest: string;
+};
+
+export type CreateSecretRequest = SecretBaseRequest & {
   project_ids: string[];
 };
+
+export type CreateProjectSecretRequest = SecretBaseRequest;
 
 export type AssignSecretRequest = {
   project_ids: string[];

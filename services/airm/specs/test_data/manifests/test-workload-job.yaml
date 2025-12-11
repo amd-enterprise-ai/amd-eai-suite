@@ -1,0 +1,21 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-workload
+spec:
+  template:
+    spec:
+      containers:
+        - name: test-container
+          image: busybox:latest
+          command: ["echo", "Hello from test workload"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+      restartPolicy: Never
+  backoffLimit: 1

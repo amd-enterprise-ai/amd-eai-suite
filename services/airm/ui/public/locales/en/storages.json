@@ -85,6 +85,17 @@
     "addProjectStorage": {
       "label": "Add project storage",
       "disabled": "You cannot add a project storage since project is not ready."
+    },
+    "assignStorage": {
+      "label": "Attach storage",
+      "options": {
+        "S3": {
+          "label": "S3 Bucket"
+        }
+      }
+    },
+    "assignProjectStorage": {
+      "disabled": "You cannot assign a storage since project is not ready."
     }
   },
   "form": {
@@ -164,9 +175,31 @@
         "error": "Failed to reassign storage."
       }
     },
+    "assignToProject": {
+      "title": "Assign storage to project",
+      "description": "Select an existing storage to assign to",
+      "noAvailableStorages": "No available storages to assign. All storages are already assigned to this project.",
+      "field": {
+        "storageId": {
+          "label": "Storage",
+          "placeholder": "Select a storage",
+          "error": {
+            "required": "Please select a storage to assign."
+          }
+        }
+      },
+      "action": {
+        "assign": "Assign storage",
+        "cancel": "Cancel"
+      },
+      "notification": {
+        "success": "Storage assigned to project successfully.",
+        "error": "Failed to assign storage to project."
+      }
+    },
     "delete": {
       "title": "Remove S3 bucket",
-      "description": "Are you sure you want to remove <strong>{{name}}</strong>? All users and workloads will lose access to this storage option until you reconfigure it.",
+      "description": "Are you sure you want to remove <strong>{{name}}</strong>? The action is permanent and cannot be undone.",
       "notification": {
         "success": "Storage deleted successfully.",
         "error": "Failed to delete storage."
@@ -182,7 +215,7 @@
     },
     "deleteProjectStorage": {
       "title": "Remove S3 bucket from project",
-      "description": "Are you sure you want to remove <strong>{{name}}</strong> from the project? The action is permanent and cannot be undone.",
+      "description": "Are you sure you want to remove <strong>{{name}}</strong> from the project? All users and workloads will lose access to this storage option until you reconfigure it.",
       "notification": {
         "success": "Storage removed from project successfully.",
         "error": "Failed to remove storage from project."
@@ -215,10 +248,5 @@
   "storageScope": {
     "Organization": "Organization",
     "Project": "Project"
-  },
-
-  "statusReason": {
-    "messageTrigger": "more info",
-    "messageHeader": "There was an error with this storage. The system returned the following error message:"
   }
 }

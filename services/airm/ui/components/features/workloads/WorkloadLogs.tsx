@@ -11,7 +11,7 @@ import {
   WorkloadLogPagination,
   WorkloadLogResponse,
 } from '@/types/workloads';
-import { LogLevel } from '@/types/enums/workloads';
+import { LogLevel, LogType, WorkloadStatus } from '@/types/enums/workloads';
 
 import { useQuery } from '@tanstack/react-query';
 import { getWorkloadLogs } from '@/services/app/workloads';
@@ -30,7 +30,14 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
   const { t } = useTranslation('workloads');
 
   const [isStreamingMode, setIsStreamingMode] = useState(false);
-  const [selectedLogLevel, setSelectedLogLevel] = useState<string>('');
+  const [selectedLogLevel, setSelectedLogLevel] = useState<LogLevel>(
+    '' as LogLevel,
+  );
+  const [selectedLogType, setSelectedLogType] = useState<LogType>(() =>
+    workload?.status === WorkloadStatus.PENDING
+      ? LogType.EVENT
+      : LogType.WORKLOAD,
+  );
   const [currentStartDate, setCurrentStartDate] = useState<string | undefined>(
     undefined,
   );
@@ -40,19 +47,20 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
   const [allLogs, setAllLogs] = useState<LogEntry[]>([]);
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const previousScrollTopRef = useRef<number>(0);
+  const previousScrollHeightRef = useRef<number>(0);
   const { toast } = useSystemToast();
+  const workloadId = workload?.id;
 
-  // Stable params for streaming to prevent unnecessary re-renders
   const streamParams = useMemo(
     () => ({
       direction: 'forward' as const,
       limit: 1000,
-      level: (selectedLogLevel as LogLevel) || undefined,
+      level: selectedLogLevel || undefined,
+      logType: selectedLogType,
     }),
-    [selectedLogLevel],
+    [selectedLogLevel, selectedLogType],
   );
 
-  // Streaming logs hook
   const {
     logs: streamLogs,
     isLoading: isStreamingLoading,
@@ -62,9 +70,7 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
     stopStreaming,
     clearLogs: clearStreamLogs,
   } = useWorkloadLogsStream({
-    workloadId: workload?.id || '',
-    params: streamParams,
-    autoStart: false,
+    workloadId: workloadId || '',
   });
 
   const {
@@ -72,129 +78,25 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
     isLoading: isLogsLoading,
     error: logsError,
   } = useQuery<WorkloadLogResponse | undefined>({
-    queryKey: ['workloads', workload, currentStartDate, selectedLogLevel],
+    queryKey: [
+      'workloads',
+      workload,
+      currentStartDate,
+      selectedLogLevel,
+      selectedLogType,
+    ],
     queryFn: async () => {
-      if (workload) {
-        return await getWorkloadLogs(workload.id, {
+      if (workloadId) {
+        return await getWorkloadLogs(workloadId, {
           direction: 'backward',
           pageToken: currentStartDate,
-          level: (selectedLogLevel as LogLevel) || undefined,
+          level: selectedLogLevel || undefined,
+          logType: selectedLogType,
         });
       }
     },
-    enabled: !!workload?.id && isOpen && !isStreamingMode,
+    enabled: !!workloadId && isOpen && !isStreamingMode,
   });
-
-  const clearLogsData = useCallback(() => {
-    setAllLogs([]);
-    setPagination(undefined);
-    setCurrentStartDate(undefined);
-  }, []);
-
-  const handleCleanup = useCallback(() => {
-    clearLogsData();
-    setSelectedLogLevel('');
-    setIsStreamingMode(false);
-
-    // Stop streaming if active
-    if (isStreaming) {
-      stopStreaming();
-    }
-    clearStreamLogs();
-
-    if (logsContainerRef.current) {
-      logsContainerRef.current.removeEventListener('scroll', handleScroll);
-    }
-  }, [isStreaming, stopStreaming, clearStreamLogs, clearLogsData]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Clean up when component unmounts or isOpen becomes false
-  useEffect(() => {
-    if (!isOpen) {
-      handleCleanup();
-    }
-  }, [isOpen, handleCleanup]);
-
-  useEffect(() => {
-    if (logsError) {
-      toast.error(t('notifications.logs.error', { error: logsError.message }));
-    }
-  }, [logsError, toast, t]);
-
-  useEffect(() => {
-    if (streamError) {
-      toast.error(t('notifications.logs.error', { error: streamError }));
-    }
-  }, [streamError, toast, t]);
-
-  useEffect(() => {
-    if (workloadLogsResponse?.logs) {
-      if (currentStartDate) {
-        // This is a pagination request, append new logs
-        setAllLogs((prevLogs) => [...prevLogs, ...workloadLogsResponse.logs]);
-      } else {
-        // This is the initial request, replace all logs
-        setAllLogs(workloadLogsResponse.logs);
-      }
-      setPagination(workloadLogsResponse.pagination);
-    }
-  }, [workloadLogsResponse]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleStreamingToggle = useCallback(
-    async (enabled: boolean) => {
-      setIsStreamingMode(enabled);
-
-      if (enabled) {
-        // Clear pagination logs when switching to streaming
-        clearLogsData();
-        // Start streaming with a small delay to ensure state is updated
-        if (workload?.id) {
-          setTimeout(() => {
-            startStreaming();
-          }, 100);
-        }
-      } else {
-        // Stop streaming when switching to pagination
-        if (isStreaming) {
-          stopStreaming();
-        }
-        clearStreamLogs();
-      }
-    },
-    [
-      workload,
-      isStreaming,
-      startStreaming,
-      stopStreaming,
-      clearStreamLogs,
-      clearLogsData,
-    ],
-  );
-
-  const handleLogLevelChange = useCallback(
-    (logLevel: string) => {
-      setSelectedLogLevel(logLevel);
-      // Clear existing logs when log level filter changes
-      clearLogsData();
-
-      // If streaming is active, restart it with new log level filter
-      if (isStreamingMode && isStreaming) {
-        stopStreaming();
-        clearStreamLogs();
-        // Restart streaming after a short delay
-        setTimeout(() => {
-          startStreaming();
-        }, 100);
-      }
-    },
-    [
-      isStreamingMode,
-      isStreaming,
-      stopStreaming,
-      clearStreamLogs,
-      startStreaming,
-      clearLogsData,
-    ],
-  );
 
   const logLevelOptions = useMemo(() => {
     return [
@@ -206,6 +108,19 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
         key: level,
         label: level.toUpperCase(),
       })),
+    ];
+  }, [t]);
+
+  const logTypeOptions = useMemo(() => {
+    return [
+      {
+        key: LogType.WORKLOAD,
+        label: t('list.actions.logs.modal.logTypeFilter.workload'),
+      },
+      {
+        key: LogType.EVENT,
+        label: t('list.actions.logs.modal.logTypeFilter.event'),
+      },
     ];
   }, [t]);
 
@@ -223,25 +138,129 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
     if (!container || isLogsLoading || !pagination?.hasMore || isStreamingMode)
       return;
 
-    const { scrollTop, scrollHeight, clientHeight } = container;
+    const { scrollTop } = container;
     const previousScrollTop = previousScrollTopRef.current;
 
-    // Only trigger when scrolling down
-    if (scrollTop <= previousScrollTop) {
+    // Only trigger when scrolling up
+    if (scrollTop >= previousScrollTop) {
       previousScrollTopRef.current = scrollTop;
       return;
     }
 
     previousScrollTopRef.current = scrollTop;
-    const scrollThreshold = 100; // Trigger 100px before reaching the bottom
+    const scrollThreshold = 100; // Trigger 100px before reaching the top
 
-    if (scrollHeight - scrollTop - clientHeight < scrollThreshold) {
+    if (scrollTop < scrollThreshold) {
       const throttledLoadMore = throttle(() => {
         setCurrentStartDate(pagination?.pageToken);
       }, 300);
       throttledLoadMore();
     }
   }, [isLogsLoading, isStreamingMode, pagination]);
+
+  const clearLogsData = useCallback(() => {
+    setAllLogs([]);
+    setPagination(undefined);
+    setCurrentStartDate(undefined);
+  }, []);
+
+  const handleCleanup = useCallback(() => {
+    clearLogsData();
+    setSelectedLogLevel('' as LogLevel);
+    setSelectedLogType(
+      workload?.status === WorkloadStatus.PENDING
+        ? LogType.EVENT
+        : LogType.WORKLOAD,
+    );
+    setIsStreamingMode(false);
+
+    stopStreaming();
+    clearStreamLogs();
+
+    if (logsContainerRef.current) {
+      logsContainerRef.current.removeEventListener('scroll', handleScroll);
+    }
+  }, [
+    workload?.status,
+    stopStreaming,
+    clearStreamLogs,
+    clearLogsData,
+    handleScroll,
+  ]);
+
+  const handleLogTypeChange = (logType: string) => {
+    setSelectedLogType(logType as LogType);
+  };
+
+  // Clean up when component unmounts or isOpen becomes false
+  useEffect(() => {
+    if (!isOpen) {
+      handleCleanup();
+    }
+  }, [isOpen, handleCleanup]);
+
+  /**
+   * Error notifications for non-streaming error and streaming errors.
+   */
+  useEffect(() => {
+    if (logsError) {
+      toast.error(t('notifications.logs.error', { error: logsError.message }));
+    }
+    if (streamError) {
+      toast.error(t('notifications.logs.error', { error: streamError }));
+    }
+  }, [logsError, streamError, toast, t]);
+
+  /**
+   * Handle the non-streaming logs and its pagination.
+   */
+  useEffect(() => {
+    if (workloadLogsResponse?.logs && !isStreamingMode) {
+      const sortedLogs = [...workloadLogsResponse.logs].sort(
+        (a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+
+      if (currentStartDate) {
+        // Store the current scroll height before adding new logs
+        const container = logsContainerRef.current;
+        if (container) {
+          previousScrollHeightRef.current = container.scrollHeight;
+        }
+        // This is a pagination request, prepend new logs
+        setAllLogs((prevLogs) => [...sortedLogs, ...prevLogs]);
+      } else {
+        // This is the initial request, replace all logs
+        setAllLogs(sortedLogs);
+      }
+      setPagination(workloadLogsResponse.pagination);
+    }
+  }, [workloadLogsResponse, isStreamingMode, currentStartDate]);
+
+  const handleStreamingToggle = async (enabled: boolean) => {
+    setIsStreamingMode(enabled);
+  };
+
+  const handleLogLevelChange = (logLevel: LogLevel) => {
+    setSelectedLogLevel(logLevel);
+  };
+
+  /**
+   * The actual streaming logs handler, which is called when the streaming mode is toggled or the log level is changed.
+   */
+  useEffect(() => {
+    if (!isStreamingMode || !workloadId) {
+      stopStreaming();
+      return;
+    }
+
+    if (isStreaming) {
+      stopStreaming();
+      clearStreamLogs();
+    }
+
+    startStreaming(streamParams);
+  }, [isStreamingMode, selectedLogLevel, selectedLogType]);
 
   useEffect(() => {
     const container = logsContainerRef.current;
@@ -269,6 +288,35 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
     }
   }, [isStreamingMode, streamLogs.length]);
 
+  // Auto-scroll to bottom when logs are loaded in pagination mode
+  useEffect(() => {
+    if (!isStreamingMode && allLogs.length > 0 && !currentStartDate) {
+      const container = logsContainerRef.current;
+      if (container) {
+        // Small delay to ensure DOM is updated
+        setTimeout(() => {
+          container.scrollTop = container.scrollHeight;
+        }, 10);
+      }
+    }
+  }, [isStreamingMode, allLogs.length, currentStartDate]);
+
+  // Restore scroll position after loading more logs (pagination)
+  useEffect(() => {
+    if (!isStreamingMode && currentStartDate && allLogs.length > 0) {
+      const container = logsContainerRef.current;
+      if (container && previousScrollHeightRef.current > 0) {
+        // Calculate the difference in scroll height and adjust scroll position
+        setTimeout(() => {
+          const heightDifference =
+            container.scrollHeight - previousScrollHeightRef.current;
+          container.scrollTop = container.scrollTop + heightDifference;
+          previousScrollHeightRef.current = 0; // Reset
+        }, 10);
+      }
+    }
+  }, [isStreamingMode, currentStartDate, allLogs.length]);
+
   if (!workload) {
     return (
       <div className="p-4 text-default-600">
@@ -282,11 +330,26 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
       <div className="mb-4">
         <div className="text-default-600 mb-4">
           {t('list.actions.logs.modal.description', {
-            workload: workload.name,
+            workload: workload.displayName,
           })}
         </div>
-        {/* Log filter and streaming controls hidden: TODO(SDA-2428): re-enable them when fixed on backend */}
-        <div className="hidden">
+        <div className="flex items-center gap-4">
+          <div>
+            <Select
+              size="sm"
+              placeholder={t('list.actions.logs.modal.logTypeFilter.label')}
+              className="min-w-[120px]"
+              selectedKeys={[selectedLogType]}
+              onSelectionChange={(keys) => {
+                const selectedKey = Array.from(keys)[0] as string;
+                handleLogTypeChange(selectedKey);
+              }}
+            >
+              {logTypeOptions.map((option) => (
+                <SelectItem key={option.key}>{option.label}</SelectItem>
+              ))}
+            </Select>
+          </div>
           <div>
             <Select
               size="sm"
@@ -294,8 +357,8 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
               className="min-w-[120px]"
               selectedKeys={selectedLogLevel ? [selectedLogLevel] : []}
               onSelectionChange={(keys) => {
-                const selectedKey = Array.from(keys)[0] as string;
-                handleLogLevelChange(selectedKey || '');
+                const selectedKey = (Array.from(keys)[0] ?? '') as LogLevel;
+                handleLogLevelChange(selectedKey);
               }}
             >
               {logLevelOptions.map((option) => (
@@ -315,16 +378,29 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
         </div>
       </div>
       <div
-        className="bg-default-100 dark:bg-default-100 rounded-lg p-4 font-mono flex-1 overflow-y-auto min-h-0"
+        className="bg-default-100 dark:bg-default-100 rounded-lg p-4 font-mono flex-1 overflow-y-auto min-h-64"
         ref={logsContainerRef}
         data-testid="workload-logs-container"
       >
+        {/* Loading indicator for infinite scroll (pagination mode only) */}
+        {isPaginationLoading && (
+          <div className="flex justify-center items-center py-4">
+            <Spinner size="sm" color="primary" />
+          </div>
+        )}
         {isCurrentlyLoading ? (
           <div
             className="flex justify-center items-center h-64"
             data-testid="workload-logs-loading"
           >
             <Spinner size="lg" color="primary" />
+          </div>
+        ) : currentLogs.length === 0 ? (
+          <div
+            className="flex justify-center items-center h-64 text-default-500"
+            data-testid="workload-logs-empty"
+          >
+            {t('list.actions.logs.modal.noLogs')}
           </div>
         ) : (
           <div className="space-y-1">
@@ -333,17 +409,10 @@ const WorkloadLogs = ({ workload, isOpen }: Props) => {
                 <span className="text-default-500 whitespace-nowrap">
                   {new Date(log.timestamp).toLocaleString()}
                 </span>
-                <span className={`uppercase font-semibold`}>[{log.level}]</span>
+                <span className="uppercase font-semibold">{log.level}</span>
                 <span className="break-all">{log.message}</span>
               </div>
             ))}
-
-            {/* Loading indicator for infinite scroll (pagination mode only) */}
-            {isPaginationLoading && (
-              <div className="flex justify-center items-center py-4">
-                <Spinner size="sm" color="primary" />
-              </div>
-            )}
           </div>
         )}
       </div>

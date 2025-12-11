@@ -9,59 +9,49 @@ Documentation       High-level dataset testing keywords.
 ...                 higher-level testing scenarios. This is the main interface that
 ...                 test cases should use.
 Resource            api/datasets.resource
-Resource            catalog_projects.resource
+Resource            airm_projects.resource
 Resource            test_data.resource
+Resource            common/resource_tracking.resource
 Library             Collections
 Library             String
 Library             OperatingSystem
 
 
 *** Variables ***
-${QUERY_PARAMS}             ${None} # Default value, will be overwritten by Project ID query params
 @{CREATED_DATASET_IDS}      # Define CREATED_DATASET_IDS as an empty list
 
 
 *** Keywords ***
-Initialize Dataset Tracking
-    [Documentation]    Resets the list of created datasets
-    ...    This keyword should be used in a test suite setup to ensure
-    ...    the tracking list starts empty for each test suite
-    @{empty_list}=          Create List
-    Set Suite Variable      ${CREATED_DATASET_IDS}                          ${empty_list}
-    Log                     Dataset tracking initialized. CREATED_DATASET_IDS: ${CREATED_DATASET_IDS}                       level=DEBUG
+# Initialize Dataset Tracking is now imported from common/resource_tracking.resource
 
 Create dataset request is sent
     [Documentation]    Sends request to create a dataset using prepared test data
-    [Arguments]             ${params}=${QUERY_PARAMS}
-    ${response}=            Create dataset          ${TEST_DATASET_DATA}    expected_status=201     params=${params}
+    [Arguments]             ${params}=${None}
+    ${params_to_use}=       Set Variable If    ${params} is not ${None}    ${params}    ${QUERY_PARAMS}
+    ${response}=            Create dataset          ${TEST_DATASET_DATA}    expected_status=201     params=${params_to_use}
     Set Test Variable       ${response}             ${response}
-
-    # Debug: Log the actual response content
-    Log                     Response status: ${response.status_code}        level=INFO
-    Log                     Response content: ${response.json()}            level=INFO
 
     ${dataset_id}=          Get from dictionary     ${response.json()}      id
     Set test variable       ${TEST_DATASET_ID}      ${dataset_id}
-    # Track created dataset ID for teardown
     Append To List          ${CREATED_DATASET_IDS}                          ${dataset_id}
-    Log                     Added dataset ${dataset_id} to cleanup list: ${CREATED_DATASET_IDS}     level=DEBUG
+    Log                     Added dataset ${dataset_id} to cleanup list: ${CREATED_DATASET_IDS}     DEBUG
 
 Upload dataset request is sent
     [Documentation]    Sends request to upload a dataset using prepared test data
-    [Arguments]             ${params}=${QUERY_PARAMS}
+    [Arguments]             ${params}=${None}
+    ${params_to_use}=       Set Variable If    ${params} is not ${None}    ${params}    ${QUERY_PARAMS}
     ${response}=            Upload dataset
     ...                     jsonl_file_path=${TEST_DATASET_FILE}
     ...                     name=${TEST_DATASET_NAME}
     ...                     description=${TEST_DATASET_DESCRIPTION}
     ...                     dataset_type=${TEST_DATASET_TYPE}
-    ...                     params=${params}
+    ...                     params=${params_to_use}
     ...                     expected_status=200
     Set Test Variable       ${response}             ${response}
     ${dataset_id}=          Get from dictionary     ${response.json()}      id
     Set test variable       ${TEST_DATASET_ID}      ${dataset_id}
-    # Track created dataset ID for teardown
     Append To List          ${CREATED_DATASET_IDS}                          ${dataset_id}
-    Log                     Added dataset ${dataset_id} to cleanup list: ${CREATED_DATASET_IDS}     level=DEBUG
+    Log                     Added dataset ${dataset_id} to cleanup list: ${CREATED_DATASET_IDS}     DEBUG
 
 Finetune dataset exists
     [Documentation]    Creates a finetune dataset for testing and stores its ID as a test variable
@@ -95,8 +85,7 @@ Dataset should exist in database
     ${dataset_id}=          Set Variable            ${TEST_DATASET_ID}
     ${db_response}=         Get dataset             ${dataset_id}           expected_status=200
 
-    # Log verification for debugging
-    Log                     Verifying dataset ${dataset_id} exists via API                          level=INFO
+    Log                     Verifying dataset ${dataset_id} exists via API                          DEBUG
 
     # Verify basic fields
     Dictionary should contain key                   ${db_response.json()}                           id
@@ -114,8 +103,7 @@ Dataset should exist in database with correct properties
     ${response_json}=       Set variable            ${response.json()}
     ${db_json}=             Set variable            ${db_response.json()}
 
-    # Log verification for debugging
-    Log                     Verifying dataset ${dataset_id} database consistency                    level=INFO
+    Log                     Verifying dataset ${dataset_id} database consistency                    DEBUG
 
     # Verify all fields match
     FOR    ${key}    IN    id    name    description    type    author    created_at    updated_at    path
@@ -138,22 +126,19 @@ The dataset should not exist in database
     [Documentation]    Verifies the dataset no longer exists in database
     ${dataset_id}=          Set Variable            ${TEST_DATASET_ID}
     ${db_response}=         Get dataset             ${dataset_id}           expected_status=404
-    Log                     Dataset ${dataset_id} no longer exists in database (404 Not Found) as expected
+    Log                     Dataset ${dataset_id} no longer exists in database (404 Not Found) as expected            DEBUG
 
 Multiple datasets exist
     [Documentation]    Creates multiple datasets for testing list endpoints
+    ...    Note: This keyword only creates datasets. Tests are responsible for their own verification.
     [Arguments]             ${count}=3
 
     FOR    ${index}    IN RANGE    ${count}
-        Log                     Creating dataset ${index+1} of ${count}
+        Log                     Creating dataset ${index+1} of ${count}         DEBUG
         Valid dataset data is prepared
         Create dataset request is sent
     END
-    Log                     Successfully created ${count} datasets: ${CREATED_DATASET_IDS}
-
-    # Verify that the expected number of datasets were created by listing them
-    List datasets request is sent
-    Response should contain at least ${count} datasets
+    Log                     Successfully created ${count} datasets: ${CREATED_DATASET_IDS}                  INFO
 
 List datasets request is sent
     [Documentation]    Sends request to list datasets with optional filters
@@ -182,16 +167,9 @@ Modify Dataset Request Is Sent
     [Arguments]             ${new_desc}
     ${dataset_data}=        Create dictionary       description=${new_desc}
 
-    # Debug logging
-    Log                     Sending modify request for dataset ${TEST_DATASET_ID}                   level=INFO
-    Log                     Modify data: ${dataset_data}                    level=INFO
-
+    Log                     Sending modify request for dataset ${TEST_DATASET_ID}                   DEBUG
     ${response}=            Modify dataset          ${TEST_DATASET_ID}      ${dataset_data}         expected_status=200     params=${QUERY_PARAMS}
     Set test variable       ${response}             ${response}
-
-    # Debug the response
-    Log                     Modify response status: ${response.status_code}                         level=INFO
-    Log                     Modify response body: ${response.json()}        level=INFO
 
 Delete dataset request is sent
     [Documentation]    Sends a request to delete a dataset
@@ -200,7 +178,7 @@ Delete dataset request is sent
 
 Batch delete datasets request is sent
     [Documentation]    Sends a request to delete multiple datasets using the list stored in ${CREATED_DATASET_IDS}
-    ${response}=            Batch delete datasets                           ${CREATED_DATASET_IDS}                          params=${QUERY_PARAMS}                          expected_status=204
+    ${response}=            Batch delete datasets                           ${CREATED_DATASET_IDS}                          params=${QUERY_PARAMS}                          expected_status=200
     Set test variable       ${response}             ${response}
 
 Send download dataset request and expect status
@@ -217,11 +195,7 @@ Dataset name in database should be "${expected_name}"
     [Documentation]    Verifies dataset name is updated in database
     ${db_response}=         Get dataset             ${TEST_DATASET_ID}      expected_status=200
 
-    # Debug logging
-    Log                     Expected name: ${expected_name}                 level=INFO
-    Log                     Database response: ${db_response.json()}        level=INFO
-    Log                     Actual name in DB: ${db_response.json()['name']}                        level=INFO
-
+    Log                     Verifying dataset name in DB: expected=${expected_name}, actual=${db_response.json()['name']}               DEBUG
     Dictionary should contain item                  ${db_response.json()}                           name                    ${expected_name}
 
 Dataset description in database should be "${expected_desc}"
@@ -232,20 +206,23 @@ Dataset description in database should be "${expected_desc}"
 Response should contain datasets list
     [Documentation]    Verifies response contains a list of datasets
     ${body}=                Set variable            ${response.json()}
-    ${is_list}=             Evaluate                isinstance(${body}, list)
-    Should Be True          ${is_list}              msg=Response body is not a list: ${body}
-    ${count}=               Get length              ${body}
+    ${datasets}=            Get from dictionary     ${body}                 data
+    ${is_list}=             Evaluate                isinstance(${datasets}, list)
+    Should Be True          ${is_list}              msg=Response body 'data' field is not a list: ${datasets}
+    ${count}=               Get length              ${datasets}
     Should be true          ${count} >= 0           msg=Dataset list is unexpectedly empty or invalid
 
 Response should contain at least ${expected_count} datasets
     [Documentation]    Verifies response list contains at least the expected number of datasets
-    ${datasets}=            Set variable            ${response.json()}
+    ${body}=                Set variable            ${response.json()}
+    ${datasets}=            Get from dictionary     ${body}                 data
     ${count}=               Get length              ${datasets}
     Should be true          ${count} >= ${expected_count}                   msg=Expected at least ${expected_count} datasets, but found ${count}
 
 Response should contain only datasets with type "${expected_type}"
     [Documentation]    Verifies all datasets in the response list have the specified type
-    ${datasets}=            Set variable            ${response.json()}
+    ${body}=                Set variable            ${response.json()}
+    ${datasets}=            Get from dictionary     ${body}                 data
     Should Not Be Empty     ${datasets}             msg=Dataset list is empty, cannot verify type filter.
     FOR    ${dataset}    IN    @{datasets}
         Dictionary should contain item                  ${dataset}              type                    ${expected_type}
@@ -253,7 +230,8 @@ Response should contain only datasets with type "${expected_type}"
 
 Response should contain only datasets with name "${expected_name}"
     [Documentation]    Verifies all datasets in the response list have the specified name
-    ${datasets}=            Set variable            ${response.json()}
+    ${body}=                Set variable            ${response.json()}
+    ${datasets}=            Get from dictionary     ${body}                 data
     Should Not Be Empty     ${datasets}             msg=Dataset list is empty, cannot verify name filter.
     FOR    ${dataset}    IN    @{datasets}
         Dictionary should contain item                  ${dataset}              name                    ${expected_name}
@@ -278,30 +256,32 @@ Downloaded content should match uploaded file
     ${expected_content}=    Get Binary File         ${TEST_DATASET_FILE}
     Should Be Equal         ${response.content}     ${expected_content}
 
-Clean Up All Created Datasets
-    [Documentation]    Deletes all datasets created during test execution
-    ...    This keyword should be used in a test suite teardown to ensure
-    ...    all datasets created during testing are cleaned up properly.
+# Clean Up All Created Datasets is now imported from common/resource_tracking.resource
+# Note: The imported version uses the standard cleanup pattern
+
+Clean Up All Created Datasets With Batch
+    [Documentation]    Extended cleanup that tries batch delete first
+    ...    Uses the standard cleanup from resource_tracking.resource but adds batch delete attempt
+    ...    This is dataset-specific optimization.
     ${count}=               Get Length              ${CREATED_DATASET_IDS}
 
     # Skip if no datasets were created or list is empty
     Return From Keyword If                          ${count} == 0           No datasets to clean up
-    Log                     Cleaning up ${count} datasets: ${CREATED_DATASET_IDS}                   level=INFO
+    Log                     Cleaning up ${count} datasets: ${CREATED_DATASET_IDS}                   INFO
 
     # Try batch delete first, but fall back to individual deletes if it fails
     TRY
         ${response}=            Batch delete datasets                           ${CREATED_DATASET_IDS}                          params=${QUERY_PARAMS}                          expected_status=any
-        Log                     Batch delete completed successfully             level=INFO
+        Log                     Batch delete completed successfully             INFO
     EXCEPT    AS    ${error}
-        Log                     Batch delete failed: ${error}. Trying individual deletes...             level=WARN
+        Log                     Batch delete failed: ${error}. Trying individual deletes...             WARN
         # Fall back to deleting each dataset individually
         FOR    ${dataset_id}    IN    @{CREATED_DATASET_IDS}
             TRY
-                Log                     Deleting dataset ${dataset_id}                  level=INFO
+                Log                     Deleting dataset ${dataset_id}                  DEBUG
                 Delete dataset          ${dataset_id}           expected_status=any     params=${QUERY_PARAMS}
-                Log                     Successfully deleted dataset ${dataset_id}      level=INFO
             EXCEPT    AS    ${delete_error}
-                Log                     Failed to delete dataset ${dataset_id}: ${delete_error}                 level=WARN
+                Log                     Failed to delete dataset ${dataset_id}: ${delete_error}                 WARN
             END
         END
     END
@@ -309,4 +289,4 @@ Clean Up All Created Datasets
     # Reset the list of created datasets
     @{empty_list}=          Create List
     Set Suite Variable      ${CREATED_DATASET_IDS}                          ${empty_list}
-    Log                     Dataset cleanup complete. CREATED_DATASET_IDS reset to: ${CREATED_DATASET_IDS}                  level=INFO
+    Log                     Dataset cleanup complete. CREATED_DATASET_IDS reset to: ${CREATED_DATASET_IDS}                  INFO

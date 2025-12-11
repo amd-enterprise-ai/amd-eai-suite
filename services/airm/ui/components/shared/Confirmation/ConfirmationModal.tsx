@@ -11,7 +11,7 @@ import {
 } from '@heroui/react';
 import { FC, ReactNode } from 'react';
 
-import { useTranslation } from 'next-i18next';
+import { Trans, useTranslation } from 'next-i18next';
 import { ActionButton } from '@/components/shared/Buttons';
 
 interface Props {
@@ -53,34 +53,32 @@ export const ConfirmationModal: FC<Props> = ({
         isOpen={isOpen}
       >
         <ModalContent>
-          <>
-            <ModalHeader className="flex flex-col gap-1">{title}</ModalHeader>
-            <ModalBody className="dark:text-default-500 text-default-600">
-              {description}
-            </ModalBody>
-            <ModalFooter>
-              <ActionButton
-                tertiary
-                aria-label={t('actions.close.title') || ''}
-                isDisabled={loading}
-                onPress={onClose}
-              >
-                {t('actions.close.title')}
-              </ActionButton>
-              <ActionButton
-                primary
-                aria-label={
-                  confirmationButtonText || t('actions.confirm.title') || ''
-                }
-                data-testid="confirm-button"
-                isLoading={loading}
-                color={confirmationButtonColor}
-                onPress={onConfirm}
-              >
-                {confirmationButtonText || t('actions.confirm.title')}
-              </ActionButton>
-            </ModalFooter>
-          </>
+          <ModalHeader className="flex flex-col gap-1">{title}</ModalHeader>
+          <ModalBody className="dark:text-default-500 text-default-600">
+            <Trans parent="p">{description}</Trans>
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton
+              tertiary
+              aria-label={t('actions.close.title') || ''}
+              isDisabled={loading}
+              onPress={onClose}
+            >
+              {t('actions.close.title')}
+            </ActionButton>
+            <ActionButton
+              primary
+              aria-label={
+                confirmationButtonText || t('actions.confirm.title') || ''
+              }
+              data-testid="confirm-button"
+              isLoading={loading}
+              color={confirmationButtonColor}
+              onPress={onConfirm}
+            >
+              {confirmationButtonText || t('actions.confirm.title')}
+            </ActionButton>
+          </ModalFooter>
         </ModalContent>
       </Modal>
     </div>

@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  IconAlertHexagonFilled,
-  IconAlertTriangleFilled,
-  IconCircleCheckFilled,
-  IconInfoCircleFilled,
+  IconAlertHexagon,
+  IconAlertTriangle,
+  IconCircleCheck,
+  IconInfoCircle,
 } from '@tabler/icons-react';
 import { ReactNode } from 'react';
 import { ToastOptions, toast } from 'react-toastify';
@@ -23,9 +23,9 @@ export const useSystemToast = () => {
 
   /** Error toast **/
   const errorIcon = () => (
-    <IconAlertHexagonFilled
+    <IconAlertHexagon
       style={{
-        fill: 'var(--toastify-color-error)',
+        color: 'var(--toastify-color-error)',
       }}
     />
   );
@@ -33,6 +33,7 @@ export const useSystemToast = () => {
   const errorStyle = {
     background: 'var(--toastify-background-error)',
     color: 'var(--toastify-text-error)',
+    lineHeight: '1.3',
   };
 
   _toast.error = (
@@ -55,27 +56,31 @@ export const useSystemToast = () => {
   _toast.info = (toastContent: ReactNode | string) => {
     toast.info(toastContent, {
       icon: (
-        <IconInfoCircleFilled
+        <IconInfoCircle
           style={{
-            fill: 'var(--toastify-color-info)',
+            color: 'var(--toastify-color-info)',
           }}
         />
       ),
+      style: {
+        lineHeight: '1.3',
+      },
     });
   };
 
   _toast.warning = (toastContent: ReactNode | string) => {
     toast.warning(toastContent, {
       icon: (
-        <IconAlertTriangleFilled
+        <IconAlertTriangle
           style={{
-            fill: 'var(--toastify-color-warning)',
+            color: 'var(--toastify-color-warning)',
           }}
         />
       ),
       style: {
         background: 'var(--toastify-background-warning)',
         color: 'var(--toastify-text-warning)',
+        lineHeight: '1.3',
       },
     });
   };
@@ -83,10 +88,11 @@ export const useSystemToast = () => {
   _toast.success = (toastContent: ReactNode | string) => {
     toast.success(toastContent, {
       icon: (
-        <IconCircleCheckFilled
-          style={{ fill: 'var(--toastify-color-success)' }}
-        />
+        <IconCircleCheck style={{ color: 'var(--toastify-color-success)' }} />
       ),
+      style: {
+        lineHeight: '1.3',
+      },
     });
   };
 

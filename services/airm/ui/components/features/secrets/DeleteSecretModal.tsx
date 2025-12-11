@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 import useSystemToast from '@/hooks/useSystemToast';
 import { deleteProjectSecret, deleteSecret } from '@/services/app/secrets';
 import { APIRequestError } from '@/utils/app/errors';
@@ -64,11 +64,7 @@ export default function DeleteSecretModal({
   return (
     <ConfirmationModal
       confirmationButtonColor="danger"
-      description={
-        <Trans parent="span">
-          {t(`form.${formKey}.description`, { name: secret.name })}
-        </Trans>
-      }
+      description={t(`form.${formKey}.description`, { name: secret.name })}
       title={t(`form.${formKey}.title`)}
       isOpen={isOpen}
       loading={isPending}

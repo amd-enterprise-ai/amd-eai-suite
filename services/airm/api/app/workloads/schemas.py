@@ -23,7 +23,7 @@ class WorkloadResponse(BaseEntityPublic):
 
 
 class Workloads(BaseModel):
-    workloads: list[WorkloadResponse]
+    data: list[WorkloadResponse]
 
 
 class WorkloadComponent(BaseEntityPublic):

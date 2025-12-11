@@ -7,7 +7,7 @@ from airm.messaging.schemas import WorkloadStatus
 from ..models.models import OnboardingStatus
 
 
-def workload_status_to_model_status(status: WorkloadStatus):
+def workload_status_to_model_status(status: WorkloadStatus) -> OnboardingStatus:
     """Maps the workload status from k8s to the onboarding status."""
     match status:
         case WorkloadStatus.PENDING | WorkloadStatus.RUNNING | WorkloadStatus.DELETING | WorkloadStatus.UNKNOWN:

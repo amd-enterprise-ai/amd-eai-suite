@@ -129,11 +129,11 @@ const ResourceAllocationInformer: FC<ResourceAllocationInformerProps> = ({
         <Alert
           variant="bordered"
           color="default"
-          classNames={{ base: 'pl-2' }}
+          classNames={{ base: 'pl-2', iconWrapper: alertContent.color }}
           hideIconWrapper={true}
           icon={
             <>
-              <IconAlertTriangle size="16" className={alertContent.color} />
+              <IconAlertTriangle size="16" />
             </>
           }
           description={alertContent.description}

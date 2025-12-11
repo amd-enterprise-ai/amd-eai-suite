@@ -4,8 +4,7 @@
 
 export * from './DeleteSecretModal';
 export * from './AssignSecret';
-export * from './AssignSecretToProject';
 export * from './AddSecret';
 export * from './SecretsTable';
-export * from './ProjectSecretStatus';
-export * from './SecretStatus';
+export * from './AddProjectSecretButton';
+export * from './AssignOrgSecretToProject';

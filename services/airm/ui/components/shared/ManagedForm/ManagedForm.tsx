@@ -51,6 +51,7 @@ export const ManagedForm = <T extends Record<string, any>>({
 
   const form = useForm<T>({
     mode: 'onChange',
+    reValidateMode: 'onChange',
     resolver: resolver(validationSchema),
     defaultValues: defaultValues,
     shouldUnregister: true,

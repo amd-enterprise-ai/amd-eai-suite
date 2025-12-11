@@ -42,7 +42,7 @@ import ClientSideDataTable from '@/components/shared/DataTable/ClientSideDataTab
 import {
   DateDisplay,
   NoDataDisplay,
-  StatusBadgeDisplay,
+  StatusDisplay,
   TranslationDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
 import { ActionsToolbar } from '@/components/shared/Toolbar/ActionsToolbar';
@@ -206,7 +206,7 @@ const WorkspacesPage: React.FC = () => {
       return !item.status ? (
         <NoDataDisplay />
       ) : (
-        <StatusBadgeDisplay
+        <StatusDisplay
           type={item[WorkloadsTableFields.STATUS]}
           variants={getWorkloadStatusVariants(t)}
         />

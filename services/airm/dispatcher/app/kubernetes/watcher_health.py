@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 
-def register_watcher(watcher_name: str):
+def register_watcher(watcher_name: str) -> None:
     if watcher_name in watcher_status_map:
         raise ValueError(f"Watcher '{watcher_name}' is already registered.")
 
@@ -17,7 +17,7 @@ def register_watcher(watcher_name: str):
 watcher_status_map: dict[str, datetime] = {}
 
 
-def update_last_watch_attempt(name: str):
+def update_last_watch_attempt(name: str) -> None:
     if name not in watcher_status_map:
         raise KeyError(f"Watcher '{name}' is not registered. Call register_watcher() first.")
     watcher_status_map[name] = datetime.now()

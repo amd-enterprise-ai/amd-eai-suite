@@ -214,14 +214,15 @@ services:
       dockerfile: Dockerfile
     container_name: mock-cluster-auth
     ports:
-      - "8081:8081"
+      - "48012:48012"
     environment:
       ADMIN_TOKEN: ${CLUSTER_AUTH_ADMIN_TOKEN:-mock-admin-token}
       LOG_LEVEL: INFO
     networks:
       - airm_network
+    profiles: [workbench]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:48012/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -267,40 +268,6 @@ services:
       POSTGRES_DB: airm
     command: >
       sh -c "uv run wm init && uv run -m app.charts.registration"
-    depends_on:
-      seed-db:
-        condition: service_completed_successfully
-
-  aims-registration:
-    container_name: aims-registration
-    image: ghcr.io/astral-sh/uv:python3.13-bookworm
-    networks: [airm_network]
-    profiles: [workbench]
-    working_dir: /app/services/airm/api
-    volumes:
-      - ../../..:/app:delegated
-      - uv_cache:/root/.cache/uv
-      - reg_env:/app/services/airm/api/.venv
-      - ~/.ssh:/root/.ssh:ro
-    environment:
-      PYTHONPATH: /app/services/airm/api
-      DATABASE_HOST: postgres
-      DATABASE_PORT: "5432"
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
-      POSTGRES_DB: airm
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-      AIM_METADATA_FILE_PATH: /app/services/airm/api/app/aims/aim-metadata.yaml
-    command: >
-      sh -c '
-        if [ -f "$$AIM_METADATA_FILE_PATH" ]; then
-          echo "Metadata file exists, running registration...";
-          uv run wm init && uv run -m app.aims.registration;
-        else
-          echo "Metadata file not found, fetching and registering...";
-          uv run wm init && uv run -m app.aims.fetching && uv run -m app.aims.registration;
-        fi
-      '
     depends_on:
       seed-db:
         condition: service_completed_successfully

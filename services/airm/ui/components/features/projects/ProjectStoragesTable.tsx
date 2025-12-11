@@ -2,16 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 import { Chip } from '@heroui/react';
-import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { fetchProjectStorages } from '@/services/app/storages';
-
-import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@/utils/app/api-helpers';
 import { getFilteredData } from '@/utils/app/data-table';
-import { doesProjectStorageDataNeedToBeRefreshed } from '@/utils/app/storages';
 import { displayTimestamp } from '@/utils/app/strings';
 
 import { ActionItem, TableColumns } from '@/types/data-table/clientside-table';
@@ -19,51 +14,35 @@ import { CustomComparatorConfig } from '@/types/data-table/table-comparators';
 import { SecretsTableField } from '@/types/enums/secrets-table-field';
 import { StoragesTableField } from '@/types/enums/storages';
 import { ClientSideDataFilter } from '@/types/filters';
+import { ProjectStorageWithParentStorage } from '@/types/storages';
+
 import {
-  ProjectStorageWithParentStorage,
-  ProjectStoragesResponse,
-} from '@/types/storages';
-
-import { ClientSideDataTable } from '@/components/shared/DataTable';
-
-import { ProjectStorageStatus } from '../storages';
+  ClientSideDataTable,
+  StatusDisplay,
+} from '@/components/shared/DataTable';
+import getProjectStorageStatusVariants from '@/utils/app/project-storage-status-variants';
+import StatusError from '@/components/shared/StatusError/StatusError';
+// import { ProjectStorageStatus } from "../storages";
+import { ProjectStorageStatus } from '@/types/enums/storages';
 
 interface Props {
   filters?: ClientSideDataFilter<ProjectStorageWithParentStorage>[];
   actions?: ActionItem<ProjectStorageWithParentStorage>[];
-  projectId: string;
   projectStorages: ProjectStorageWithParentStorage[];
+  isLoading: boolean;
 }
 
 export const ProjectStoragesTable: React.FC<Props> = ({
   filters,
   actions,
-  projectId,
+  isLoading,
   projectStorages,
 }) => {
   const { t } = useTranslation('storages');
 
-  const { data: projectStoragesData, isLoading: isSecretsLoading } =
-    useQuery<ProjectStoragesResponse>({
-      queryKey: ['project-storages', projectId],
-      queryFn: () => fetchProjectStorages(projectId),
-      initialData: {
-        projectStorages,
-      },
-      refetchInterval: (query) => {
-        return !query.state.data ||
-          doesProjectStorageDataNeedToBeRefreshed(
-            query.state.data.projectStorages,
-          )
-          ? DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA
-          : false;
-      },
-    });
-
   const filteredData = useMemo(() => {
-    const data = projectStoragesData.projectStorages;
-    return getFilteredData(data, filters);
-  }, [projectStoragesData, filters]);
+    return getFilteredData(projectStorages, filters);
+  }, [projectStorages, filters]);
 
   const columns: TableColumns<StoragesTableField | null> = [
     {
@@ -96,9 +75,20 @@ export const ProjectStoragesTable: React.FC<Props> = ({
         return <Chip>{t(`storageType.${item.storage.type}`)}</Chip>;
       },
       [StoragesTableField.STATUS]: (item: ProjectStorageWithParentStorage) => (
-        <ProjectStorageStatus
-          status={item.status}
-          statusReason={item.statusReason}
+        <StatusDisplay
+          type={item.status}
+          variants={getProjectStorageStatusVariants(t)}
+          bypassProps={
+            (item.status === ProjectStorageStatus.FAILED ||
+              item.status === ProjectStorageStatus.DELETE_FAILED ||
+              item.status === ProjectStorageStatus.SYNCED_ERROR) &&
+            !!item.statusReason
+              ? {
+                  isClickable: true,
+                  helpContent: <StatusError statusReason={item.statusReason} />,
+                }
+              : undefined
+          }
         />
       ),
       [StoragesTableField.SCOPE]: (item: ProjectStorageWithParentStorage) => {
@@ -134,7 +124,7 @@ export const ProjectStoragesTable: React.FC<Props> = ({
         defaultSortByField={'name'}
         translation={t}
         idKey={'id'}
-        isLoading={isSecretsLoading}
+        isLoading={isLoading}
         rowActions={actions}
       />
     </div>

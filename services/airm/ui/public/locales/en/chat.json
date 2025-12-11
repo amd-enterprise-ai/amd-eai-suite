@@ -102,8 +102,10 @@
   "errors": {
     "modelLoadingFailed": "Error loading models",
     "workloadLoadingFailed": "Error loading workloads",
-    "chatResponseFailed": "Error fetching chat response. Please try again.",
-    "noCanonicalName": "No canonical name found"
+    "chatResponseFailed": "Error fetching chat response. Please try again."
+  },
+  "notifications": {
+    "delayedResponse": "It seems that the response is taking longer than usual. This might be due to high server load or model warmup. Please wait a moment while we process your request."
   },
   "debugInfoModal": {
     "title": "Debug Information",

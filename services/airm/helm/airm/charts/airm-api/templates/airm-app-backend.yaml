@@ -43,8 +43,6 @@ spec:
               value: "{{ .Values.airm.keycloak.clientId }}"
             - name: DISABLE_JWT_VALIDATION
               value: "false"
-            - name: OPENID_CONFIGURATION_URL
-              value: {{ template "airm-api.keycloakPublicUrl" . }}/realms/{{ .Values.airm.keycloak.realm }}/.well-known/openid-configuration
             - name: POST_REGISTRATION_REDIRECT_URL
               value: "https://{{ .Values.kgateway.airmui.prefixValue }}.{{ .Values.airm.appDomain }}/"
             - name: DATABASE_HOST
@@ -77,9 +75,9 @@ spec:
                 secretKeyRef:
                   key: password
                   name: "{{ .Release.Name }}-rabbitmq-admin"
-            - name: KEYCLOAK_SERVER_URL
-              value: "{{ .Values.airm.keycloak.internalUrl }}"
-            - name: KEYCLOAK_ADMIN_SERVER_URL
+            - name: KEYCLOAK_PUBLIC_URL
+              value: {{ template "airm-api.keycloakPublicUrl" . }}
+            - name: KEYCLOAK_INTERNAL_URL
               value: "{{ .Values.airm.keycloak.internalUrl }}"
             - name: KEYCLOAK_REALM
               value: "{{ .Values.airm.keycloak.realm }}"
@@ -109,8 +107,6 @@ spec:
                   name: "{{ .Release.Name }}-api-minio-credentials"
             - name: PROMETHEUS_URL
               value: "{{ .Values.airm.backend.env.prometheusUrl }}"
-            - name: AIM_OTEL_COLLECTOR_SIDECAR_REF
-              value: "{{ .Release.Namespace }}/{{ .Release.Name }}-{{ .Values.aims.otelCollector.name }}"
             - name: CLUSTER_AUTH_URL
               value: "{{ .Values.airm.backend.env.clusterAuthUrl }}"
             - name: CLUSTER_AUTH_ADMIN_TOKEN
@@ -208,34 +204,6 @@ spec:
           image: "{{ .Values.airm.backend.image.repository }}:{{ .Values.airm.backend.image.tag }}"
           imagePullPolicy: {{ .Values.airm.backend.image.pullPolicy }}
           command: ["uv", "run", "-m", "app.charts.registration"]
-          env:
-            - name: DATABASE_HOST
-              value: "{{ .Release.Name }}-cnpg-rw.{{ .Release.Namespace }}.svc.cluster.local"
-            - name: DATABASE_PORT
-              value: "{{ .Values.airm.backend.env.dbPort }}"
-            - name: DATABASE_USER
-              valueFrom:
-                secretKeyRef:
-                  name: "{{ .Release.Name }}-cnpg-user"
-                  key: username
-            - name: DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: "{{ .Release.Name }}-cnpg-user"
-                  key: password
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: 1000
-            seccompProfile:
-              type: RuntimeDefault
-            capabilities:
-              drop:
-                - ALL
-        - name: aim-metadata-registration
-          image: "{{ .Values.airm.backend.image.repository }}:{{ .Values.airm.backend.image.tag }}"
-          imagePullPolicy: {{ .Values.airm.backend.image.pullPolicy }}
-          command: ["uv", "run", "-m", "app.aims.registration"]
           env:
             - name: DATABASE_HOST
               value: "{{ .Release.Name }}-cnpg-rw.{{ .Release.Namespace }}.svc.cluster.local"

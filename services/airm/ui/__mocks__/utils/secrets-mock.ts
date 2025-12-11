@@ -6,6 +6,7 @@ import {
   SecretScope,
   SecretStatus,
   SecretType,
+  SecretUseCase,
 } from '@/types/enums/secrets';
 import {
   ProjectSecret,
@@ -18,12 +19,15 @@ export const generateMockSecrets = (n: number): Secret[] => {
     id: `secret-${i + 1}`,
     name: `My Secret ${i + 1}`,
     displayName: `My Secret Display Name ${i + 1}`,
-    type: SecretType.EXTERNAL,
+    type: SecretType.EXTERNAL_SECRET,
     status: SecretStatus.PENDING,
     statusReason: '',
+    useCase: SecretUseCase.GENERIC,
     scope: SecretScope.ORGANIZATION,
     projectSecrets: generateMockProjectSecrets(1),
     createdAt: new Date().toISOString(),
+    createdBy: 'user@example.com',
+    updatedBy: 'user@example.com',
     updatedAt: new Date().toISOString(),
   }));
 };
@@ -60,6 +64,7 @@ export const generateMockProjectSecretsWithParentSecret = (
     displayName: `My Project Display Name ${i + 1}`,
     scope: SecretScope.PROJECT,
     status: ProjectSecretStatus.PENDING,
+    useCase: SecretUseCase.GENERIC,
     statusReason: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

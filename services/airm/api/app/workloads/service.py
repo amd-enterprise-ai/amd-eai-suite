@@ -18,7 +18,7 @@ from airm.messaging.schemas import (
 )
 
 from ..clusters.models import Cluster
-from ..messaging.publisher import submit_message_to_cluster_queue
+from ..messaging.sender import MessageSender
 from ..projects.models import Project
 from ..utilities.exceptions import ConflictException
 from .enums import WorkloadType
@@ -60,7 +60,13 @@ from .utils import (
 
 
 async def extract_components_and_submit_workload(
-    session: AsyncSession, workload: Workload, project: Project, manifest: list[dict], creator: str, token: str
+    session: AsyncSession,
+    workload: Workload,
+    project: Project,
+    manifest: list[dict],
+    creator: str,
+    token: str,
+    message_sender: MessageSender,
 ) -> None:
     components_with_manifests = extract_workload_components_from_manifest(manifest, workload.id)
     # Separate the list into components and manifests lists
@@ -81,7 +87,7 @@ async def extract_components_and_submit_workload(
     message = WorkloadMessage(
         message_type="workload", manifest=workload_manifest, user_token=token, workload_id=workload.id
     )
-    await submit_message_to_cluster_queue(project.cluster_id, message)
+    await message_sender.enqueue(project.cluster_id, message)
 
 
 async def create_and_submit_workload(
@@ -92,6 +98,7 @@ async def create_and_submit_workload(
     token: str,
     workload_type: WorkloadType,
     display_name: str,
+    message_sender: MessageSender,
 ) -> WorkloadResponse:
     workload = await create_workload_in_db(
         session=session,
@@ -102,11 +109,13 @@ async def create_and_submit_workload(
         workload_type=workload_type,
         display_name=display_name,
     )
-    await extract_components_and_submit_workload(session, workload, project, manifest, creator, token)
+    await extract_components_and_submit_workload(session, workload, project, manifest, creator, token, message_sender)
     return WorkloadResponse.model_validate(workload)
 
 
-async def submit_delete_workload(session: AsyncSession, workload: WorkloadResponse, user: str):
+async def submit_delete_workload(
+    session: AsyncSession, workload: WorkloadResponse, user: str, message_sender: MessageSender
+) -> None:
     if workload.status == WorkloadStatus.DELETING:
         raise ConflictException("Workload is already marked for deletion")
     elif workload.status == WorkloadStatus.DELETED:
@@ -121,7 +130,7 @@ async def submit_delete_workload(session: AsyncSession, workload: WorkloadRespon
     await update_workload_status_in_db(session, workload, WorkloadStatus.DELETING.value, datetime.now(UTC), user)
 
     message = DeleteWorkloadMessage(message_type="delete_workload", workload_id=workload.id)
-    await submit_message_to_cluster_queue(workload.cluster_id, message)
+    await message_sender.enqueue(workload.cluster_id, message)
 
 
 async def get_workload_with_components(session: AsyncSession, workload: WorkloadResponse) -> WorkloadWithComponents:
@@ -153,7 +162,9 @@ async def get_stats_for_workloads_in_organization(session: AsyncSession, organiz
     )
 
 
-async def update_workload_status(session: AsyncSession, cluster: Cluster, workload_status: WorkloadStatusMessage):
+async def update_workload_status(
+    session: AsyncSession, cluster: Cluster, workload_status: WorkloadStatusMessage
+) -> None:
     workload = await get_workload_by_id_in_cluster(session, workload_status.workload_id, cluster.id)
 
     if workload is None:
@@ -171,17 +182,17 @@ async def update_workload_status(session: AsyncSession, cluster: Cluster, worklo
 
 async def get_workloads_by_project(session: AsyncSession, project_id: UUID) -> Workloads:
     db_workloads = await get_workloads_by_project_in_db(session, project_id)
-    return Workloads(workloads=[WorkloadResponse.model_validate(workload) for workload in db_workloads])
+    return Workloads(data=[WorkloadResponse.model_validate(workload) for workload in db_workloads])
 
 
 async def get_workloads_accessible_to_user(session: AsyncSession, accessible_projects: list[Project]) -> Workloads:
     db_workloads = await get_workloads_accessible_to_user_from_db(session, accessible_projects)
-    return Workloads(workloads=[WorkloadResponse.model_validate(workload) for workload in db_workloads])
+    return Workloads(data=[WorkloadResponse.model_validate(workload) for workload in db_workloads])
 
 
 async def update_workload_component_status(
     session: AsyncSession, cluster: Cluster, message: WorkloadComponentStatusMessage
-):
+) -> None:
     workload = await get_workload_by_id_in_cluster(session, message.workload_id, cluster.id)
 
     if workload is None:
@@ -221,7 +232,7 @@ async def update_workload_component_status(
 
 async def register_auto_discovered_workload_component(
     session: AsyncSession, cluster: Cluster, message: AutoDiscoveredWorkloadComponentMessage
-):
+) -> None:
     workload = await get_workload_by_id_in_cluster(session, message.workload_id, cluster.id)
     submitter = message.submitter or "system"
     if not workload:
@@ -253,7 +264,7 @@ async def register_auto_discovered_workload_component(
 
 async def increment_workload_time_summary(
     session: AsyncSession, workload_id: UUID, status: str, duration_in_status: timedelta
-):
+) -> None:
     duration_in_status_seconds = duration_in_status.total_seconds()
     workload_time_summary = await get_workload_time_summary_by_workload_id_and_status(session, workload_id, status)
     if workload_time_summary:

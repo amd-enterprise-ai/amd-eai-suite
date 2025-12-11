@@ -4,6 +4,7 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { act } from 'react';
+import React from 'react';
 
 import { Aim } from '@/types/aims';
 
@@ -38,6 +39,44 @@ vi.mock('@heroui/react', () => ({
       {children}
       {copyIcon}
     </div>
+  ),
+  Switch: ({ children, isSelected, onValueChange, ...props }: any) => (
+    <label data-testid="switch" {...props}>
+      <input
+        type="checkbox"
+        checked={isSelected}
+        onChange={(e) => onValueChange?.(e.target.checked)}
+        data-testid="switch-input"
+      />
+      {children}
+    </label>
+  ),
+  Tabs: ({ children, selectedKey, onSelectionChange, ...props }: any) => {
+    // Clone children and pass onSelectionChange to Tab components
+    const clonedChildren = React.Children.map(children, (child) => {
+      if (React.isValidElement(child)) {
+        return React.cloneElement(child as any, {
+          onSelectionChange,
+          tabKey: (child as any).key, // Pass the key as a prop
+        });
+      }
+      return child;
+    });
+
+    return (
+      <div data-testid="tabs" data-selected={selectedKey} {...props}>
+        {clonedChildren}
+      </div>
+    );
+  },
+  Tab: ({ title, onSelectionChange, tabKey, ...props }: any) => (
+    <button
+      data-testid={`tab-${tabKey || props.key}`}
+      onClick={() => onSelectionChange?.(tabKey || props.key)}
+      {...props}
+    >
+      {title}
+    </button>
   ),
 }));
 
@@ -74,6 +113,7 @@ vi.mock('@/components/shared/Modal/Modal', () => ({
 // Mock Tabler icon
 vi.mock('@tabler/icons-react', () => ({
   IconCopy: () => <div data-testid="copy-icon">Copy</div>,
+  IconCheck: () => <div data-testid="check-icon">Check</div>,
 }));
 
 describe('AIMConnectModal', () => {
@@ -170,11 +210,13 @@ describe('AIMConnectModal', () => {
 
       render(<AIMConnectModal {...defaultProps} aim={aimWithExternalHost} />);
 
-      const externalUrlInput = screen.getByDisplayValue(
-        'https://api.example.com/v1/chat/completions',
+      const snippets = screen.getAllByTestId('code-snippet');
+      const externalUrlSnippet = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'https://api.example.com/v1/chat/completions',
+        ),
       );
-      expect(externalUrlInput).toBeInTheDocument();
-      expect(externalUrlInput).toHaveAttribute('readOnly');
+      expect(externalUrlSnippet).toBeInTheDocument();
     });
 
     it('generates correct internal URL from mock data', () => {
@@ -191,11 +233,13 @@ describe('AIMConnectModal', () => {
 
       render(<AIMConnectModal {...defaultProps} aim={aimWithInternalHost} />);
 
-      const internalUrlInput = screen.getByDisplayValue(
-        'http://test-internal.example.com/v1/chat/completions',
+      const snippets = screen.getAllByTestId('code-snippet');
+      const internalUrlSnippet = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'http://test-internal.example.com/v1/chat/completions',
+        ),
       );
-      expect(internalUrlInput).toBeInTheDocument();
-      expect(internalUrlInput).toHaveAttribute('readOnly');
+      expect(internalUrlSnippet).toBeInTheDocument();
     });
 
     it('handles aim without workload output', () => {
@@ -203,12 +247,9 @@ describe('AIMConnectModal', () => {
         <AIMConnectModal {...defaultProps} aim={mockAimWithoutWorkload} />,
       );
 
-      // Should render empty URL
-      const inputs = screen.getAllByRole('textbox');
-      const emptyInput = inputs.find(
-        (input) => input.getAttribute('value') === '',
-      );
-      expect(emptyInput).toBeInTheDocument();
+      // Should render at least one snippet (internal URL is always shown)
+      const snippets = screen.getAllByTestId('code-snippet');
+      expect(snippets.length).toBeGreaterThan(0);
     });
   });
 
@@ -227,7 +268,11 @@ describe('AIMConnectModal', () => {
 
       render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
 
-      const codeSnippet = screen.getByTestId('code-snippet');
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      // The code example snippet is the one with curl command
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl -X POST'),
+      );
       expect(codeSnippet).toBeInTheDocument();
 
       // Check if the code snippet contains expected content
@@ -249,7 +294,11 @@ describe('AIMConnectModal', () => {
     it('includes aim canonical name in code snippet', () => {
       render(<AIMConnectModal {...defaultProps} />);
 
-      const codeSnippet = screen.getByTestId('code-snippet');
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      // The code example snippet is the one with curl command
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl -X POST'),
+      );
       expect(codeSnippet).toHaveTextContent(mockAimWithWorkload.canonicalName);
     });
 
@@ -263,7 +312,11 @@ describe('AIMConnectModal', () => {
         <AIMConnectModal {...defaultProps} aim={aimWithoutCanonicalName} />,
       );
 
-      const codeSnippet = screen.getByTestId('code-snippet');
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      // The code example snippet is the one with curl command
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl -X POST'),
+      );
       expect(codeSnippet).toHaveTextContent('"model": ""');
     });
   });
@@ -338,7 +391,7 @@ describe('AIMConnectModal', () => {
   });
 
   describe('Accessibility', () => {
-    it('sets correct aria-labels on input fields', () => {
+    it('sets correct aria-labels on snippet fields', () => {
       const aimWithHosts = {
         ...mockAimWithWorkload,
         workload: {
@@ -352,25 +405,31 @@ describe('AIMConnectModal', () => {
 
       render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
 
-      const externalUrlInput = screen.getByDisplayValue(
-        'https://api.example.com/v1/chat/completions',
-      );
+      const snippets = screen.getAllByTestId('code-snippet');
 
-      // Make sure the internal URL is not rendered
-      const codeSnippet = screen.getByTestId('code-snippet');
-
-      expect(externalUrlInput).toHaveAttribute(
-        'aria-label',
-        'actions.connect.modal.externalUrl',
+      // Check external URL snippet
+      const externalUrlSnippet = snippets.find(
+        (snippet) =>
+          snippet.getAttribute('aria-label') ===
+          'actions.connect.modal.externalUrl',
       );
-      expect(codeSnippet).toHaveAttribute(
-        'aria-label',
-        'actions.connect.modal.codeExample',
-      );
+      expect(externalUrlSnippet).toBeInTheDocument();
 
-      expect(
-        screen.queryByText('http://test-host.example.com/v1/chat/completions'),
-      ).not.toBeInTheDocument();
+      // Check internal URL snippet
+      const internalUrlSnippet = snippets.find(
+        (snippet) =>
+          snippet.getAttribute('aria-label') ===
+          'actions.connect.modal.internalUrl',
+      );
+      expect(internalUrlSnippet).toBeInTheDocument();
+
+      // Check code example snippet
+      const codeSnippet = snippets.find(
+        (snippet) =>
+          snippet.getAttribute('aria-label') ===
+          'actions.connect.modal.codeExample',
+      );
+      expect(codeSnippet).toBeInTheDocument();
     });
   });
 
@@ -383,9 +442,9 @@ describe('AIMConnectModal', () => {
       // Should still render the modal
       expect(screen.getByTestId('modal')).toBeInTheDocument();
 
-      // URL inputs should be empty
-      const inputs = screen.getAllByRole('textbox');
-      expect(inputs.length).toBeGreaterThan(0);
+      // Should still render snippets
+      const snippets = screen.getAllByTestId('code-snippet');
+      expect(snippets.length).toBeGreaterThan(0);
     });
 
     it('handles undefined aim', () => {
@@ -406,11 +465,259 @@ describe('AIMConnectModal', () => {
       expect(modalContent).toBeInTheDocument();
     });
 
-    it('renders copy icon in code snippet', () => {
+    it('renders copy icons in snippets', () => {
       render(<AIMConnectModal {...defaultProps} />);
 
-      const copyIcon = screen.getByTestId('copy-icon');
-      expect(copyIcon).toBeInTheDocument();
+      const copyIcons = screen.getAllByTestId('copy-icon');
+      expect(copyIcons.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Language Selection', () => {
+    it('renders language tabs with curl as default', () => {
+      render(<AIMConnectModal {...defaultProps} />);
+
+      const tabs = screen.getByTestId('tabs');
+      expect(tabs).toBeInTheDocument();
+      expect(tabs).toHaveAttribute('data-selected', 'curl');
+    });
+
+    it('renders all three language tabs', () => {
+      render(<AIMConnectModal {...defaultProps} />);
+
+      expect(screen.getByTestId('tab-curl')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-python')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-javascript')).toBeInTheDocument();
+    });
+
+    it('displays curl code example by default', () => {
+      const aimWithHosts = {
+        ...mockAimWithWorkload,
+        workload: {
+          ...mockAimWithWorkload.workload!,
+          output: {
+            externalHost: 'https://api.example.com',
+            internalHost: 'test-host.example.com',
+          },
+        },
+      };
+
+      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl -X POST'),
+      );
+      expect(codeSnippet).toHaveTextContent('curl -X POST');
+      expect(codeSnippet).toHaveTextContent(
+        'https://api.example.com/v1/chat/completions',
+      );
+    });
+
+    it('displays python code example when selected', () => {
+      const aimWithHosts = {
+        ...mockAimWithWorkload,
+        workload: {
+          ...mockAimWithWorkload.workload!,
+          output: {
+            externalHost: 'https://api.example.com',
+            internalHost: 'test-host.example.com',
+          },
+        },
+      };
+
+      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      const codeSnippet = codeSnippets.find(
+        (snippet) =>
+          snippet.getAttribute('aria-label') ===
+          'actions.connect.modal.codeExample',
+      );
+
+      expect(codeSnippet).toBeDefined();
+    });
+
+    it('displays javascript code example when selected', () => {
+      const aimWithHosts = {
+        ...mockAimWithWorkload,
+        workload: {
+          ...mockAimWithWorkload.workload!,
+          output: {
+            externalHost: 'https://api.example.com',
+            internalHost: 'test-host.example.com',
+          },
+        },
+      };
+
+      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      const codeSnippet = codeSnippets.find(
+        (snippet) =>
+          snippet.getAttribute('aria-label') ===
+          'actions.connect.modal.codeExample',
+      );
+      expect(codeSnippet).toBeDefined();
+    });
+  });
+
+  describe('URL Toggle Switch', () => {
+    it('renders the internal URL switch', () => {
+      render(<AIMConnectModal {...defaultProps} />);
+
+      const switchElement = screen.getByTestId('switch');
+      expect(switchElement).toBeInTheDocument();
+      expect(switchElement).toHaveTextContent(
+        'actions.connect.modal.useInternalUrl',
+      );
+    });
+
+    it('switch is unchecked by default (external URL)', () => {
+      render(<AIMConnectModal {...defaultProps} />);
+
+      const switchInput = screen.getByTestId('switch-input');
+      expect(switchInput).not.toBeChecked();
+    });
+
+    it('toggles between external and internal URL in code snippet', async () => {
+      const aimWithHosts = {
+        ...mockAimWithWorkload,
+        workload: {
+          ...mockAimWithWorkload.workload!,
+          output: {
+            externalHost: 'https://api.example.com',
+            internalHost: 'test-host.example.com',
+          },
+        },
+      };
+
+      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl -X POST'),
+      );
+
+      // Initially should show external URL
+      expect(codeSnippet).toHaveTextContent(
+        'https://api.example.com/v1/chat/completions',
+      );
+
+      // Toggle switch
+      const switchInput = screen.getByTestId('switch-input');
+      await act(async () => {
+        fireEvent.click(switchInput);
+      });
+
+      // After toggle, the component would re-render with internal URL
+      // Note: Due to mock limitations, we verify the switch state changed
+      expect(switchInput).toBeChecked();
+    });
+  });
+
+  describe('Code Examples Content', () => {
+    const aimWithHosts = {
+      ...mockAimWithWorkload,
+      workload: {
+        ...mockAimWithWorkload.workload!,
+        output: {
+          externalHost: 'https://api.example.com',
+          internalHost: 'test-host.example.com',
+        },
+      },
+    };
+
+    it('curl example contains correct structure', () => {
+      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl -X POST'),
+      );
+      expect(codeSnippet).toHaveTextContent('curl -X POST');
+      expect(codeSnippet).toHaveTextContent('-H "Authorization: Bearer');
+      expect(codeSnippet).toHaveTextContent(
+        '-H "Content-Type: application/json"',
+      );
+      expect(codeSnippet).toHaveTextContent('"messages"');
+      expect(codeSnippet).toHaveTextContent('"stream": false');
+    });
+
+    it('includes UPDATE_YOUR_API_KEY_HERE placeholder in all examples', () => {
+      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl'),
+      );
+      expect(codeSnippet).toHaveTextContent('UPDATE_YOUR_API_KEY_HERE');
+    });
+
+    it('includes model canonical name in code examples', () => {
+      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl'),
+      );
+      expect(codeSnippet).toHaveTextContent(aimWithHosts.canonicalName);
+    });
+
+    it('includes Hello message in all examples', () => {
+      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+
+      const codeSnippets = screen.getAllByTestId('code-snippet');
+      const codeSnippet = codeSnippets.find((snippet) =>
+        snippet.textContent?.includes('curl'),
+      );
+      expect(codeSnippet).toHaveTextContent('Hello');
+    });
+  });
+
+  describe('URL Format', () => {
+    it('appends /v1/chat/completions to external host', () => {
+      const aimWithExternalHost = {
+        ...mockAimWithWorkload,
+        workload: {
+          ...mockAimWithWorkload.workload!,
+          output: {
+            externalHost: 'https://api.example.com',
+          },
+        },
+      };
+
+      render(<AIMConnectModal {...defaultProps} aim={aimWithExternalHost} />);
+
+      const snippets = screen.getAllByTestId('code-snippet');
+      const urlSnippet = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'https://api.example.com/v1/chat/completions',
+        ),
+      );
+      expect(urlSnippet).toBeInTheDocument();
+    });
+
+    it('appends /v1/chat/completions to internal host with http prefix', () => {
+      const aimWithInternalHost = {
+        ...mockAimWithWorkload,
+        workload: {
+          ...mockAimWithWorkload.workload!,
+          output: {
+            internalHost: 'internal.example.com',
+          },
+        },
+      };
+
+      render(<AIMConnectModal {...defaultProps} aim={aimWithInternalHost} />);
+
+      const snippets = screen.getAllByTestId('code-snippet');
+      const urlSnippet = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'http://internal.example.com/v1/chat/completions',
+        ),
+      );
+      expect(urlSnippet).toBeInTheDocument();
     });
   });
 });

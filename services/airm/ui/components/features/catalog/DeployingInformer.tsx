@@ -39,11 +39,9 @@ const DeployingInformer = (props: Props) => {
         <CardHeader className="text-lg font-semibold">{name}</CardHeader>
         <Divider />
         <CardBody className="text-md text-gray-500">
-          {!isDeployed ? (
-            <>{t('deployModal.deploymentStatus.deployingMessage')}</>
-          ) : (
-            <>{t('deployModal.deploymentStatus.readyMessage')}</>
-          )}
+          {!isDeployed
+            ? t('deployModal.deploymentStatus.deployingMessage')
+            : t('deployModal.deploymentStatus.readyMessage')}
         </CardBody>
         <Divider />
         <CardFooter>

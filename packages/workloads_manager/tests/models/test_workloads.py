@@ -38,7 +38,7 @@ def test_workload_metadata_validation():
     assert metadata.type == "training"
 
 
-def test_workload_creation(tmp_path: Path):
+def test_workload_creation(tmp_path: Path) -> None:
     """Test Workload class creation and properties."""
     workload_path = tmp_path / "test-workload"
     workload_path.mkdir()

@@ -156,9 +156,7 @@ class TestMinioClientOperations:
         # Check that the correct objects were passed to remove_objects
         assert client.remove_objects.call_count == 1
         assert client.remove_objects.call_args[0][0] == "bucket"
-        assert set(obj._name for obj in client.remove_objects.call_args[0][1]) == set(
-            obj._name for obj in delete_objects
-        )
+        assert set(obj.name for obj in client.remove_objects.call_args[0][1]) == set(obj.name for obj in delete_objects)
 
 
 class TestInitMinioClient:

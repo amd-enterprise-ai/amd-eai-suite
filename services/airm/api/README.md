@@ -14,8 +14,6 @@ The centralized API component handles both AI Resource Manager and AI Workbench 
 
 Dependencies are handled with `uv` which must be installed first. `uv` will create virtual environment and in order to utilize the environment, commands should be with `uv run`. There is _no_ need to manually install packages or activate environments.
 
-More details about `uv` can be read from our [dependency management guidelines](../../../docs/guidelines/dependency-management.md).
-
 ### Running AIRM API locally
 
 Note: If you are on a mac and see this error: Error: pg_config executable not found.
@@ -29,10 +27,10 @@ brew install postgresql
 
 If you want to test everything locally, you need to use `.env` and run `docker compose up -d`. This will spin up everything except the AIRM service, which you need to run with `uv run -m app`.
 
-Set up environment variables by first copying the .env.local file and making edits to secrets and other parameters:
+Set up environment variables by first copying the .env.example file and making edits to secrets and other parameters:
 
 ```bash
-cp .env.local .env
+cp .env.example .env
 ```
 
 Start Docker services:
@@ -71,8 +69,8 @@ This scheme does not need a client secret and you should be able to authenticate
   - run `docker compose --profile log up -d` to start the stack with the log generator
 - `export` - starts a service that can be used to export the keycloak realm for AIRM
   - run `docker compose --profile export run --rm keycloak-export` to export the realm to `./airm-realm.json`. Please note that the keycloak container should NOT be running when you run this command.
-- `workbench` - starts the containers that are needed to register AIMs and charts into the database
-  - run `docker compose --profile workbench up -d` to start the stack with aims-registration and charts-registration services
+- `workbench` - starts the containers that are needed to register and test AIMs
+  - run `docker compose --profile workbench up -d` to start the stack with aims-registration, charts-registration and mock-cluster-auth services
 
 ### MCP (Model Context Protocol) Integration
 

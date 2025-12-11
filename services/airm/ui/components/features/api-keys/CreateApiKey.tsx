@@ -27,7 +27,7 @@ import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
 import { FormField } from '@/types/forms/forms';
 import { Workload } from '@/types/workloads';
 
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import { FormFieldComponent } from '@/components/shared/ManagedForm/FormFieldComponent';
 import { KeyCreatedDrawer } from './KeyCreatedDrawer';
 

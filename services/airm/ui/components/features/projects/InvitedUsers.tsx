@@ -7,7 +7,7 @@ import { IconX } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 
 import useSystemToast from '@/hooks/useSystemToast';
 
@@ -138,7 +138,7 @@ export const InvitedUsers: React.FC<Props> = ({ project }) => {
         </Tooltip>
       </div>
       <div className="mt-4 pb-8">
-        {!!project.invitedUsers.length ? (
+        {project.invitedUsers.length ? (
           <ClientSideDataTable
             data={project.invitedUsers}
             columns={columns}
@@ -159,17 +159,13 @@ export const InvitedUsers: React.FC<Props> = ({ project }) => {
         selectedProjectIds={[project.id]}
       />
       <ConfirmationModal
-        description={
-          <Trans parent="span">
-            {t(
-              'settings.membersAndInvitedUsers.invitedUsers.actions.remove.description',
-              {
-                email: userBeingRemoved?.email,
-                project: project.name,
-              },
-            )}
-          </Trans>
-        }
+        description={t(
+          'settings.membersAndInvitedUsers.invitedUsers.actions.remove.description',
+          {
+            email: userBeingRemoved?.email,
+            project: project.name,
+          },
+        )}
         title={t(
           'settings.membersAndInvitedUsers.invitedUsers.actions.remove.confirm',
         )}

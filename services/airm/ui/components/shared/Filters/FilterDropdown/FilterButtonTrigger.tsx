@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DropdownTrigger, PressEvent, Tooltip, cn } from '@heroui/react';
+import { DropdownTrigger, Tooltip, cn } from '@heroui/react';
 import { IconChevronDown } from '@tabler/icons-react';
-import { ReactNode, useCallback, useMemo } from 'react';
+import { ReactNode, useMemo } from 'react';
 import ClearSingleFilterButton from '../ClearSingleFilterButton';
 import { InlineBadge } from '@/components/shared/InlineBadge';
 import { ActionButton } from '@/components/shared/Buttons';
@@ -28,17 +28,8 @@ const FilterButtonTrigger: React.FC<FilterButtonTriggerProps> = ({
   isActive = false,
   onReset,
 }) => {
-  const handleResetClick = useCallback(
-    (_e: PressEvent): void => {
-      onReset?.();
-    },
-    [onReset],
-  );
-
-  // Memoize complex conditional components for performance
-  const memoizedStartContent = useMemo(() => {
+  const badgeContent = useMemo(() => {
     if (!isActive) return null;
-
     return (
       <Tooltip content={tooltipText} delay={500} size="sm" className="max-w-40">
         <div className="cursor-help">
@@ -55,6 +46,8 @@ const FilterButtonTrigger: React.FC<FilterButtonTriggerProps> = ({
       <DropdownTrigger className="w-full">
         <ActionButton
           className="px-2"
+          aria-label={label}
+          startContent={badgeContent}
           endContent={
             <div className="w-6 h-6 min-w-6 flex justify-center items-center">
               {isActive && onReset ? null : (
@@ -62,18 +55,13 @@ const FilterButtonTrigger: React.FC<FilterButtonTriggerProps> = ({
               )}
             </div>
           }
-          aria-label={label}
-          startContent={memoizedStartContent}
         >
-          <div className="flex flex-grow items-center gap-2 truncate">
+          <div className="flex grow items-center gap-2 truncate">
             {startContent} {label}
           </div>
         </ActionButton>
       </DropdownTrigger>
-
-      {isActive && onReset && (
-        <ClearSingleFilterButton onPress={handleResetClick} />
-      )}
+      {isActive && onReset && <ClearSingleFilterButton onPress={onReset} />}
     </div>
   );
 };

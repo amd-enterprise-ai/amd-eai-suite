@@ -5,7 +5,8 @@
 import asyncio
 import time
 from asyncio import AbstractEventLoop, to_thread
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable
+from typing import Any
 
 from kubernetes import client, watch
 from loguru import logger
@@ -13,13 +14,15 @@ from loguru import logger
 from .watcher_health import register_watcher, update_last_watch_attempt
 
 
-async def start_kubernetes_watcher(watcher_name: str, watch_function, callback: Callable, *args, **kwargs) -> Coroutine:
+async def start_kubernetes_watcher(
+    watcher_name: str, watch_function: Callable, callback: Callable, *args: Any, **kwargs: Any
+) -> None:
     register_watcher(watcher_name)
     loop = asyncio.get_running_loop()
-    return await to_thread(__watch_k8s_resources, watcher_name, watch_function, callback, loop, *args, **kwargs)
+    await to_thread(__watch_k8s_resources, watcher_name, watch_function, callback, loop, *args, **kwargs)
 
 
-def get_installed_version_for_custom_resource(kube_client, group: str, plural: str) -> str | None:
+def get_installed_version_for_custom_resource(kube_client: Any, group: str, plural: str) -> str | None:
     try:
         api_ext = kube_client.ApiextensionsV1Api()
         crd = api_ext.read_custom_resource_definition(f"{plural}.{group}")
@@ -48,8 +51,8 @@ def get_installed_version_for_custom_resource(kube_client, group: str, plural: s
 
 
 async def start_kubernetes_watcher_if_resource_exists(
-    watcher_name: str, watch_function, callback: Callable, *args, **kwargs
-) -> Coroutine | None:
+    watcher_name: str, watch_function: Callable, callback: Callable, *args: Any, **kwargs: Any
+) -> None:
     try:
         watch_function(*args, **kwargs)
     except client.ApiException as e:
@@ -60,10 +63,12 @@ async def start_kubernetes_watcher_if_resource_exists(
             logger.exception(f"Error checking resource {watcher_name}.", e)
             raise
 
-    return await start_kubernetes_watcher(watcher_name, watch_function, callback, *args, **kwargs)
+    await start_kubernetes_watcher(watcher_name, watch_function, callback, *args, **kwargs)
 
 
-def __watch_k8s_resources(watcher_name, watch_function, callback: Callable, loop: AbstractEventLoop, *args, **kwargs):
+def __watch_k8s_resources(
+    watcher_name: str, watch_function: Callable, callback: Callable, loop: AbstractEventLoop, *args: Any, **kwargs: Any
+) -> None:
     logger.info(f"Starting Kubernetes event watchers {watcher_name}...")
     resource_version = None
     while True:

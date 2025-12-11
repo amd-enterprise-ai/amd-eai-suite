@@ -29,38 +29,36 @@ const UsersPage = ({ users, invitedUsers }: Props) => {
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const { isInviteEnabled } = useAccessControl();
   return (
-    <>
-      <div className="inline-flex flex-col w-full h-full max-h-full">
-        <Tabs
-          aria-label="Users tabs"
-          variant="underlined"
-          color="primary"
-          classNames={{
-            panel: !isInviteEnabled && 'py-0',
-            tabList: isInviteEnabled ? 'mt-8' : 'hidden',
-          }}
-        >
-          <Tab key="active" title={t('tabs.active')}>
-            <ActiveUsersTab initialData={users} onInviteUserClick={onOpen} />
+    <div className="inline-flex flex-col w-full h-full max-h-full">
+      <Tabs
+        aria-label="Users tabs"
+        variant="underlined"
+        color="primary"
+        classNames={{
+          panel: !isInviteEnabled && 'py-0',
+          tabList: isInviteEnabled ? 'mt-8' : 'hidden',
+        }}
+      >
+        <Tab key="active" title={t('tabs.active')}>
+          <ActiveUsersTab initialData={users} onInviteUserClick={onOpen} />
+        </Tab>
+        {isInviteEnabled && (
+          <Tab key="invited" title={t('tabs.invited')}>
+            <InvitedUsersTab
+              initialData={invitedUsers}
+              onInviteUserClick={onOpen}
+            />
           </Tab>
-          {isInviteEnabled && (
-            <Tab key="invited" title={t('tabs.invited')}>
-              <InvitedUsersTab
-                initialData={invitedUsers}
-                onInviteUserClick={onOpen}
-              />
-            </Tab>
-          )}
-        </Tabs>
+        )}
+      </Tabs>
 
-        <InviteUserModal
-          usersInitialData={users}
-          invitedUsersInitialData={invitedUsers}
-          isOpen={isOpen}
-          onOpenChange={onOpenChange}
-        />
-      </div>
-    </>
+      <InviteUserModal
+        usersInitialData={users}
+        invitedUsersInitialData={invitedUsers}
+        isOpen={isOpen}
+        onOpenChange={onOpenChange}
+      />
+    </div>
   );
 };
 

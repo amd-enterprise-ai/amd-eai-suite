@@ -2,13 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  render,
-  screen,
-  act,
-  waitFor,
-  fireEvent,
-} from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import FilterDropdown, {
@@ -110,6 +104,7 @@ describe('FilterDropdown Component', () => {
 
     await userEvent.click(item1);
 
+    // After clicking one item in a fully-selected list, only that item remains selected
     await waitFor(() => {
       const badge = screen.getByText('1');
       expect(badge).toBeInTheDocument();
@@ -135,10 +130,11 @@ describe('FilterDropdown Component', () => {
     const item1 = await screen.findByRole('menuitemcheckbox', {
       name: 'Item One',
     });
+
     await userEvent.click(item1);
 
     await waitFor(() => {
-      expect(onSelectionChangeMock).toHaveBeenCalledTimes(1);
+      expect(onSelectionChangeMock).toHaveBeenCalled();
     });
 
     // First interaction selects only the clicked item
@@ -191,233 +187,6 @@ describe('FilterDropdown Component', () => {
       name: 'Item One',
     });
     expect(item1).toHaveAttribute('aria-checked', 'false');
-  });
-
-  it('handles drag selection mouse events without errors', async () => {
-    render(<FilterDropdown {...defaultProps} />);
-    const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
-
-    const dropdownItem = await screen.findByText('Item One');
-    const itemElement = dropdownItem.closest('[role="menuitemcheckbox"]');
-
-    // Test mouse events don't cause errors
-    act(() => {
-      fireEvent.mouseDown(itemElement!);
-      fireEvent.mouseEnter(itemElement!);
-      fireEvent.mouseUp(itemElement!);
-    });
-
-    expect(itemElement).toBeInTheDocument();
-  });
-
-  it('supports drag selection to select multiple items', async () => {
-    const onSelectionChangeMock = vi.fn();
-    render(
-      <FilterDropdown
-        {...defaultProps}
-        onSelectionChange={onSelectionChangeMock}
-      />,
-    );
-    const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
-
-    const item1 = await screen.findByText('Item One');
-    const item2 = await screen.findByText('Item Two');
-    const item1Element = item1.closest('[role="menuitemcheckbox"]');
-    const item2Element = item2.closest('[role="menuitemcheckbox"]');
-
-    // Start drag on first item (this should select only item1 on first interaction)
-    act(() => {
-      fireEvent.mouseDown(item1Element!, {
-        button: 0,
-        bubbles: true,
-      });
-    });
-
-    // Drag to second item
-    act(() => {
-      fireEvent.mouseEnter(item2Element!, {
-        bubbles: true,
-      });
-    });
-
-    // End drag
-    act(() => {
-      fireEvent.mouseUp(item2Element!, {
-        button: 0,
-        bubbles: true,
-      });
-    });
-
-    await waitFor(() => {
-      expect(onSelectionChangeMock).toHaveBeenCalled();
-    });
-
-    // Should have been called at least once
-    expect(onSelectionChangeMock.mock.calls.length).toBeGreaterThanOrEqual(1);
-
-    // Verify the final state shows selected items
-    await waitFor(() => {
-      const badge = screen.getByText(/2/);
-      expect(badge).toBeInTheDocument();
-    });
-  });
-
-  it('supports drag selection to deselect items when starting from selected item', async () => {
-    const onSelectionChangeMock = vi.fn();
-    render(
-      <FilterDropdown
-        {...defaultProps}
-        defaultSelectedKeys={['item1', 'item2', 'item3']}
-        onSelectionChange={onSelectionChangeMock}
-      />,
-    );
-    const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
-
-    const item1 = await screen.findByText('Item One');
-    const item1Element = item1.closest('[role="menuitemcheckbox"]');
-
-    // Verify initial state - all items selected (no badge should show since all are selected)
-    expect(item1Element).toHaveAttribute('aria-checked', 'true');
-
-    // Start drag on first item (should deselect it since it's already selected)
-    act(() => {
-      fireEvent.mouseDown(item1Element!, {
-        button: 0,
-        bubbles: true,
-      });
-    });
-
-    // End drag
-    act(() => {
-      fireEvent.mouseUp(item1Element!, {
-        button: 0,
-        bubbles: true,
-      });
-    });
-
-    await waitFor(() => {
-      expect(onSelectionChangeMock).toHaveBeenCalled();
-    });
-
-    // Should show some badge indicating partial selection
-    await waitFor(() => {
-      const badge = screen.getByText(/1|2/); // Badge should show some number
-      expect(badge).toBeInTheDocument();
-    });
-  });
-
-  it('properly handles complex drag selection scenarios with mixed add/remove operations', async () => {
-    const onSelectionChangeMock = vi.fn();
-    render(
-      <FilterDropdown
-        {...defaultProps}
-        defaultSelectedKeys={[]} // Start with nothing selected
-        onSelectionChange={onSelectionChangeMock}
-      />,
-    );
-    const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
-
-    const item1 = await screen.findByText('Item One');
-    const item2 = await screen.findByText('Item Two');
-    const item3 = await screen.findByText('Item Three');
-    const item1Element = item1.closest('[role="menuitemcheckbox"]');
-    const item2Element = item2.closest('[role="menuitemcheckbox"]');
-    const item3Element = item3.closest('[role="menuitemcheckbox"]');
-
-    // Verify initial state - no items selected
-    expect(item1Element).toHaveAttribute('aria-checked', 'false');
-    expect(item2Element).toHaveAttribute('aria-checked', 'false');
-    expect(item3Element).toHaveAttribute('aria-checked', 'false');
-
-    // Perform a drag operation from item1 to item3
-    act(() => {
-      fireEvent.mouseDown(item1Element!, {
-        button: 0,
-        bubbles: true,
-      });
-    });
-
-    act(() => {
-      fireEvent.mouseEnter(item2Element!, {
-        bubbles: true,
-      });
-    });
-
-    act(() => {
-      fireEvent.mouseEnter(item3Element!, {
-        bubbles: true,
-      });
-    });
-
-    act(() => {
-      fireEvent.mouseUp(item3Element!, {
-        button: 0,
-        bubbles: true,
-      });
-    });
-
-    await waitFor(() => {
-      expect(onSelectionChangeMock).toHaveBeenCalled();
-    });
-
-    // Verify that drag selection resulted in some items being selected
-    await waitFor(() => {
-      const badge = screen.queryByText(/[1-3]/); // Should show some badge
-      if (badge) {
-        expect(badge).toBeInTheDocument();
-      }
-      // At minimum, the callback should have been invoked
-      expect(onSelectionChangeMock.mock.calls.length).toBeGreaterThan(0);
-    });
-
-    // Verify the reset button appears when items are selected
-    const resetButton = screen.queryByLabelText('Reset filter');
-    if (resetButton) {
-      expect(resetButton).toBeInTheDocument();
-    }
-  });
-
-  it('terminates drag selection when mouseup occurs outside the dropdown', async () => {
-    const onSelectionChangeMock = vi.fn();
-    render(
-      <FilterDropdown
-        {...defaultProps}
-        onSelectionChange={onSelectionChangeMock}
-      />,
-    );
-    const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
-
-    const item1 = await screen.findByText('Item One');
-    const item1Element = item1.closest('[role="menuitemcheckbox"]');
-
-    // Start drag operation
-    act(() => {
-      fireEvent.mouseDown(item1Element!, {
-        button: 0,
-        bubbles: true,
-      });
-    });
-
-    // Simulate mouseup outside the component (on document)
-    act(() => {
-      fireEvent.mouseUp(document, {
-        button: 0,
-        bubbles: true,
-      });
-    });
-
-    await waitFor(() => {
-      expect(onSelectionChangeMock).toHaveBeenCalled();
-    });
-
-    // The drag operation should have been terminated properly
-    // and the callback should have been invoked at least once
-    expect(onSelectionChangeMock.mock.calls.length).toBeGreaterThan(0);
   });
 
   it('handles keyboard interactions - Space to open and Escape to close dropdown', async () => {

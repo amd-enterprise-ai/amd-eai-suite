@@ -118,6 +118,16 @@ class AIMServiceStatus(StrEnum):
     DEGRADED = "Degraded"
 
 
+class AIMClusterModelStatus(StrEnum):
+    NOT_AVAILABLE = "NotAvailable"
+    PENDING = "Pending"
+    PROGRESSING = "Progressing"
+    READY = "Ready"
+    DEGRADED = "Degraded"
+    FAILED = "Failed"
+    DELETED = "Deleted"  # API-only status for AIMs removed from cluster
+
+
 class JobStatus(StrEnum):
     RUNNING = "Running"
     FAILED = "Failed"
@@ -201,6 +211,16 @@ WorkloadComponentStatus = (
     | AIMServiceStatus
     | CommonComponentStatus
 )
+
+
+class SecretKind(StrEnum):
+    EXTERNAL_SECRET = "ExternalSecret"
+    KUBERNETES_SECRET = "KubernetesSecret"
+
+
+class SecretScope(StrEnum):
+    ORGANIZATION = "Organization"
+    PROJECT = "Project"
 
 
 class PriorityClass(BaseModel):
@@ -319,19 +339,22 @@ class ProjectSecretsCreateMessage(BaseModel):
     secret_name: str = Field(description="The name of the secret.")
     project_secret_id: UUID = Field(description="The ID of the secret.")
     manifest: str = Field(description="YAML content of the secret.")
-    secret_type: "SecretsComponentKind" = Field(description="The Kubernetes resource kind to manage for this secret.")
+    secret_type: "SecretKind" = Field(description="The Kubernetes resource kind to manage for this secret.")
+    secret_scope: SecretScope = Field(description="The scope of the secret.")
 
 
 class ProjectSecretsDeleteMessage(BaseModel):
     message_type: Literal["project_secrets_delete"]
     project_secret_id: UUID = Field(description="The ID of the secret.")
     project_name: str = Field(description="The name of the project.")
-    secret_type: "SecretsComponentKind" = Field(description="The Kubernetes resource kind to manage for this secret.")
+    secret_type: "SecretKind" = Field(description="The Kubernetes resource kind to manage for this secret.")
+    secret_scope: SecretScope = Field(description="The scope of the secret.")
 
 
 class ProjectSecretsUpdateMessage(BaseModel):
     message_type: Literal["project_secrets_update"]
     project_secret_id: UUID = Field(description="The ID of the secret.")
+    secret_scope: SecretScope | None = Field(description="The scope of the secret.")
     status: ProjectSecretStatus = Field(description="The status of the secret.")
     status_reason: str | None = Field(None, description="The reason for the update.")
     updated_at: AwareDatetime = Field(description="The timestamp of the update.")
@@ -381,9 +404,26 @@ class ProjectNamespaceStatusMessage(BaseModel):
     status_reason: str | None = Field(None, description="The reason for the status.")
 
 
-class SecretsComponentKind(StrEnum):
-    EXTERNAL_SECRET = "ExternalSecret"
-    KUBERNETES_SECRET = "Secret"
+class AIMClusterModel(BaseModel):
+    """A single AIMClusterModel resource discovered from the cluster."""
+
+    resource_name: str = Field(description="Kubernetes resource name of the AIMClusterModel")
+    image_reference: str = Field(
+        description="Full image reference (e.g., docker.io/amdenterpriseai/aim-meta-llama-llama-3-1-405b-instruct:0.8.4)"
+    )
+    labels: dict = Field(description="Original labels from status.imageMetadata.originalLabels")
+    status: str = Field(description="Status of the AIMClusterModel (e.g., Ready, Pending)")
+
+
+class AIMClusterModelsMessage(BaseModel):
+    """
+    Periodic batch sync message containing all AIMClusterModel resources discovered in the cluster.
+    The API will reconcile the database state with this list (add new, update existing, remove missing).
+    """
+
+    message_type: Literal["aim_cluster_models"]
+    models: list[AIMClusterModel] = Field(description="List of all discovered AIMClusterModel resources")
+    synced_at: AwareDatetime = Field(description="Timestamp when the sync was performed")
 
 
 Message = (
@@ -406,6 +446,7 @@ Message = (
     | ProjectNamespaceStatusMessage
     | ProjectNamespaceDeleteMessage
     | AutoDiscoveredWorkloadComponentMessage
+    | AIMClusterModelsMessage
 )
 
 AnnotatedMessage = Annotated[Message, Field(discriminator="message_type")]

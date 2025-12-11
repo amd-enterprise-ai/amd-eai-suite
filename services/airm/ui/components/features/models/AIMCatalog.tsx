@@ -6,7 +6,7 @@ import { IconRocket, IconTag } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { useTranslation, Trans } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
 
 import useSystemToast from '@/hooks/useSystemToast';
@@ -17,7 +17,7 @@ import { getFilteredData } from '@/utils/app/data-table';
 
 import { FilterComponentType } from '@/types/enums/filters';
 import { ClientSideDataFilter, FilterValueMap } from '@/types/filters';
-import { Aim, AimWorkloadStatus } from '@/types/aims';
+import { Aim, AimWorkloadStatus, AIMStatus } from '@/types/aims';
 
 import { ActionsToolbar } from '@/components/shared/Toolbar/ActionsToolbar';
 import { ConfirmationModal } from '@/components/shared/Confirmation/ConfirmationModal';
@@ -75,7 +75,10 @@ const AIMCatalog: React.FC = () => {
     },
   });
 
-  const memoizedAims = useMemo(() => aims || [], [aims]);
+  const memoizedAims = useMemo(() => {
+    // Filter out deleted AIMs from the catalog
+    return (aims || []).filter((aim) => aim.status !== AIMStatus.DELETED);
+  }, [aims]);
 
   const filteredModels = useMemo(() => {
     const filtered = getFilteredData(memoizedAims, filters);
@@ -232,7 +235,7 @@ const AIMCatalog: React.FC = () => {
       )}
 
       {!isAIMSLoading && !!aims && (
-        <div className="flex flex-wrap items-stretch gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 mb-6">
           {filteredModels.map((aim) => (
             <AIMCard
               key={aim.id}
@@ -266,13 +269,9 @@ const AIMCatalog: React.FC = () => {
             aimId: currentAim!.id,
           })
         }
-        description={
-          <Trans parent="span">
-            {t('actions.undeploy.confirmation.description', {
-              name: currentAim?.title || '',
-            })}
-          </Trans>
-        }
+        description={t('actions.undeploy.confirmation.description', {
+          name: currentAim?.title || '',
+        })}
         title={t('actions.undeploy.confirmation.title')}
         loading={undeployAimMutation.isPending}
         onClose={undeployAimDisclosure.onClose}

@@ -249,10 +249,18 @@ describe('projects', () => {
     await fireEvent.click(statusSelect);
 
     // Select "READY" status
-    const readyOption = await screen.getAllByText(
-      `status.${ProjectStatus.READY}`,
-    );
-    await fireEvent.click(readyOption[3]);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {
+          name: `status.${ProjectStatus.READY}`,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    const readyOption = screen.getByRole('option', {
+      name: `status.${ProjectStatus.READY}`,
+    });
+    await fireEvent.click(readyOption);
 
     // Projects with READY status (Project Name 1, Project Name 3 based on mockQuotas logic) should be visible
     expect(screen.getByText('Project Name 1')).toBeInTheDocument();

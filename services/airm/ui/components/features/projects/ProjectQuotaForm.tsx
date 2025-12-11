@@ -120,10 +120,9 @@ export const ProjectQuotaForm: React.FC<Props> = ({ project, cluster }) => {
               <Alert
                 color="primary"
                 hideIconWrapper={true}
-                className="!bg-primary/10"
-              >
-                {t('settings.form.guaranteedQuota.info')}
-              </Alert>
+                className="bg-primary/10!"
+                description={t('settings.form.guaranteedQuota.info')}
+              />
               <AllocationSettings
                 form={form}
                 quota={project.quota}

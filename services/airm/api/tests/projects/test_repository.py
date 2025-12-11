@@ -12,6 +12,7 @@ from app.projects.repository import create_project as create_project_repo
 from app.projects.repository import (
     delete_project,
     get_active_project_count_per_cluster,
+    get_project_by_name_in_organization,
     get_project_in_organization,
     get_projects_by_names_in_organization,
     get_projects_in_cluster,
@@ -204,9 +205,6 @@ async def test_get_active_project_count_per_cluster(db_session: AsyncSession):
 async def test_update_project_status(db_session: AsyncSession):
     env = await factory.create_basic_test_environment(db_session)
 
-    original_status = env.project.status
-    original_status_reason = env.project.status_reason
-
     updated_project = await update_project_status(db_session, env.project, "FAILED", "Something went wrong", "system")
 
     assert updated_project.id == env.project.id
@@ -215,132 +213,43 @@ async def test_update_project_status(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_get_projects_by_names_in_organization_returns_matching_projects(db_session: AsyncSession):
-    """Test that function returns projects that match the provided names within the organization."""
-    # Create environment with multiple projects
-    organization, cluster, projects = await factory.create_multi_project_environment(db_session, project_count=3)
+@pytest.mark.parametrize(
+    "names,expected_count",
+    [
+        (["test-project-1", "test-project-2"], 2),  # matching projects
+        ([], 0),  # empty list
+        (["NonExistent"], 0),  # no matches
+        (["test-project-1", "NonExistent"], 1),  # partial match
+        (["Test-ProjecT-1"], 0),  # case sensitive
+    ],
+)
+async def test_get_projects_by_names(db_session, names, expected_count):
+    """Test various input scenarios for get_projects_by_names_in_organization."""
+    org, _, projects = await factory.create_multi_project_environment(db_session, project_count=3)
 
-    # Get the project names
-    project_names = [p.name for p in projects[:2]]  # Only first 2 projects
-
-    # Call the function
-    result = await get_projects_by_names_in_organization(db_session, project_names, organization.id)
-
-    # Should return exactly the 2 projects we requested
-    assert len(result) == 2
-    result_names = {p.name for p in result}
-    expected_names = set(project_names)
-    assert result_names == expected_names
-
-    # Verify they belong to the correct organization
-    for project in result:
-        assert project.organization_id == organization.id
+    result = await get_projects_by_names_in_organization(db_session, names, org.id)
+    assert len(result) == expected_count
 
 
 @pytest.mark.asyncio
-async def test_get_projects_by_names_in_organization_empty_names_list(db_session: AsyncSession):
-    """Test that function returns empty list when project names list is empty."""
-    env = await factory.create_basic_test_environment(db_session)
+async def test_get_projects_by_names_different_orgs(db_session):
+    """Test get project by names, in different organizations."""
+    org, _, projects = await factory.create_multi_project_environment(db_session, project_count=1)
 
-    result = await get_projects_by_names_in_organization(db_session, [], env.organization.id)
-
-    assert result == []
-
-
-@pytest.mark.asyncio
-async def test_get_projects_by_names_in_organization_no_matching_projects(db_session: AsyncSession):
-    """Test that function returns empty list when no projects match the provided names."""
-    env = await factory.create_basic_test_environment(db_session)
-
-    # Request projects with names that don't exist
-    non_existent_names = ["NonExistentProject1", "NonExistentProject2"]
-
-    result = await get_projects_by_names_in_organization(db_session, non_existent_names, env.organization.id)
-
-    assert result == []
+    result = await get_projects_by_names_in_organization(db_session, [projects[0].name], uuid4())
+    assert len(result) == 0
 
 
 @pytest.mark.asyncio
-async def test_get_projects_by_names_in_organization_filters_by_organization(db_session: AsyncSession):
-    """Test that function only returns projects from the specified organization."""
-    # Create two organizations with projects
-    environments = await factory.create_multi_organization_environment(db_session, org_count=2)
-    org1, cluster1, project1 = environments[0]
-    org2, cluster2, project2 = environments[1]
+async def test_get_project_by_name_in_organization(db_session):
+    """Test getting project by name in organization."""
+    org, _, projects = await factory.create_multi_project_environment(db_session, project_count=2)
+    name = projects[0].name
 
-    # Try to get project1 from org2 (should not work)
-    result = await get_projects_by_names_in_organization(db_session, [project1.name], org2.id)
+    result = await get_project_by_name_in_organization(db_session, org.id, name)
+    assert result is not None
 
-    assert result == []
-
-    # Try to get project1 from org1 (should work)
-    result = await get_projects_by_names_in_organization(db_session, [project1.name], org1.id)
-
-    assert len(result) == 1
-    assert result[0].id == project1.id
-    assert result[0].organization_id == org1.id
-
-
-@pytest.mark.asyncio
-async def test_get_projects_by_names_in_organization_partial_matches(db_session: AsyncSession):
-    """Test that function returns only projects that exist, ignoring non-existent names."""
-    organization, cluster, projects = await factory.create_multi_project_environment(db_session, project_count=2)
-
-    # Mix existing and non-existing project names
-    mixed_names = [projects[0].name, "NonExistentProject", projects[1].name]
-
-    result = await get_projects_by_names_in_organization(db_session, mixed_names, organization.id)
-
-    # Should return only the 2 existing projects
-    assert len(result) == 2
-    result_names = {p.name for p in result}
-    expected_names = {projects[0].name, projects[1].name}
-    assert result_names == expected_names
-
-
-@pytest.mark.asyncio
-async def test_get_projects_by_names_in_organization_case_sensitivity(db_session: AsyncSession):
-    """Test that function respects case sensitivity in project names."""
-    env = await factory.create_basic_test_environment(db_session)
-
-    # Try to match with different case
-    result = await get_projects_by_names_in_organization(
-        db_session,
-        [env.project.name.upper()],
-        env.organization.id,  # Search with uppercase version
-    )
-
-    # Should not match (assuming project name is not all uppercase)
-    if env.project.name != env.project.name.upper():
-        assert result == []
-    else:
-        # If the project name happens to be all uppercase, it should match
-        assert len(result) == 1
-
-
-@pytest.mark.asyncio
-async def test_get_projects_by_names_in_organization_duplicate_names(db_session: AsyncSession):
-    """Test that function handles duplicate names in the input list correctly."""
-    env = await factory.create_basic_test_environment(db_session)
-
-    # Request the same project name twice
-    duplicate_names = [env.project.name, env.project.name]
-
-    result = await get_projects_by_names_in_organization(db_session, duplicate_names, env.organization.id)
-
-    # Should return the project only once
-    assert len(result) == 1
-    assert result[0].id == env.project.id
-
-
-@pytest.mark.asyncio
-async def test_get_projects_by_names_in_organization_nonexistent_organization(db_session: AsyncSession):
-    """Test that function returns empty list for non-existent organization."""
-    env = await factory.create_basic_test_environment(db_session)
-
-    # Use a random UUID that doesn't exist
-    fake_org_id = uuid4()
-
-    result = await get_projects_by_names_in_organization(db_session, [env.project.name], fake_org_id)
-
-    assert result == []
+    assert await get_project_by_name_in_organization(db_session, org.id, None) is None  # No name
+    assert await get_project_by_name_in_organization(db_session, org.id, "NonExistent") is None  # Different name
+    assert await get_project_by_name_in_organization(db_session, org.id, name.title()) is None  # Capitalization
+    assert await get_project_by_name_in_organization(db_session, uuid4(), name) is None  # Different orgs

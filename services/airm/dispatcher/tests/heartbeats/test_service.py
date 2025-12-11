@@ -13,7 +13,7 @@ from app.heartbeats.service import publish_heartbeat_message_to_queue
 
 
 @pytest.mark.asyncio
-async def test_publish_heartbeat_message_to_queue():
+async def test_publish_heartbeat_message_to_queue() -> None:
     """Test that a heartbeat message is correctly created and published."""
     mock_connection = AsyncMock()
     mock_channel = AsyncMock()

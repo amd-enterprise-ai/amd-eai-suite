@@ -13,12 +13,42 @@ no_implicit_optional = false
 explicit_package_bases = true
 scripts_are_modules = true
 check_untyped_defs = false
+disallow_incomplete_defs = true
+
+# Override disallow_incomplete_defs for modules not yet fixed
+# As we fix modules, remove them from this list
+#
+# Strategy: Enable disallow_incomplete_defs globally, but disable it for modules
+# we haven't fixed yet. As we fix modules in each PR, we remove them from here.
+
+[[tool.mypy.overrides]]
+# Test files - will be fixed in PR 2-3
+# Note: Keep test files excluded until all are fixed
+# Some test files have been fixed but still have incomplete function definitions
+module = [
+  "tests.*",
+  "services.airm.api.tests.*",
+]
+disallow_incomplete_defs = false
 
 [tool.robocop]
 
 [tool.robocop.lint]
-select = []
-ignore = ["all"]
+# Enable most rules but ignore some that don't fit your code style
+ignore = [
+    "COM04",     # Ignore comment formatting (copyright headers)
+    "NAME02",    # Allow your current keyword naming style (sentence case)
+    "DEPR05",    # Allow Set Variable/Set Test Variable usage
+    "DEPR06",    # Allow Create List/Create Dictionary usage
+    "VAR01",     # Allow empty variable values
+    "VAR05",     # Allow suite-scoped variables
+    "VAR06",     # Allow test-scoped variables
+    "IMP02",     # Allow current import order
+]
+# Keep these important ones enabled:
+# - LEN08 (line length)
+# - VAR02 (unused variables)
+# - Logic and syntax errors
 
 [tool.robocop.format]
 select = [

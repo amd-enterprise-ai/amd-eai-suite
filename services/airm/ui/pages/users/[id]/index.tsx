@@ -27,6 +27,7 @@ import FormFieldComponent from '@/components/shared/ManagedForm/FormFieldCompone
 import ManagedForm from '@/components/shared/ManagedForm/ManagedForm';
 
 import { ZodType, z } from 'zod';
+import { Card, CardBody, CardHeader } from '@heroui/react';
 
 const translationKeySet = 'users';
 
@@ -91,79 +92,92 @@ const UserPage: React.FC<Props> = ({ user, projects }) => {
   };
 
   return (
-    <div className="flex flex-col">
-      <div className="flex gap-4">
-        <section className="p-8 w-3/4 min-h-full px-8 font-bold">
-          <div className="border-1 rounded-sm p-4 bg-white dark:bg-black">
-            <h2 className="p-1">{t('detail.title')}</h2>
-            <ManagedForm<UserFormData>
-              className="flex gap-4 my-4 flex-col w-3/4"
-              defaultValues={defaultValues}
-              validationSchema={userFormSchema}
-              showResetButton
-              showSubmitButton
-              isActioning={isPending}
-              onFormSuccess={(data) =>
-                updateUserMutation({
-                  id: userData.id,
-                  firstName: (data['firstName'] as string).trim(),
-                  lastName: (data['lastName'] as string).trim(),
-                })
-              }
-              submitButtonText={t('detail.form.actions.submit') || ''}
-              resetButtonText={t('detail.form.actions.reset') || ''}
-              renderFields={(form) => (
-                <div className="flex flex-col gap-4">
-                  <div className="flex gap-4 w-full">
+    <div className="flex flex-col gap-8 mt-8 ">
+      <div className="flex flex-row gap-6">
+        <div className="flex flex-col gap-4 w-full">
+          <Card
+            shadow="sm"
+            classNames={{
+              base: 'border-1 border-default-200 rounded-sm	',
+            }}
+          >
+            <CardHeader>
+              <h2>{t('detail.title')}</h2>
+            </CardHeader>
+            <CardBody>
+              <ManagedForm<UserFormData>
+                className="flex gap-4 flex-col"
+                defaultValues={defaultValues}
+                validationSchema={userFormSchema}
+                showResetButton
+                showSubmitButton
+                isActioning={isPending}
+                onFormSuccess={(data) =>
+                  updateUserMutation({
+                    id: userData.id,
+                    firstName: (data.firstName as string).trim(),
+                    lastName: (data.lastName as string).trim(),
+                  })
+                }
+                submitButtonText={t('detail.form.actions.submit') || ''}
+                resetButtonText={t('detail.form.actions.reset') || ''}
+                renderFields={(form) => (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex gap-4 w-full">
+                      <FormFieldComponent<UserFormData>
+                        formField={{
+                          name: 'firstName',
+                          label: t('detail.form.firstName.label'),
+                          placeholder: t('detail.form.firstName.placeholder'),
+                          props: {
+                            maxLength: 64,
+                          },
+                        }}
+                        defaultValue={form.formState.defaultValues?.firstName}
+                        errorMessage={form.formState.errors.firstName?.message}
+                        register={form.register}
+                      />
+                      <FormFieldComponent<UserFormData>
+                        formField={{
+                          name: 'lastName',
+                          label: t('detail.form.lastName.label'),
+                          placeholder: t('detail.form.lastName.placeholder'),
+                          props: {
+                            maxLength: 64,
+                          },
+                        }}
+                        defaultValue={form.formState.defaultValues?.lastName}
+                        errorMessage={form.formState.errors.lastName?.message}
+                        register={form.register}
+                      />
+                    </div>
                     <FormFieldComponent<UserFormData>
                       formField={{
-                        name: 'firstName',
-                        label: t('detail.form.firstName.label'),
-                        placeholder: t('detail.form.firstName.placeholder'),
-                        props: {
-                          maxLength: 64,
-                        },
+                        name: 'email',
+                        label: t('detail.form.email.label'),
+                        placeholder: t('detail.form.email.placeholder'),
+                        isReadOnly: true,
                       }}
-                      defaultValue={form.formState.defaultValues?.firstName}
-                      errorMessage={form.formState.errors.firstName?.message}
-                      register={form.register}
-                    />
-                    <FormFieldComponent<UserFormData>
-                      formField={{
-                        name: 'lastName',
-                        label: t('detail.form.lastName.label'),
-                        placeholder: t('detail.form.lastName.placeholder'),
-                        props: {
-                          maxLength: 64,
-                        },
-                      }}
-                      defaultValue={form.formState.defaultValues?.lastName}
-                      errorMessage={form.formState.errors.lastName?.message}
+                      defaultValue={form.formState.defaultValues?.email}
+                      errorMessage={form.formState.errors.email?.message}
                       register={form.register}
                     />
                   </div>
-                  <FormFieldComponent<UserFormData>
-                    formField={{
-                      name: 'email',
-                      label: t('detail.form.email.label'),
-                      placeholder: t('detail.form.email.placeholder'),
-                      isReadOnly: true,
-                    }}
-                    defaultValue={form.formState.defaultValues?.email}
-                    errorMessage={form.formState.errors.email?.message}
-                    register={form.register}
-                  />
-                </div>
-              )}
-            />
-          </div>
+                )}
+              />
+            </CardBody>
+          </Card>
+
           <DeleteUser id={userData.id} email={userData.email} />
-        </section>
-        <section className="border-l-1 p-8 dark:border-gray-800 w-1/4 min-h-full min-w-96">
+        </div>
+        <div className="w-1/3 flex flex-col p-3">
           <h2>{t('detail.projectsAndRoles.title')}</h2>
-          <Projects user={userData} projects={projects} />
-          <UserRoles user={userData} />
-        </section>
+
+          <div className="flex flex-col gap-4">
+            <Projects user={userData} projects={projects} />
+            <UserRoles user={userData} />
+          </div>
+        </div>
       </div>
     </div>
   );

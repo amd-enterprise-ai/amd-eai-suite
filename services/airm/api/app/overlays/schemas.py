@@ -40,3 +40,9 @@ class OverlayUpdate(BaseModel):
         examples=["meta-llama/Llama-3.1-8B"],
     )
     updated_by: str = Field(description="Email of the user who updated the overlay.")
+
+
+class OverlaysResponse(BaseModel):
+    """Wrapper for collection of overlays."""
+
+    data: list[OverlayResponse] = Field(description="List of overlays")

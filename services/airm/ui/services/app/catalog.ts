@@ -21,7 +21,9 @@ export const getCatalogItems = async (): Promise<CatalogItem[]> => {
     );
   }
 
-  return await response.json();
+  const catalogResponse = await response.json();
+
+  return catalogResponse.data;
 };
 
 export const getCatalogItemById = async (id: string): Promise<CatalogItem> => {

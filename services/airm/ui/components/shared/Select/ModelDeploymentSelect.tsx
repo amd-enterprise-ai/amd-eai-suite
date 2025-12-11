@@ -55,7 +55,7 @@ export default function ModelDeploymentSelect({
             aria-label={workload.id}
           >
             {workload.type === WorkloadType.INFERENCE &&
-              (workload.model?.name || workload.displayName)}
+              (workload.displayName || workload.name)}
           </SelectItem>
         ))}
     </Select>

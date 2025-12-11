@@ -18,8 +18,8 @@ from loguru import logger
 
 from app.workloads.schemas import WorkloadWithComponents
 
-from .config import LOKI_DEFAULT_TIME_RANGE_DAYS, LOKI_TIMEOUT_SECONDS, LOKI_URL
-from .schemas import LogDirectionLiteral, LogEntry, LogLevel, PaginationMetadata, WorkloadLogsResponse
+from .config import LOKI_DEFAULT_TIME_RANGE_DAYS, LOKI_KEEPALIVE_TIMEOUT_SECONDS, LOKI_TIMEOUT_SECONDS, LOKI_URL
+from .schemas import LogDirectionLiteral, LogEntry, LogLevel, LogTypeLiteral, PaginationMetadata, WorkloadLogsResponse
 
 _loki_client: httpx.AsyncClient | None = None
 
@@ -57,150 +57,47 @@ async def close_loki_client():
         logger.info("Loki client closed")
 
 
-class WebSocketConnectionFactory:
-    """Factory for managing WebSocket connections for log streaming.
+async def create_websocket_connection(
+    workload_id: UUID,
+    query: str,
+    start_time: datetime | None = None,
+    delay_seconds: int = 1,
+) -> websockets.ClientConnection:
+    """Create a new WebSocket connection for log streaming.
 
-    Provides connection reuse and proper cleanup for WebSocket connections
-    to the Loki tail API endpoint.
+    Args:
+        workload_id: The workload ID
+        query: The Loki query string
+        start_time: Optional start time for streaming
+        delay_seconds: Delay between polls
+
+    Returns:
+        WebSocket connection
+
+    Raises:
+        websockets.WebSocketException: If connection fails
+        ValueError: If LOKI_URL is not configured
     """
-
-    def __init__(self, base_url: str):
-        """Initialize the factory with the base URL.
-
-        Args:
-            base_url: Base URL for Loki API (e.g., "http://loki:3100")
-        """
-        self.base_url = base_url
-        self._connections: dict[str, websockets.ClientConnection] = {}
-        self._connection_lock = asyncio.Lock()
-
-    def _get_connection_key(self, workload_id: UUID, query: str, delay_seconds: int) -> str:
-        """Generate a unique key for connection caching.
-
-        Args:
-            workload_id: The workload ID
-            query: The Loki query string
-            delay_seconds: Delay between polls
-
-        Returns:
-            String key for this connection configuration
-        """
-        return f"{workload_id}:{query}:{delay_seconds}"
-
-    async def get_or_create_connection(
-        self,
-        workload_id: UUID,
-        query: str,
-        start_time: datetime | None = None,
-        delay_seconds: int = 1,
-    ) -> websockets.ClientConnection:
-        """Get existing or create new WebSocket connection.
-
-        Args:
-            workload_id: The workload ID
-            query: The Loki query string
-            start_time: Optional start time for streaming
-            delay_seconds: Delay between polls
-
-        Returns:
-            WebSocket connection
-
-        Raises:
-            websockets.WebSocketException: If connection fails
-        """
-        connection_key = self._get_connection_key(workload_id, query, delay_seconds)
-
-        async with self._connection_lock:
-            if connection_key in self._connections:
-                conn = self._connections[connection_key]
-
-                try:
-                    await conn.ping()
-                    return conn
-                except websockets.ConnectionClosed:
-                    del self._connections[connection_key]
-
-            # Create new connection
-            ws_url = _build_loki_websocket_url(self.base_url, query, start_time, delay_seconds)
-            logger.info(f"Creating new WebSocket connection to: {ws_url}")
-
-            try:
-                connection = await websockets.connect(ws_url)
-                self._connections[connection_key] = connection
-                logger.info(f"Created new WebSocket connection for workload {workload_id}")
-                return connection
-            except Exception as e:
-                logger.error(f"Failed to create WebSocket connection for workload {workload_id}: {e}")
-                raise
-
-    async def close_connection(self, workload_id: UUID, query: str, delay_seconds: int = 1):
-        """Close a specific WebSocket connection.
-
-        Args:
-            workload_id: The workload ID
-            query: The Loki query string
-            delay_seconds: Delay between polls
-        """
-        connection_key = self._get_connection_key(workload_id, query, delay_seconds)
-
-        try:
-            async with self._connection_lock:
-                if connection_key in self._connections:
-                    conn = self._connections[connection_key]
-                    del self._connections[connection_key]
-                    await conn.close()
-                    logger.debug(f"Closed WebSocket connection for workload {workload_id}")
-        except Exception as e:
-            logger.warning(f"Error closing WebSocket connection {connection_key}: {e}")
-
-    async def close_all_connections(self):
-        """Close all WebSocket connections. Called during app shutdown."""
-        async with self._connection_lock:
-            for connection_key, conn in list(self._connections.items()):
-                try:
-                    await conn.close()
-                    logger.debug(f"Closed WebSocket connection: {connection_key}")
-                except Exception as e:
-                    logger.warning(f"Error closing WebSocket connection {connection_key}: {e}")
-
-            self._connections.clear()
-            logger.info("All WebSocket connections closed")
-
-
-_websocket_factory: WebSocketConnectionFactory | None = None
-
-
-def init_websocket_factory() -> WebSocketConnectionFactory:
-    """Initialize WebSocket connection factory. This will be called at application startup."""
-    global _websocket_factory
-
-    if _websocket_factory is not None:
-        logger.warning("WebSocket factory already initialized")
-        return _websocket_factory
-
     if LOKI_URL is None:
         raise ValueError("LOKI_URL is not configured")
 
-    _websocket_factory = WebSocketConnectionFactory(LOKI_URL)
-    logger.info(f"WebSocket factory initialized with base URL: {LOKI_URL}")
-    return _websocket_factory
+    # Create new connection
+    ws_url = _build_loki_websocket_url(LOKI_URL, query, start_time, delay_seconds)
+    logger.info(f"Creating new WebSocket connection to: {ws_url}")
 
-
-def get_websocket_factory(request: Request) -> WebSocketConnectionFactory:
-    """FastAPI dependency to get the initialized WebSocket factory from app.state."""
-    if not hasattr(request.app.state, "websocket_factory") or request.app.state.websocket_factory is None:
-        logger.error("WebSocket factory not initialized in app.state.")
-        raise RuntimeError("WebSocket factory not available.")
-    return request.app.state.websocket_factory
-
-
-async def close_websocket_factory():
-    """Close the WebSocket factory. This will be called at application shutdown."""
-    global _websocket_factory
-    if _websocket_factory:
-        await _websocket_factory.close_all_connections()
-        _websocket_factory = None
-        logger.info("WebSocket factory closed")
+    try:
+        # Add connection timeout and ping interval for better connection health
+        connection = await websockets.connect(
+            ws_url,
+            ping_interval=30,  # Send ping every 30 seconds
+            ping_timeout=10,  # Wait 10 seconds for pong response
+            close_timeout=10,  # Wait 10 seconds for close handshake
+        )
+        logger.info(f"Created new WebSocket connection for workload {workload_id}")
+        return connection
+    except Exception as e:
+        logger.error(f"Failed to create WebSocket connection for workload {workload_id}: {e}")
+        raise
 
 
 def _parse_and_validate_dates(
@@ -249,17 +146,25 @@ def _parse_and_validate_dates(
     return start_date, end_date
 
 
-def _build_loki_query(component_names: set[str], level_filter: LogLevel | None = None) -> str:
+def _build_loki_query(
+    component_names: set[str], log_level: LogLevel | None = None, log_type: LogTypeLiteral = "workload"
+) -> str:
     """Build LogQL query string for the given component and optional level filter."""
     component_regex = "|".join([f"{name}.*" for name in component_names])
+    log_type_filter = ""
 
-    if level_filter is not None:
-        # Get level filter value and all more severe levels
-        level_values = [str(level) for level in LogLevel if level.value >= level_filter.value]
-        level_regex = "|".join(level_values)
-        return f'{{k8s_pod_name=~"{component_regex}", level=~"{level_regex}"}}'
+    if log_type == "event":
+        log_type_filter = ', log_type="k8s_event"'
     else:
-        return f'{{k8s_pod_name=~"{component_regex}"}}'
+        log_type_filter = ', log_type!="k8s_event"'
+
+    if log_level is not None:
+        # Get level filter value and all more severe levels
+        level_values = [f'detected_level="{level}"' for level in LogLevel if level.value >= log_level.value]
+        level_query = " or ".join(level_values)
+        return f'{{k8s_pod_name=~"{component_regex}"{log_type_filter}}}|{level_query}'
+    else:
+        return f'{{k8s_pod_name=~"{component_regex}"{log_type_filter}}}'
 
 
 async def _execute_loki_request(
@@ -284,21 +189,15 @@ async def _execute_loki_request(
     return response.json()
 
 
-def _parse_loki_response(response_data: dict) -> list[LogEntry]:
+def _parse_loki_response(response_data: dict, log_type: LogTypeLiteral) -> list[LogEntry]:
     """Parse Loki response data into LogEntry objects."""
     all_entries: list[LogEntry] = []
-    for stream in response_data.get("data", {}).get("result", []):
+    for stream in response_data.get("data", {}).get("result", []) or response_data.get("streams", {}).get("result", []):
         labels = stream.get("stream", {})
 
         for timestamp_ns, message in stream.get("values", []):
-            timestamp_dt = datetime.fromtimestamp(int(timestamp_ns) / 1_000_000_000, tz=UTC)
-            all_entries.append(
-                LogEntry(
-                    timestamp=timestamp_dt.isoformat(),
-                    level=LogLevel.from_label(labels.get("detected_level")),
-                    message=message,
-                )
-            )
+            log_entry = _parse_log_entry(timestamp_ns, message, labels)
+            all_entries.append(log_entry)
     return all_entries
 
 
@@ -340,6 +239,7 @@ async def get_workload_logs(
     page_token: datetime | None = None,
     limit: int = 1000,
     level_filter: LogLevel | None = None,
+    log_type: LogTypeLiteral = "workload",
     direction: LogDirectionLiteral = "forward",
 ) -> WorkloadLogsResponse:
     """Get logs for a workload by ID using deployment names from workload components."""
@@ -357,12 +257,12 @@ async def get_workload_logs(
     # workload_id is not indexed in Loki, so we need to use indexed labels
     # Use the first component name for pod/deployment queries
     component_names = set([c.name for c in workload.components])
-    query = _build_loki_query(component_names, level_filter)
+    query = _build_loki_query(component_names, level_filter, log_type)
     logger.info(f"Querying logs for workload {workload.id} using components: {component_names}")
 
     try:
         response_data = await _execute_loki_request(loki_client, query, start_date, end_date, limit, direction)
-        all_entries = _parse_loki_response(response_data)
+        all_entries = _parse_loki_response(response_data, log_type)
         returned_entries, pagination = _handle_pagination(all_entries, limit, direction)
 
         if returned_entries:
@@ -379,22 +279,21 @@ async def get_workload_logs(
 
 async def stream_workload_logs(
     workload: WorkloadWithComponents,
-    websocket_factory: WebSocketConnectionFactory,
     start_time: datetime | None = None,
     level_filter: LogLevel | None = None,
+    log_type: LogTypeLiteral = "workload",
     delay_seconds: int = 1,
-) -> AsyncGenerator[LogEntry]:
+) -> AsyncGenerator[str]:
     """Stream logs for a workload using Loki's WebSocket tail API.
 
     Args:
         workload: The workload to stream logs for
-        websocket_factory: Factory for managing WebSocket connections
         start_time: Start time for streaming (defaults to one hour ago)
         level_filter: Optional log level filter
         delay_seconds: Delay between polling requests in seconds
 
     Yields:
-        LogEntry objects as they become available
+        LogEntry serialized as JSON string
     """
     if not workload.components:
         logger.warning(f"No components found for workload {workload.id}")
@@ -402,67 +301,76 @@ async def stream_workload_logs(
 
     # Use the first component name for pod/deployment queries
     component_names = set([c.name for c in workload.components])
-    query = _build_loki_query(component_names, level_filter)
+    query = _build_loki_query(component_names, level_filter, log_type)
 
     if start_time is not None and start_time.tzinfo is None:
         start_time = start_time.replace(tzinfo=UTC)
+    else:
+        start_time = datetime.now(UTC) - timedelta(days=LOKI_DEFAULT_TIME_RANGE_DAYS)
 
     logger.info(f"Starting log stream for workload {workload.id} using components: {component_names}")
 
     websocket = None
+
+    websocket = await create_websocket_connection(
+        workload_id=workload.id,
+        query=query,
+        start_time=start_time,
+        delay_seconds=delay_seconds,
+    )
+
+    logger.info(f"Connected to Loki WebSocket for workload {workload.id}")
+
     try:
-        websocket = await websocket_factory.get_or_create_connection(
-            workload_id=workload.id,
-            query=query,
-            start_time=start_time,
-            delay_seconds=delay_seconds,
-        )
-
-        logger.info(f"Connected to Loki WebSocket for workload {workload.id}")
-
-        try:
-            async for message in websocket:
-                try:
+        while True:
+            try:
+                async with asyncio.timeout(LOKI_KEEPALIVE_TIMEOUT_SECONDS):
+                    message = await websocket.recv()
                     tail_data = json.loads(message)
 
-                    if "streams" in tail_data:
-                        for stream in tail_data["streams"]:
-                            labels = stream.get("stream", {})
+                    if "streams" not in tail_data:
+                        continue
 
-                            for timestamp_ns, log_message in stream.get("values", []):
-                                log_entry = _parse_websocket_log_entry(timestamp_ns, log_message, labels)
-                                yield log_entry
+                    for stream in tail_data["streams"]:
+                        labels = stream.get("stream", {})
+                        for timestamp_ns, log_message in stream.get("values", []):
+                            log_entry = _parse_log_entry(timestamp_ns, log_message, labels)
 
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse WebSocket message: {message[:100]}... Error: {e}")
-                    continue
-                except Exception as e:
-                    logger.warning(f"Error processing WebSocket message: {e}")
-                    continue
+                            yield str(log_entry)
 
-        except asyncio.CancelledError:
-            # Client disconnection or request cancellation
-            logger.info(f"Log stream cancelled for workload {workload.id}")
-            raise  # Re-raise to properly handle cancellation
+            except TimeoutError:
+                yield "[HEARTBEAT]"
+                continue
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse WebSocket message: {message[:100]}... Error: {e}")
+                continue
+            except Exception as e:
+                logger.warning(f"Error processing WebSocket message: {e}")
+                continue
 
+    except asyncio.CancelledError:
+        # Client disconnection or request cancellation - handle gracefully
+        logger.info(f"Log stream cancelled for workload {workload.id}")
+        return  # Exit gracefully without re-raising
     except websockets.WebSocketException as e:
         logger.error(f"WebSocket connection failed for workload {workload.id}: {e}")
         # WebSocket streaming is not available, streaming stops
-        raise
-    except asyncio.CancelledError:
-        # Client disconnection - cleanup and re-raise
-        logger.info(f"Client disconnected from log stream for workload {workload.id}")
         raise
     except Exception as e:
         logger.error(f"Log streaming for workload {workload.id} failed: {e}")
         # Streaming failed, stopping
         raise
     finally:
-        await websocket_factory.close_connection(workload.id, query, delay_seconds)
-        logger.debug(f"WebSocket streaming finished for workload {workload.id}")
+        if websocket:
+            try:
+                await websocket.close()
+                logger.info(f"WebSocket connection closed for workload {workload.id}")
+            except Exception as e:
+                logger.warning(f"Error closing WebSocket connection for workload {workload.id}: {e}")
+        logger.info(f"WebSocket streaming finished for workload {workload.id}")
 
 
-def _parse_websocket_log_entry(timestamp_ns: str, log_message: str, labels: dict = None) -> LogEntry:
+def _parse_log_entry(timestamp_ns: str, log_message: str, labels: dict = None) -> LogEntry:
     """Parse a single log entry from WebSocket message.
 
     Args:
@@ -476,8 +384,8 @@ def _parse_websocket_log_entry(timestamp_ns: str, log_message: str, labels: dict
     timestamp_dt = datetime.fromtimestamp(int(timestamp_ns) / 1_000_000_000, tz=UTC)
 
     # Try to get level from stream labels first, then fall back to parsing message
-    if labels and labels.get("detected_level"):
-        level = LogLevel.from_label(labels.get("detected_level"))
+    if labels and (labels.get("detected_level") or labels.get("level")):
+        level = LogLevel.from_label(labels.get("detected_level") or labels.get("level"))
     else:
         # Fall back to parsing level from message content
         level_str = log_message.split(": ")[0]

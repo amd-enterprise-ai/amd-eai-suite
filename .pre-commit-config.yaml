@@ -8,7 +8,7 @@ repos:
       - id: copyright-check
         name: AMD Copyright Check
         description: Check that all files have the required AMD copyright
-        entry: tooling/check_copyright.py
+        entry: tooling/check_copyright.py --fix
         language: python
         pass_filenames: true
         always_run: false

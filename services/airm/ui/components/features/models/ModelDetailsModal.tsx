@@ -43,18 +43,16 @@ const ModelDetailsModal = ({ model, isOpen, onOpenChange }: Props) => {
           }
         >
           {model ? (
-            <>
-              {Object.entries(model).map(([key, value]) => (
-                <div key={key} className="mb-4">
-                  <div className="mb-0 font-semibold">{key}</div>
-                  <div className="dark:text-default-500 text-default-600">
-                    {typeof value === 'object'
-                      ? JSON.stringify(value)
-                      : String(value)}
-                  </div>
+            Object.entries(model).map(([key, value]) => (
+              <div key={key} className="mb-4">
+                <div className="mb-0 font-semibold">{key}</div>
+                <div className="dark:text-default-500 text-default-600">
+                  {typeof value === 'object'
+                    ? JSON.stringify(value)
+                    : String(value)}
                 </div>
-              ))}
-            </>
+              </div>
+            ))
           ) : (
             <div className="p-4 text-default-600">
               {t('list.actions.details.modal.modelNotFound')}

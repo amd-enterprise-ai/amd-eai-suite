@@ -10,8 +10,9 @@ from fastapi import status
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airm.messaging.schemas import SecretKind, SecretScope
 from app import app  # type: ignore
-from app.secrets.enums import SecretScope, SecretStatus, SecretType
+from app.secrets.enums import SecretStatus
 from app.secrets.schemas import Secrets, SecretWithProjects
 from app.utilities.database import get_session
 from app.utilities.exceptions import ConflictException
@@ -53,7 +54,7 @@ def test_get_secrets_success():
             SecretWithProjects(
                 id=uuid4(),
                 name="secret1",
-                type=SecretType.EXTERNAL,
+                type=SecretKind.EXTERNAL_SECRET,
                 scope=SecretScope.ORGANIZATION,
                 status=SecretStatus.SYNCED,
                 status_reason=None,
@@ -77,11 +78,10 @@ def test_get_secrets_success():
     data = response.json()
     assert len(data["secrets"]) == 1
     assert data["secrets"][0]["name"] == "secret1"
-    assert data["secrets"][0]["type"] == SecretType.EXTERNAL.value
+    assert data["secrets"][0]["type"] == SecretKind.EXTERNAL_SECRET.value
     assert data["secrets"][0]["status"] == SecretStatus.SYNCED.value
     mock_service.assert_called_once()
     _, kwargs = mock_service.call_args
-    assert kwargs.get("project") is None
     assert kwargs.get("secret_type") is None
     assert kwargs.get("use_case") is None
 
@@ -94,17 +94,17 @@ def test_create_secret_success():
 
     secret_in = {
         "name": "my-secret",
-        "type": SecretType.KUBERNETES_SECRET.value,
+        "type": SecretKind.EXTERNAL_SECRET.value,
         "scope": SecretScope.ORGANIZATION.value,
         "project_ids": [str(mock_project_id)],
-        "manifest": "apiVersion: v1",
+        "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: my-secret",
     }
 
     # Expected response from service
     expected_secret = SecretWithProjects(
         id=uuid4(),
         name="my-secret",
-        type=SecretType.KUBERNETES_SECRET,
+        type=SecretKind.EXTERNAL_SECRET,
         scope=SecretScope.ORGANIZATION,
         status=SecretStatus.PENDING,
         status_reason=None,
@@ -119,8 +119,12 @@ def test_create_secret_success():
     # Mock dependencies for TestClient
     _apply_common_overrides(mock_organization)
 
-    with patch("app.secrets.router.create_secret_in_organization") as mock_service:
+    with (
+        patch("app.secrets.router.create_organization_scoped_secret_in_organization") as mock_service,
+        patch("app.secrets.router.get_project_in_organization") as mock_get_project,
+    ):
         mock_service.return_value = expected_secret
+        mock_get_project.return_value = MagicMock(id=mock_project_id)
 
         with TestClient(app) as client:
             response = client.post("/v1/secrets", json=secret_in)
@@ -128,9 +132,10 @@ def test_create_secret_success():
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["name"] == "my-secret"
-    assert data["type"] == SecretType.KUBERNETES_SECRET.value
+    assert data["type"] == SecretKind.EXTERNAL_SECRET.value
     assert data["status"] == SecretStatus.PENDING.value
     mock_service.assert_called_once()
+    mock_get_project.assert_called_once()
 
 
 def test_create_secret_conflict():
@@ -140,16 +145,16 @@ def test_create_secret_conflict():
 
     secret_in = {
         "name": "duplicate-secret",
-        "type": SecretType.KUBERNETES_SECRET.value,
+        "type": SecretKind.EXTERNAL_SECRET.value,
         "scope": SecretScope.ORGANIZATION.value,
         "project_ids": [],
-        "manifest": "apiVersion: v1",
+        "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: duplicate-secret",
     }
 
     # Mock dependencies for TestClient
     _apply_common_overrides(mock_organization)
 
-    with patch("app.secrets.router.create_secret_in_organization") as mock_service:
+    with patch("app.secrets.router.create_organization_scoped_secret_in_organization") as mock_service:
         mock_service.side_effect = ConflictException(
             "A secret with the name 'duplicate-secret' already exists in the organization"
         )
@@ -164,8 +169,8 @@ def test_create_secret_conflict():
 @pytest.mark.parametrize(
     "secret_type,use_case,scope,expected_message_fragment",
     [
-        (SecretType.EXTERNAL, None, SecretScope.ORGANIZATION, "not found in your organization"),
-        (SecretType.KUBERNETES_SECRET, "HuggingFace", SecretScope.PROJECT, "Secret with ID"),
+        (SecretKind.EXTERNAL_SECRET, None, SecretScope.ORGANIZATION, "not found in your organization"),
+        (SecretKind.KUBERNETES_SECRET, "HuggingFace", SecretScope.PROJECT, "Secret with ID"),
     ],
 )
 def test_delete_secret_success(secret_type, use_case, scope, expected_message_fragment):
@@ -208,8 +213,8 @@ def test_delete_secret_success(secret_type, use_case, scope, expected_message_fr
 @pytest.mark.parametrize(
     "secret_type,use_case,scope,expected_message_fragment",
     [
-        (SecretType.EXTERNAL, None, SecretScope.ORGANIZATION, "not found in your organization"),
-        (SecretType.KUBERNETES_SECRET, "HuggingFace", SecretScope.PROJECT, "Secret with ID"),
+        (SecretKind.EXTERNAL_SECRET, None, SecretScope.ORGANIZATION, "not found in your organization"),
+        (SecretKind.KUBERNETES_SECRET, "HuggingFace", SecretScope.PROJECT, "Secret with ID"),
     ],
 )
 def test_delete_secret_not_found(secret_type, use_case, scope, expected_message_fragment):
@@ -234,9 +239,14 @@ def test_delete_secret_not_found(secret_type, use_case, scope, expected_message_
 @pytest.mark.parametrize(
     "secret_type,use_case,scope,conflict_message",
     [
-        (SecretType.EXTERNAL, None, SecretScope.ORGANIZATION, "Secret is in PENDING state and cannot be deleted"),
         (
-            SecretType.KUBERNETES_SECRET,
+            SecretKind.EXTERNAL_SECRET,
+            None,
+            SecretScope.ORGANIZATION,
+            "Secret is in PENDING state and cannot be deleted",
+        ),
+        (
+            SecretKind.KUBERNETES_SECRET,
             "HuggingFace",
             SecretScope.PROJECT,
             "Secret is in PENDING state and cannot be deleted",
@@ -327,7 +337,7 @@ def test_assign_secret_success():
 
     mock_secret = MagicMock()
     mock_secret.id = secret_id
-    mock_secret.type = SecretType.KUBERNETES_SECRET
+    mock_secret.type = SecretKind.KUBERNETES_SECRET
     mock_secret.project_secrets = []
     mock_secret.project_secrets = []
 
@@ -335,7 +345,7 @@ def test_assign_secret_success():
     _apply_common_overrides(mock_organization)
 
     with (
-        patch("app.secrets.router.get_secret_in_organization") as mock_get,
+        patch("app.secrets.router.get_organization_scoped_secret_in_organization") as mock_get,
         patch("app.secrets.router.update_project_secret_assignments") as mock_update,
     ):
         mock_get.return_value = mock_secret
@@ -358,7 +368,7 @@ def test_assign_secret_not_found():
     # Mock dependencies for TestClient
     _apply_common_overrides(mock_organization)
 
-    with patch("app.secrets.router.get_secret_in_organization") as mock_get:
+    with patch("app.secrets.router.get_organization_scoped_secret_in_organization") as mock_get:
         mock_get.return_value = None
 
         with TestClient(app) as client:
@@ -377,13 +387,12 @@ def test_assign_secret_validation_error():
 
     mock_secret = MagicMock()
     mock_secret.id = secret_id
-    mock_secret.type = SecretType.KUBERNETES_SECRET
+    mock_secret.type = SecretKind.KUBERNETES_SECRET
 
-    # Mock dependencies for TestClient
     _apply_common_overrides(mock_organization)
 
     with (
-        patch("app.secrets.router.get_secret_in_organization") as mock_get,
+        patch("app.secrets.router.get_organization_scoped_secret_in_organization") as mock_get,
         patch("app.secrets.router.update_project_secret_assignments") as mock_update,
     ):
         mock_get.return_value = mock_secret
@@ -394,3 +403,111 @@ def test_assign_secret_validation_error():
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "No changes" in response.json()["detail"]
+
+
+def test_create_organization_secret_success():
+    """Test successful creation of an organization-scoped secret via API using the unified /secrets endpoint."""
+    mock_project_id = uuid4()
+    mock_organization = MagicMock()
+    mock_organization.id = uuid4()
+
+    secret_in = {
+        "name": "org-secret",
+        "type": SecretKind.EXTERNAL_SECRET.value,
+        "scope": SecretScope.ORGANIZATION.value,
+        "project_ids": [str(mock_project_id)],
+        "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: org-secret",
+    }
+
+    expected_secret = SecretWithProjects(
+        id=uuid4(),
+        name="org-secret",
+        type=SecretKind.EXTERNAL_SECRET,
+        scope=SecretScope.ORGANIZATION,
+        status=SecretStatus.PENDING,
+        status_reason=None,
+        manifest="apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: org-secret",
+        project_secrets=[],
+        created_at="2025-01-01T00:00:00Z",
+        updated_at="2025-01-01T00:00:00Z",
+        created_by="test@example.com",
+        updated_by="test@example.com",
+    )
+
+    _apply_common_overrides(mock_organization)
+
+    with (
+        patch("app.secrets.router.create_organization_scoped_secret_in_organization") as mock_service,
+        patch("app.secrets.router.get_project_in_organization") as mock_get_project,
+    ):
+        mock_service.return_value = expected_secret
+        mock_get_project.return_value = MagicMock(id=mock_project_id)
+
+        with TestClient(app) as client:
+            response = client.post("/v1/secrets", json=secret_in)
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["name"] == "org-secret"
+    assert data["type"] == SecretKind.EXTERNAL_SECRET.value
+    assert data["scope"] == SecretScope.ORGANIZATION.value
+    mock_service.assert_called_once()
+    mock_get_project.assert_called_once()
+
+
+def test_create_organization_secret_project_not_found():
+    """Test creating org secret with a project not in org returns 404 using the unified /secrets endpoint."""
+    mock_project_id = uuid4()
+    mock_organization = MagicMock()
+    mock_organization.id = uuid4()
+
+    secret_in = {
+        "name": "org-secret",
+        "type": SecretKind.EXTERNAL_SECRET.value,
+        "scope": SecretScope.ORGANIZATION.value,
+        "project_ids": [str(mock_project_id)],
+        "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: org-secret",
+    }
+
+    _apply_common_overrides(mock_organization)
+
+    with patch("app.secrets.router.get_project_in_organization") as mock_get_project:
+        mock_get_project.return_value = None
+
+        with TestClient(app) as client:
+            response = client.post("/v1/secrets", json=secret_in)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert f"Project with ID {mock_project_id} not found in your organization." in response.json()["detail"]
+
+
+def test_create_organization_secret_conflict():
+    """Test creating org secret with duplicate name returns conflict using the unified /secrets endpoint."""
+    mock_project_id = uuid4()
+    mock_organization = MagicMock()
+    mock_organization.id = uuid4()
+
+    secret_in = {
+        "name": "org-secret-dup",
+        "type": SecretKind.EXTERNAL_SECRET.value,
+        "scope": SecretScope.ORGANIZATION.value,
+        "project_ids": [str(mock_project_id)],
+        "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: org-secret-dup",
+    }
+
+    _apply_common_overrides(mock_organization)
+
+    with (
+        patch("app.secrets.router.create_organization_scoped_secret_in_organization") as mock_service,
+        patch("app.secrets.router.get_project_in_organization") as mock_get_project,
+    ):
+        mock_service.side_effect = ConflictException(
+            "A secret with the name 'org-secret-dup' already exists in the organization"
+        )
+        mock_get_project.return_value = MagicMock(id=mock_project_id)
+
+        with TestClient(app) as client:
+            response = client.post("/v1/secrets", json=secret_in)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert "already exists" in response.json()["detail"]

@@ -7,6 +7,7 @@ KAIWO_SERVICE_RESOURCE_PLURAL = "kaiwoservices"
 
 AIM_SERVICE_API_GROUP = "aim.silogen.ai"
 AIM_SERVICE_RESOURCE_PLURAL = "aimservices"
+AIM_CLUSTER_MODEL_RESOURCE_PLURAL = "aimclustermodels"
 
 HTTPROUTE_API_GROUP = "gateway.networking.k8s.io"
 HTTPROUTE_PLURAL = "httproutes"

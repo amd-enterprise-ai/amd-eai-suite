@@ -55,6 +55,7 @@ export type ProjectStorage = {
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
+  storage: Storage;
 };
 
 export type BaseStorage = {

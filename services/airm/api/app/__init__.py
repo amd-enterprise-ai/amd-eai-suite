@@ -6,6 +6,7 @@ import asyncio
 import os
 import sys
 from asyncio import Task
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -22,7 +23,7 @@ from .apikeys.router import router as apikeys_router
 from .charts.router import router as charts_router
 from .clusters.router import router as clusters_router
 from .datasets.router import router as datasets_router
-from .logs.service import close_loki_client, close_websocket_factory, init_loki_client, init_websocket_factory
+from .logs.service import close_loki_client, init_loki_client
 from .managed_workloads.router import router as managed_workloads_router
 from .messaging.admin import configure_inbound_vhost
 from .messaging.consumer import start_consuming_from_common_feedback_queue
@@ -44,7 +45,7 @@ from .utilities.exceptions import (
     ForbiddenException,
     InconsistentStateException,
     NotFoundException,
-    NotReadyException,
+    PreconditionNotMetException,
     UnhealthyException,
     UploadFailedException,
     ValidationException,
@@ -59,7 +60,7 @@ from .utilities.fastapi import (
     inconsistent_state_exception_handler,
     integrity_error_handler,
     not_found_exception_handler,
-    not_ready_exception_handler,
+    precondition_not_met_exception_handler,
     unhealthy_exception_handler,
     upload_failed_exception_handler,
     validation_exception_handler,
@@ -78,13 +79,13 @@ consumer_task: Task | None = None
 
 
 @asynccontextmanager
-async def lifespan(app_lifespan: FastAPI):
+async def lifespan(app_lifespan: FastAPI) -> AsyncIterator[None]:
     await startup_event(app_lifespan)
     yield
     await shutdown_event(app_lifespan)
 
 
-async def startup_event(app_lifespan: FastAPI):
+async def startup_event(app_lifespan: FastAPI) -> None:
     global consumer_task
     app_state = app_lifespan.state
 
@@ -118,12 +119,6 @@ async def startup_event(app_lifespan: FastAPI):
         logger.exception("Failed to initialize Loki client", e)
 
     try:
-        # Initialize WebSocket factory and store in app.state
-        app_state.websocket_factory = init_websocket_factory()
-    except Exception as e:
-        logger.exception("Failed to initialize WebSocket factory", e)
-
-    try:
         # Initialize Minio Client and store in app.state
         app_state.minio_client = init_minio_client()
     except Exception as e:
@@ -153,7 +148,7 @@ async def startup_event(app_lifespan: FastAPI):
         sys.exit(1)
 
 
-async def shutdown_event(app_lifespan: FastAPI):
+async def shutdown_event(app_lifespan: FastAPI) -> None:
     global consumer_task
     if consumer_task:
         consumer_task.cancel()
@@ -177,12 +172,6 @@ async def shutdown_event(app_lifespan: FastAPI):
         await close_loki_client()
     except Exception as e:
         logger.error(f"Error closing Loki client: {e}")
-
-    # Close WebSocket factory
-    try:
-        await close_websocket_factory()
-    except Exception as e:
-        logger.error(f"Error closing WebSocket factory: {e}")
 
     await dispose_db()
 
@@ -241,7 +230,7 @@ app.add_exception_handler(ValidationException, validation_exception_handler)
 app.add_exception_handler(UploadFailedException, upload_failed_exception_handler)
 app.add_exception_handler(ForbiddenException, forbidden_exception_handler)
 app.add_exception_handler(UnhealthyException, unhealthy_exception_handler)
-app.add_exception_handler(NotReadyException, not_ready_exception_handler)
+app.add_exception_handler(PreconditionNotMetException, precondition_not_met_exception_handler)
 app.add_exception_handler(ExternalServiceError, external_service_error_handler)
 app.add_exception_handler(InconsistentStateException, inconsistent_state_exception_handler)
 

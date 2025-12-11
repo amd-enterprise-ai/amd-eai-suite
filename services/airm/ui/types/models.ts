@@ -36,29 +36,15 @@ export interface ModelRequirements {
 }
 
 export interface InferenceSettings {
-  collectionId?: string;
-  ragEnabled: boolean;
-  hybridSearch: boolean;
-  certainty: number;
-  topK: number;
-  alpha: number;
   systemPrompt: string;
-  userPromptTemplate: string;
   temperature: number;
   frequencyPenalty: number;
   presencePenalty: number;
 }
 
 export const DEFAULT_SETTINGS: InferenceSettings = {
-  collectionId: undefined,
-  certainty: 0,
-  topK: 4,
-  alpha: 0.5,
   systemPrompt: '',
-  userPromptTemplate: '',
   temperature: 0,
-  ragEnabled: false,
-  hybridSearch: false,
   frequencyPenalty: 0,
   presencePenalty: 0,
 };

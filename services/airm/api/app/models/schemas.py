@@ -73,4 +73,8 @@ class ModelDeployRequest(BaseModel):
 
 
 class FinetunableModelsResponse(BaseModel):
-    models: list[str] = Field(description="List of canonical names of all finetunable models")
+    data: list[str] = Field(description="List of canonical names of all finetunable models")
+
+
+class ModelsResponse(BaseModel):
+    data: list[ModelResponse] = Field(description="List of models")

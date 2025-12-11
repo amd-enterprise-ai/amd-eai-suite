@@ -39,11 +39,11 @@ export type InvitedUser = BaseUser & {
 export type Users = User[];
 
 export type UsersResponse = {
-  users: Users;
+  data: Users;
 };
 
 export type InvitedUsersResponse = {
-  invitedUsers: InvitedUser[];
+  data: InvitedUser[];
 };
 
 export type UserResponse = User;
@@ -52,6 +52,7 @@ export type InviteUserRequest = {
   email: string;
   roles: UserRole[];
   project_ids: string[];
+  temporary_password: string;
 };
 
 export type UpdateUserRequest = {
@@ -61,9 +62,10 @@ export type UpdateUserRequest = {
 };
 
 export type InviteUserFormData = {
-  email: string | string[];
+  email: string;
   roles: string | string[];
   projectIds?: string | string[];
+  tempPassword?: string | null;
 };
 
 export type UserFormField = 'firstName' | 'lastName' | 'email';

@@ -6,7 +6,11 @@ import { NextRequest } from 'next/server';
 
 import { authenticateRoute, handleError } from '@/utils/server/route';
 
-import { INFERENCE_CHUNK_DELIMITER, InferenceChunk } from '@/types/chat';
+import {
+  INFERENCE_CHUNK_DELIMITER,
+  InferenceChunk,
+  StreamingChatResponse,
+} from '@/types/chat';
 
 export async function POST(
   req: NextRequest,
@@ -20,7 +24,7 @@ export async function POST(
     const projectId = (searchParams.get('projectId') as string) || '';
 
     const body = await req.json();
-    const url = `${process.env.AIRM_API_SERVICE_URL}/v1/chat/${workloadId}?project_id=${projectId}`;
+    const url = `${process.env.AIRM_API_SERVICE_URL}/v1/managed-workloads/${workloadId}/chat?project_id=${projectId}`;
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -49,7 +53,7 @@ export async function POST(
       new ReadableStream({
         async pull(controller) {
           try {
-            let readerChunk;
+            let readerChunk: ReadableStreamReadResult<Uint8Array>;
             let incompleteJson = '';
 
             while (!(readerChunk = await reader.read()).done) {
@@ -64,7 +68,7 @@ export async function POST(
                   incompleteJson = '';
                 }
 
-                let jsonObject;
+                let jsonObject: StreamingChatResponse;
                 incompleteJson = '';
                 try {
                   jsonObject = JSON.parse(json);
@@ -72,7 +76,7 @@ export async function POST(
                   incompleteJson += json;
                   continue;
                 }
-                const content = jsonObject.choices[0]?.delta?.content;
+                const content = jsonObject.choices?.[0]?.delta?.content;
                 const responseChunk: InferenceChunk = {};
                 if (content) {
                   responseChunk.content = content;

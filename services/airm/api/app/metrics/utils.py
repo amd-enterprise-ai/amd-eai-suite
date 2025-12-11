@@ -5,6 +5,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 from math import floor
+from typing import Any
 
 from prometheus_api_client import PrometheusConnect
 
@@ -56,8 +57,13 @@ def get_aggregation_lookback_for_metrics(step: float | None = None) -> str:
 
 
 async def a_custom_query_range(
-    client: PrometheusConnect, query: str, start_time: datetime, end_time: datetime, step: str, params: dict = None
-):
+    client: PrometheusConnect,
+    query: str,
+    start_time: datetime,
+    end_time: datetime,
+    step: str,
+    params: dict | None = None,
+) -> list[dict[str, Any]]:
     """Async wrapper for custom_query_range."""
     return await asyncio.to_thread(
         lambda: client.custom_query_range(
@@ -66,7 +72,7 @@ async def a_custom_query_range(
     )
 
 
-async def a_custom_query(client: PrometheusConnect, query: str, params: dict = None):
+async def a_custom_query(client: PrometheusConnect, query: str, params: dict | None = None) -> list[dict[str, Any]]:
     """Async wrapper for custom_query."""
     return await asyncio.to_thread(lambda: client.custom_query(query=query, params=params))
 

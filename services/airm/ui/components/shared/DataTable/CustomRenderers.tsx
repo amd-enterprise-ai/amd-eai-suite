@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Chip, Spinner, Tooltip } from '@heroui/react';
+import { Chip, Tooltip } from '@heroui/react';
 import React, { ReactNode } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -12,7 +12,7 @@ import { ChipDisplayVariant } from '@/types/data-table/chip-variant';
 import { StatusBadgeVariant } from '@/types/data-table/status-variant';
 
 import { InlineBadge } from '../InlineBadge';
-
+import Status, { StatusProps } from '../Status/Status';
 import { format, parseISO } from 'date-fns';
 
 /**
@@ -72,7 +72,7 @@ const ChipDisplay = ({
   );
 };
 
-export interface StatusBadgeVariants {
+export interface StatusVariants {
   [type: string]: StatusBadgeVariant;
 }
 
@@ -81,12 +81,14 @@ export interface StatusBadgeVariants {
  * @param variants - An object mapping variant keys to their configurations.
  * @param type - The key of the variant to display.
  */
-const StatusBadgeDisplay = ({
+const StatusDisplay = ({
   variants,
   type,
+  bypassProps = {},
 }: {
-  variants: StatusBadgeVariants;
+  variants: { [T: string]: StatusBadgeVariant };
   type: string;
+  bypassProps?: Partial<StatusBadgeVariant>;
 }) => {
   // Fallback render a Chip in danger color as an indicator of an error
   if (!variants[type]) {
@@ -97,40 +99,9 @@ const StatusBadgeDisplay = ({
     );
   }
 
-  const {
-    label,
-    icon: iconSource,
-    color: iconColorName = 'default',
-    textColor: labelColorName = '',
-  } = variants[type];
+  const mergedProps: StatusProps = { ...variants[type], ...bypassProps };
 
-  const iconStylingClass =
-    iconColorName &&
-    `text-${iconColorName}` + (iconColorName === 'default' ? '-500' : '');
-
-  const labelStylingClass =
-    labelColorName &&
-    `text-${labelColorName}` + (iconColorName === 'default' ? '-500' : '');
-
-  let iconElement: ReactNode;
-
-  if (iconSource === 'spinner') {
-    iconElement = (
-      <Spinner size="sm" color={iconColorName} className="scale-75" />
-    );
-  } else {
-    const IconComponent = iconSource;
-    iconElement = <IconComponent size="20" className={iconStylingClass} />;
-  }
-
-  return (
-    <span
-      className={`flex font flex-nowrap gap-1 items-center ${labelStylingClass}`}
-    >
-      {iconElement}
-      {label}
-    </span>
-  );
+  return <Status {...mergedProps} />;
 };
 
 interface TranslationDisplayBaseProps {
@@ -283,7 +254,7 @@ const BadgeStackDisplay = ({
 export {
   DateDisplay,
   ChipDisplay,
-  StatusBadgeDisplay,
+  StatusDisplay,
   TranslationDisplay,
   NoDataDisplay,
   BadgeStackDisplay,

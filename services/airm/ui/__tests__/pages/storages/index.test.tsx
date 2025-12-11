@@ -12,9 +12,6 @@ import {
 import { getServerSession } from 'next-auth';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
-import { fetchProjects } from '@/services/app/projects';
-import { fetchSecrets } from '@/services/app/secrets';
-import { fetchStorages } from '@/services/app/storages';
 import { getProjects } from '@/services/server/projects';
 import { getSecrets } from '@/services/server/secrets';
 import { getStorages } from '@/services/server/storages';
@@ -246,6 +243,36 @@ describe('storages page', async () => {
         expect.anything(),
       );
     });
+  });
+
+  it('refetches the data if the refetch button is clicked', async () => {
+    const mockSecrets = generateMockSecrets(1);
+    const mockProjects = generateMockProjects(1);
+    const mockStorages = generateMockStorages(1);
+
+    act(() => {
+      render(
+        <StoragesPage
+          secrets={mockSecrets}
+          projects={mockProjects}
+          storages={mockStorages}
+        />,
+        {
+          wrapper,
+        },
+      );
+    });
+
+    expect(mockFetchStorages).toBeCalledTimes(1);
+    act(() => {
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'data.refresh',
+        }),
+      );
+    });
+
+    expect(mockFetchStorages).toBeCalledTimes(2);
   });
 
   it('filter will return correct storages', async () => {

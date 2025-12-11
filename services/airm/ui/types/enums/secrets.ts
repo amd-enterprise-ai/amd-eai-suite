@@ -21,12 +21,15 @@ export enum SecretStatus {
 }
 
 export enum SecretType {
-  EXTERNAL = 'External',
+  EXTERNAL_SECRET = 'ExternalSecret',
   KUBERNETES_SECRET = 'KubernetesSecret',
 }
 
 export enum SecretUseCase {
   HUGGING_FACE = 'HuggingFace',
+  S3 = 'S3',
+  DB = 'Database',
+  GENERIC = 'Generic',
 }
 
 export enum ProjectSecretStatus {

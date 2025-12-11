@@ -11,14 +11,7 @@ import {
 import { APIRequestError } from '@/utils/app/errors';
 import { aimParser, aimsParser } from '@/utils/app/aims';
 
-import { type Aim } from '@/types/aims';
-
-export type AimDeployment = {
-  displayName?: string;
-  type: string;
-  template: string;
-  image?: string;
-};
+import { type Aim, type AimDeployPayload } from '@/types/aims';
 
 export const getAims = async (projectId: string): Promise<Aim[]> => {
   if (!projectId) throw new APIRequestError(`No project selected`, 422);
@@ -43,7 +36,9 @@ export const getAims = async (projectId: string): Promise<Aim[]> => {
     );
   }
   const aims = await response.json();
-  return aimsParser(aims);
+  // Extract data from wrapped response
+  const aimsData = aims.data;
+  return aimsParser(aimsData);
 };
 
 export const getAimById = async (
@@ -78,19 +73,14 @@ export const getAimById = async (
  *
  * @param {string} id - The ID of the model to deploy.
  * @param {string} projectId - The ID of the project.
- * @param {AimDeployment} payload - The deployment configuration.
+ * @param {AimDeployPayload} payload - The deployment configuration.
  * @returns {Promise<any>} A promise that resolves to the deployment result.
  * @throws {APIRequestError} If the API request fails.
  */
 export const deployAim = async (
   id: string,
   projectId: string,
-  payload?: Partial<AimDeployment> & {
-    imagePullSecrets?: string[];
-    hfToken?: string;
-    cacheModel: boolean;
-    replicas: number;
-  },
+  payload?: AimDeployPayload,
 ) => {
   if (!projectId) throw new APIRequestError(`No project selected`, 422);
 

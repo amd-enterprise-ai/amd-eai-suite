@@ -8,11 +8,23 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..managed_workloads.schemas import ChartWorkloadResponse
-from ..secrets.service import resolve_hf_token_reference
+from ..messaging.sender import MessageSender, get_message_sender
+from ..organizations.models import Organization
+from ..projects.models import Project
+from ..secrets.enums import SecretUseCase
+from ..secrets.repository import get_secret_by_id_and_use_case
+from ..users.models import User
 from ..utilities.checks import ensure_cluster_healthy
 from ..utilities.database import get_session
-from ..utilities.minio import get_minio_client
-from ..utilities.security import BearerToken, get_user, get_user_email, validate_and_get_project_from_query
+from ..utilities.exceptions import NotFoundException
+from ..utilities.minio import MinioClient, get_minio_client
+from ..utilities.security import (
+    BearerToken,
+    get_user,
+    get_user_email,
+    get_user_organization,
+    validate_and_get_project_from_query,
+)
 from .models import OnboardingStatus
 from .schemas import (
     DeleteModelsBatchRequest,
@@ -21,6 +33,7 @@ from .schemas import (
     ModelDeployRequest,
     ModelEdit,
     ModelResponse,
+    ModelsResponse,
 )
 from .service import (
     delete_model,
@@ -39,7 +52,7 @@ router = APIRouter(prefix="/models", tags=["Models"])
 
 @router.get(
     "",
-    response_model=list[ModelResponse],
+    response_model=ModelsResponse,
     status_code=status.HTTP_200_OK,
     summary="List available models with filtering.",
     description="""
@@ -49,16 +62,17 @@ router = APIRouter(prefix="/models", tags=["Models"])
 async def get_models(
     onboarding_status: OnboardingStatus | None = Query(None, description="Filter by onboarding status"),
     name: str | None = Query(None, description="Filter by name (exact match)"),
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
-) -> list[ModelResponse]:
+) -> ModelsResponse:
     await update_onboarding_statuses(session, project.id)
-    return await list_models(
+    models = await list_models(
         session=session,
         onboarding_status=onboarding_status,
         name=name,
         project_id=project.id,
     )
+    return ModelsResponse(data=models)
 
 
 @router.get(
@@ -70,7 +84,7 @@ async def get_models(
 )
 async def get_finetunable_models_endpoint(session: AsyncSession = Depends(get_session)) -> FinetunableModelsResponse:
     models = await get_finetunable_models(session)
-    return FinetunableModelsResponse(models=models)
+    return FinetunableModelsResponse(data=models)
 
 
 @router.get(
@@ -82,7 +96,7 @@ async def get_finetunable_models_endpoint(session: AsyncSession = Depends(get_se
 )
 async def get_model_endpoint(
     model_id: UUID,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
 ) -> ModelResponse:
     await update_onboarding_statuses(session, project.id)
@@ -99,8 +113,8 @@ async def get_model_endpoint(
 async def modify_model(
     model_id: UUID,
     model: ModelEdit,
-    project=Depends(validate_and_get_project_from_query),
-    user=Depends(get_user_email),
+    project: Project = Depends(validate_and_get_project_from_query),
+    user: str = Depends(get_user_email),
     session: AsyncSession = Depends(get_session),
 ) -> ModelResponse:
     await update_onboarding_statuses(session, project.id)
@@ -115,10 +129,10 @@ async def modify_model(
 )
 async def delete_single_model(
     model_id: UUID,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
-    minio_client=Depends(get_minio_client),
-):
+    minio_client: MinioClient = Depends(get_minio_client),
+) -> None:
     ensure_cluster_healthy(project)
     await delete_model(session, model_id, project.id, minio_client=minio_client)
 
@@ -131,10 +145,10 @@ async def delete_single_model(
 )
 async def batch_delete_models(
     data: DeleteModelsBatchRequest,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
-    minio_client=Depends(get_minio_client),
-):
+    minio_client: MinioClient = Depends(get_minio_client),
+) -> list[UUID]:
     ensure_cluster_healthy(project)
     deleted_ids = await delete_models(session=session, ids=data.ids, project_id=project.id, minio_client=minio_client)
     return deleted_ids
@@ -150,12 +164,14 @@ async def batch_delete_models(
 async def finetune_model(
     model_id: UUID | str,
     finetuning_data: FinetuneCreate,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     display_name: str | None = Query(None, description="User-friendly display name for the workload"),
     token: str = Depends(BearerToken),
-    author=Depends(get_user_email),
+    organization: Organization = Depends(get_user_organization),
+    author: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
     session: AsyncSession = Depends(get_session),
-):
+) -> ChartWorkloadResponse:
     ensure_cluster_healthy(project)
 
     # Convert string to UUID if valid, otherwise keep as string
@@ -167,11 +183,14 @@ async def finetune_model(
     hf_secret_name = None
 
     if finetuning_data.hf_token_secret_id:
-        resolved = await resolve_hf_token_reference(
+        resolved = await get_secret_by_id_and_use_case(
             session=session,
-            project=project,
-            token_secret_id=finetuning_data.hf_token_secret_id,
+            organization_id=organization.id,
+            secret_id=finetuning_data.hf_token_secret_id,
+            use_case=SecretUseCase.HUGGING_FACE,
         )
+        if not resolved:
+            raise NotFoundException("Hugging Face token reference not found for this project.")
         hf_secret_name = resolved.name
 
     workload = await run_finetune_model_workload(
@@ -181,6 +200,7 @@ async def finetune_model(
         project=project,
         creator=author,
         token=token,
+        message_sender=message_sender,
         display_name=display_name,
         hf_token_secret_name=hf_secret_name,
     )
@@ -198,10 +218,11 @@ async def finetune_model(
 async def deploy_model(
     model_id: UUID,
     request: ModelDeployRequest | None = None,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     display_name: str | None = Query(None, description="User-friendly display name for the workload"),
     token: str = Depends(BearerToken),
-    author=Depends(get_user),
+    author: User = Depends(get_user),
+    message_sender: MessageSender = Depends(get_message_sender),
     session: AsyncSession = Depends(get_session),
 ) -> ChartWorkloadResponse:
     ensure_cluster_healthy(project)
@@ -212,6 +233,7 @@ async def deploy_model(
         creator=author,
         token=token,
         project=project,
+        message_sender=message_sender,
         request=request,
         display_name=display_name,
     )

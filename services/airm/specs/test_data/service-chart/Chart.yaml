@@ -5,4 +5,4 @@
 apiVersion: v2
 name: test-health-service
 description: A simple service chart for testing with a health endpoint
-version: 0.1.0
+version: 0.2.0

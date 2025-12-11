@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Enum as SQLAlchemyEnum
@@ -11,9 +10,7 @@ from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-if TYPE_CHECKING:
-    from ..projects.models import Project
-
+from ..projects.models import Project
 from ..utilities.models import BaseEntity
 
 
@@ -39,6 +36,5 @@ class InferenceModel(BaseEntity):
     )
     model_weights_path: Mapped[str | None] = mapped_column(String, nullable=True)
     canonical_name: Mapped[str] = mapped_column(String, nullable=True)
-    hf_token_secret_name: Mapped[str] = mapped_column(String, nullable=True)
 
     __table_args__ = (UniqueConstraint("name", "project_id", name="inference_models_name_project_id_key"),)

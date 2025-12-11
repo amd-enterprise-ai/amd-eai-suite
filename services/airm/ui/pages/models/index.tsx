@@ -29,7 +29,7 @@ import DeployedModels from '@/components/features/models/DeployedModels';
 import AIMCatalog from '@/components/features/models/AIMCatalog';
 import CustomModels from '@/components/features/models/CustomModels';
 import DeleteModelModal from '@/components/features/models/DeleteModelModal';
-import FinetuneModelModal from '@/components/features/models/FinetuneModelModal';
+import FinetuneDrawer from '@/components/features/models/FinetuneDrawer';
 import { APIRequestError } from '@/utils/app/errors';
 
 const ModelsPage = () => {
@@ -54,8 +54,7 @@ const ModelsPage = () => {
 
   const { data: finetunableModelsResponse } = useQuery({
     queryKey: ['project', activeProject, 'finetunable-models'],
-    queryFn: (): Promise<{ models: string[] }> =>
-      getFinetunableModels(activeProject!),
+    queryFn: (): Promise<string[]> => getFinetunableModels(activeProject!),
     enabled: !!activeProject,
   });
 
@@ -177,7 +176,7 @@ const ModelsPage = () => {
             onOpenDeployModal={handleOpenDeployModal}
             onOpenFinetuneModal={handleOpenFinetuneModal}
             onOpenDeleteModal={handleOpenDeleteModal}
-            finetunableModels={finetunableModelsResponse?.models}
+            finetunableModels={finetunableModelsResponse || []}
           />
         </Tab>
         <Tab key="deployedModels" title={t('tabs.deployedModels')}>
@@ -185,11 +184,11 @@ const ModelsPage = () => {
         </Tab>
       </Tabs>
 
-      <FinetuneModelModal
+      <FinetuneDrawer
         isOpen={finetuneDisclosure.isOpen}
         onOpenChange={finetuneDisclosure.onOpenChange}
         model={currentModelForModal}
-        finetunableModels={finetunableModelsResponse?.models || []}
+        finetunableModels={finetunableModelsResponse || []}
         onConfirmAction={({
           id,
           params,

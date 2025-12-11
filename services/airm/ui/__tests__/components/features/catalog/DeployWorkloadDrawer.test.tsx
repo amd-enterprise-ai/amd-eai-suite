@@ -396,7 +396,12 @@ describe('DeployWorkloadDrawer', () => {
     });
 
     expect(toastSuccessMock).toHaveBeenCalledWith(
-      'notifications.deployWorkload.success',
+      expect.objectContaining({
+        props: expect.objectContaining({
+          message: 'notifications.deployWorkload.success',
+          href: '/workloads/workload-1',
+        }),
+      }),
     );
     expect(mockOnDeploying).toHaveBeenCalled();
   });

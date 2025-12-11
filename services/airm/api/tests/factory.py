@@ -30,7 +30,7 @@ When to keep isolation data enabled (default):
 """
 
 from datetime import UTC, datetime
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +41,8 @@ from airm.messaging.schemas import (
     ProjectSecretStatus,
     ProjectStorageStatus,
     QuotaStatus,
+    SecretKind,
+    SecretScope,
     WorkloadComponentKind,
 )
 from app.aims.models import AIM
@@ -54,8 +56,13 @@ from app.overlays.models import Overlay
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
 from app.quotas.models import Quota
-from app.secrets.enums import SecretScope, SecretStatus, SecretType
-from app.secrets.models import ProjectSecret, Secret
+from app.secrets.enums import SecretStatus, SecretUseCase
+from app.secrets.models import (
+    OrganizationScopedSecret,
+    OrganizationSecretAssignment,
+    ProjectScopedSecret,
+    Secret,
+)
 from app.storages.enums import StorageScope, StorageStatus, StorageType
 from app.storages.models import ProjectStorage, ProjectStorageConfigmap, Storage
 from app.users.models import User
@@ -127,7 +134,8 @@ async def create_cluster(
     id: UUID | None = None,
     name: str = "test-cluster",
     creator: str = "test@example.com",
-    base_url: str = "https://example.com",
+    workloads_base_url: str = "https://example.com",
+    kube_api_url: str = "https://k8s.example.com:6443",
 ) -> Cluster:
     """Create a test cluster associated with an organization."""
     cluster = Cluster(
@@ -136,7 +144,8 @@ async def create_cluster(
         organization_id=organization.id,
         created_by=creator,
         updated_by=creator,
-        base_url=base_url,
+        workloads_base_url=workloads_base_url,
+        kube_api_url=kube_api_url,
     )
     session.add(cluster)
     await session.flush()
@@ -403,17 +412,19 @@ async def create_aim(
     session: AsyncSession,
     *,
     id: UUID | None = None,
-    image_name: str = "aim",
-    image_tag: str = "0.1.0-test-model-20251001",
-    labels: dict[str, str] | None = None,
+    resource_name: str = "aim-test-model-0-1-0",
+    image_reference: str = "docker.io/amdenterpriseai/test-model:0.1.0",
+    labels: dict[str, Any] | None = None,
+    status: str = "Ready",
     creator: str = "test@example.com",
 ) -> AIM:
-    """Create a test AIM (AI Model) entity."""
+    """Create a test AIM entity."""
     aim = AIM(
         id=id or uuid4(),
-        image_name=image_name,
-        image_tag=image_tag,
+        resource_name=resource_name,
+        image_reference=image_reference,
         labels=labels or {},
+        status=status,
         created_by=creator,
         updated_by=creator,
     )
@@ -475,7 +486,9 @@ async def create_basic_test_environment(
             for tests that need projects with quotas (e.g., resource allocation tests).
     """
     organization = await create_organization(session, name=org_name, creator=creator)
-    cluster = await create_cluster(session, organization, name=cluster_name, creator=creator, base_url=cluster_base_url)
+    cluster = await create_cluster(
+        session, organization, name=cluster_name, creator=creator, workloads_base_url=cluster_base_url
+    )
 
     if create_project_quota:
         project, quota = await create_project_with_quota(
@@ -522,7 +535,9 @@ async def create_full_test_environment(
             bugs. Set to False for non-organization-scoped tests.
     """
     organization = await create_organization(session, name=org_name, creator=creator)
-    cluster = await create_cluster(session, organization, name=cluster_name, creator=creator, base_url=cluster_base_url)
+    cluster = await create_cluster(
+        session, organization, name=cluster_name, creator=creator, workloads_base_url=cluster_base_url
+    )
     project = await create_project(session, organization, cluster, name=project_name, creator=creator)
     user = await create_user(session, organization, email=user_email, invited_by=creator)
 
@@ -1139,8 +1154,9 @@ async def create_secret(
     *,
     id: UUID | None = None,
     name: str = "my-secret",
-    secret_type: str = SecretType.EXTERNAL.value,
+    secret_type: str = SecretKind.EXTERNAL_SECRET.value,
     secret_scope: str = SecretScope.ORGANIZATION.value,
+    use_case: str | None = SecretUseCase.S3.value,
     manifest: str = "manifest",
     status: str = SecretStatus.UNASSIGNED.value,
     status_reason: str | None = None,
@@ -1148,48 +1164,67 @@ async def create_secret(
 ) -> Secret:
     """Create a test secret associated with organization."""
     now = datetime.now(UTC)
-    secret = Secret(
-        id=id or uuid4(),
-        name=name,
-        type=secret_type,
-        scope=secret_scope,
-        manifest=manifest,
-        status=status,
-        status_reason=status_reason,
-        organization_id=organization.id,
-        created_by=creator,
-        updated_by=creator,
-        created_at=now,
-        updated_at=now,
-    )
+
+    # Create OrganizationScopedSecret for ORGANIZATION scope, regular Secret otherwise
+    if secret_scope == SecretScope.ORGANIZATION.value:
+        secret = OrganizationScopedSecret(
+            id=id or uuid4(),
+            name=name,
+            type=secret_type,
+            scope=secret_scope,
+            use_case=use_case,
+            manifest=manifest,
+            status=status,
+            status_reason=status_reason,
+            organization_id=organization.id,
+            created_by=creator,
+            updated_by=creator,
+            created_at=now,
+            updated_at=now,
+        )
+    else:
+        secret = ProjectScopedSecret(
+            id=id or uuid4(),
+            name=name,
+            type=secret_type,
+            scope=secret_scope,
+            use_case=use_case,
+            status=status,
+            status_reason=status_reason,
+            organization_id=organization.id,
+            created_by=creator,
+            updated_by=creator,
+            created_at=now,
+            updated_at=now,
+        )
     session.add(secret)
     await session.flush()
     return secret
 
 
-async def create_project_secret(
+async def create_organization_secret_assignment(
     session: AsyncSession,
     project: Project,
-    secret: Secret,
+    secret: Secret,  # Accept Secret type since it could be OrganizationScopedSecret
     *,
     id: UUID | None = None,
     status: str = ProjectSecretStatus.SYNCED.value,
     status_reason: str | None = None,
     creator: str = "test@example.com",
-) -> ProjectSecret:
-    """Create a test project secret assignment."""
-    project_secret = ProjectSecret(
+) -> OrganizationSecretAssignment:
+    """Create a test organization secret assignment to a project."""
+    assignment = OrganizationSecretAssignment(
         id=id or uuid4(),
         project_id=project.id,
-        secret_id=secret.id,
+        organization_secret_id=secret.id,  # This should be the secret's ID
         status=status,
         status_reason=status_reason,
         created_by=creator,
         updated_by=creator,
     )
-    session.add(project_secret)
+    session.add(assignment)
     await session.flush()
-    return project_secret
+    return assignment
 
 
 async def create_secret_with_project_assignment(
@@ -1199,7 +1234,7 @@ async def create_secret_with_project_assignment(
     *,
     secret_id: UUID | None = None,
     name: str = "test-secret",
-    secret_type: SecretType = SecretType.EXTERNAL,
+    secret_type: SecretKind = SecretKind.EXTERNAL_SECRET,
     scope: SecretScope = SecretScope.ORGANIZATION,
     manifest: str = "apiVersion: v1\nkind: Secret\nmetadata:\n  name: test-secret",
     secret_status: str = SecretStatus.SYNCED.value,
@@ -1222,15 +1257,65 @@ async def create_secret_with_project_assignment(
         creator=creator,
     )
 
-    await create_project_secret(
-        session,
-        project,
-        secret,
-        status=project_secret_status,
-        status_reason=project_secret_status_reason,
-        creator=creator,
-    )
+    # Use OrganizationSecretAssignment for ORGANIZATION-scoped secrets
+    if scope == SecretScope.ORGANIZATION:
+        await create_organization_secret_assignment(
+            session,
+            project,
+            secret,
+            status=project_secret_status,
+            status_reason=project_secret_status_reason,
+            creator=creator,
+        )
+    else:
+        # Use ProjectSecret for other scopes (if needed)
+        await create_project_scoped_secret(
+            session,
+            project,
+            secret,
+            secret_status=project_secret_status,
+            secret_status_reason=project_secret_status_reason,
+            creator=creator,
+        )
 
+    return secret
+
+
+async def create_project_scoped_secret(
+    session: AsyncSession,
+    organization: Organization,
+    project: Project,
+    *,
+    secret_id: UUID | None = None,
+    name: str = "test-project-secret",
+    secret_type: SecretKind | str = SecretKind.EXTERNAL_SECRET,
+    secret_status: str = SecretStatus.SYNCED.value,
+    secret_status_reason: str | None = None,
+    use_case: str | None = None,
+    creator: str = "test@example.com",
+) -> ProjectScopedSecret:
+    """Create a test project-scoped secret."""
+    now = datetime.now(UTC)
+    # Handle both SecretKind enum and string values
+    type_value = secret_type.value if isinstance(secret_type, SecretKind) else secret_type
+
+    secret = ProjectScopedSecret(
+        id=secret_id or uuid4(),
+        name=name,
+        type=type_value,
+        scope=SecretScope.PROJECT.value,
+        status=secret_status,
+        status_reason=secret_status_reason,
+        organization_id=organization.id,
+        project_id=project.id,
+        created_by=creator,
+        updated_by=creator,
+        created_at=now,
+        updated_at=now,
+        use_case=use_case,
+    )
+    session.add(secret)
+    await session.flush()
     return secret
 
 
@@ -1360,7 +1445,7 @@ async def create_storage_with_project_assignment(
         creator=creator,
     )
 
-    await create_project_secret(
+    await create_organization_secret_assignment(
         session,
         project,
         secret,

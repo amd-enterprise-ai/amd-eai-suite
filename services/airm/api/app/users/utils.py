@@ -2,15 +2,29 @@
 #
 # SPDX-License-Identifier: MIT
 
+
 from keycloak import KeycloakAdmin
 
+from ..organizations.models import Organization
+from ..organizations.service import enrich_organization_details
 from ..projects.models import Project
 from ..projects.schemas import ProjectResponse
-from ..utilities.exceptions import ExternalServiceError, ValidationException
+from ..utilities.config import POST_REGISTRATION_REDIRECT_URL
+from ..utilities.exceptions import (
+    ConflictException,
+    ExternalServiceError,
+    PreconditionNotMetException,
+    ValidationException,
+)
+from ..utilities.keycloak_admin import (
+    create_user,
+    send_verify_email,
+    set_temporary_password,
+)
 from ..utilities.keycloak_admin import get_organization_by_id as get_organization_by_id_from_keycloak
 from ..utilities.security import Roles
 from .models import User as UserModel
-from .schemas import InvitedUser, InvitedUserWithProjects, UserResponse, UserWithProjects
+from .schemas import InvitedUser, InvitedUserWithProjects, InviteUser, UserResponse, UserWithProjects
 
 
 def merge_user_details(keycloak_user: dict, user: UserModel, platform_admins: set[str]) -> UserResponse:
@@ -110,7 +124,7 @@ def is_keycloak_user_inactive(keycloak_user: dict) -> bool:
     return not is_keycloak_user_active(keycloak_user)
 
 
-async def check_valid_email_domain(user_email: str, organization, kc_admin: KeycloakAdmin):
+async def check_valid_email_domain(user_email: str, organization: Organization, kc_admin: KeycloakAdmin) -> None:
     """
     Check if a user email can be assigned to an organization.
 
@@ -185,3 +199,41 @@ def merge_invited_user_details_with_projects(
         **invited_user.model_dump(),
         projects=[ProjectResponse.model_validate(project) for project in projects] if projects else [],
     )
+
+
+async def create_user_in_keycloak(kc_admin: KeycloakAdmin, user_in: InviteUser, organization: Organization) -> str:
+    organization_details = await enrich_organization_details(kc_admin=kc_admin, organization=organization)
+
+    if not organization_details.idp_linked and not organization_details.smtp_enabled:
+        if not user_in.temporary_password:
+            raise ConflictException("Temporary password is required for user creation")
+        else:
+            # Create user in Keycloak with temporary password
+            user_data = {
+                "username": user_in.email,
+                "email": user_in.email,
+                "emailVerified": True,  # set the email as already verified since there is no smtp setup
+                "enabled": True,
+                "requiredActions": ["UPDATE_PASSWORD", "UPDATE_PROFILE"],
+            }
+            keycloak_user_id = await create_user(kc_admin=kc_admin, user_data=user_data)
+            await set_temporary_password(
+                kc_admin=kc_admin, user_id=keycloak_user_id, temp_password=user_in.temporary_password
+            )
+            return keycloak_user_id
+    elif organization_details.smtp_enabled:
+        # Create user in Keycloak with email verification required
+        user_data = {
+            "username": user_in.email,
+            "email": user_in.email,
+            "emailVerified": False,
+            "enabled": True,
+            "requiredActions": ["VERIFY_EMAIL", "UPDATE_PASSWORD", "UPDATE_PROFILE"],
+        }
+        keycloak_user_id = await create_user(kc_admin=kc_admin, user_data=user_data)
+        await send_verify_email(
+            kc_admin=kc_admin, keycloak_user_id=keycloak_user_id, redirect_uri=POST_REGISTRATION_REDIRECT_URL
+        )
+        return keycloak_user_id
+    else:
+        raise PreconditionNotMetException("Organization is not configured for user creation")

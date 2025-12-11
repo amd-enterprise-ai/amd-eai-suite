@@ -14,8 +14,8 @@ The frontend interface for both AI Resource Manager and AI Workbench. It provide
 
 The app has various settings and features that can be set or toggled using environment variables:
 
-- NEXTAUTH_SECRET: the secret used by next-auth for authentication. See the .env.local.example file.
-- NEXTAUTH_URL: the url the app will run on. This is used by next-auth for authentication. See the .env.local.example file.
+- NEXTAUTH_SECRET: the secret used by next-auth for authentication. See the `.env.local.example` file.
+- NEXTAUTH_URL: the url the app will run on. This is used by next-auth for authentication. See the `.env.local.example` file.
 - KEYCLOAK_ID: ID for the keycloak client used by next-auth for authentication
 - KEYCLOAK_SECRET: the secret for the keycloak authentication client used by next-auth for authentication
 - KEYCLOAK_ISSUER: the URL to the Keycloak issuer (something like https://auth.dev.silogen.ai/realms/airm with the realms)
@@ -32,7 +32,7 @@ Here are the instructions for running locally:
 
 - Install pnpm: https://pnpm.io/installation
 - Run `pnpm install`
-- Copy the ./.env.local.dummy to .env.local and configure the variables.
+- Copy the `.env.local.example` to `.env.local` and configure the variables.
 
   - setup connection to other services, for example locally:
 

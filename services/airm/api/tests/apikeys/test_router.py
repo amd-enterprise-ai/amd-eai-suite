@@ -66,9 +66,10 @@ def test_get_api_keys_success(mock_cluster_auth_client):
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["name"] == "Production Key"
-    assert data[0]["truncated_key"] == "amd_aim_api_key_••••••••1234"
+    assert "data" in data
+    assert len(data["data"]) == 1
+    assert data["data"][0]["name"] == "Production Key"
+    assert data["data"][0]["truncated_key"] == "amd_aim_api_key_••••••••1234"
 
 
 def test_create_api_key_success(mock_cluster_auth_client):

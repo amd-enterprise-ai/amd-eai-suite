@@ -29,7 +29,7 @@ from app.utilities.security import (
 )
 
 
-@patch("app.utilities.security.KEYCLOAK_PUBLIC_OPENID.decode_token", autospec=True)
+@patch("app.utilities.security.KEYCLOAK_OPENID.decode_token", autospec=True)
 def test_auth_token_claimset_valid_token(mock_decode_token):
     mock_decode_token.return_value = {"realm_access": {"roles": [Roles.PLATFORM_ADMINISTRATOR.value]}}
     authorization = "Bearer valid_token"
@@ -48,7 +48,7 @@ def test_auth_token_claimset_invalid_scheme():
     )
 
 
-@patch("app.utilities.security.KEYCLOAK_PUBLIC_OPENID.decode_token", autospec=True)
+@patch("app.utilities.security.KEYCLOAK_OPENID.decode_token", autospec=True)
 def test_auth_token_claimset_invalid_token(mock_decode_token):
     mock_decode_token.side_effect = Exception("Invalid token")
     authorization = "Bearer invalid_token"

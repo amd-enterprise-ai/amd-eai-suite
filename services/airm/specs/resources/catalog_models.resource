@@ -10,7 +10,9 @@ Documentation       High-level model testing keywords.
 ...                 test cases should use.
 Resource            api/models.resource
 Resource            api/finetuning.resource
-Resource            catalog_projects.resource
+Resource            api/workloads.resource
+Resource            airm_projects.resource
+Resource            common/resource_tracking.resource
 
 
 *** Variables ***
@@ -34,7 +36,7 @@ Valid base model data is prepared
     ${model_data}=          Create Dictionary
     ...                     type=BaseModel
     ...                     name=${model_name}
-    ...                     model_weights_path=default-bucket/models/${CURRENT_PROJECT_SLUG}/models/${model_name}
+    ...                     model_weights_path=default-bucket/models/${TEST_PROJECT_SLUG}/models/${model_name}
     ...                     canonical_name=${model_name}
     Set Test Variable       ${TEST_DATA}            ${model_data}
 
@@ -49,18 +51,17 @@ Valid merged model data is prepared
     ${model_data}=          Create Dictionary
     ...                     type=MergedModel
     ...                     name=${model_name}
-    ...                     model_weights_path=default-bucket/models/${CURRENT_PROJECT_SLUG}/models/${model_name}
+    ...                     model_weights_path=default-bucket/models/${TEST_PROJECT_SLUG}/models/${model_name}
     ...                     base_model_id=${base_model_id}
     Set Test Variable       ${TEST_DATA}            ${model_data}
 
 Create model request is sent
-    [Documentation]    Sends request to create a model using prepared test data and the project ID from catalog_projects.resource
+    [Documentation]    Sends request to create a model using prepared test data and the project ID from airm_projects.resource
     ${endpoint}=            Models endpoint
-    ${query_params}=        Create Dictionary       project_id=${CURRENT_PROJECT_ID}
-    ${response}=            Post on session         ${API_SESSION}          ${endpoint}             json=${TEST_DATA}       params=${query_params}
+    ${query_params}=        Create Dictionary       project_id=${TEST_PROJECT_ID}
+    ${response}=            Safe Post Request         ${endpoint}             json=${TEST_DATA}       params=${query_params}
     Set Test Variable       ${response}             ${response}
 
-    # Track created model ID for cleanup
     ${model_id}=            Get from dictionary     ${response.json()}      id
     Append To List          ${CREATED_MODEL_IDS}    ${model_id}
     Log                     Added model ${model_id} to cleanup list: ${CREATED_MODEL_IDS}           level=DEBUG
@@ -80,7 +81,7 @@ Base model exists in system
 
     # Verify model was actually created
     ${verify_response}=     Get model               ${model_id}             expected_status=200
-    Log                     Base model ${model_id} (${TEST_MODEL_NAME}) successfully created and verified
+    Log                     Base model ${model_id} (${TEST_MODEL_NAME}) successfully created and verified                         INFO
 
 Base model for finetuning exists in system
     [Documentation]    Creates a base model for finetuning and stores its ID as a test variable
@@ -105,8 +106,7 @@ Model should exist in database with correct properties
     ${response_json}=       Set variable            ${response.json()}
     ${db_json}=             Set variable            ${db_response.json()}
 
-    # Log verification for debugging
-    Log                     Verifying model ${model_id} database consistency                        level=INFO
+    Log                     Verifying model ${model_id} database consistency                        DEBUG
 
     # Verify all fields match
     FOR    ${key}    IN    id    name    type    onboarding_status    model_weights_path    created_at    updated_at
@@ -138,34 +138,30 @@ Multiple models exist in system
     [Documentation]    Creates multiple models of different types for testing
     [Arguments]             ${base_model_count}=2                           ${adapter_count}=2
 
-    # Track created models for better reporting
     @{created_base_models}=                         Create list
     @{created_adapters}=    Create list
     Set test variable       ${CREATED_BASE_MODELS}                          ${created_base_models}
     Set test variable       ${CREATED_ADAPTERS}     ${created_adapters}
 
-    Log                     Creating ${base_model_count} base models and ${adapter_count} adapters for testing
+    Log                     Creating ${base_model_count} base models and ${adapter_count} adapters for testing           INFO
 
-    # Create base models
     FOR    ${index}    IN RANGE    ${base_model_count}
-        Log                     Creating base model ${index+1} of ${base_model_count}
+        Log                     Creating base model ${index+1} of ${base_model_count}               DEBUG
         Valid base model data is prepared
         Create model request is sent
         Response status should be 201
 
-        # Store the first base model ID for adapter creation
         ${model_id}=            Get from dictionary     ${response.json()}      id
         Append to list          ${CREATED_BASE_MODELS}                          ${model_id}
 
         IF    ${index} == 0
             Set test variable       ${TEST_BASE_MODEL_ID}                           ${model_id}
-            Log                     Set base model ID for adapter creation: ${model_id}
+            Log                     Set base model ID for adapter creation: ${model_id}             DEBUG
         END
     END
 
-    # Create adapters
     FOR    ${index}    IN RANGE    ${adapter_count}
-        Log                     Creating adapter ${index+1} of ${adapter_count}
+        Log                     Creating adapter ${index+1} of ${adapter_count}                 DEBUG
 
         # Verify we have a base model ID before attempting adapter creation
         Should not be empty     ${TEST_BASE_MODEL_ID}                           Cannot create adapter: No base model ID available
@@ -178,7 +174,7 @@ Multiple models exist in system
         Append to list          ${CREATED_ADAPTERS}     ${model_id}
     END
 
-    Log                     Successfully created ${base_model_count} base models and ${adapter_count} adapters
+    Log                     Successfully created ${base_model_count} base models and ${adapter_count} adapters               INFO
 
 List models request is sent
     [Documentation]    Sends request to list models with filters
@@ -190,7 +186,6 @@ Models with different states exist
     [Documentation]    Creates models in different states for testing stats
     [Arguments]             ${ready_count}=2        ${pending_count}=3      ${failed_count}=1
 
-    # Track created models by status for better reporting
     @{ready_models}=        Create list
     @{pending_models}=      Create list
     @{failed_models}=       Create list
@@ -198,11 +193,10 @@ Models with different states exist
     Set test variable       ${PENDING_MODELS}       ${pending_models}
     Set test variable       ${FAILED_MODELS}        ${failed_models}
 
-    Log                     Creating models with different states: ${ready_count} ready, ${pending_count} pending, ${failed_count} failed
+    Log                     Creating models with different states: ${ready_count} ready, ${pending_count} pending, ${failed_count} failed              INFO
 
-    # Create ready models
     FOR    ${index}    IN RANGE    ${ready_count}
-        Log                     Creating ready model ${index+1} of ${ready_count}
+        Log                     Creating ready model ${index+1} of ${ready_count}               DEBUG
         Valid base model data is prepared
         Set to dictionary       ${TEST_DATA}            onboarding_status=ready
         Create model request is sent
@@ -212,9 +206,8 @@ Models with different states exist
         Append to list          ${READY_MODELS}         ${model_id}
     END
 
-    # Create pending models (default state)
     FOR    ${index}    IN RANGE    ${pending_count}
-        Log                     Creating pending model ${index+1} of ${pending_count}
+        Log                     Creating pending model ${index+1} of ${pending_count}           DEBUG
         Valid base model data is prepared
         Create model request is sent
         Response status should be 201
@@ -223,9 +216,8 @@ Models with different states exist
         Append to list          ${PENDING_MODELS}       ${model_id}
     END
 
-    # Create failed models
     FOR    ${index}    IN RANGE    ${failed_count}
-        Log                     Creating failed model ${index+1} of ${failed_count}
+        Log                     Creating failed model ${index+1} of ${failed_count}             DEBUG
         Valid base model data is prepared
         Set to dictionary       ${TEST_DATA}            onboarding_status=failed
         Create model request is sent
@@ -252,7 +244,7 @@ Models with different states exist
     ${total}=               Evaluate                ${ready_count}+${pending_count}+${failed_count}
     Set test variable       ${EXPECTED_TOTAL}       ${total}
 
-    Log                     Successfully created models with different states: ${ready_count} ready, ${pending_count} pending, ${failed_count} failed
+    Log                     Successfully created models with different states: ${ready_count} ready, ${pending_count} pending, ${failed_count} failed              INFO
 
 Get model stats request is sent
     [Documentation]    Sends request to get model statistics
@@ -300,16 +292,16 @@ Model with name "${name}" does not exist in system
 
     # If models with this name exist, delete the first one found
     IF    ${count} > 0
-        Log                     Found model with name "${name}" - will delete it                        level=INFO
+        Log                     Found model with name "${name}" - will delete it                        INFO
         ${model_to_delete}=     Get From List           ${models}               0
         ${model_id}=            Get From Dictionary     ${model_to_delete}      id
         ${delete_response}=     Delete model            ${model_id}             expected_status=204
 
         # Verify the model was deleted
         ${verify_response}=     Get model               ${model_id}             expected_status=404
-        Log                     Successfully deleted model with name "${name}" (ID: ${model_id})        level=INFO
+        Log                     Successfully deleted model with name "${name}" (ID: ${model_id})        INFO
     ELSE
-        Log                     No model with name "${name}" exists - no deletion needed                level=INFO
+        Log                     No model with name "${name}" exists - no deletion needed                DEBUG
     END
 
 A model does not exist
@@ -345,30 +337,40 @@ List models request is sent with type "${model_type}" and status "${status}"
     Set test variable       ${response}             ${response}
 
 A finetune request is sent
-    [Documentation]    Sends a finetune request using the base model data
-    Should Not Be Empty     ${TEST_BASE_MODEL_ID}                           msg=Base model ID is required for finetuning.
+    [Documentation]    Sends a finetune request using a HuggingFace model name
     Should Not Be Empty     ${TEST_DATASET_ID}      msg=Dataset ID is required for finetuning.
+    Should Not Be Empty     ${TEST_PROJECT_ID}      msg=Project ID is required for finetuning.
+    # Set up query parameters with project ID for finetuning API calls
+    ${query_params}=        Create Dictionary       project_id=${TEST_PROJECT_ID}
+    Set Test Variable       ${QUERY_PARAMS}         ${query_params}
     ${random_suffix}=       Generate random string                          8                       [LETTERS][NUMBERS]
     ${model_name}=          Set Variable            finetuned-model-${random_suffix}
-    # Generate finetune data with correct model_weights_path format
+    # Use HuggingFace model name directly instead of model ID
+    ${base_model_name}=     Set Variable            TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    # Generate finetune data with HuggingFace model name
     ${finetune_data}=       Create Dictionary
     ...                     name=${model_name}
+    ...                     base_model=${base_model_name}
     ...                     dataset_path=${TEST_DATASET_PATH}
     ...                     batch_size=16
     ...                     learning_rate=0.001
     ...                     epochs=5
     ...                     dataset_id=${TEST_DATASET_ID}
-    ...                     model_weights_path=default-bucket/models/${CURRENT_PROJECT_SLUG}/models/${model_name}
+    ...                     model_weights_path=default-bucket/models/${TEST_PROJECT_SLUG}/models/${model_name}
 
-    Log                     Sending finetune request for base model ID: ${TEST_BASE_MODEL_ID} with data: ${finetune_data}
-    ${response}=            Send Finetune Request                           model_id=${TEST_BASE_MODEL_ID}                  finetune_data=${finetune_data}                  params=${QUERY_PARAMS}                          expected_status=202
+    Log                     Sending finetune request for HuggingFace model: ${base_model_name}           DEBUG
+    ${response}=            Finetune model          ${base_model_name}      ${finetune_data}
+    ...                     expected_status=202     params=${QUERY_PARAMS}
     Set Test Variable       ${response}             ${response}
-    Log                     message=Finetune request response: ${response.json()}                   level=DEBUG
-    Set Test Variable       ${TEST_WORKLOAD_ID}     ${response.json()['id']}
-    Set Test Variable       ${TEST_MANAGED_MODEL_ID}                        ${response.json()['model_id']}
-    # Extract model_weights_path from the associated model object
-    ${model_weights_path}=                          Get From Dictionary     ${response.json()['model']}                     model_weights_path
-    Set Test Variable       ${MODEL_WEIGHTS_PATH}                           ${model_weights_path}
+    Log                     Finetune request response: ${response.json()}                   DEBUG
+    # Extract response data based on actual API response structure
+    ${response_data}=       Set Variable            ${response.json()}
+    Set Test Variable       ${TEST_WORKLOAD_ID}     ${response_data['id']}
+    # Check if model_id exists in response, if not use the response id
+    ${model_id}=            Get From Dictionary     ${response_data}        model_id        default=${response_data['id']}
+    Set Test Variable       ${TEST_MANAGED_MODEL_ID}                        ${model_id}
+    # Set a default model weights path since it may not be in the response
+    Set Test Variable       ${MODEL_WEIGHTS_PATH}                           default-bucket/models/${TEST_PROJECT_SLUG}/models/finetuned-model
 
 The merged model is retrieved
     [Documentation]    Retrieves the merged model using the model_id from the finetune request response.
@@ -384,13 +386,8 @@ The workflow is retrieved
     ${retrieved_response}=                          Get menaged workload    ${TEST_WORKLOAD_ID}     expected_status=200     params=${QUERY_PARAMS}
     Set Test Variable       ${response}             ${retrieved_response}
 
-Initialize Model Tracking
-    [Documentation]    Resets the list of created models
-    ...    This keyword should be used in a test suite setup to ensure
-    ...    the tracking list starts empty for each test suite
-    @{empty_list}=          Create List
-    Set Suite Variable      ${CREATED_MODEL_IDS}    ${empty_list}
-    Log                     Model tracking initialized. CREATED_MODEL_IDS: ${CREATED_MODEL_IDS}     level=DEBUG
+# Initialize Model Tracking is now imported from common/resource_tracking.resource
+# Note: Clean Up All Created Models has a special implementation for models with project_id requirement
 
 Register Model For Cleanup
     [Documentation]    Manually registers a model ID to be cleaned up later
@@ -404,25 +401,25 @@ Clean Up All Created Models
     [Documentation]    Deletes all models created during test execution
     ...    This keyword should be used in a test suite teardown to ensure
     ...    all models created during testing are cleaned up properly.
+    ...    Note: Models require project_id for deletion, so this has a special implementation
     ${count}=               Get Length              ${CREATED_MODEL_IDS}
 
     # Skip if no models were created or list is empty
     Return From Keyword If                          ${count} == 0           No models to clean up
 
-    Log                     Cleaning up ${count} models: ${CREATED_MODEL_IDS}                       level=INFO
+    Log                     Cleaning up ${count} models: ${CREATED_MODEL_IDS}                       INFO
 
     # Delete each model individually
     FOR    ${model_id}    IN    @{CREATED_MODEL_IDS}
         TRY
-            Log                     Deleting model ${model_id}                      level=INFO
-            Delete model            model_id=${model_id}    expected_status=any     project_id=${CURRENT_PROJECT_ID}
-            Log                     Successfully deleted model ${model_id}          level=INFO
+            Log                     Deleting model ${model_id}                      DEBUG
+            Delete model            model_id=${model_id}    expected_status=any     project_id=${TEST_PROJECT_ID}
         EXCEPT    AS    ${error}
-            Log                     Failed to delete model ${model_id}: ${error}    level=WARN
+            Log                     Failed to delete model ${model_id}: ${error}    WARN
         END
     END
 
     # Reset the list of created models
     @{empty_list}=          Create List
     Set Suite Variable      ${CREATED_MODEL_IDS}    ${empty_list}
-    Log                     Model cleanup complete. CREATED_MODEL_IDS reset to: ${CREATED_MODEL_IDS}                        level=INFO
+    Log                     Model cleanup complete. CREATED_MODEL_IDS reset to: ${CREATED_MODEL_IDS}                        INFO

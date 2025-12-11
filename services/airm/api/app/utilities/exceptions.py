@@ -65,8 +65,8 @@ class UnhealthyException(BaseAirmException):
     pass
 
 
-class NotReadyException(BaseAirmException):
-    """Exception raised when a resource is not ready for the requested operation."""
+class PreconditionNotMetException(BaseAirmException):
+    """Exception raised when a pre-condition is not met for the current operation"""
 
     pass
 

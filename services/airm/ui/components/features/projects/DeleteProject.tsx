@@ -7,7 +7,7 @@ import { IconAlertTriangle } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import React, { useCallback } from 'react';
 
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 import router from 'next/router';
 
 import useSystemToast from '@/hooks/useSystemToast';
@@ -73,13 +73,9 @@ export const DeleteProject: React.FC<Props> = ({ project }) => {
       </div>
       <ConfirmationModal
         confirmationButtonColor="danger"
-        description={
-          <Trans parent="span">
-            {t('settings.delete.confirmation.description', {
-              project: project.name,
-            })}
-          </Trans>
-        }
+        description={t('settings.delete.confirmation.description', {
+          project: project.name,
+        })}
         title={t('settings.delete.confirmation.title')}
         isOpen={isOpen}
         loading={isPending}

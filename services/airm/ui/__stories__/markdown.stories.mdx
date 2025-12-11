@@ -1,0 +1,159 @@
+<>
+  {/* Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+      SPDX-License-Identifier: MIT */}
+</>
+
+# Markdown Parser Test Document
+
+This is a comprehensive test document to verify MDX parser functionality.
+
+## Headings
+
+### Level 3 Heading
+
+#### Level 4 Heading
+
+##### Level 5 Heading
+
+###### Level 6 Heading
+
+## Text Formatting
+
+Here are various text formatting options:
+
+- **Bold text** using double asterisks
+- _Italic text_ using single asterisks
+- **_Bold and italic_** using triple asterisks
+- ~~Strikethrough text~~ using double tildes
+- <u>Underlined text</u> using HTML tags
+
+You can also use **bold** and _italic_ inline with regular text. Here's a sentence with **bold words**, _italic words_, and ~~strikethrough~~ all together.
+
+## Lists
+
+### Unordered List
+
+- First item
+- Second item
+  - Nested item
+  - Another nested item
+- Third item
+  - Deeply nested
+    - Even deeper nesting
+
+### Ordered List
+
+1. First numbered item
+2. Second numbered item
+   1. Nested numbered item
+   2. Another nested numbered item
+3. Third numbered item
+   1. Deeply nested numbered
+      1. Even deeper nesting
+
+### Mixed List
+
+- Unordered item
+  1. Ordered nested item
+  2. Another ordered nested item
+- Another unordered item
+
+### Task List
+
+- [ ] Unchecked task item
+- [x] Checked task item
+- [ ] Another unchecked task
+- [x] Completed task with **bold text**
+- [ ] Task with _italic text_
+- [ ] Task with `code` formatting
+- [ ] Nested task
+  - [ ] Sub-task unchecked
+  - [x] Sub-task checked
+- [x] Final completed task
+
+## Code Blocks
+
+### Inline Code
+
+Here's some `inline code` within a sentence. You can also use `multiple code snippets` in the same paragraph.
+
+### Code Block
+
+```javascript
+function greet(name) {
+  return `Hello, ${name}!`;
+}
+
+const message = greet("World");
+console.log(message);
+```
+
+### Code Block with Different Language
+
+```python
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+result = fibonacci(10)
+print(f"Fibonacci(10) = {result}")
+```
+
+## Tables
+
+| Column 1     | Column 2  | Column 3  | Column 4          |
+| ------------ | --------- | --------- | ----------------- |
+| **Bold**     | _Italic_  | `Code`    | ~~Strikethrough~~ |
+| Regular text | More text | Even more | Last column       |
+| Data 1       | Data 2    | Data 3    | Data 4            |
+| Left         | Center    | Right     | Justified         |
+
+### Table with Alignment
+
+| Left Aligned | Center Aligned | Right Aligned |
+| :----------- | :------------: | ------------: |
+| Left         |     Center     |         Right |
+| Text         |      Text      |          Text |
+
+## Combined Elements
+
+### Paragraph with Multiple Formats
+
+This paragraph contains **bold text**, _italic text_, `code`, ~~strikethrough~~, and <u>underlined text</u>. You can also combine them like **_bold italic_** or **bold with `code`** inside.
+
+### List with Formatting
+
+- **Bold list item**
+- _Italic list item_
+- `Code list item`
+- ~~Strikethrough list item~~
+- <u>Underlined list item</u>
+- **_Bold italic list item_**
+
+### Table with Formatting
+
+| Format Type   | Example        | Syntax        |
+| ------------- | -------------- | ------------- |
+| Bold          | **example**    | `**text**`    |
+| Italic        | _example_      | `*text*`      |
+| Code          | `example`      | `` `text` ``  |
+| Strikethrough | ~~example~~    | `~~text~~`    |
+| Underline     | <u>example</u> | `<u>text</u>` |
+
+## Conclusion
+
+This document tests:
+
+- ✅ Multiple heading levels (H1-H6)
+- ✅ Unordered and ordered lists
+- ✅ Task lists (checkboxes)
+- ✅ Nested lists
+- ✅ Tables with various formatting
+- ✅ Code blocks (inline and block)
+- ✅ Bold text
+- ✅ Italic text
+- ✅ Underlined text
+- ✅ Strikethrough text
+- ✅ Combined formatting

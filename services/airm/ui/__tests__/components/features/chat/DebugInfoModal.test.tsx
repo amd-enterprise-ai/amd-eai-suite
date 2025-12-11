@@ -5,7 +5,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { DebugInfo, Message, Source } from '@/types/chat';
+import { DebugInfo, Message } from '@/types/chat';
 
 import { DebugInfoModal } from '@/components/features/chat/DebugInfoModal';
 import ProviderWrapper from '@/__tests__/ProviderWrapper';
@@ -73,9 +73,6 @@ vi.mock('next-i18next', () => ({
         'debugInfoModal.title': 'Debug Information',
         'debugInfoModal.subTitle':
           'Detailed debugging data for this conversation',
-        'debugInfoModal.ragDocumentsTitle': 'RAG Documents',
-        'debugInfoModal.ragDocumentsDescription':
-          'Documents retrieved from the knowledge base',
         'debugInfoModal.promptsTitle': 'Prompts',
         'debugInfoModal.promptsDescription':
           'System and user prompts used in this conversation',
@@ -83,7 +80,6 @@ vi.mock('next-i18next', () => ({
         'debugInfoModal.promptTokens': 'Prompt Tokens:',
         'debugInfoModal.completionTokens': 'Completion Tokens:',
         'debugInfoModal.totalTokens': 'Total Tokens:',
-        'debugInfoModal.noSources': 'No sources available',
         'debugInfoModal.noPromptMessages': 'No prompt messages available',
         'debugInfoModal.noTokenUsage': 'Token usage information not available',
       };
@@ -93,21 +89,6 @@ vi.mock('next-i18next', () => ({
 }));
 
 describe('DebugInfoModal Component', () => {
-  const mockSources: Source[] = [
-    {
-      url: 'https://example.com/doc1',
-      sourceId: 'document-1',
-      text: 'This is the content of the first retrieved document',
-      score: 0.95,
-    },
-    {
-      url: 'https://example.com/doc2',
-      sourceId: 'document-2',
-      text: 'This is the content of the second retrieved document',
-      score: 0.87,
-    },
-  ];
-
   const mockMessages: Message[] = [
     {
       role: 'system',
@@ -125,7 +106,6 @@ describe('DebugInfoModal Component', () => {
 
   const mockDebugInfo: DebugInfo = {
     messages: mockMessages,
-    sources: mockSources,
     usage: {
       prompt_tokens: 150,
       completion_tokens: 75,
@@ -180,7 +160,7 @@ describe('DebugInfoModal Component', () => {
       expect(screen.getByTestId('modal')).toHaveAttribute('data-size', '3xl');
     });
 
-    it('renders accordion with all three sections', () => {
+    it('renders accordion with both sections', () => {
       render(
         <ProviderWrapper>
           <DebugInfoModal {...defaultProps} />
@@ -188,9 +168,6 @@ describe('DebugInfoModal Component', () => {
       );
 
       expect(screen.getByTestId('accordion')).toBeInTheDocument();
-      expect(
-        screen.getByTestId('accordion-toggle-rag-documents'),
-      ).toHaveTextContent('RAG Documents');
       expect(screen.getByTestId('accordion-toggle-prompts')).toHaveTextContent(
         'Prompts',
       );
@@ -215,159 +192,6 @@ describe('DebugInfoModal Component', () => {
       await user.click(closeButton);
 
       expect(onCloseMock).toHaveBeenCalled();
-    });
-  });
-
-  describe('RAG Documents Section', () => {
-    it('renders RAG documents section with sources', () => {
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal {...defaultProps} />
-        </ProviderWrapper>,
-      );
-
-      const ragContent = screen.getByTestId('accordion-content-rag-documents');
-      expect(ragContent).toBeInTheDocument();
-
-      // Check for description
-      expect(
-        screen.getByText('Documents retrieved from the knowledge base'),
-      ).toBeInTheDocument();
-
-      // Check for sources
-      expect(screen.getByText('1. document-1')).toBeInTheDocument();
-      expect(screen.getByText('2. document-2')).toBeInTheDocument();
-      expect(screen.getByText('https://example.com/doc1')).toBeInTheDocument();
-      expect(screen.getByText('https://example.com/doc2')).toBeInTheDocument();
-    });
-
-    it('renders source content and scores', () => {
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal {...defaultProps} />
-        </ProviderWrapper>,
-      );
-
-      expect(
-        screen.getByText('This is the content of the first retrieved document'),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          'This is the content of the second retrieved document',
-        ),
-      ).toBeInTheDocument();
-      expect(screen.getByText('0.95')).toBeInTheDocument();
-      expect(screen.getByText('0.87')).toBeInTheDocument();
-    });
-
-    it('renders sources with zero score correctly', () => {
-      const debugInfoWithZeroScore: DebugInfo = {
-        ...mockDebugInfo,
-        sources: [
-          {
-            url: 'https://example.com/doc-zero',
-            sourceId: 'document-zero',
-            text: 'Document with zero score',
-            score: 0,
-          },
-        ],
-      };
-
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal
-            {...defaultProps}
-            debugInfo={debugInfoWithZeroScore}
-          />
-        </ProviderWrapper>,
-      );
-
-      expect(screen.getByText('0.00')).toBeInTheDocument();
-    });
-
-    it('renders N/A for sources without score', () => {
-      const debugInfoWithoutScore: DebugInfo = {
-        ...mockDebugInfo,
-        sources: [
-          {
-            url: 'https://example.com/doc-no-score',
-            sourceId: 'document-no-score',
-            text: 'Document without score',
-            // No score property
-          },
-        ],
-      };
-
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal {...defaultProps} debugInfo={debugInfoWithoutScore} />
-        </ProviderWrapper>,
-      );
-
-      expect(screen.getByText('N/A')).toBeInTheDocument();
-    });
-
-    it('renders empty sources section when sources array is empty', () => {
-      const debugInfoWithoutSources: DebugInfo = {
-        ...mockDebugInfo,
-        sources: [],
-      };
-
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal
-            {...defaultProps}
-            debugInfo={debugInfoWithoutSources}
-          />
-        </ProviderWrapper>,
-      );
-
-      const ragContent = screen.getByTestId('accordion-content-rag-documents');
-      expect(ragContent).toBeInTheDocument();
-
-      // Should show description but no sources (since the array is empty but truthy)
-      expect(
-        screen.getByText('Documents retrieved from the knowledge base'),
-      ).toBeInTheDocument();
-
-      // Should not show any source items
-      expect(screen.queryByText(/document-/)).not.toBeInTheDocument();
-    });
-
-    it('renders no sources message when sources is falsy', () => {
-      const debugInfoWithoutSources: DebugInfo = {
-        ...mockDebugInfo,
-        sources: undefined as any,
-      };
-
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal
-            {...defaultProps}
-            debugInfo={debugInfoWithoutSources}
-          />
-        </ProviderWrapper>,
-      );
-
-      expect(screen.getByText('No sources available')).toBeInTheDocument();
-    });
-
-    it('renders source links as clickable', () => {
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal {...defaultProps} />
-        </ProviderWrapper>,
-      );
-
-      const link1 = screen.getByRole('link', {
-        name: 'https://example.com/doc1',
-      });
-      const link2 = screen.getByRole('link', {
-        name: 'https://example.com/doc2',
-      });
-
-      expect(link1).toHaveAttribute('href', 'https://example.com/doc1');
-      expect(link2).toHaveAttribute('href', 'https://example.com/doc2');
     });
   });
 
@@ -531,7 +355,6 @@ describe('DebugInfoModal Component', () => {
     it('handles empty debugInfo gracefully', () => {
       const emptyDebugInfo: DebugInfo = {
         messages: [],
-        sources: [],
       };
 
       render(
@@ -542,24 +365,19 @@ describe('DebugInfoModal Component', () => {
 
       // Should render all sections but with empty content
       expect(
-        screen.getByText('Documents retrieved from the knowledge base'),
-      ).toBeInTheDocument();
-      expect(
         screen.getByText('System and user prompts used in this conversation'),
       ).toBeInTheDocument();
       expect(
         screen.getByText('Token usage information not available'),
       ).toBeInTheDocument();
 
-      // Should not have any sources or messages
+      // Should not have any messages
       expect(screen.queryAllByTestId('chat-message')).toHaveLength(0);
-      expect(screen.queryByText(/document-/)).not.toBeInTheDocument();
     });
 
     it('handles debugInfo with only some properties', () => {
       const partialDebugInfo: DebugInfo = {
         messages: mockMessages,
-        sources: [],
         // No usage
       };
 
@@ -572,81 +390,10 @@ describe('DebugInfoModal Component', () => {
       // Should show messages
       expect(screen.getAllByTestId('chat-message')).toHaveLength(3);
 
-      // Should show empty sources section (empty array is truthy)
-      expect(
-        screen.getByText('Documents retrieved from the knowledge base'),
-      ).toBeInTheDocument();
-      expect(screen.queryByText(/document-/)).not.toBeInTheDocument();
-
       // Should show no token usage
       expect(
         screen.getByText('Token usage information not available'),
       ).toBeInTheDocument();
-    });
-
-    it('handles very long source text without breaking layout', () => {
-      const longText =
-        'This is a very long source text that should be handled properly by the component. '.repeat(
-          20,
-        );
-      const debugInfoWithLongText: DebugInfo = {
-        ...mockDebugInfo,
-        sources: [
-          {
-            url: 'https://example.com/long-doc',
-            sourceId: 'long-document',
-            text: longText,
-            score: 0.5,
-          },
-        ],
-      };
-
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal {...defaultProps} debugInfo={debugInfoWithLongText} />
-        </ProviderWrapper>,
-      );
-
-      // Check that the component renders without breaking and shows the source
-      expect(screen.getByText('1. long-document')).toBeInTheDocument();
-      expect(
-        screen.getByText('https://example.com/long-doc'),
-      ).toBeInTheDocument();
-      // For very long text, just check that part of it is there using a substring
-      expect(
-        screen.getByText(
-          /This is a very long source text that should be handled properly by the component/,
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it('handles sources with special characters in URLs', () => {
-      const debugInfoWithSpecialChars: DebugInfo = {
-        ...mockDebugInfo,
-        sources: [
-          {
-            url: 'https://example.com/path/file%20with%20spaces?query=test&other=value#section',
-            sourceId: 'special-chars-doc',
-            text: 'Document with special URL',
-            score: 0.8,
-          },
-        ],
-      };
-
-      render(
-        <ProviderWrapper>
-          <DebugInfoModal
-            {...defaultProps}
-            debugInfo={debugInfoWithSpecialChars}
-          />
-        </ProviderWrapper>,
-      );
-
-      const link = screen.getByRole('link');
-      expect(link).toHaveAttribute(
-        'href',
-        'https://example.com/path/file%20with%20spaces?query=test&other=value#section',
-      );
     });
 
     it('handles large token usage values', () => {
@@ -687,53 +434,15 @@ describe('DebugInfoModal Component', () => {
 
       // Accordion sections should have proper labels
       expect(
-        screen.getByTestId('accordion-toggle-rag-documents'),
-      ).toBeInTheDocument();
-      expect(
         screen.getByTestId('accordion-toggle-prompts'),
       ).toBeInTheDocument();
       expect(
         screen.getByTestId('accordion-toggle-token-usage'),
       ).toBeInTheDocument();
-
-      // Links should be properly accessible
-      const links = screen.getAllByRole('link');
-      links.forEach((link) => {
-        expect(link).toHaveAttribute('href');
-      });
     });
   });
 
   describe('Performance', () => {
-    it('handles large number of sources efficiently', () => {
-      const manySources: Source[] = Array.from({ length: 100 }, (_, i) => ({
-        url: `https://example.com/doc${i}`,
-        sourceId: `document-${i}`,
-        text: `Content of document ${i}`,
-        score: Math.random(),
-      }));
-
-      const debugInfoWithManySources: DebugInfo = {
-        ...mockDebugInfo,
-        sources: manySources,
-      };
-
-      expect(() =>
-        render(
-          <ProviderWrapper>
-            <DebugInfoModal
-              {...defaultProps}
-              debugInfo={debugInfoWithManySources}
-            />
-          </ProviderWrapper>,
-        ),
-      ).not.toThrow();
-
-      // Should render all sources
-      expect(screen.getByText('1. document-0')).toBeInTheDocument();
-      expect(screen.getByText('100. document-99')).toBeInTheDocument();
-    });
-
     it('handles large number of messages efficiently', () => {
       const manyMessages: Message[] = Array.from({ length: 50 }, (_, i) => ({
         role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',

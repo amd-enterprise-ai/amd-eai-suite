@@ -5,7 +5,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Path, status
+from keycloak import KeycloakAdmin
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..organizations.models import Organization
 from ..utilities.database import get_session
 from ..utilities.exceptions import NotFoundException
 from ..utilities.keycloak_admin import get_kc_admin
@@ -47,19 +50,19 @@ router = APIRouter(tags=["Users"])
     response_model=Users,
 )
 async def get_users(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
 ) -> Users:
     users = await get_users_for_organization(kc_admin, session, organization)
     return Users(
-        users=users,
+        data=users,
     )
 
 
 @router.get(
-    "/invited_users",
+    "/invited-users",
     operation_id="get_invited_users",
     summary="List pending user invitations",
     description="""
@@ -71,13 +74,13 @@ async def get_users(
     response_model=InvitedUsers,
 )
 async def get_invited_users(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
 ) -> InvitedUsers:
     invited_users = await get_invited_users_for_organization(kc_admin, session, organization)
-    return InvitedUsers(invited_users=invited_users)
+    return InvitedUsers(data=invited_users)
 
 
 @router.post(
@@ -92,13 +95,13 @@ async def get_invited_users(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_user(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    user=Depends(get_logged_in_user),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_logged_in_user),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     user_in: InviteUser = Body(description="The user to be created in the user's organization"),
-):
+) -> None:
     await create_user_in_organization(kc_admin, session, organization, user_in, user)
 
 
@@ -115,10 +118,10 @@ async def create_user(
     response_model=UserWithProjects,
 )
 async def get_user(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     user_id: UUID = Path(description="The ID of the user to be retrieved"),
 ) -> UserWithProjects:
     user = await get_user_in_organization(session, organization.id, user_id)
@@ -141,12 +144,12 @@ async def get_user(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_user(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     user_id: UUID = Path(description="The ID of the user to be deleted"),
-):
+) -> None:
     user = await get_user_in_organization(session, organization.id, user_id)
     if not user:
         raise NotFoundException("User not found")
@@ -165,14 +168,14 @@ async def delete_user(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def add_user_role(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    logged_in_user=Depends(get_logged_in_user),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    logged_in_user: str = Depends(get_logged_in_user),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     user_id: UUID = Path(description="The ID of the user to add the role to"),
     user_role_request: UserRolesUpdate = Body(...),
-):
+) -> None:
     user = await get_user_in_organization(session, organization.id, user_id)
     if not user:
         raise NotFoundException("User not found")
@@ -191,14 +194,14 @@ async def add_user_role(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def update_user(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    logged_in_user=Depends(get_logged_in_user),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    logged_in_user: str = Depends(get_logged_in_user),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     user_id: UUID = Path(description="The ID of the user to update"),
     user_details: UserDetailsUpdate = Body(...),
-):
+) -> None:
     user = await get_user_in_organization(session, organization.id, user_id)
     if not user:
         raise NotFoundException("User not found")
@@ -206,7 +209,7 @@ async def update_user(
 
 
 @router.post(
-    "/invited_users/{user_id}/resend_invitation",
+    "/invited-users/{user_id}/resend-invitation",
     operation_id="resend_invitations",
     summary="Resend user invitation",
     description="""
@@ -217,13 +220,13 @@ async def update_user(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def resend_invitations(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    logged_in_user=Depends(get_logged_in_user),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    logged_in_user: str = Depends(get_logged_in_user),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     user_id: UUID = Path(description="The ID of the user to resend invitation to"),
-):
+) -> None:
     user = await get_user_in_organization(session, organization.id, user_id)
     if not user:
         raise NotFoundException("User not found")

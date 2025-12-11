@@ -24,7 +24,7 @@ from .repository import (
     select_dataset,
     update_dataset,
 )
-from .schemas import DatasetCreate, DatasetType
+from .schemas import DatasetCreate, DatasetEdit, DatasetType
 from .utils import (
     MinioClient,
     clean_s3_path,
@@ -217,7 +217,7 @@ async def get_dataset_by_id(session: AsyncSession, dataset_id: UUID, project_id:
 
 
 async def update_dataset_by_id(
-    session: AsyncSession, dataset_id: UUID, project_id: UUID, update_data, updater: str
+    session: AsyncSession, dataset_id: UUID, project_id: UUID, update_data: DatasetEdit, updater: str
 ) -> Dataset:
     """Update a dataset, raising NotFoundException if not found."""
     dataset = await update_dataset(session, dataset_id, update_data, project_id, updater)

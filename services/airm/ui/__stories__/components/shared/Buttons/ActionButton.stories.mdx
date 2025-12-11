@@ -1,0 +1,438 @@
+<>
+  {/* Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+      SPDX-License-Identifier: MIT */}
+</>
+
+import { Meta } from "@ladle/react";
+import { ActionButton } from "@/components/shared/Buttons/ActionButton";
+import {
+  IconPlus,
+  IconSettings,
+  IconTrash,
+  IconEdit,
+  IconCheck,
+  IconX,
+} from "@tabler/icons-react";
+
+<Meta title="Components/Shared/Buttons/ActionButton/Description" />
+
+# ActionButton
+
+A customizable button component with predefined styling variants that wraps HeroUI's Button component with enforced design system constraints.
+
+## Overview
+
+The `ActionButton` component provides a consistent button interface across the application with three main variants:
+
+- **Primary**: Solid variant for primary actions (blue filled)
+- **Secondary**: Flat variant for secondary actions (default, gray flat)
+- **Tertiary**: Light variant for tertiary/subtle actions (transparent with hover)
+
+---
+
+## Variants
+
+### Primary Button
+
+Use primary buttons for the main action on a page or in a modal. Uses solid blue styling.
+
+<JSX>
+  <ActionButton primary onPress={() => alert("Primary clicked!")}>
+    Save Changes
+  </ActionButton>
+</JSX>
+
+### Secondary Button
+
+Use secondary buttons for less prominent actions. This is the default variant when no variant prop is specified.
+
+<JSX>
+  <ActionButton secondary onPress={() => alert("Secondary clicked!")}>
+    Cancel
+  </ActionButton>
+</JSX>
+
+### Tertiary Button
+
+Use tertiary buttons for subtle actions or when you need a lighter visual weight.
+
+<JSX>
+  <ActionButton tertiary onPress={() => alert("Tertiary clicked!")}>
+    Learn More
+  </ActionButton>
+</JSX>
+
+### All Variants Side by Side
+
+<JSX>
+  <div className="flex gap-4 items-center">
+    <ActionButton primary>Primary</ActionButton>
+    <ActionButton secondary>Secondary</ActionButton>
+    <ActionButton tertiary>Tertiary</ActionButton>
+  </div>
+</JSX>
+
+---
+
+## With Icons
+
+The `icon` prop allows you to add an icon before the button text.
+
+<JSX>
+  <div className="flex gap-4 items-center">
+    <ActionButton primary icon={<IconPlus size={18} />}>
+      Add Item
+    </ActionButton>
+    <ActionButton secondary icon={<IconSettings size={18} />}>
+      Settings
+    </ActionButton>
+    <ActionButton tertiary icon={<IconEdit size={18} />}>
+      Edit
+    </ActionButton>
+  </div>
+</JSX>
+
+---
+
+## Icon Only Buttons
+
+When no children are provided, the button automatically becomes icon-only. Always provide an `aria-label` for accessibility.
+
+<JSX>
+  <div className="flex gap-4 items-center">
+    <ActionButton primary icon={<IconPlus size={18} />} aria-label="Add" />
+    <ActionButton
+      secondary
+      icon={<IconSettings size={18} />}
+      aria-label="Settings"
+    />
+    <ActionButton tertiary icon={<IconTrash size={18} />} aria-label="Delete" />
+  </div>
+</JSX>
+
+---
+
+## Sizes
+
+The `size` prop controls both the button size and border radius. Available sizes: `sm`, `md` (default), `lg`.
+
+<JSX>
+  <Grid col={3}>
+    <ActionButton primary size="sm">
+      Small Primary
+    </ActionButton>
+    <ActionButton secondary size="sm">
+      Small Secondary
+    </ActionButton>
+    <ActionButton tertiary size="sm">
+      Small Tertiary
+    </ActionButton>
+
+    <ActionButton primary size="md">
+      Medium Primary
+    </ActionButton>
+    <ActionButton secondary size="md">
+      Medium Secondary
+    </ActionButton>
+    <ActionButton tertiary size="md">
+      Medium Tertiary
+    </ActionButton>
+
+    <ActionButton primary size="lg">
+      Large Primary
+    </ActionButton>
+    <ActionButton secondary size="lg">
+      Large Secondary
+    </ActionButton>
+    <ActionButton tertiary size="lg">
+      Large Tertiary
+    </ActionButton>
+
+    <ActionButton primary size="sm">
+      Small
+    </ActionButton>
+    <ActionButton primary size="md">
+      Medium
+    </ActionButton>
+    <ActionButton primary size="lg">
+      Large
+    </ActionButton>
+
+    <ActionButton
+      primary
+      size="sm"
+      icon={<IconPlus size={14} />}
+      aria-label="Add small"
+    />
+    <ActionButton
+      primary
+      size="md"
+      icon={<IconPlus size={18} />}
+      aria-label="Add medium"
+    />
+    <ActionButton
+      primary
+      size="lg"
+      icon={<IconPlus size={22} />}
+      aria-label="Add large"
+    />
+
+  </Grid>
+</JSX>
+
+---
+
+## Colors
+
+The `color` prop allows you to override the default variant color. Available colors: `primary`, `secondary`, `success`, `warning`, `danger`, `default`.
+
+<JSX>
+  <Grid col={6}>
+    <ActionButton primary color="primary">
+      Primary
+    </ActionButton>
+    <ActionButton primary color="secondary">
+      Secondary
+    </ActionButton>
+    <ActionButton primary color="success">
+      Success
+    </ActionButton>
+    <ActionButton primary color="warning">
+      Warning
+    </ActionButton>
+    <ActionButton primary color="danger">
+      Danger
+    </ActionButton>
+    <ActionButton primary color="default">
+      Default
+    </ActionButton>
+    <ActionButton secondary color="primary">
+      Primary
+    </ActionButton>
+    <ActionButton secondary color="secondary">
+      Secondary
+    </ActionButton>
+    <ActionButton secondary color="success">
+      Success
+    </ActionButton>
+    <ActionButton secondary color="warning">
+      Warning
+    </ActionButton>
+    <ActionButton secondary color="danger">
+      Danger
+    </ActionButton>
+    <ActionButton secondary color="default">
+      Default
+    </ActionButton>
+    <ActionButton tertiary color="primary">
+      Primary
+    </ActionButton>
+    <ActionButton tertiary color="secondary">
+      Secondary
+    </ActionButton>
+    <ActionButton tertiary color="success">
+      Success
+    </ActionButton>
+    <ActionButton tertiary color="warning">
+      Warning
+    </ActionButton>
+    <ActionButton tertiary color="danger">
+      Danger
+    </ActionButton>
+    <ActionButton tertiary color="default">
+      Default
+    </ActionButton>
+  </Grid>
+</JSX>
+
+---
+
+## Loading State
+
+The `isLoading` prop displays a spinner and disables interaction. The icon is hidden during loading.
+
+<JSX>
+  <Grid col={3}>
+    <ActionButton primary isLoading>
+      Saving...
+    </ActionButton>
+    <ActionButton secondary isLoading>
+      Loading
+    </ActionButton>
+    <ActionButton tertiary isLoading>
+      Processing
+    </ActionButton>
+    <ActionButton primary icon={<IconCheck size={18} />} isLoading>
+      Confirming...
+    </ActionButton>
+    <ActionButton secondary icon={<IconSettings size={18} />} isLoading>
+      Updating
+    </ActionButton>
+    <ActionButton
+      primary
+      icon={<IconPlus size={18} />}
+      isLoading
+      aria-label="Adding"
+    />
+    <ActionButton
+      secondary
+      icon={<IconSettings size={18} />}
+      isLoading
+      aria-label="Loading settings"
+    />
+    <ActionButton
+      tertiary
+      icon={<IconTrash size={18} />}
+      isLoading
+      aria-label="Deleting"
+    />
+  </Grid>
+</JSX>
+
+---
+
+## Disabled State
+
+The `isDisabled` prop prevents interaction and applies disabled styling.
+
+<JSX>
+  <Grid col={3}>
+    <ActionButton primary isDisabled>
+      Primary Disabled
+    </ActionButton>
+    <ActionButton secondary isDisabled>
+      Secondary Disabled
+    </ActionButton>
+    <ActionButton tertiary isDisabled>
+      Tertiary Disabled
+    </ActionButton>
+    <ActionButton primary icon={<IconPlus size={18} />} isDisabled>
+      Add Item
+    </ActionButton>
+    <ActionButton secondary icon={<IconSettings size={18} />} isDisabled>
+      Settings
+    </ActionButton>
+    <ActionButton tertiary icon={<IconTrash size={18} />} isDisabled>
+      Delete
+    </ActionButton>
+  </Grid>
+</JSX>
+
+---
+
+## Full Width
+
+The `fullWidth` prop makes the button expand to fill its container.
+
+<JSX>
+  <div className="flex flex-col gap-4 w-64">
+    <ActionButton primary fullWidth>
+      Full Width Primary
+    </ActionButton>
+    <ActionButton secondary fullWidth>
+      Full Width Secondary
+    </ActionButton>
+    <ActionButton tertiary fullWidth>
+      Full Width Tertiary
+    </ActionButton>
+  </div>
+</JSX>
+
+---
+
+## Custom Start Content
+
+The `startContent` prop allows you to override the default icon behavior with custom content.
+
+<JSX>
+  <div className="flex gap-4 items-center">
+    <ActionButton primary startContent={<span className="text-lg">🚀</span>}>
+      Launch
+    </ActionButton>
+    <ActionButton secondary startContent={<span className="text-lg">⚙️</span>}>
+      Configure
+    </ActionButton>
+    <ActionButton tertiary startContent={<span className="text-lg">💡</span>}>
+      Ideas
+    </ActionButton>
+  </div>
+</JSX>
+
+---
+
+## Danger Actions
+
+Common pattern for destructive actions using the `danger` color.
+
+<JSX>
+  <div className="flex gap-4 items-center">
+    <ActionButton primary color="danger" icon={<IconTrash size={18} />}>
+      Delete
+    </ActionButton>
+    <ActionButton secondary color="danger" icon={<IconX size={18} />}>
+      Remove
+    </ActionButton>
+    <ActionButton tertiary color="danger" icon={<IconTrash size={18} />}>
+      Delete
+    </ActionButton>
+  </div>
+</JSX>
+
+---
+
+## Props Reference
+
+### Variant Props (Exclusive)
+
+Only one variant prop can be true at a time:
+
+| Prop        | Type      | Default | Description                                  |
+| ----------- | --------- | ------- | -------------------------------------------- |
+| `primary`   | `boolean` | `false` | Renders as solid variant (filled background) |
+| `secondary` | `boolean` | `false` | Renders as flat variant (subtle background)  |
+| `tertiary`  | `boolean` | `false` | Renders as light variant (transparent)       |
+
+_If no variant is specified, defaults to secondary._
+
+### Common Props
+
+| Prop           | Type                                                                          | Default | Description                                 |
+| -------------- | ----------------------------------------------------------------------------- | ------- | ------------------------------------------- |
+| `size`         | `"sm" \| "md" \| "lg"`                                                        | `"md"`  | Button size and border radius               |
+| `color`        | `"primary" \| "secondary" \| "success" \| "warning" \| "danger" \| "default"` | varies  | Button color theme                          |
+| `icon`         | `React.ReactNode`                                                             | -       | Icon to display before button text          |
+| `isLoading`    | `boolean`                                                                     | `false` | Shows loading spinner, hides icon           |
+| `isDisabled`   | `boolean`                                                                     | `false` | Disables button interaction                 |
+| `fullWidth`    | `boolean`                                                                     | `false` | Button expands to fill container            |
+| `startContent` | `React.ReactNode`                                                             | -       | Custom content before text (overrides icon) |
+| `children`     | `React.ReactNode`                                                             | -       | Button label/content                        |
+| `onPress`      | `(e: PressEvent) => void`                                                     | -       | Click/press handler                         |
+
+### Inherited HeroUI Button Props
+
+All other HeroUI Button props are supported except: `variant`, `radius`, `spinner`, `isIconOnly` (these are controlled internally).
+
+---
+
+## Best Practices
+
+1. **Use Primary for main actions**: Reserve primary buttons for the most important action on a page
+2. **Use Secondary for supporting actions**: Cancel, back, or less prominent actions
+3. **Use Tertiary for subtle actions**: "Learn more", "View details", or inline actions
+4. **Provide aria-labels for icon-only buttons**: Essential for accessibility
+5. **Show loading states for async actions**: Provides user feedback
+6. **Use danger color for destructive actions**: Clear visual warning for delete/remove operations
+
+---
+
+## Accessibility
+
+- Inherits HeroUI Button accessibility features
+- Keyboard navigation support (Tab, Enter, Space)
+- ARIA attributes are properly set
+- Always provide `aria-label` for icon-only buttons:
+
+```tsx
+<ActionButton tertiary icon={<IconEdit />} aria-label="Edit item" />
+```

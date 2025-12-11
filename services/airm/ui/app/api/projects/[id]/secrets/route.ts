@@ -29,3 +29,21 @@ export async function GET(
     return handleError(error);
   }
 }
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<NextResponse<APIError>> {
+  try {
+    const { accessToken } = await authenticateRoute();
+    const { id: projectId } = await params;
+
+    const url = `${process.env.AIRM_API_SERVICE_URL}/v1/projects/${projectId}/secrets`;
+
+    const res = await proxyRequest(req, url, accessToken as string);
+
+    return NextResponse.json(res);
+  } catch (error) {
+    return handleError(error);
+  }
+}

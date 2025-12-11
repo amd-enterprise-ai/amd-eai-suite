@@ -6,8 +6,11 @@ import { RefObject, memo } from 'react';
 
 import { ChatConversation } from '@/types/chat';
 
-import { ChatLoader } from './ChatLoader';
 import { MemoizedChatMessage } from './MemoizedChatMessage';
+import { Alert } from '@heroui/react';
+import { ChatMessage } from './ChatMessage';
+import { useTranslation } from 'next-i18next';
+import { IconInfoCircle } from '@tabler/icons-react';
 
 interface Props {
   conversation: ChatConversation;
@@ -15,6 +18,7 @@ interface Props {
   messagesEndRef: RefObject<HTMLDivElement | null>;
   onConversationUpdated: (conversation: ChatConversation) => void;
   loading: boolean;
+  delayedResponseNotification: boolean;
   messageIsStreaming: boolean;
 }
 
@@ -24,8 +28,11 @@ export const ChatMessages = memo(
     messagesEndRef,
     compareMode,
     loading,
+    delayedResponseNotification,
     messageIsStreaming,
   }: Props) => {
+    const { t } = useTranslation('chat');
+
     return (
       <div className="flex flex-col w-full" data-testid="chat-messages">
         <div className="relative">
@@ -51,7 +58,24 @@ export const ChatMessages = memo(
                   messageIsStreaming={messageIsStreaming}
                 />
               ))}
-              {conversation.messages && loading && <ChatLoader />}
+              {conversation.messages && loading && (
+                <>
+                  <ChatMessage
+                    message={{ role: 'assistant', content: '' }}
+                    showCursorOnMessage={false}
+                    allowEdit={false}
+                    allowCopy={false}
+                    isLoading={true}
+                  />
+                  {delayedResponseNotification && (
+                    <Alert
+                      hideIconWrapper
+                      icon={<IconInfoCircle />}
+                      description={t('notifications.delayedResponse')}
+                    />
+                  )}
+                </>
+              )}
               <div className="h-[172px]" ref={messagesEndRef} />
             </div>
           </div>

@@ -243,7 +243,11 @@ class ClusterAuthService:
         if not group_id:
             group_id = f"group-{uuid4()}"
 
-        group_data: dict[str, str | list[str]] = {"id": group_id, "name": name or "", "members": []}
+        # If name is not provided, default to group_id
+        if name is None:
+            name = group_id
+
+        group_data: dict[str, str | list[str]] = {"id": group_id, "name": name, "members": []}
 
         self._groups[group_id] = group_data
 

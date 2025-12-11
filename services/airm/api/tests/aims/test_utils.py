@@ -11,7 +11,6 @@ from app.aims.utils import (
     generate_aim_service_manifest,
     generate_aim_workload_urls,
     get_workload_internal_host,
-    kubernetes_name,
 )
 from tests.factory import create_aim, create_aim_workload, create_basic_test_environment
 
@@ -20,7 +19,11 @@ from tests.factory import create_aim, create_aim_workload, create_basic_test_env
 async def test_generate_aim_service_manifest(db_session: AsyncSession):
     """Test AIM service manifest generation."""
     env = await create_basic_test_environment(db_session)
-    aim = await create_aim(db_session, image_name="aim", image_tag="0.1.0-test-model-20251002")
+    aim = await create_aim(
+        db_session,
+        resource_name="aim-test-model-0-1-0",
+        image_reference="docker.io/amdenterpriseai/aim:0.1.0-test-model-20251002",
+    )
     workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
     deploy_request = AIMDeployRequest()
 
@@ -35,7 +38,7 @@ async def test_generate_aim_service_manifest(db_session: AsyncSession):
     assert metadata["name"] == workload.name
 
     spec = manifest["spec"]
-    assert spec["model"]["ref"] == kubernetes_name(aim.image_name, aim.image_tag)
+    assert spec["model"]["ref"] == aim.resource_name
     assert spec["cacheModel"] is True
     assert spec["replicas"] == 1
 
@@ -50,7 +53,11 @@ async def test_generate_aim_service_manifest(db_session: AsyncSession):
 async def test_generate_aim_service_manifest_with_all_options(db_session: AsyncSession):
     """Test AIM service manifest generation with all optional fields."""
     env = await create_basic_test_environment(db_session)
-    aim = await create_aim(db_session, image_name="aim", image_tag="0.1.0-test-model-20251002")
+    aim = await create_aim(
+        db_session,
+        resource_name="aim-test-model-0-1-0",
+        image_reference="docker.io/amdenterpriseai/aim:0.1.0-test-model-20251002",
+    )
     workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
     deploy_request = AIMDeployRequest(
         cache_model=True,
@@ -72,7 +79,7 @@ async def test_generate_aim_service_manifest_with_all_options(db_session: AsyncS
 
     # Verify spec fields
     spec = manifest["spec"]
-    assert spec["model"]["ref"] == kubernetes_name(aim.image_name, aim.image_tag)
+    assert spec["model"]["ref"] == aim.resource_name
     assert spec["cacheModel"] is True
     assert spec["replicas"] == 3
 
@@ -100,7 +107,11 @@ async def test_generate_aim_service_manifest_with_all_options(db_session: AsyncS
 async def test_generate_aim_service_manifest_with_group_id(db_session: AsyncSession):
     """Test AIM service manifest generation with group_id."""
     env = await create_basic_test_environment(db_session)
-    aim = await create_aim(db_session, image_name="aim", image_tag="0.1.0-test-model-20251002")
+    aim = await create_aim(
+        db_session,
+        resource_name="aim-test-model-0-1-0",
+        image_reference="docker.io/amdenterpriseai/aim:0.1.0-test-model-20251002",
+    )
     workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
     deploy_request = AIMDeployRequest()
 
@@ -117,10 +128,76 @@ async def test_generate_aim_service_manifest_with_group_id(db_session: AsyncSess
 
 
 @pytest.mark.asyncio
+async def test_generate_aim_service_manifest_with_metric(db_session: AsyncSession):
+    """Test AIM service manifest generation with metric override."""
+    env = await create_basic_test_environment(db_session)
+    aim = await create_aim(
+        db_session,
+        resource_name="aim-test-model-0-1-0",
+        image_reference="docker.io/amdenterpriseai/aim:0.1.0-test-model-20251002",
+    )
+    workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
+    deploy_request = AIMDeployRequest(metric="latency")
+
+    manifest_str = generate_aim_service_manifest(aim, deploy_request, workload, env.project)
+    manifest = yaml.safe_load(manifest_str)
+
+    # Verify metric override is included
+    spec = manifest["spec"]
+    assert "overrides" in spec
+    assert spec["overrides"]["metric"] == "latency"
+
+
+@pytest.mark.asyncio
+async def test_generate_aim_service_manifest_with_throughput_metric(db_session: AsyncSession):
+    """Test AIM service manifest generation with throughput metric."""
+    env = await create_basic_test_environment(db_session)
+    aim = await create_aim(
+        db_session,
+        resource_name="aim-test-model-0-1-0",
+        image_reference="docker.io/amdenterpriseai/aim:0.1.0-test-model-20251002",
+    )
+    workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
+    deploy_request = AIMDeployRequest(metric="throughput")
+
+    manifest_str = generate_aim_service_manifest(aim, deploy_request, workload, env.project)
+    manifest = yaml.safe_load(manifest_str)
+
+    # Verify metric override is included
+    spec = manifest["spec"]
+    assert "overrides" in spec
+    assert spec["overrides"]["metric"] == "throughput"
+
+
+@pytest.mark.asyncio
+async def test_generate_aim_service_manifest_without_metric(db_session: AsyncSession):
+    """Test AIM service manifest generation without metric override."""
+    env = await create_basic_test_environment(db_session)
+    aim = await create_aim(
+        db_session,
+        resource_name="aim-test-model-0-1-0",
+        image_reference="docker.io/amdenterpriseai/aim:0.1.0-test-model-20251002",
+    )
+    workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
+    deploy_request = AIMDeployRequest()
+
+    manifest_str = generate_aim_service_manifest(aim, deploy_request, workload, env.project)
+    manifest = yaml.safe_load(manifest_str)
+
+    # Verify overrides is not included when metric is not specified
+    spec = manifest["spec"]
+    assert "overrides" not in spec
+
+
+@pytest.mark.asyncio
 async def test_generate_aim_workload_urls(db_session: AsyncSession):
     """Test AIM workload URL generation."""
     env = await create_basic_test_environment(db_session)
-    aim = await create_aim(db_session, image_name="aim", image_tag="0.1.0-test-model-20251002")
+    aim = await create_aim(
+        db_session,
+        resource_name="aim-test-model-0-1-0",
+        image_reference="docker.io/amdenterpriseai/aim:0.1.0-test-model-20251002",
+    )
     workload = await create_aim_workload(
         db_session, project=env.project, aim=aim, creator=env.creator, name="test-workload"
     )
@@ -133,7 +210,7 @@ async def test_generate_aim_workload_urls(db_session: AsyncSession):
     # Internal host uses get_workload_internal_host which may truncate
     expected_internal = get_workload_internal_host(workload.name, env.project.name)
     assert urls["internal_host"] == expected_internal
-    assert urls["external_host"] == f"{env.project.cluster.base_url}/{env.project.name}/{workload.id}"
+    assert urls["external_host"] == f"{env.project.cluster.workloads_base_url}/{env.project.name}/{workload.id}"
 
 
 def test_get_workload_internal_host_max_namespace():
@@ -171,3 +248,73 @@ def test_get_workload_internal_host_original_issue():
     first_label = f"{workload_name}-predictor"
     assert len(first_label) == 21  # 11 + 10
     assert len(first_label) < 63
+
+
+@pytest.mark.asyncio
+async def test_generate_aim_service_manifest_with_allow_unoptimized_true(db_session: AsyncSession):
+    """Test AIM service manifest generation with allowUnoptimized set to True."""
+    env = await create_basic_test_environment(db_session)
+    aim = await create_aim(db_session, creator=env.creator)
+    workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
+    deploy_request = AIMDeployRequest(allow_unoptimized=True)
+
+    manifest_str = generate_aim_service_manifest(aim, deploy_request, workload, env.project)
+    manifest = yaml.safe_load(manifest_str)
+
+    # Verify template.allowUnoptimized is set to True
+    spec = manifest["spec"]
+    assert "template" in spec
+    assert spec["template"]["allowUnoptimized"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_aim_service_manifest_with_allow_unoptimized_false(db_session: AsyncSession):
+    """Test AIM service manifest generation with allowUnoptimized explicitly set to False."""
+    env = await create_basic_test_environment(db_session)
+    aim = await create_aim(db_session, creator=env.creator)
+    workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
+    deploy_request = AIMDeployRequest(allow_unoptimized=False)
+
+    manifest_str = generate_aim_service_manifest(aim, deploy_request, workload, env.project)
+    manifest = yaml.safe_load(manifest_str)
+
+    # Verify template.allowUnoptimized is set to False
+    spec = manifest["spec"]
+    assert "template" in spec
+    assert spec["template"]["allowUnoptimized"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_aim_service_manifest_default_allow_unoptimized(db_session: AsyncSession):
+    """Test AIM service manifest generation with default allowUnoptimized (should be False)."""
+    env = await create_basic_test_environment(db_session)
+    aim = await create_aim(db_session, creator=env.creator)
+    workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
+    deploy_request = AIMDeployRequest()  # No allow_unoptimized specified
+
+    manifest_str = generate_aim_service_manifest(aim, deploy_request, workload, env.project)
+    manifest = yaml.safe_load(manifest_str)
+
+    # Verify template.allowUnoptimized defaults to False
+    spec = manifest["spec"]
+    assert "template" in spec
+    assert spec["template"]["allowUnoptimized"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_aim_service_manifest_with_metric_and_allow_unoptimized(db_session: AsyncSession):
+    """Test AIM service manifest generation with both metric and allowUnoptimized."""
+    env = await create_basic_test_environment(db_session)
+    aim = await create_aim(db_session, creator=env.creator)
+    workload = await create_aim_workload(db_session, project=env.project, aim=aim, creator=env.creator)
+    deploy_request = AIMDeployRequest(metric="latency", allow_unoptimized=True)
+
+    manifest_str = generate_aim_service_manifest(aim, deploy_request, workload, env.project)
+    manifest = yaml.safe_load(manifest_str)
+
+    # Verify both metric override and template.allowUnoptimized are included
+    spec = manifest["spec"]
+    assert "overrides" in spec
+    assert spec["overrides"]["metric"] == "latency"
+    assert "template" in spec
+    assert spec["template"]["allowUnoptimized"] is True

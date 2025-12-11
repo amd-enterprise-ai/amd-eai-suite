@@ -152,7 +152,7 @@ async def delete_models(session: AsyncSession, existing_ids: list[UUID], project
     return deletable_model_ids
 
 
-async def update_onboarding_statuses(session: AsyncSession, project_id: UUID):
+async def update_onboarding_statuses(session: AsyncSession, project_id: UUID) -> None:
     pending_models = await select_models(session, project_id=project_id, onboarding_status=OnboardingStatus.pending)
     if not pending_models:
         return

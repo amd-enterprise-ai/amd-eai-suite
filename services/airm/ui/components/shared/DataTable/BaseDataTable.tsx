@@ -121,7 +121,7 @@ const BaseDataTable = <T, K extends keyof T, C>({
 
   const columns: TableColumns<typeof ACTIONS_COLUMN_KEY | C> = [...columnsProp];
 
-  if (!!rowActions) {
+  if (rowActions) {
     columns.push(ACTIONS_COLUMN);
   }
 

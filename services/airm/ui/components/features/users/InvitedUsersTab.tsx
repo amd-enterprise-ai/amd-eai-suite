@@ -51,6 +51,7 @@ export const InvitedUsersTab = ({
   const { t: tInvited } = useTranslation('users', { keyPrefix: 'invited' });
   const [filter, setFilter] = useState<ClientSideDataFilter<InvitedUser>[]>([]);
   const { isInviteEnabled } = useAccessControl();
+  const { smtpEnabled } = useAccessControl();
 
   const handleFilterChange = useCallback((filterValues: FilterValueMap) => {
     const invitedFilterableFields: (keyof InvitedUser)[] = ['email'];
@@ -143,10 +144,10 @@ export const InvitedUsersTab = ({
     });
 
   const filteredInvitedUsersData = useMemo(() => {
-    if (invitedUsersData?.invitedUsers) {
-      return getFilteredData(invitedUsersData.invitedUsers, filter);
+    if (invitedUsersData?.data) {
+      return getFilteredData(invitedUsersData.data, filter);
     }
-  }, [filter, invitedUsersData?.invitedUsers]);
+  }, [filter, invitedUsersData?.data]);
 
   const invitedUsersCustomRenderers: Partial<
     Record<
@@ -161,14 +162,18 @@ export const InvitedUsersTab = ({
   };
 
   const invitedUsersActions = [
-    {
-      key: 'resend',
-      onPress: (i: InvitedUser) => {
-        setInvitationBeingActioned(i);
-        onResendInvitationModalOpen();
-      },
-      label: tInvited('list.actions.resend.label'),
-    },
+    ...(smtpEnabled
+      ? [
+          {
+            key: 'resend',
+            onPress: (i: InvitedUser) => {
+              setInvitationBeingActioned(i);
+              onResendInvitationModalOpen();
+            },
+            label: tInvited('list.actions.resend.label'),
+          },
+        ]
+      : []),
     {
       key: 'cancel',
       className: 'text-danger',

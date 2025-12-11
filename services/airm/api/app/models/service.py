@@ -17,6 +17,7 @@ from ..datasets.repository import select_dataset
 from ..managed_workloads.repository import select_workloads
 from ..managed_workloads.schemas import ChartWorkloadResponse
 from ..managed_workloads.service import submit_chart_workload
+from ..messaging.sender import MessageSender
 from ..overlays.repository import list_overlays
 from ..projects.models import Project
 from ..users.models import User
@@ -34,7 +35,7 @@ from .repository import (
     update_onboarding_statuses,
 )
 from .repository import delete_models as delete_models_by_ids
-from .schemas import FinetuneCreate, ModelDeployRequest
+from .schemas import FinetuneCreate, ModelDeployRequest, ModelEdit
 from .utils import delete_from_s3, format_model_path, get_finetuned_model_weights_path
 
 
@@ -73,7 +74,7 @@ async def list_models(
 
 
 async def update_model_by_id(
-    session: AsyncSession, model_id: UUID, project_id: UUID, update_data, updater: str
+    session: AsyncSession, model_id: UUID, project_id: UUID, update_data: ModelEdit, updater: str
 ) -> InferenceModel:
     """Update a model, raising NotFoundException if not found."""
     model = await get_model(session, model_id, project_id)
@@ -133,6 +134,7 @@ async def run_finetune_model_workload(
     creator: str,
     token: str,
     project: Project,
+    message_sender: MessageSender,
     display_name: str | None = None,
     hf_token_secret_name: str | None = None,
 ) -> ChartWorkloadResponse:
@@ -224,8 +226,9 @@ async def run_finetune_model_workload(
         token=token,
         project=project,
         chart=chart,
-        user_inputs=user_inputs,
         overlays_values=overlay_values,
+        user_inputs=user_inputs,
+        message_sender=message_sender,
         model=finetuned_model,
         dataset=dataset,
         display_name=display_name,
@@ -238,6 +241,7 @@ async def run_model_deployment(
     creator: User,
     token: str,
     project: Project,
+    message_sender: MessageSender,
     request: ModelDeployRequest | None = None,
     display_name: str | None = None,
 ) -> ChartWorkloadResponse:
@@ -286,8 +290,9 @@ async def run_model_deployment(
         token=token,
         project=project,
         chart=chart,
-        user_inputs=user_inputs,
         overlays_values=overlay_values,
+        user_inputs=user_inputs,
+        message_sender=message_sender,
         model=model,
         display_name=display_name,
     )

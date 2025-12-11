@@ -47,12 +47,12 @@ export const ClusterNodesTable = ({ clusterNodes }: Props) => {
       return `${displayBytesInGigabytes(item.memoryBytes)}`;
     },
     [ClusterNodesTableField.GPU_MEMORY]: (item) => {
-      return !!item.gpuInfo
+      return item.gpuInfo
         ? `${displayBytesInGigabytes(item.gpuCount * item.gpuInfo.memoryBytesPerDevice)}`
         : '-';
     },
     [ClusterNodesTableField.GPU_TYPE]: (item) => {
-      return !!item.gpuInfo ? item.gpuInfo.name : '-';
+      return item.gpuInfo ? item.gpuInfo.name : '-';
     },
   };
 

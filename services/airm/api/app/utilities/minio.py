@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import io
+from collections.abc import Generator
 from contextlib import contextmanager
 
 import urllib3
@@ -129,7 +130,7 @@ def map_s3_error_to_domain_exception(s3_error: S3Error, context: str) -> BaseAir
 
 
 @contextmanager
-def handle_s3_operation(operation: str, context: str, resource_id: str = None):
+def handle_s3_operation(operation: str, context: str, resource_id: str | None = None) -> Generator[None]:
     """
     Context manager for consistent S3 error handling and logging.
 

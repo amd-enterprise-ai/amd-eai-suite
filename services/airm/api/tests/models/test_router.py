@@ -53,8 +53,10 @@ async def test_get_models(mock_update_statuses, mock_list_models, db_session: As
         response = client.get(f"/v1/models?project={env.project.id}")
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.json()) == 1
-        assert response.json()[0]["name"] == model_response.name
+        response_data = response.json()
+        assert "data" in response_data
+        assert len(response_data["data"]) == 1
+        assert response_data["data"][0]["name"] == model_response.name
 
 
 @patch("app.models.router.list_models")
@@ -71,8 +73,10 @@ async def test_get_models_with_filters(mock_update_statuses, mock_list_models, d
         response = client.get(f"/v1/models?project={env.project.id}&name=Test%20Model")
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.json()) == 1
-        assert response.json()[0]["name"] == model_response.name
+        response_data = response.json()
+        assert "data" in response_data
+        assert len(response_data["data"]) == 1
+        assert response_data["data"][0]["name"] == model_response.name
         mock_list_models.assert_called_once()
 
 
@@ -90,7 +94,8 @@ async def test_get_model(mock_update_statuses, mock_get_model, db_session: Async
         response = client.get(f"/v1/models/{env.model.id}?project={env.project.id}")
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["name"] == model_response.name
+        response_data = response.json()
+        assert response_data["name"] == model_response.name
 
 
 @patch("app.models.router.get_model")
@@ -482,7 +487,7 @@ def test_get_finetunable_models_endpoint(mock_get_finetunable_models):
 
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["models"] == expected_models
+        assert response_data["data"] == expected_models
         mock_get_finetunable_models.assert_called_once()
 
 
@@ -500,7 +505,7 @@ async def test_get_finetunable_models_endpoint_empty_list(
 
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["models"] == []
+        assert response_data["data"] == []
         mock_get_finetunable_models.assert_called_once()
 
 

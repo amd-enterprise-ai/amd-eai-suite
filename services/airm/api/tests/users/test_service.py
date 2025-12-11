@@ -17,7 +17,6 @@ from app.users.repository import get_user_by_email
 from app.users.schemas import InviteUser, UserDetailsUpdate, UserRoleEnum, UserRolesUpdate
 from app.users.schemas import UserResponse as UserSchema
 from app.users.service import (
-    POST_REGISTRATION_REDIRECT_URL,
     assign_roles_to_user,
     create_user_in_organization,
     delete_user,
@@ -183,6 +182,7 @@ async def test_create_user_in_organization_success(db_session: AsyncSession):
         patch("app.users.service.assign_user_to_organization_in_keycloak"),
         patch("app.users.service.assign_roles_to_user"),
         patch("app.users.service.send_verify_email"),
+        patch("app.users.service.POST_REGISTRATION_REDIRECT_URL", "http://test-redirect-url.com"),
     ):
         kc_admin = AsyncMock(spec=KeycloakAdmin)
         result = await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
@@ -213,6 +213,7 @@ async def test_create_user_in_organization_with_projects_success(db_session: Asy
         patch("app.users.service.assign_roles_to_user"),
         patch("app.users.service.send_verify_email"),
         patch("app.users.service.assign_users_to_group") as mock_assign_users_to_group,
+        patch("app.users.service.POST_REGISTRATION_REDIRECT_URL", "http://test-redirect-url.com"),
     ):
         kc_admin = AsyncMock(spec=KeycloakAdmin)
         result = await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
@@ -309,6 +310,7 @@ async def test_create_user_in_organization_with_no_roles(db_session: AsyncSessio
         patch("app.users.service.assign_user_to_organization_in_keycloak"),
         patch("app.users.service.assign_roles_to_user") as mock_assign_roles,
         patch("app.users.service.send_verify_email"),
+        patch("app.users.service.POST_REGISTRATION_REDIRECT_URL", "http://test-redirect-url.com"),
     ):
         kc_admin = AsyncMock(spec=KeycloakAdmin)
         result = await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
@@ -415,6 +417,7 @@ async def test_create_user_with_project_memberships(db_session: AsyncSession):
         patch("app.users.service.assign_user_to_organization_in_keycloak"),
         patch("app.users.service.assign_roles_to_user"),
         patch("app.users.service.send_verify_email"),
+        patch("app.users.service.POST_REGISTRATION_REDIRECT_URL", "http://test-redirect-url.com"),
     ):
         kc_admin = AsyncMock(spec=KeycloakAdmin)
         result = await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
@@ -542,6 +545,7 @@ async def test_resend_invitation_success(db_session: AsyncSession):
         patch("app.users.service.get_user", return_value=keycloak_user) as mock_get_user,
         patch("app.users.service.is_keycloak_user_inactive", return_value=True) as mock_is_inactive,
         patch("app.users.service.send_verify_email") as mock_send_email,
+        patch("app.users.service.POST_REGISTRATION_REDIRECT_URL", "http://test-redirect-url.com"),
     ):
         kc_admin = AsyncMock(spec=KeycloakAdmin)
         await resend_invitation(kc_admin, user, logged_in_user)
@@ -549,7 +553,7 @@ async def test_resend_invitation_success(db_session: AsyncSession):
     mock_get_user.assert_called_once_with(kc_admin=kc_admin, user_id="user-kc-id")
     mock_is_inactive.assert_called_once_with(keycloak_user)
     mock_send_email.assert_called_once_with(
-        kc_admin=kc_admin, keycloak_user_id="user-kc-id", redirect_uri=POST_REGISTRATION_REDIRECT_URL
+        kc_admin=kc_admin, keycloak_user_id="user-kc-id", redirect_uri="http://test-redirect-url.com"
     )
     assert user.invited_by == logged_in_user
     assert user.invited_at is not None
@@ -636,3 +640,296 @@ async def test_get_invited_users_for_organization(db_session: AsyncSession):
     assert result[0].email == users[0].email
     assert result[0].invited_at == datetime(2025, 1, 1, tzinfo=UTC)
     assert result[1].email == users[1].email
+
+
+@pytest.mark.asyncio
+async def test_get_users_for_organization_filters_inactive_users(db_session: AsyncSession):
+    """Test that get_users_for_organization only returns active users."""
+    env = await factory.create_basic_test_environment(db_session)
+
+    users = await factory.create_multiple_users(db_session, env.organization, user_count=3)
+
+    keycloak_users = [
+        {
+            "id": users[0].keycloak_user_id,
+            "email": users[0].email,
+            "firstName": "Active",
+            "lastName": "User",
+            "enabled": True,
+        },
+        {
+            "id": users[1].keycloak_user_id,
+            "email": users[1].email,
+            "firstName": "Inactive",
+            "lastName": "User",
+            "enabled": False,
+        },
+        {
+            "id": users[2].keycloak_user_id,
+            "email": users[2].email,
+            "firstName": "Another",
+            "lastName": "Active",
+            "enabled": True,
+        },
+    ]
+
+    with (
+        patch("app.users.service.get_users_in_organization_from_keycloak", return_value=keycloak_users),
+        patch("app.users.service.get_users_in_role", return_value=[]),
+        patch("app.users.service.is_keycloak_user_active", side_effect=lambda u: u.get("enabled", False)),
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+        result = await get_users_for_organization(kc_admin, db_session, env.organization)
+
+    # Should only return 2 active users
+    assert len(result) == 2
+    emails = [user.email for user in result]
+    assert users[0].email in emails
+    assert users[1].email not in emails  # Inactive user should not be included
+    assert users[2].email in emails
+
+
+@pytest.mark.asyncio
+async def test_get_user_details_with_platform_admin_role(db_session: AsyncSession):
+    """Test user details retrieval when user is a Platform Administrator."""
+    env = await factory.create_basic_test_environment(db_session)
+    user = await factory.create_user(
+        db_session,
+        env.organization,
+        email="admin@example.com",
+        keycloak_user_id="admin-kc-id",
+    )
+
+    keycloak_user = {
+        "id": "admin-kc-id",
+        "firstName": "Admin",
+        "lastName": "User",
+        "email": "admin@example.com",
+    }
+
+    user_roles = [
+        {"name": "Platform Administrator", "id": "role-id-1"},
+    ]
+
+    with (
+        patch("app.users.service.get_user", return_value=keycloak_user),
+        patch("app.users.service.get_user_realm_roles", return_value=user_roles),
+        patch("app.users.service.get_user_groups", return_value=[]),
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+        result = await get_user_details(kc_admin, db_session, env.organization, user)
+
+    assert result.email == "admin@example.com"
+    assert result.role == Roles.PLATFORM_ADMINISTRATOR.value
+    assert result.first_name == "Admin"
+    assert result.last_name == "User"
+
+
+@pytest.mark.asyncio
+async def test_create_user_with_multiple_projects(db_session: AsyncSession):
+    """Test user creation with assignment to multiple projects."""
+    env = await factory.create_basic_test_environment(db_session)
+
+    project1 = env.project
+    project2 = await factory.create_project(db_session, env.organization, env.cluster, name="Project 2")
+    project3 = await factory.create_project(db_session, env.organization, env.cluster, name="Project 3")
+
+    user_data = InviteUser(
+        email="multiproject@example.com", roles=[], project_ids=[project1.id, project2.id, project3.id]
+    )
+    creator = "test_creator"
+
+    with (
+        patch("app.users.service.check_valid_email_domain"),
+        patch("app.users.service.get_user_by_username_from_keycloak", return_value=None),
+        patch("app.users.service.create_user_in_keycloak", return_value="keycloak_user_id"),
+        patch("app.users.service.assign_user_to_organization_in_keycloak"),
+        patch("app.users.service.assign_users_to_group") as mock_assign_to_group,
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+        result = await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
+
+    assert result.email == "multiproject@example.com"
+    # Should be called 3 times, once for each project
+    assert mock_assign_to_group.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_create_user_with_empty_project_ids_list(db_session: AsyncSession):
+    """Test user creation with empty project_ids list doesn't assign to groups."""
+    env = await factory.create_basic_test_environment(db_session)
+
+    user_data = InviteUser(email="noprojects@example.com", roles=[], project_ids=[])
+    creator = "test_creator"
+
+    with (
+        patch("app.users.service.check_valid_email_domain"),
+        patch("app.users.service.get_user_by_username_from_keycloak", return_value=None),
+        patch("app.users.service.create_user_in_keycloak", return_value="keycloak_user_id"),
+        patch("app.users.service.assign_user_to_organization_in_keycloak"),
+        patch("app.users.service.assign_users_to_group") as mock_assign_to_group,
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+        result = await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
+
+    assert result.email == "noprojects@example.com"
+    mock_assign_to_group.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_user_invalid_email_domain(db_session: AsyncSession):
+    """Test user creation fails when email domain is not allowed."""
+    from app.utilities.exceptions import ValidationException
+
+    env = await factory.create_basic_test_environment(db_session)
+
+    user_data = InviteUser(
+        email="user@invalid-domain.com",
+        roles=[],
+    )
+    creator = "test_creator"
+
+    with (
+        patch("app.users.service.check_valid_email_domain", side_effect=ValidationException("Invalid domain")),
+        patch("app.users.service.get_user_by_username_from_keycloak", return_value=None),
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+
+        with pytest.raises(ValidationException, match="Invalid domain"):
+            await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
+
+
+@pytest.mark.asyncio
+async def test_create_user_sets_invited_fields(db_session: AsyncSession):
+    """Test that created user has invited_at and invited_by fields set."""
+    env = await factory.create_basic_test_environment(db_session)
+
+    user_data = InviteUser(email="invited@example.com", roles=[])
+    creator = "admin@example.com"
+
+    with (
+        patch("app.users.service.check_valid_email_domain"),
+        patch("app.users.service.get_user_by_username_from_keycloak", return_value=None),
+        patch("app.users.service.create_user_in_keycloak", return_value="keycloak_user_id"),
+        patch("app.users.service.assign_user_to_organization_in_keycloak"),
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+        result = await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
+
+    assert result.invited_by == creator
+    assert result.invited_at is not None
+
+    # Verify in database as well
+    db_user = await get_user_by_email(db_session, "invited@example.com")
+    assert db_user.invited_by == creator
+    assert db_user.invited_at is not None
+
+
+@pytest.mark.asyncio
+async def test_create_user_with_existing_keycloak_user_uses_existing_id(db_session: AsyncSession):
+    """Test that when Keycloak user exists, we use their existing ID."""
+    env = await factory.create_basic_test_environment(db_session)
+
+    existing_kc_user = {"id": "existing-kc-user-id", "email": "existing@example.com"}
+    user_data = InviteUser(email="existing@example.com", roles=[])
+    creator = "test_creator"
+
+    with (
+        patch("app.users.service.check_valid_email_domain"),
+        patch("app.users.service.get_user_by_username_from_keycloak", return_value=existing_kc_user),
+        patch("app.users.service.create_user_in_keycloak") as mock_create_kc_user,
+        patch("app.users.service.assign_user_to_organization_in_keycloak"),
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+        result = await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
+
+    # Should not create new user in Keycloak
+    mock_create_kc_user.assert_not_called()
+
+    # Should use existing Keycloak user ID
+    assert result.keycloak_user_id == "existing-kc-user-id"
+
+    db_user = await get_user_by_email(db_session, "existing@example.com")
+    assert db_user.keycloak_user_id == "existing-kc-user-id"
+
+
+@pytest.mark.asyncio
+async def test_create_user_assigns_to_organization_in_keycloak(db_session: AsyncSession):
+    """Test that user is assigned to organization in Keycloak."""
+    env = await factory.create_basic_test_environment(db_session)
+
+    user_data = InviteUser(email="orguser@example.com", roles=[])
+    creator = "test_creator"
+
+    with (
+        patch("app.users.service.check_valid_email_domain"),
+        patch("app.users.service.get_user_by_username_from_keycloak", return_value=None),
+        patch("app.users.service.create_user_in_keycloak", return_value="new-kc-user-id"),
+        patch("app.users.service.assign_user_to_organization_in_keycloak") as mock_assign_org,
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+        await create_user_in_organization(kc_admin, db_session, env.organization, user_data, creator)
+
+    # Verify organization assignment was called with correct parameters
+    mock_assign_org.assert_called_once_with(
+        kc_admin=kc_admin, user_id="new-kc-user-id", organization_id=env.organization.keycloak_organization_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_user_with_all_projects_in_different_org_fails(db_session: AsyncSession):
+    """Test that providing project IDs from a different organization fails."""
+    org1 = await factory.create_organization(db_session, name="Org 1", keycloak_organization_id="org1-id")
+    org2 = await factory.create_organization(db_session, name="Org 2", keycloak_organization_id="org2-id")
+
+    cluster = await factory.create_cluster(db_session, org2, name="Test Cluster")
+
+    # Create project in org2
+    project_in_org2 = await factory.create_project(db_session, org2, cluster, name="Org 2 Project")
+
+    # Try to create user in org1 with project from org2
+    user_data = InviteUser(email="crossorg@example.com", roles=[], project_ids=[project_in_org2.id])
+    creator = "test_creator"
+
+    with (
+        patch("app.users.service.check_valid_email_domain"),
+        patch("app.users.service.get_user_by_username_from_keycloak", return_value=None),
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+
+        with pytest.raises(NotFoundException, match="Projects not found in organization"):
+            await create_user_in_organization(kc_admin, db_session, org1, user_data, creator)
+
+
+@pytest.mark.asyncio
+async def test_assign_roles_when_platform_admin_role_not_found(db_session: AsyncSession):
+    """Test role assignment when Platform Administrator role doesn't exist in Keycloak."""
+    env = await factory.create_basic_test_environment(db_session)
+    target_user = await factory.create_user(
+        db_session,
+        env.organization,
+        email="user@test.com",
+        keycloak_user_id="user-id",
+    )
+
+    user_role_request = UserRolesUpdate(roles=[UserRoleEnum.PLATFORM_ADMIN])
+
+    # No Platform Administrator role in Keycloak
+    keycloak_roles = [
+        {"id": "role-id-1", "name": "Team Member"},
+    ]
+
+    with (
+        patch("app.users.service.assign_roles_to_user_keycloak", return_value=None) as mock_assign_roles,
+        patch("app.users.service.unassign_roles_to_user", return_value=None),
+        patch(
+            "app.users.service.get_assigned_roles_to_user",
+            return_value={"realmMappings": []},
+        ),
+        patch("app.users.service.get_all_available_realm_roles", return_value=keycloak_roles),
+    ):
+        kc_admin = AsyncMock(spec=KeycloakAdmin)
+        await assign_roles_to_user(kc_admin, target_user, user_role_request, "admin")
+
+    # Should not call assign_roles since the role doesn't exist
+    mock_assign_roles.assert_not_called()

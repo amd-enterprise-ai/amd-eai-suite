@@ -12,11 +12,14 @@ import {
 
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import { mockAims } from '@/__mocks__/services/app/aims.data';
-import { deleteWorkload, listWorkloads } from '@/services/app/workloads';
+import { mockModels } from '@/__mocks__/services/app/models.data';
 import { getAims } from '@/services/app/aims';
 import { getModels } from '@/services/app/models';
+import { deleteWorkload, listWorkloads } from '@/services/app/workloads';
 
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
+import { Aim } from '@/types/aims';
+import { Model, ModelOnboardingStatus } from '@/types/models';
 import { Workload } from '@/types/workloads';
 
 import DeployedModels from '@/components/features/models/DeployedModels';
@@ -24,18 +27,25 @@ import DeployedModels from '@/components/features/models/DeployedModels';
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock, vi } from 'vitest';
 
-// Mock the API services
 vi.mock('@/services/app/workloads', () => ({
   listWorkloads: vi.fn(),
   deleteWorkload: vi.fn(),
+}));
+
+vi.mock('@/services/app/models', () => ({
+  getModels: vi.fn(),
 }));
 
 vi.mock('@/services/app/aims', () => ({
   getAims: vi.fn(),
 }));
 
-vi.mock('@/services/app/models', () => ({
-  getModels: vi.fn(),
+// Mock useProject hook
+vi.mock('@/hooks/useProject', () => ({
+  __esModule: true,
+  default: () => ({
+    activeProject: 'test-project',
+  }),
 }));
 
 // Mock useSystemToast for testing
@@ -81,19 +91,15 @@ vi.mock('@tabler/icons-react', async (importOriginal) => {
 describe('DeployedModels', () => {
   const mockListWorkloads = listWorkloads as Mock;
   const mockDeleteWorkload = deleteWorkload as Mock;
-  const mockGetAims = getAims as Mock;
   const mockGetModels = getModels as Mock;
+  const mockGetAims = getAims as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockListWorkloads.mockResolvedValue(mockWorkloads);
     mockDeleteWorkload.mockResolvedValue({ success: true });
-    mockGetAims.mockResolvedValue(mockAims);
-    // Mock getModels to return models from mockWorkloads
-    const mockModels = mockWorkloads
-      .filter((w) => w.model)
-      .map((w) => w.model!);
     mockGetModels.mockResolvedValue(mockModels);
+    mockGetAims.mockResolvedValue(mockAims);
 
     // Mock window.open
     Object.defineProperty(window, 'open', {
@@ -139,17 +145,22 @@ describe('DeployedModels', () => {
     // Wait for data to load and be displayed
     await waitFor(
       () => {
-        // Check that workloads are displayed - the component shows model names or display names
-        expect(screen.getByText('Llama 7B')).toBeInTheDocument();
-        expect(screen.getByText('Stable Diffusion XL')).toBeInTheDocument();
-        expect(screen.getByText('GPT-4 Base')).toBeInTheDocument();
+        // Check that workloads are displayed - the component shows displayName
+        // Only INFERENCE types should be visible by default
+        expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
+        // other types should not appear
+        expect(
+          screen.queryByText('Stable Diffusion XL Download'),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText('Model fine-tuning Job'),
+        ).not.toBeInTheDocument();
       },
       { timeout: 5000 },
     );
 
-    // Check that workspace workloads are also displayed (since they match the default type filter)
-    // The component shows workloads based on type and status filters, not model existence
-    expect(screen.queryByText('Jupyter Workspace')).not.toBeInTheDocument(); // This is WORKSPACE type, not in default filter
+    // The component only shows INFERENCE workloads
+    expect(screen.queryByText('Jupyter Workspace')).not.toBeInTheDocument(); // WORKSPACE type is not shown
 
     // For now, just verify the component renders without crashing
     expect(screen.getByTestId('deployed-models')).toBeInTheDocument();
@@ -164,89 +175,66 @@ describe('DeployedModels', () => {
 
     // Wait for initial data to load
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
     // Search for "Llama" - this should filter by displayName field
     fireEvent.change(searchInput, { target: { value: 'Llama' } });
 
     await waitFor(() => {
-      // Should show the Llama workload (model name is displayed)
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      // Should show the Llama workload (displayName is displayed)
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
       // Should not show other workloads
-      expect(screen.queryByText('Stable Diffusion XL')).not.toBeInTheDocument();
-      expect(screen.queryByText('GPT-4 Base')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('Stable Diffusion XL Download'),
+      ).not.toBeInTheDocument();
     });
 
-    // Clear search and verify all workloads are shown again
+    // Clear search and verify all default-filtered workloads are shown again
     fireEvent.change(searchInput, { target: { value: '' } });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
-      expect(screen.getByText('Stable Diffusion XL')).toBeInTheDocument();
-      expect(screen.getByText('GPT-4 Base')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
+      // other types won't be shown
+      expect(
+        screen.queryByText('Stable Diffusion XL Download'),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('Model fine-tuning Job'),
+      ).not.toBeInTheDocument();
     });
   });
 
-  it('filters workloads by type', async () => {
-    // Use the standard mock workloads to test type filtering
+  it('displays only inference workloads', async () => {
+    // Use the standard mock workloads to verify only INFERENCE workloads are shown
     mockListWorkloads.mockResolvedValue(mockWorkloads);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
     });
 
-    // Wait for initial data to load - by default only INFERENCE, MODEL_DOWNLOAD, FINE_TUNING should be visible
+    // Wait for initial data to load - by default only INFERENCE should be visible
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument(); // INFERENCE
-      expect(screen.getByText('Stable Diffusion XL')).toBeInTheDocument(); // MODEL_DOWNLOAD
-      expect(screen.getByText('Model fine-tuning Job')).toBeInTheDocument(); // FINE_TUNING
-      // WORKSPACE should be filtered out by default
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument(); // INFERENCE
+      // FINE_TUNING and WORKSPACE should be filtered out by default
+      expect(
+        screen.queryByText('Stable Diffusion XL Download'),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('Model fine-tuning Job'),
+      ).not.toBeInTheDocument();
       expect(screen.queryByText('Jupyter Workspace')).not.toBeInTheDocument();
     });
-
-    // Find the type filter button
-    const typeFilterButton = screen.getByRole('button', { name: /type/i });
-    expect(typeFilterButton).toBeInTheDocument();
-
-    // Verify that the component correctly applies default type filters
-    // The workloads shown should match the expected filtering behavior
-    await waitFor(() => {
-      // Should show workloads matching default type filter
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
-      expect(screen.getByText('Stable Diffusion XL')).toBeInTheDocument();
-      expect(screen.getByText('Model fine-tuning Job')).toBeInTheDocument();
-
-      // Should not show WORKSPACE type by default
-      expect(screen.queryByText('Jupyter Workspace')).not.toBeInTheDocument();
-    });
-
-    // Test that we can verify the type chips are displayed correctly for visible workloads
-    const tableContainer = await screen.findByRole('grid');
-
-    // Now verify the content within the table shows the correct type filters
-    const inferenceElements =
-      within(tableContainer).getAllByText('type.INFERENCE');
-    expect(inferenceElements.length).toBeGreaterThan(0); // Should have at least one INFERENCE type
-    expect(
-      within(tableContainer).getByText('type.MODEL_DOWNLOAD'),
-    ).toBeInTheDocument();
-    const fineTuningElements =
-      within(tableContainer).getAllByText('type.FINE_TUNING');
-    expect(fineTuningElements.length).toBeGreaterThan(0); // Should have at least one FINE_TUNING type
-
-    // WORKSPACE type chips should not be visible in the table
-    expect(
-      within(tableContainer).queryByText('type.WORKSPACE'),
-    ).not.toBeInTheDocument();
 
     // Verify that the component has the expected number of rows (header + visible data rows)
+    const tableContainer = await screen.findByRole('grid');
     await waitFor(() => {
       const rows = within(tableContainer).getAllByRole('row');
-      // Based on mockWorkloads and default filtering, we should see:
-      // Llama 7B (INFERENCE), SDXL (MODEL_DOWNLOAD), Fine-tuning (FINE_TUNING), GPT-4 (FINE_TUNING), Delete Failed Inference (INFERENCE)
-      // Jupyter Workspace (WORKSPACE) should be filtered out
-      expect(rows).toHaveLength(6); // 1 header + 5 data rows for default filtered types
+      // Based on mockWorkloads, we should see only INFERENCE workloads:
+      // workload-1 (Llama, RUNNING), workload-8 (Delete Failed, DELETE_FAILED),
+      // workload-11 (AIM GPT-4, RUNNING), workload-12 (AIM LLaMA 2, RUNNING), workload-13 (AIM Mistral, RUNNING)
+      // workload-5 is DELETED status so filtered out by default
+      expect(rows).toHaveLength(6); // 1 header + 5 data rows
     });
   });
 
@@ -265,7 +253,7 @@ describe('DeployedModels', () => {
       expect(deployedModels).toBeInTheDocument();
 
       // Verify that no workload data is displayed while loading
-      expect(screen.queryByText('Llama 7B')).not.toBeInTheDocument();
+      expect(screen.queryByText('Llama 7B Inference')).not.toBeInTheDocument();
       expect(screen.queryByText('Stable Diffusion XL')).not.toBeInTheDocument();
     });
   });
@@ -297,11 +285,11 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
-    // Find the row with Llama 7B and click its action button
-    const llamaRow = screen.getByText('Llama 7B').closest('tr');
+    // Find the row with Llama 7B Inference and click its action button
+    const llamaRow = screen.getByText('Llama 7B Inference').closest('tr');
     expect(llamaRow).not.toBeNull();
 
     const rowActionButton = within(llamaRow!).getByText('action-dot-icon');
@@ -329,7 +317,7 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
     const rowActionButtons = screen.getAllByText('action-dot-icon');
@@ -348,7 +336,7 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
     // Open row actions menu for the last workload (Llama 7B)
@@ -378,7 +366,7 @@ describe('DeployedModels', () => {
 
     // Verify the delete API was called with the correct workload ID
     await waitFor(() => {
-      expect(mockDeleteWorkload).toHaveBeenCalledWith('workload-1'); // Llama 7B workload
+      expect(mockDeleteWorkload).toHaveBeenCalledWith('workload-1'); // Llama 7B Inference workload
     });
   });
 
@@ -421,7 +409,7 @@ describe('DeployedModels', () => {
 
     // Verify that no workload data is displayed when there's an error
     await waitFor(() => {
-      expect(screen.queryByText('Llama 7B')).not.toBeInTheDocument();
+      expect(screen.queryByText('Llama 7B Inference')).not.toBeInTheDocument();
       expect(screen.queryByText('Stable Diffusion XL')).not.toBeInTheDocument();
     });
 
@@ -438,17 +426,17 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
     // Verify that different status values are displayed
-    // The StatusBadgeDisplay component renders these as translated strings
+    // The StatusDisplay component renders these as translated strings
     await waitFor(() => {
       // Check for actual status text displayed (not the enum keys)
-      expect(screen.getByText('status.Running')).toBeInTheDocument(); // Llama workload
-      expect(screen.getAllByText('status.Pending')).toHaveLength(2); // SDXL workload and GPT-4 workload
-      expect(screen.getByText('status.Failed')).toBeInTheDocument(); // Fine-tuning workload
-      expect(screen.getByText('status.DeleteFailed')).toBeInTheDocument(); // Delete failed workload
+      expect(screen.getAllByText('status.Running').length).toBeGreaterThan(0); // Llama workload
+      expect(screen.getByText('status.DeleteFailed')).toBeInTheDocument(); // Delete failed inference workload
+      // Fine-tuning workloads should not be shown by default
+      expect(screen.queryByText('status.Failed')).not.toBeInTheDocument();
     });
   });
 
@@ -458,18 +446,18 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
     // Verify different workload types are displayed as chips
     // The ChipDisplay component renders these as translated strings
     await waitFor(() => {
-      // Check for type translations based on the default filtered workloads
+      // Only INFERENCE workloads are shown (excluding DELETED status)
       const inferenceElements = screen.getAllByText('type.INFERENCE');
-      expect(inferenceElements.length).toBe(2); // Llama and Delete Failed Inference workloads
-      expect(screen.getByText('type.MODEL_DOWNLOAD')).toBeInTheDocument(); // SDXL workload
-      const fineTuningElements = screen.getAllByText('type.FINE_TUNING');
-      expect(fineTuningElements.length).toBe(2); // Fine-tuning and GPT-4 workloads
+      // From mockWorkloads: workload-1 (Llama, RUNNING), workload-8 (Delete Failed, DELETE_FAILED),
+      // workload-11 (AIM GPT-4, RUNNING), workload-12 (AIM LLaMA 2, RUNNING), workload-13 (AIM Mistral, RUNNING)
+      // workload-5 is DELETED status so filtered out by default
+      expect(inferenceElements.length).toBe(5);
     });
   });
 
@@ -479,7 +467,7 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
     // Verify that DateDisplay components are rendered for createdAt dates
@@ -499,14 +487,14 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
-    // Test actions for the Llama 7B workload (INFERENCE with RUNNING status and CHAT capability)
+    // Test actions for the Llama 7B Inference workload (INFERENCE with RUNNING status and CHAT capability)
     // It should be the last row since the table is sorted by createdAt descending
     const rowActionButtons = screen.getAllByText('action-dot-icon');
     await act(async () => {
-      // Click the last workload which should be Llama 7B based on the sorting
+      // Click the last workload which should be Llama 7B Inference based on the sorting
       fireEvent.click(rowActionButtons[rowActionButtons.length - 1]);
     });
 
@@ -525,17 +513,9 @@ describe('DeployedModels', () => {
     // First, we need to include DELETED status in the filters to see deleted workloads
     const deletedWorkload: Workload = {
       ...mockWorkloads[4], // Deleted Workload
-      type: WorkloadType.INFERENCE, // Ensure it matches the default type filter
+      displayName: 'Deleted Model',
+      type: WorkloadType.INFERENCE, // Component only shows INFERENCE workloads
       status: WorkloadStatus.DELETE_FAILED, // Use DELETE_FAILED instead of DELETED so it's visible by default
-      model: {
-        id: 'model-deleted',
-        name: 'Deleted Model',
-        canonicalName: 'test/deleted-model',
-        createdAt: '2023-01-01T00:00:00Z',
-        onboardingStatus: 'READY' as any,
-        createdBy: 'test',
-        modelWeightsPath: '/models/deleted',
-      },
     };
 
     mockListWorkloads.mockResolvedValue([deletedWorkload]);
@@ -572,15 +552,8 @@ describe('DeployedModels', () => {
         ...mockWorkloads[4],
         type: WorkloadType.INFERENCE,
         status: WorkloadStatus.DELETED, // This should be filtered out
-        model: {
-          id: 'model-deleted',
-          name: 'Deleted Model',
-          canonicalName: 'test/deleted-model',
-          createdAt: '2023-01-01T00:00:00Z',
-          onboardingStatus: 'READY' as any,
-          createdBy: 'test',
-          modelWeightsPath: '/models/deleted',
-        },
+        modelId: 'model-deleted',
+        displayName: 'Deleted Model',
       },
     ];
 
@@ -597,34 +570,105 @@ describe('DeployedModels', () => {
 
     // Should see the non-deleted workloads but not the deleted one
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument(); // RUNNING workload
-      expect(screen.getByText('Stable Diffusion XL')).toBeInTheDocument(); // PENDING workload
-      expect(screen.queryByText('Deleted Model')).not.toBeInTheDocument(); // DELETED workload should be filtered out
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument(); // RUNNING INFERENCE workload
+      // DELETED workloads should be filtered out
+      expect(screen.queryByText('Stable Diffusion XL')).not.toBeInTheDocument();
+      expect(screen.queryByText('Deleted Model')).not.toBeInTheDocument();
     });
   });
 
-  it('displays model canonical names in cluster column', async () => {
+  it('displays canonical names for all workloads with AIM or Model', async () => {
+    const workloadsWithModelOrAim = [
+      mockWorkloads[0], // workload-1 - modelId
+      mockWorkloads[7], // workload-8 - modelId
+      mockWorkloads[10], // workload-11 - aimId
+      mockWorkloads[11], // workload-12 - aimId
+      mockWorkloads[12], // workload-13 - aimId
+    ];
+
+    mockListWorkloads.mockResolvedValue(workloadsWithModelOrAim);
+
     await act(async () => {
       render(<DeployedModels />, { wrapper });
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
+      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
-    // Verify that canonical names are displayed in the table
+    const table = screen.getByRole('grid');
+    const rows = within(table).getAllByRole('row');
+
+    // Check each data row has a canonical name
+    const expectedCanonicalNames = [
+      'org/model-1',
+      'org/model-2',
+      'meta-llama/llama-2-7b',
+      'org/model-5',
+      'org/model-6',
+    ];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const cells = within(row).getAllByRole('gridcell');
+
+      // Check if this row has TYPE column showing INFERENCE
+      const typeCell = cells[2]; // Third column is TYPE
+      if (typeCell.textContent !== 'type.INFERENCE') {
+        continue; // Skip non-INFERENCE rows
+      }
+
+      const canonicalNameCell = cells[1]; // Second column
+      const canonicalNameText = canonicalNameCell.textContent;
+
+      expect(canonicalNameText).toBeTruthy();
+      expect(canonicalNameText).not.toBe('');
+      expect(expectedCanonicalNames).toContain(canonicalNameText);
+    }
+  });
+
+  it('displays no data indicator for workload without AIM or Model', async () => {
+    // Workload without modelId or aimId should show NoDataDisplay
+    const workloadWithoutModelOrAim: Workload = {
+      id: 'workload-no-model',
+      name: 'Standalone Inference',
+      displayName: 'Standalone Inference',
+      createdBy: 'test-user',
+      chartId: 'chart-standalone',
+      type: WorkloadType.INFERENCE,
+      project: mockWorkloads[0].project,
+      createdAt: '2023-01-15T00:00:00Z',
+      updatedAt: '2023-01-15T01:00:00Z',
+      updatedBy: 'test-user',
+      status: WorkloadStatus.RUNNING,
+      allocatedResources: {
+        gpuCount: 1,
+        vram: 2147483648.0,
+      },
+    };
+
+    mockListWorkloads.mockResolvedValue([workloadWithoutModelOrAim]);
+
+    await act(async () => {
+      render(<DeployedModels />, { wrapper });
+    });
+
     await waitFor(() => {
-      // Check that canonical names from the mock data are displayed
-      const llamaElements = screen.getAllByText('meta/llama-7b');
-      expect(llamaElements.length).toBeGreaterThan(0);
-
-      const sdxlElements = screen.getAllByText(
-        'stabilityai/stable-diffusion-xl',
-      );
-      expect(sdxlElements.length).toBeGreaterThan(0);
-
-      const gptElements = screen.getAllByText('openai/gpt-4-base');
-      expect(gptElements.length).toBeGreaterThan(0);
+      expect(screen.getByText('Standalone Inference')).toBeInTheDocument();
     });
+
+    const table = screen.getByRole('grid');
+    const rows = within(table).getAllByRole('row');
+    expect(rows).toHaveLength(2);
+
+    const dataRow = rows[1];
+    const cells = within(dataRow).getAllByRole('gridcell');
+    const canonicalNameCell = cells[1];
+    const canonicalNameText = canonicalNameCell.textContent;
+
+    // Verify NoDataDisplay is shown (no canonical name patterns)
+    expect(canonicalNameText).not.toMatch(/\//);
+    expect(canonicalNameText).not.toMatch(/^org\//);
+    expect(canonicalNameText).not.toMatch(/^meta-/);
   });
 });

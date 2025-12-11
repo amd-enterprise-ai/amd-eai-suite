@@ -1,0 +1,9 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: v2
+name: test-simple-job
+description: Minimal test job for AIRM e2e testing
+version: 0.1.0
+appVersion: "1.0"

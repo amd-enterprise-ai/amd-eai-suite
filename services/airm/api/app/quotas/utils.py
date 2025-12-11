@@ -5,8 +5,9 @@
 from prometheus_client.core import GaugeMetricFamily
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airm.messaging.schemas import ClusterQuotaAllocation
+from airm.messaging.schemas import ClusterQuotaAllocation, ClusterQuotasAllocationMessage, GPUVendor
 
+from ..clusters.constants import DEFAULT_PRIORITY_CLASSES
 from ..clusters.models import Cluster, ClusterNode
 from ..clusters.schemas import ClusterWithResources
 from ..organizations.models import Organization
@@ -14,6 +15,27 @@ from ..projects.models import Project
 from .constants import DEFAULT_CATCH_ALL_QUOTA_NAME
 from .models import Quota
 from .schemas import QuotaCreate, QuotaUpdate
+
+
+def format_quotas_allocation_message(
+    quota_allocations: list[ClusterQuotaAllocation], gpu_vendor: GPUVendor | None
+) -> ClusterQuotasAllocationMessage:
+    """
+    Format quota allocations into a ClusterQuotasAllocationMessage.
+
+    Args:
+        quota_allocations: List of quota allocations for the cluster
+        gpu_vendor: GPU vendor type for the cluster
+
+    Returns:
+        ClusterQuotasAllocationMessage ready to be sent
+    """
+    return ClusterQuotasAllocationMessage(
+        message_type="cluster_quotas_allocation",
+        gpu_vendor=gpu_vendor,
+        quota_allocations=quota_allocations,
+        priority_classes=DEFAULT_PRIORITY_CLASSES,
+    )
 
 
 def validate_quota_against_available_cluster_resources(
@@ -120,7 +142,7 @@ def have_quota_resources_changed(quota: Quota, edits: QuotaUpdate) -> bool:
 
 def set_allocated_gpus_metric_samples(
     allocated_gpus_metric: GaugeMetricFamily, projects: list[Project], organizations: list[Organization]
-):
+) -> GaugeMetricFamily:
     allocated_gpus_metric.samples.clear()
     org_id_to_name = {org.id: org.name for org in organizations}
     for project in projects:
@@ -141,7 +163,7 @@ def set_allocated_vram_metric_samples(
     projects: list[Project],
     organizations: list[Organization],
     cluster_nodes: list[ClusterNode],
-):
+) -> GaugeMetricFamily:
     allocated_gpu_vram_metric.samples.clear()
     org_id_to_name = {org.id: org.name for org in organizations}
     cluster_id_to_gpu_node = {node.cluster_id: node for node in cluster_nodes if node.gpu_vendor is not None}

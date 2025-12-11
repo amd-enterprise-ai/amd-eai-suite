@@ -13,7 +13,7 @@ from app import app  # type: ignore
 from app.storages.enums import StorageScope, StorageStatus, StorageType
 from app.storages.schemas import Storages, StorageWithProjects
 from app.utilities.database import get_session
-from app.utilities.exceptions import ConflictException
+from app.utilities.exceptions import ConflictException, NotFoundException
 from app.utilities.security import (
     ensure_platform_administrator,
     get_user_email,
@@ -111,10 +111,7 @@ def test_create_storage_success():
     app.dependency_overrides[ensure_platform_administrator] = lambda: None
     app.dependency_overrides[get_user_email] = lambda: "test@example.com"
 
-    with (
-        patch("app.storages.router.create_storage_in_organization", return_value=expected_storage) as mock_service,
-        patch("app.storages.router.get_secret_in_organization", return_value=object()) as mock_get_secret,
-    ):
+    with patch("app.storages.router.create_storage_in_organization", return_value=expected_storage) as mock_service:
         with TestClient(app) as client:
             response = client.post("/v1/storages", json=storage_in)
 
@@ -123,7 +120,6 @@ def test_create_storage_success():
     assert data["name"] == "my-storage"
     assert data["type"] == StorageType.S3.value
     assert data["status"] == StorageStatus.PENDING.value
-    mock_get_secret.assert_awaited_once()
     mock_service.assert_awaited_once()
 
 
@@ -131,10 +127,11 @@ def test_create_storage_conflict():
     """Test creating storage with duplicate name returns conflict."""
     mock_organization = MagicMock()
     mock_organization.id = uuid4()
+    mock_secret_id = uuid4()
 
     secret_in = {
         "name": "duplicate-storage",
-        "secret_id": str(uuid4()),
+        "secret_id": str(mock_secret_id),
         "type": StorageType.S3.value,
         "scope": StorageScope.ORGANIZATION.value,
         "project_ids": [],
@@ -151,10 +148,7 @@ def test_create_storage_conflict():
     app.dependency_overrides[ensure_platform_administrator] = lambda: None
     app.dependency_overrides[get_user_email] = lambda: "test@example.com"
 
-    with (
-        patch("app.storages.router.create_storage_in_organization") as mock_service,
-        patch("app.storages.router.get_secret_in_organization", return_value=object()) as mock_get_secret,
-    ):
+    with patch("app.storages.router.create_storage_in_organization") as mock_service:
         mock_service.side_effect = ConflictException(
             "A storage with the name 'duplicate-storage' already exists in the organization"
         )
@@ -170,10 +164,11 @@ def test_create_storage_secret_not_found():
     """Test creating storage with the secret id not valid."""
     mock_organization = MagicMock()
     mock_organization.id = uuid4()
+    non_existent_secret_id = uuid4()
 
     secret_in = {
         "name": "not-found-storage",
-        "secret_id": str(uuid4()),
+        "secret_id": str(non_existent_secret_id),
         "type": StorageType.S3.value,
         "scope": StorageScope.ORGANIZATION.value,
         "project_ids": [],
@@ -190,15 +185,17 @@ def test_create_storage_secret_not_found():
     app.dependency_overrides[ensure_platform_administrator] = lambda: None
     app.dependency_overrides[get_user_email] = lambda: "test@example.com"
 
-    with (
-        patch("app.storages.router.create_storage_in_organization") as mock_service,
-        patch("app.storages.router.get_secret_in_organization", return_value=None) as mock_get_secret,
-    ):
+    # Mock the service layer to raise NotFoundException
+    with patch("app.storages.router.create_storage_in_organization") as mock_service:
+        mock_service.side_effect = NotFoundException(
+            f"Secret with ID {non_existent_secret_id} not found in organization"
+        )
+
         with TestClient(app) as client:
             response = client.post("/v1/storages", json=secret_in)
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert "not found in your organization" in response.json()["detail"]
+    assert "not found" in response.json()["detail"]
 
 
 def test_delete_secret_success():

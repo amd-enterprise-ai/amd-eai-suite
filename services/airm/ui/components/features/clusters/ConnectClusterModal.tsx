@@ -125,7 +125,7 @@ const ConnectClusterModal: React.FC<Props> = ({ onOpenChange, isOpen }) => {
                 }}
               >
                 <span>
-                  Contact administator to get the cluster script
+                  wget https://download.amd.com/airm/cluster-onboarding.sh
                 </span>
                 <span>chmod +x cluster-onbording.sh</span>
                 <span>{installationCMD}</span>

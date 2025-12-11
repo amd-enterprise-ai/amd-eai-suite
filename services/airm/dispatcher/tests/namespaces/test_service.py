@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from asyncio import CancelledError
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -27,7 +27,7 @@ from app.namespaces.service import (
 
 @pytest.mark.asyncio
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_create_success(mock_core_v1_api):
+async def test_process_namespace_create_success(mock_core_v1_api: MagicMock) -> None:
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
 
@@ -53,7 +53,7 @@ async def test_process_namespace_create_success(mock_core_v1_api):
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_create_failure(mock_core_v1_api, mock_publish_status):
+async def test_process_namespace_create_failure(mock_core_v1_api: MagicMock, mock_publish_status: MagicMock) -> None:
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
     mock_api_instance.create_namespace.side_effect = ApiException("Namespace already exists")
@@ -74,7 +74,7 @@ async def test_process_namespace_create_failure(mock_core_v1_api, mock_publish_s
 @pytest.mark.asyncio
 @patch("app.namespaces.service.get_common_vhost_connection_and_channel")
 @patch("app.namespaces.service.publish_to_common_feedback_queue")
-async def test_publish_namespace_status(mock_publish_queue, mock_get_connection):
+async def test_publish_namespace_status(mock_publish_queue: MagicMock, mock_get_connection: AsyncMock) -> None:
     mock_connection = MagicMock()
     mock_channel = MagicMock()
     mock_get_connection.return_value = (mock_connection, mock_channel)
@@ -97,7 +97,7 @@ async def test_publish_namespace_status(mock_publish_queue, mock_get_connection)
 
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
-async def test_process_namespace_event_active_namespace(mock_publish_status):
+async def test_process_namespace_event_active_namespace(mock_publish_status: MagicMock) -> None:
     mock_resource = MagicMock()
     mock_resource.metadata.name = "test-namespace"
     mock_resource.metadata.labels = {PROJECT_ID_LABEL: "12345"}
@@ -110,7 +110,7 @@ async def test_process_namespace_event_active_namespace(mock_publish_status):
 
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
-async def test_process_namespace_event_terminating_namespace(mock_publish_status):
+async def test_process_namespace_event_terminating_namespace(mock_publish_status: MagicMock) -> None:
     mock_resource = MagicMock()
     mock_resource.metadata.name = "test-namespace"
     mock_resource.metadata.labels = {PROJECT_ID_LABEL: "12345"}
@@ -123,7 +123,7 @@ async def test_process_namespace_event_terminating_namespace(mock_publish_status
 
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
-async def test_process_namespace_event_unknown_phase(mock_publish_status):
+async def test_process_namespace_event_unknown_phase(mock_publish_status: MagicMock) -> None:
     mock_resource = MagicMock()
     mock_resource.metadata.name = "test-namespace"
     mock_resource.metadata.labels = {PROJECT_ID_LABEL: "12345"}
@@ -136,7 +136,7 @@ async def test_process_namespace_event_unknown_phase(mock_publish_status):
 
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
-async def test_process_namespace_event_no_project_id_label(mock_publish_status):
+async def test_process_namespace_event_no_project_id_label(mock_publish_status: MagicMock) -> None:
     mock_resource = MagicMock()
     mock_resource.metadata.name = "system-namespace"
     mock_resource.metadata.labels = {}
@@ -149,7 +149,7 @@ async def test_process_namespace_event_no_project_id_label(mock_publish_status):
 
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
-async def test_process_namespace_event_no_labels(mock_publish_status):
+async def test_process_namespace_event_no_labels(mock_publish_status: MagicMock) -> None:
     mock_resource = MagicMock()
     mock_resource.metadata.name = "system-namespace"
     mock_resource.metadata.labels = None
@@ -163,7 +163,7 @@ async def test_process_namespace_event_no_labels(mock_publish_status):
 @pytest.mark.asyncio
 @patch("app.namespaces.service.start_kubernetes_watcher")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_start_watching_namespace_components(mock_core_v1_api, mock_start_watcher):
+async def test_start_watching_namespace_components(mock_core_v1_api: MagicMock, mock_start_watcher: MagicMock) -> None:
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
 
@@ -183,7 +183,7 @@ async def test_start_watching_namespace_components(mock_core_v1_api, mock_start_
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_delete_success(mock_core_v1_api, mock_publish_status):
+async def test_process_namespace_delete_success(mock_core_v1_api: MagicMock, mock_publish_status: MagicMock) -> None:
     """Test successful namespace deletion."""
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
@@ -207,7 +207,9 @@ async def test_process_namespace_delete_success(mock_core_v1_api, mock_publish_s
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_delete_project_id_mismatch(mock_core_v1_api, mock_publish_status):
+async def test_process_namespace_delete_project_id_mismatch(
+    mock_core_v1_api: MagicMock, mock_publish_status: MagicMock
+) -> None:
     """Test namespace deletion when project ID doesn't match."""
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
@@ -232,7 +234,9 @@ async def test_process_namespace_delete_project_id_mismatch(mock_core_v1_api, mo
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_delete_no_project_id_label(mock_core_v1_api, mock_publish_status):
+async def test_process_namespace_delete_no_project_id_label(
+    mock_core_v1_api: MagicMock, mock_publish_status: MagicMock
+) -> None:
     """Test namespace deletion when project ID label is missing."""
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
@@ -257,7 +261,7 @@ async def test_process_namespace_delete_no_project_id_label(mock_core_v1_api, mo
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_delete_no_labels(mock_core_v1_api, mock_publish_status):
+async def test_process_namespace_delete_no_labels(mock_core_v1_api: MagicMock, mock_publish_status: MagicMock) -> None:
     """Test namespace deletion when labels are None."""
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
@@ -282,7 +286,9 @@ async def test_process_namespace_delete_no_labels(mock_core_v1_api, mock_publish
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_delete_read_failure(mock_core_v1_api, mock_publish_status):
+async def test_process_namespace_delete_read_failure(
+    mock_core_v1_api: MagicMock, mock_publish_status: MagicMock
+) -> None:
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
     mock_api_instance.read_namespace.side_effect = ApiException("Namespace not readable")
@@ -304,7 +310,7 @@ async def test_process_namespace_delete_read_failure(mock_core_v1_api, mock_publ
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_delete_not_found(mock_core_v1_api, mock_publish_status):
+async def test_process_namespace_delete_not_found(mock_core_v1_api: MagicMock, mock_publish_status: MagicMock) -> None:
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
     mock_api_instance.read_namespace.side_effect = ApiException(status=404, reason="Namespace not found")
@@ -324,7 +330,9 @@ async def test_process_namespace_delete_not_found(mock_core_v1_api, mock_publish
 @pytest.mark.asyncio
 @patch("app.namespaces.service._publish_namespace_status")
 @patch("app.namespaces.service.client.CoreV1Api")
-async def test_process_namespace_delete_delete_failure(mock_core_v1_api, mock_publish_status):
+async def test_process_namespace_delete_delete_failure(
+    mock_core_v1_api: MagicMock, mock_publish_status: MagicMock
+) -> None:
     mock_api_instance = MagicMock()
     mock_core_v1_api.return_value = mock_api_instance
     projectid = uuid4()

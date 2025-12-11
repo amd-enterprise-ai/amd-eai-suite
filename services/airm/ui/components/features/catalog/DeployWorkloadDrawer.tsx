@@ -37,7 +37,7 @@ import {
 } from '@/types/secrets';
 import { Workload } from '@/types/workloads';
 
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import {
   FormInput,
   FormSelect,
@@ -45,6 +45,7 @@ import {
 } from '@/components/shared/ManagedForm';
 
 import DeployingInformer from './DeployingInformer';
+import { LinkToast } from '@/components/shared/Toast/LinkToast';
 import ResourceAllocationInformer from './ResourceAllocationInformer';
 
 import { useProject } from '@/contexts/ProjectContext';
@@ -128,7 +129,12 @@ export const DeployWorkloadDrawer = ({
     },
     mutationKey: ['deployWorkload'],
     onSuccess: (data) => {
-      toast.success(t('notifications.deployWorkload.success'));
+      toast.success(
+        <LinkToast
+          message={t('notifications.deployWorkload.success')}
+          href={`/workloads/${data.id}`}
+        />,
+      );
       setWorkloadId(data.id);
       if (onDeploying) {
         onDeploying();
@@ -278,7 +284,10 @@ export const DeployWorkloadDrawer = ({
       isDisabled={isDeployDisabled}
       hideCloseButton={false}
       defaultValues={{
-        displayName: `${catalogItem?.slug}-${formatDate(new Date(), 'yyyyMMdd-HHmmss')}`,
+        displayName: `${catalogItem?.slug}-${formatDate(
+          new Date(),
+          'yyyyMMdd-HHmmss',
+        )}`,
       }}
       renderFields={(form) => {
         const {
@@ -307,9 +316,7 @@ export const DeployWorkloadDrawer = ({
                     <div className="text-2xl font-bold">
                       {catalogItem?.displayName ?? catalogItem?.name}
                     </div>
-                    <div className="text-gray-500">
-                      {catalogItem?.description}
-                    </div>
+                    <p>{catalogItem?.description}</p>
                   </div>
                   <Image
                     alt="workload icon"
@@ -319,8 +326,9 @@ export const DeployWorkloadDrawer = ({
                     width={40}
                   />
                 </div>
-                <p className="whitespace-pre-wrap break-words">
-                  {catalogItem?.longDescription}
+                {/* TODO: Introduce the MD renderer here instead of using a raw string. */}
+                <p className="whitespace-pre-wrap wrap-break-words flex flex-col gap-4">
+                  {catalogItem?.longDescription?.replace(/\\n/g, '\n')}
                 </p>
                 <Divider />
                 <div className="text-foreground text-medium uppercase font-bold">

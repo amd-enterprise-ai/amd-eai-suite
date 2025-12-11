@@ -19,13 +19,3 @@ export const FILTER_CONSTANTS = {
   /** Minimum dropdown width */
   MIN_DROPDOWN_WIDTH: 'min-w-64',
 } as const;
-
-/**
- * CSS styles for dropdown items to prevent text selection during drag operations
- */
-export const DROPDOWN_ITEM_STYLES = {
-  userSelect: 'none' as const,
-  WebkitUserSelect: 'none' as const,
-  MozUserSelect: 'none' as const,
-  msUserSelect: 'none' as const,
-} as const;

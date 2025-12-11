@@ -5,8 +5,9 @@
 from uuid import uuid4
 
 from airm.messaging.schemas import ClusterNode, GPUInformation, GPUVendor
+from app.clusters.models import Cluster as ClusterModel
 from app.clusters.models import ClusterNode as ClusterNodeModel
-from app.clusters.utils import flatten_for_db_comparison, has_node_changed
+from app.clusters.utils import build_cluster_kube_config, flatten_for_db_comparison, has_node_changed
 
 
 def test_flatten_for_db_comparison_without_gpu():
@@ -253,3 +254,54 @@ def test_has_node_changed_no_change():
         is_ready=True,
     )
     assert has_node_changed(node, existing_node) is False
+
+
+def test_build_cluster_kube_config():
+    cluster = ClusterModel(
+        id=uuid4(),
+        name="test-cluster",
+        organization_id=uuid4(),
+        workloads_base_url="https://workloads.example.com",
+        kube_api_url="https://k8s.example.com:6443",
+        created_by="test@example.com",
+        updated_by="test@example.com",
+    )
+
+    keycloak_issuer_url = "https://keycloak.example.com/realms/test"
+    k8s_client_secret = "test-secret-123"
+
+    result = build_cluster_kube_config(cluster, keycloak_issuer_url, k8s_client_secret)
+
+    assert (
+        result.kube_config
+        == """apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://k8s.example.com:6443
+  name: default
+contexts:
+- context:
+    cluster: default
+    user: default
+  name: default
+current-context: default
+kind: Config
+preferences: {}
+users:
+- name: default
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      args:
+      - oidc-login
+      - get-token
+      - --oidc-issuer-url=https://keycloak.example.com/realms/test
+      - --oidc-client-id=k8s
+      - --oidc-client-secret=test-secret-123
+      command: kubectl
+      env: null
+      interactiveMode: IfAvailable
+      provideClusterInfo: false
+"""
+    )

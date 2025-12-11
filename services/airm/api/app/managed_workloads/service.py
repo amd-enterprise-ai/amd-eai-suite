@@ -16,6 +16,7 @@ from airm.messaging.schemas import WorkloadStatus
 
 from ..charts.models import Chart
 from ..datasets.models import Dataset
+from ..messaging.sender import MessageSender
 from ..models.models import InferenceModel
 from ..models.repository import select_model
 from ..projects.models import Project
@@ -25,7 +26,7 @@ from ..utilities.exceptions import NotFoundException
 from ..workloads.enums import WorkloadType
 from ..workloads.service import extract_components_and_submit_workload, submit_delete_workload
 from ..workloads.utils import validate_and_parse_workload_manifest
-from .config import CHAT_STREAM_HTTP_TIMEOUT
+from .config import CHAT_TIMEOUT
 from .models import ManagedWorkload
 from .repository import insert_workload, select_workload, select_workloads
 from .schemas import AIMWorkloadResponse, ChartWorkloadCreate, ChartWorkloadResponse
@@ -87,7 +88,8 @@ async def submit_chart_workload(
     project: Project,
     chart: Chart,
     overlays_values: list[dict[str, Any]],
-    user_inputs: dict[str, Any] = None,
+    message_sender: MessageSender,
+    user_inputs: dict[str, Any] | None = None,
     model: InferenceModel | None = None,
     dataset: Dataset | None = None,
     display_name: str | None = None,
@@ -141,7 +143,7 @@ async def submit_chart_workload(
     if does_workload_need_cluster_base_url(chart):
         internal_host = get_workload_internal_host(workload.name, project.name)
         external_host = get_workload_host_from_HTTPRoute_manifest(
-            manifest=manifest, cluster_base_url=project.cluster.base_url
+            manifest=manifest, cluster_base_url=project.cluster.workloads_base_url
         )
     workload.output = {
         "internal_host": internal_host,
@@ -152,13 +154,17 @@ async def submit_chart_workload(
     yml_content = await validate_and_parse_workload_manifest(manifest)
 
     logger.info(f"Submitting workload {workload.id}...")
-    await extract_components_and_submit_workload(session, workload, project, yml_content, creator, token)
+    await extract_components_and_submit_workload(
+        session, workload, project, yml_content, creator, token, message_sender
+    )
 
     logger.info(f"Successfully completed managed workload submission for {workload.id}. Returning object.")
     return workload
 
 
-async def delete_workload(session: AsyncSession, id: UUID, accessible_projects: list[Project]) -> bool:
+async def delete_workload(
+    session: AsyncSession, id: UUID, accessible_projects: list[Project], message_sender: MessageSender
+) -> bool:
     """
     Delete a managed workload that the user has access to.
 
@@ -170,12 +176,14 @@ async def delete_workload(session: AsyncSession, id: UUID, accessible_projects: 
     if workload is None:
         raise NotFoundException("Workload not found")
 
-    await submit_delete_workload(session, workload, "system")
+    await submit_delete_workload(session, workload, "system", message_sender)
 
     return True
 
 
-async def stream_downstream(base_url: str, request: Request, url_path: str | None = None, body=None):
+async def stream_downstream(
+    base_url: str, request: Request, url_path: str | None = None, body: bytes | None = None
+) -> StreamingResponse:
     """Stream response from a downstream server.
     If body is not None, it is used instead of the body in the request object.
     Optionally provide a url_path to override the request path.
@@ -186,7 +194,12 @@ async def stream_downstream(base_url: str, request: Request, url_path: str | Non
     # Remove content length from headers as the body might have been modified from original
     if "content-length" in headers:
         del headers["content-length"]
-    client = httpx.AsyncClient(base_url=base_url, timeout=httpx.Timeout(CHAT_STREAM_HTTP_TIMEOUT, read=None))
+
+    # Timeout is set here as safety for long-lived connections
+    # but API and UI timeouts are set at gateway level in helm charts
+    timeout = httpx.Timeout(CHAT_TIMEOUT)
+
+    client = httpx.AsyncClient(base_url=base_url, timeout=timeout)
     path = url_path or request.url.path
     url = httpx.URL(path=path, query=request.url.query.encode("utf-8"))
     downstream_request = client.build_request(request.method, url, headers=headers, content=body)

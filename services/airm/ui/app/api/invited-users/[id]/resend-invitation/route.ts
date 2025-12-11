@@ -18,7 +18,7 @@ export async function POST(
     const { accessToken } = await authenticateRoute();
     const { id: userId } = await params;
 
-    const url = `${process.env.AIRM_API_SERVICE_URL}/v1/invited_users/${userId}/resend_invitation`;
+    const url = `${process.env.AIRM_API_SERVICE_URL}/v1/invited-users/${userId}/resend-invitation`;
     await proxyRequest(req, url, accessToken as string);
     return new NextResponse(null, { status: 204 });
   } catch (error) {

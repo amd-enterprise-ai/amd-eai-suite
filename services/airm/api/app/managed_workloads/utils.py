@@ -8,7 +8,9 @@ import os
 import subprocess
 import tempfile
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 from urllib.parse import urljoin
 from uuid import UUID
 
@@ -29,7 +31,7 @@ from .schemas import AIMWorkloadResponse, AllocatedResources, ChartWorkloadRespo
 
 
 @contextmanager
-def workload_directory(chart: Chart):
+def workload_directory(chart: Chart) -> Generator[Path]:
     """
     Context manager that re-creates all the files of the chart in a temporary directory
     to be used with Helm template rendering and cleans it up afterward.
@@ -47,7 +49,7 @@ def workload_directory(chart: Chart):
             with open(os.path.join(file_dir, os.path.basename(file.path)), "w") as f:
                 f.write(file.content)
 
-        yield temp_dir.name
+        yield Path(temp_dir.name)
     finally:
         temp_dir.cleanup()
 
@@ -64,16 +66,16 @@ async def render_helm_template(chart: Chart, name: str, namespace: str, overlays
     """
 
     with workload_directory(chart) as chart_dir:
-        cmd = ["helm", "template", chart_dir, "--namespace", namespace, "--name-template", name]
+        cmd = ["helm", "template", str(chart_dir), "--namespace", namespace, "--name-template", name]
 
         for i, values in enumerate(overlays_values):
-            overlay_file = os.path.join(chart_dir, f"overlay_{i}.yaml")
+            overlay_file = chart_dir / f"overlay_{i}.yaml"
 
             with open(overlay_file, "w") as f:
                 yaml.dump(values, f)
                 logger.debug(f"Overlay {i} has values: \n{values}\n\n")
 
-            cmd.extend(["--values", overlay_file])
+            cmd.extend(["--values", str(overlay_file)])
         cmd.extend(["--set", "fullnameOverride=" + name])
         logger.debug(f"Rendering Helm template: {' '.join(cmd)}")
         process = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -181,7 +183,7 @@ def generate_display_name(workload: ManagedWorkload) -> str:
     uuid_prefix = str(workload.id)[:8]
 
     if workload.aim:
-        return f"{workload.aim.image_name}-{workload.aim.image_tag}-{uuid_prefix}"
+        return f"{workload.aim.resource_name}-{uuid_prefix}"
     elif workload.chart:
         if workload.model:
             return f"{workload.chart.name}-{workload.model.name}-{uuid_prefix}"
@@ -194,7 +196,7 @@ def generate_display_name(workload: ManagedWorkload) -> str:
         )
 
 
-def does_workload_need_cluster_base_url(chart: Chart):
+def does_workload_need_cluster_base_url(chart: Chart) -> bool:
     """
     Check if the workload type needs the cluster base URL to be accessed.
     """

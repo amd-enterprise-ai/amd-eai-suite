@@ -1,0 +1,279 @@
+/*
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+*/
+
+/* CSS Variables - Light theme (default) */
+.ladle-markdown {
+  /* Typography */
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--md-color-text);
+  word-wrap: break-word;
+}
+
+/* Dark mode via color-scheme attribute */
+[data-theme="dark"] .ladle-markdown {
+  --md-color-text: #e6e6e6;
+  --md-color-text-muted: #919191;
+  --md-color-text-quote: #919191;
+  --md-color-link: #4493f8;
+  --md-color-border: #303030;
+  --md-color-bg-code: rgba(110, 110, 110, 0.4);
+  --md-color-bg-pre: #161616;
+  --md-color-bg-table-header: #161616;
+  --md-color-bg-table-row: #0d0d0d;
+  --md-color-bg-table-row-alt: #161616;
+  --md-color-bg-image: #0d0d0d;
+  color-scheme: dark;
+}
+
+/* Light mode via color-scheme attribute */
+[data-theme="light"] .ladle-markdown {
+  --md-color-text: #242424;
+  --md-color-text-muted: #656565;
+  --md-color-text-quote: #656565;
+  --md-color-link: #0969da;
+  --md-color-border: #d1d1d1;
+  --md-color-bg-code: rgba(175, 184, 193, 0.2);
+  --md-color-bg-pre: #f6f6f6;
+  --md-color-bg-table-header: #f6f6f6;
+  --md-color-bg-table-row: #ffffff;
+  --md-color-bg-table-row-alt: #f6f6f6;
+  --md-color-bg-image: #ffffff;
+  color-scheme: light;
+}
+
+/* Headings */
+h1.ladle-markdown,
+h2.ladle-markdown,
+h3.ladle-markdown,
+h4.ladle-markdown,
+h5.ladle-markdown,
+h6.ladle-markdown {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--md-color-text);
+}
+
+h1.ladle-markdown {
+  font-size: 2em;
+  border-bottom: 1px solid var(--md-color-border);
+  padding-bottom: 0.3em;
+}
+
+h2.ladle-markdown {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--md-color-border);
+  padding-bottom: 0.3em;
+}
+
+h3.ladle-markdown {
+  font-size: 1.25em;
+}
+
+h4.ladle-markdown {
+  font-size: 1em;
+}
+
+h5.ladle-markdown {
+  font-size: 0.875em;
+}
+
+h6.ladle-markdown {
+  font-size: 0.85em;
+  color: var(--md-color-text-muted);
+}
+
+/* Paragraphs */
+p.ladle-markdown {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+/* Lists */
+ul.ladle-markdown {
+  margin-top: 0;
+  margin-bottom: 10px;
+  padding-left: 1.5em;
+  list-style-type: disc;
+}
+
+ol.ladle-markdown {
+  margin-top: 0;
+  margin-bottom: 10px;
+  padding-left: 1.5em;
+  list-style-type: decimal;
+}
+
+/* Nested lists */
+ul.ladle-markdown ul.ladle-markdown {
+  list-style-type: circle;
+}
+
+ul.ladle-markdown ul.ladle-markdown ul.ladle-markdown {
+  list-style-type: square;
+}
+
+ol.ladle-markdown ol.ladle-markdown {
+  list-style-type: lower-alpha;
+}
+
+ol.ladle-markdown ol.ladle-markdown ol.ladle-markdown {
+  list-style-type: lower-roman;
+}
+
+li.ladle-markdown {
+  margin-top: 0.25em;
+  display: list-item;
+}
+
+li.ladle-markdown > p.ladle-markdown {
+  margin-top: 16px;
+}
+
+li.ladle-markdown + li.ladle-markdown {
+  margin-top: 0.25em;
+}
+
+/* Task lists */
+.task-list-item.ladle-markdown {
+  list-style-type: none;
+}
+
+.task-list-item.ladle-markdown input[type="checkbox"] {
+  margin: 0 0.2em 0.25em -1.6em;
+  vertical-align: middle;
+}
+
+/* Links */
+a.ladle-markdown {
+  color: var(--md-color-link);
+  text-decoration: none;
+}
+
+a.ladle-markdown:hover {
+  text-decoration: underline;
+}
+
+/* Text formatting */
+strong.ladle-markdown {
+  font-weight: 600;
+}
+
+em.ladle-markdown {
+  font-style: italic;
+}
+
+del.ladle-markdown {
+  text-decoration: line-through;
+}
+
+u.ladle-markdown {
+  text-decoration: underline;
+}
+
+/* Code */
+p.ladle-markdown code,
+code.ladle-markdown {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: var(--md-color-bg-code);
+  border-width: 0;
+  border-radius: 6px;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+}
+
+pre.ladle-markdown {
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+
+  border-radius: 6px;
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas;
+}
+
+pre.ladle-markdown code.ladle-markdown {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  line-height: inherit;
+  word-wrap: normal;
+  background-color: transparent;
+  border: 0;
+}
+
+/* Tables */
+table.ladle-markdown {
+  border-spacing: 0;
+  border-collapse: collapse;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: auto;
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+table.ladle-markdown th.ladle-markdown,
+table.ladle-markdown td.ladle-markdown {
+  padding: 6px 13px;
+  border: 1px solid var(--md-color-border);
+}
+
+table.ladle-markdown th.ladle-markdown {
+  font-weight: 600;
+  background-color: var(--md-color-bg-table-header);
+}
+
+table.ladle-markdown tr.ladle-markdown {
+  background-color: var(--md-color-bg-table-row);
+  border-top: 1px solid var(--md-color-border);
+}
+
+table.ladle-markdown tr.ladle-markdown:nth-child(2n) {
+  background-color: var(--md-color-bg-table-row-alt);
+}
+
+/* Blockquotes */
+blockquote.ladle-markdown {
+  padding: 0 1em;
+  color: var(--md-color-text-quote);
+  border-left: 0.25em solid var(--md-color-border);
+  margin: 0 0 16px 0;
+}
+
+blockquote.ladle-markdown > :first-child {
+  margin-top: 0;
+}
+
+blockquote.ladle-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* Horizontal rule */
+hr.ladle-markdown {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background-color: var(--md-color-border);
+  border: 0;
+}
+
+/* Images */
+img.ladle-markdown {
+  max-width: 100%;
+  box-sizing: content-box;
+  background-color: var(--md-color-bg-image);
+}

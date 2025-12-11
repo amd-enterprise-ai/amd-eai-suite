@@ -35,6 +35,13 @@ async def get_project_in_organization(session: AsyncSession, organization_id: UU
     return result.scalar_one_or_none()
 
 
+async def get_project_by_name_in_organization(
+    session: AsyncSession, organization_id: UUID, project_name: str
+) -> Project | None:
+    projects = await get_projects_by_names_in_organization(session, [project_name], organization_id)
+    return projects[0] if projects else None
+
+
 async def create_project(
     session: AsyncSession,
     organization_id: UUID,

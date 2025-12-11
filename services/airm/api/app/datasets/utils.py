@@ -188,7 +188,7 @@ async def delete_from_s3(dataset: Dataset, client: MinioClient) -> None:
         logger.info(f"Successfully deleted dataset {dataset.id} from S3: {object_key}")
 
 
-def validate_jsonl(file: UploadFile):
+def validate_jsonl(file: UploadFile) -> None:
     if not file.filename.endswith(".jsonl"):
         raise ValidationException(message="Invalid file format. Only .jsonl files are allowed.")
 
@@ -198,5 +198,3 @@ def validate_jsonl(file: UploadFile):
 
     if file_size > MAX_FILE_SIZE_BYTES:
         raise ValidationException(message=f"File size exceeds {MAX_FILE_SIZE_MB}MB limit.")
-
-    return True

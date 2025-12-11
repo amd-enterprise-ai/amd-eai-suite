@@ -4,4 +4,4 @@
 
 import os
 
-CHAT_STREAM_HTTP_TIMEOUT = float(os.environ.get("CHAT_STREAM_HTTP_TIMEOUT", 20.0))
+CHAT_TIMEOUT = float(os.environ.get("CHAT_TIMEOUT", 1800.0))

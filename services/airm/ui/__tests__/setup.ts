@@ -11,9 +11,7 @@ vi.stubEnv('KEYCLOAK_SECRET', 'keycloak_secret');
 vi.stubEnv('KEYCLOAK_ISSUER', 'keycloak_issuer');
 vi.stubEnv('DEBUG_PRINT_LIMIT', '10');
 
-// @ts-ignore
 if (typeof global === 'undefined') {
-  // @ts-ignore
   window.global = window;
 }
 

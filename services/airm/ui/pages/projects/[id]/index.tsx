@@ -365,8 +365,7 @@ export async function getServerSideProps(context: any) {
     const breadcrumb = [
       {
         title:
-          translations._nextI18Next?.initialI18nStore[locale]?.['projects']
-            ?.title,
+          translations._nextI18Next?.initialI18nStore[locale]?.projects?.title,
         href: '/projects',
       },
       {

@@ -6,19 +6,21 @@ export const DOCS_BASE_URL = 'https://enterprise-ai.docs.amd.com/en/latest';
 export const DocWorkbenchBaseURI = '/workbench';
 export const DocResourceManagerBaseURI = '/resource-manager';
 
-// Keep more specific paths first to ensure they match correctly
-// For example `/catalog/some-thing´ should come before `/catalog`
+// Keep more specific paths first to ensure they match correctly.
+// For example `/catalog/some-thing´ should come before `/catalog`.
 const PageToDocumentationPath: Record<string, string> = {
-  '/workspaces': `${DocWorkbenchBaseURI}/workspaces.html`,
+  '/api-keys': `${DocWorkbenchBaseURI}/api-keys.html`,
   '/chat': `${DocWorkbenchBaseURI}/inference/chat.html`,
   '/datasets': `${DocWorkbenchBaseURI}/training/datasets.html`,
-  '/models': `${DocWorkbenchBaseURI}/training/models.html`,
+  '/models': `${DocWorkbenchBaseURI}/models.html`,
+  '/workbench-secrets': `${DocResourceManagerBaseURI}/secrets/overview.html`,
   '/workloads': `${DocWorkbenchBaseURI}/workloads.html`,
-  '/projects': `${DocResourceManagerBaseURI}/projects/manage-projects.html`,
-  '/users': `${DocResourceManagerBaseURI}/users/manage-users.html`,
+  '/workspaces': `${DocWorkbenchBaseURI}/workspaces/overview.html`,
   '/clusters': `${DocResourceManagerBaseURI}/clusters/overview.html`,
+  '/projects': `${DocResourceManagerBaseURI}/projects/project-dashboard.html`,
   '/secrets': `${DocResourceManagerBaseURI}/secrets/overview.html`,
   '/storage': `${DocResourceManagerBaseURI}/storage/overview.html`,
+  '/users': `${DocResourceManagerBaseURI}/users/manage-users.html`,
 };
 
 /**

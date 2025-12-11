@@ -17,7 +17,8 @@ from airm.messaging.schemas import (
 )
 
 from ..clusters.models import Cluster
-from ..messaging.publisher import submit_message_to_cluster_queue
+from ..messaging.sender import MessageSender
+from ..organizations.models import Organization
 from ..projects.models import Project
 from ..projects.repository import get_project_in_organization
 from ..utilities.exceptions import NotFoundException
@@ -31,7 +32,9 @@ from .repository import (
 from .schemas import ClusterNamespaces, ClustersWithNamespaces, NamespaceResponse
 
 
-async def get_namespaces_by_cluster_for_organization(session: AsyncSession, organization) -> ClustersWithNamespaces:
+async def get_namespaces_by_cluster_for_organization(
+    session: AsyncSession, organization: Organization
+) -> ClustersWithNamespaces:
     namespaces = await get_namespaces_by_organisation(session, organization.id)
 
     clusters = [
@@ -42,7 +45,7 @@ async def get_namespaces_by_cluster_for_organization(session: AsyncSession, orga
 
 
 async def create_namespace_for_project(
-    session: AsyncSession, project: Project, cluster_id: UUID, user: str
+    session: AsyncSession, project: Project, cluster_id: UUID, user: str, message_sender: MessageSender
 ) -> Namespace:
     namespace = Namespace(
         project_id=project.id,
@@ -58,7 +61,7 @@ async def create_namespace_for_project(
     message = ProjectNamespaceCreateMessage(
         message_type="project_namespace_create", name=namespace.name, project_id=namespace.project_id
     )
-    await submit_message_to_cluster_queue(project.cluster_id, message)
+    await message_sender.enqueue(project.cluster_id, message)
 
     return namespace
 
@@ -84,7 +87,9 @@ async def update_project_namespace_status(
     logger.info(f"Updated namespace {project.name} status to {message.status}.")
 
 
-async def delete_namespace_in_cluster(session: AsyncSession, project: Project, updater: str) -> None:
+async def delete_namespace_in_cluster(
+    session: AsyncSession, project: Project, updater: str, message_sender: MessageSender
+) -> None:
     namespace = await get_namespace_by_project_and_cluster(session, project.id, project.cluster_id)
     if not namespace:
         raise NotFoundException(f"Namespace for project {project.id} not found in cluster {project.cluster_id}.")
@@ -97,4 +102,4 @@ async def delete_namespace_in_cluster(session: AsyncSession, project: Project, u
         name=project.name,
         project_id=project.id,
     )
-    await submit_message_to_cluster_queue(project.cluster_id, message)
+    await message_sender.enqueue(project.cluster_id, message)

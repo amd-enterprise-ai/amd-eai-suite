@@ -136,7 +136,7 @@ export function hasOnlyOneValueForKey(
   const val: any[] = [];
 
   for (const obj of array) {
-    if (Object.prototype.hasOwnProperty.call(obj, keyToCheck)) {
+    if (Object.hasOwn(obj, keyToCheck)) {
       val.push(obj[keyToCheck]);
       if (val.length > 1) {
         return false;

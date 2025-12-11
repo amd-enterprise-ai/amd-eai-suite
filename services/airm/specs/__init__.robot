@@ -8,18 +8,20 @@ Documentation       End to end tests for catalog service
 Resource            resources/deployment.resource
 Resource            resources/catalog_keywords.resource
 Resource            resources/api/health.resource
+Resource            resources/authorization.resource
 
-Suite Setup         Setup Catalog Service
-Suite Teardown      Apps are undeployed
+Suite Setup         Verify Catalog Service Health
 
 
 *** Keywords ***
-Setup Catalog Service
-    [Documentation]    Sets up catalog service and verifies it's healthy
-    Apps "catalog" are deployed
+Verify Catalog Service Health
+    [Documentation]    Verifies catalog service is healthy before running tests
+    ...                Includes validation of authentication setup for better error reporting
+    ...                Extended retry window (30s) allows port forward recreation if needed
 
-    # Use longer wait time if apps were actually deployed, shorter if using existing namespace
-    ${wait_time} =          Set Variable If         ${NAMESPACE_WAS_CREATED}                        2 min                   10 s
-    Log                     Using wait time ${wait_time} for health check (namespace was created: ${NAMESPACE_WAS_CREATED})                         console=yes
+    # First validate kubectl OIDC configuration
+    Validate Kubectl Config
 
-    Wait until keyword succeeds                     ${wait_time}            200 ms                  Verify catalog health
+    # Then verify catalog service health with extended timeout for port forward recovery
+    # Port forward recreation can take several seconds, so we need more time than 10s
+    Wait until keyword succeeds    30 s    2 s    Verify catalog health

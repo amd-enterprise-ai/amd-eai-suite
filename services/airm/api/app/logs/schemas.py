@@ -4,6 +4,7 @@
 
 """Schemas used by the logs service."""
 
+import json
 from enum import IntEnum
 from typing import Literal
 
@@ -21,7 +22,7 @@ class LogLevel(IntEnum):
     debug = 10  # Debug information
     info = 20  # General information
     unknown = 21  # Loki unknown level, usually info
-    warning = 30  # Warning messages (also accepts 'warning')
+    warning = 30  # Warning messages
     error = 40  # Error messages
     critical = 50  # Critical/fatal errors - highest severity
 
@@ -54,13 +55,19 @@ class LogLevel(IntEnum):
 
     def __str__(self) -> str:
         """Return the string name of the log level."""
+        if self == LogLevel.warning:
+            return "warn"
+        if self == LogLevel.critical:
+            return "fatal"
         return self.name
 
 
 # API-friendly literal type for endpoint parameters
-LogLevelLiteral = Literal["trace", "debug", "info", "warning", "error", "critical"]
+LogLevelLiteral = Literal["trace", "debug", "info", "warning", "error", "critical", "unknown"]
 
 LogDirectionLiteral = Literal["forward", "backward"]
+
+LogTypeLiteral = Literal["workload", "event"]
 
 
 class LogEntry(BaseModel):
@@ -89,6 +96,15 @@ class LogEntry(BaseModel):
         if isinstance(data, dict) and "level" in data:
             data["level"] = self.level.name
         return data
+
+    def __str__(self) -> str:
+        return json.dumps(
+            {
+                "timestamp": self.timestamp,
+                "level": self.level.name,
+                "message": self.message,
+            }
+        )
 
 
 class PaginationMetadata(BaseModel):

@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..organizations.models import Organization
 from ..utilities.database import get_session
 from ..utilities.security import ensure_platform_administrator, get_user_organization
 from .schemas import ClustersWithNamespaces
@@ -20,8 +22,8 @@ router = APIRouter(tags=["Namespaces"])
     response_model=ClustersWithNamespaces,
 )
 async def get_namespaces(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
 ) -> ClustersWithNamespaces:
     return await get_namespaces_by_cluster_for_organization(session, organization)

@@ -6,7 +6,8 @@
       "inferenceMetrics": "Inference metrics",
       "workloadInformation": "Workload information",
       "basicInformation": "Basic information",
-      "clusterAndResources": "Cluster and resources",
+      "projectInformation": "Project information",
+      "resources": "Resources",
       "timeline": "Timeline",
       "modelAndDataset": "Model and dataset",
       "capabilities": "Capabilities",
@@ -91,18 +92,6 @@
       "id": {
         "title": "ID"
       },
-      "modelName": {
-        "title": "Model"
-      },
-      "modelId": {
-        "title": "Model ID"
-      },
-      "datasetName": {
-        "title": "Dataset"
-      },
-      "datasetId": {
-        "title": "Dataset ID"
-      },
       "capabilities": {
         "title": "Capabilities"
       },
@@ -127,11 +116,41 @@
       "status": {
         "title": "Status"
       },
-      "chartId": {
-        "title": "Chart ID"
+      "model": {
+        "title": "Model",
+        "id": "ID",
+        "name": "Name",
+        "canonicalName": "Canonical Name"
       },
-      "clusterId": {
-        "title": "Cluster ID"
+      "dataset": {
+        "title": "Dataset",
+        "id": "ID",
+        "name": "Name",
+        "description": "Description"
+      },
+      "chart": {
+        "title": "Chart",
+        "id": "ID",
+        "name": "Name",
+        "description": "Description"
+      },
+      "aim": {
+        "title": "AIM",
+        "id": "ID",
+        "canonicalName": "Canonical Name",
+        "description": "Description",
+        "image": "Image",
+        "imageTag": "Image Tag"
+      },
+      "cluster": {
+        "title": "Cluster",
+        "id": "ID",
+        "name": "Name"
+      },
+      "project": {
+        "title": "Project",
+        "id": "ID",
+        "name": "Name"
       },
       "clusterName": {
         "title": "Cluster Name"
@@ -190,6 +209,12 @@
           "logLevelFilter": {
             "label": "Log Level",
             "allLevels": "All levels"
+          },
+          "noLogs": "No logs available",
+          "logTypeFilter": {
+            "label": "Log Type",
+            "workload": "Workload",
+            "event": "Events"
           }
         }
       }

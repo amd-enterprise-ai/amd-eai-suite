@@ -15,7 +15,9 @@ from ..messaging.publisher import publish_to_common_feedback_queue
 from .utils import get_gpu_info, get_node_status
 
 
-async def publish_cluster_nodes_message_to_queue(connection: abc.AbstractConnection, channel: abc.AbstractChannel):
+async def publish_cluster_nodes_message_to_queue(
+    connection: abc.AbstractConnection, channel: abc.AbstractChannel
+) -> None:
     cluster_nodes = __get_cluster_nodes()
     await __publish_cluster_nodes_message_to_queue(cluster_nodes, connection, channel)
 

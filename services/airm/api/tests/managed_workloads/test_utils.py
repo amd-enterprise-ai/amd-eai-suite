@@ -216,7 +216,11 @@ async def test_generate_workload_name_aim_workload(db_session):
     """Test generate_workload_name with AIM workload."""
 
     env = await factory.create_basic_test_environment(db_session)
-    aim = await factory.create_aim(db_session, image_name="test-aim", image_tag="v1.0.0")
+    aim = await factory.create_aim(
+        db_session,
+        resource_name="test-aim-v1-0-0",
+        image_reference="docker.io/amdenterpriseai/test-aim:v1.0.0",
+    )
 
     aim_workload = await factory.create_aim_workload(
         db_session,
@@ -285,7 +289,11 @@ async def test_generate_display_name_chart_workload(db_session):
 async def test_generate_display_name_aim_workload(db_session):
     """Test generate_display_name with AIM workload."""
     env = await factory.create_basic_test_environment(db_session)
-    aim = await factory.create_aim(db_session, image_name="test-aim", image_tag="v1.0.0")
+    aim = await factory.create_aim(
+        db_session,
+        resource_name="test-aim-v1-0-0",
+        image_reference="docker.io/amdenterpriseai/test-aim:v1.0.0",
+    )
 
     aim_workload = await factory.create_aim_workload(
         db_session,
@@ -297,7 +305,7 @@ async def test_generate_display_name_aim_workload(db_session):
 
     display_name = generate_display_name(aim_workload)
     uuid_prefix = str(aim_workload.id)[:8]
-    assert display_name == f"{aim.image_name}-{aim.image_tag}-{uuid_prefix}"
+    assert display_name == f"{aim.resource_name}-{uuid_prefix}"
 
 
 @pytest.mark.asyncio

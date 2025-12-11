@@ -13,7 +13,7 @@ from airm.utilities.http_request import delete_request, put_request
 from .config import RABBITMQ_ADMIN_PASSWORD, RABBITMQ_ADMIN_USER, RABBITMQ_AIRM_COMMON_VHOST, RABBITMQ_MANAGEMENT_URL
 
 
-async def create_vhost_and_user(cluster_id: UUID):
+async def create_vhost_and_user(cluster_id: UUID) -> str:
     auth = httpx.BasicAuth(username=RABBITMQ_ADMIN_USER, password=RABBITMQ_ADMIN_PASSWORD)
 
     vhost_name = f"vh_{cluster_id}"
@@ -43,7 +43,7 @@ async def create_vhost_and_user(cluster_id: UUID):
     return user_secret
 
 
-async def configure_inbound_vhost():
+async def configure_inbound_vhost() -> None:
     auth = httpx.BasicAuth(username=RABBITMQ_ADMIN_USER, password=RABBITMQ_ADMIN_PASSWORD)
 
     async with httpx.AsyncClient(auth=auth) as client:
@@ -54,7 +54,7 @@ async def configure_inbound_vhost():
         logger.info(f"Vhost {RABBITMQ_AIRM_COMMON_VHOST} created successfully")
 
 
-async def delete_vhost_and_user(cluster_id: UUID):
+async def delete_vhost_and_user(cluster_id: UUID) -> None:
     auth = httpx.BasicAuth(username=RABBITMQ_ADMIN_USER, password=RABBITMQ_ADMIN_PASSWORD)
 
     vhost_name = f"vh_{cluster_id}"

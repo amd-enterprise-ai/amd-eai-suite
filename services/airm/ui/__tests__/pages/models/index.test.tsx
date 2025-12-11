@@ -50,9 +50,9 @@ vi.mock('@/hooks/useSystemToast', () => {
   return { default: useSystemToast };
 });
 
-// Mock FinetuneModelModal
-vi.mock('@/components/features/models/FinetuneModelModal', () => ({
-  default: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) =>
+// Mock FinetuneDrawer
+vi.mock('@/components/features/models/FinetuneDrawer', () => ({
+  default: ({ isOpen }: { isOpen: boolean }) =>
     isOpen ? <div data-testid="finetune-modal">Finetune Modal</div> : null,
 }));
 

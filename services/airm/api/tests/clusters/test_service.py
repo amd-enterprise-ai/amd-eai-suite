@@ -5,7 +5,8 @@
 """Clusters service tests."""
 
 import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,10 +15,11 @@ from airm.messaging.schemas import ClusterNode as ClusterNodeIn
 from airm.messaging.schemas import ClusterNodesMessage, GPUInformation, GPUVendor, HeartbeatMessage
 from app.clusters.repository import get_cluster_in_organization
 from app.clusters.repository import get_cluster_nodes as get_cluster_nodes_from_db
-from app.clusters.schemas import ClusterIn, Clusters, ClustersStats
+from app.clusters.schemas import ClusterIn, ClusterKubeConfig, Clusters, ClustersStats
 from app.clusters.service import (
     create_cluster,
     delete_cluster,
+    get_cluster_kubeconfig_as_yaml,
     get_cluster_nodes,
     get_cluster_with_resources,
     get_clusters_stats,
@@ -29,7 +31,7 @@ from app.clusters.service import (
 )
 from app.projects.models import Project
 from app.quotas.models import QuotaStatus
-from app.utilities.exceptions import ForbiddenException
+from app.utilities.exceptions import DeletionConflictException, ForbiddenException, PreconditionNotMetException
 from tests import factory
 
 
@@ -45,7 +47,7 @@ async def test_create_cluster_success(db_session: AsyncSession):
         patch("app.clusters.service.configure_queues_for_cluster") as mock_configure_queues,
     ):
         result = await create_cluster(
-            db_session, organization.id, creator, cluster_create=ClusterIn(base_url="http://example.com")
+            db_session, organization.id, creator, cluster_create=ClusterIn(workloads_base_url="http://example.com")
         )
 
     mock_create_vhost.assert_called_once()
@@ -54,7 +56,7 @@ async def test_create_cluster_success(db_session: AsyncSession):
     assert result is not None
     assert result.created_by == creator
     assert result.user_secret == "12345"
-    assert result.base_url == "http://example.com"
+    assert result.workloads_base_url == "http://example.com"
 
 
 @pytest.mark.asyncio
@@ -76,7 +78,7 @@ async def test_create_cluster_success_no_base_url(db_session: AsyncSession):
     assert result is not None
     assert result.created_by == creator
     assert result.user_secret == "12345"
-    assert result.base_url is None
+    assert result.workloads_base_url is None
 
 
 @pytest.mark.asyncio
@@ -89,7 +91,7 @@ async def test_create_cluster_vhost_failure(db_session: AsyncSession):
     with patch("app.clusters.service.create_vhost_and_user", side_effect=Exception("Mock exception")):
         with pytest.raises(Exception, match="Mock exception"):
             await create_cluster(
-                db_session, organization.id, creator, cluster_create=ClusterIn(base_url="http://example.com")
+                db_session, organization.id, creator, cluster_create=ClusterIn(workloads_base_url="http://example.com")
             )
 
 
@@ -100,7 +102,7 @@ async def test_update_cluster_success(db_session: AsyncSession):
     cluster = env.cluster
     original_name = cluster.name
 
-    cluster_data = ClusterIn(base_url="https://updated.example.com")
+    cluster_data = ClusterIn(workloads_base_url="https://updated.example.com")
     updater = "test_updater"
 
     result = await update_cluster(db_session, cluster, cluster_data, updater)
@@ -108,9 +110,9 @@ async def test_update_cluster_success(db_session: AsyncSession):
     await db_session.refresh(cluster)
     assert cluster.name == original_name
     assert cluster.updated_by == updater
-    assert cluster.base_url == "https://updated.example.com"
+    assert cluster.workloads_base_url == "https://updated.example.com"
     assert result.name == original_name
-    assert result.base_url == "https://updated.example.com"
+    assert result.workloads_base_url == "https://updated.example.com"
 
 
 @pytest.mark.asyncio
@@ -118,6 +120,8 @@ async def test_delete_cluster_success(db_session: AsyncSession):
     """Test successful cluster deletion with real database operations."""
     env = await factory.create_basic_test_environment(db_session, cluster_name="Test Cluster")
     organization = env.organization
+    await db_session.delete(env.project)
+    await db_session.flush()
     cluster = env.cluster
 
     with patch("app.clusters.service.delete_vhost_and_user") as mock_delete_vhost:
@@ -135,12 +139,41 @@ async def test_delete_cluster_success(db_session: AsyncSession):
 async def test_delete_cluster_vhost_failure(db_session: AsyncSession):
     """Test cluster deletion failure when vhost deletion fails."""
     env = await factory.create_basic_test_environment(db_session, cluster_name="Test Cluster")
+    await db_session.delete(env.project)
+    await db_session.flush()
     cluster = env.cluster
 
     # Mock vhost deletion failure and verify exception is raised
     with patch("app.clusters.service.delete_vhost_and_user", side_effect=Exception("Mock vhost exception")):
         with pytest.raises(Exception, match="Mock vhost exception"):
             await delete_cluster(db_session, cluster)
+
+
+@pytest.mark.asyncio
+async def test_delete_cluster_db_failure(db_session: AsyncSession):
+    """Test cluster deletion failure when database operation fails."""
+    env = await factory.create_basic_test_environment(db_session, cluster_name="Test Cluster")
+    await db_session.delete(env.project)
+    await db_session.flush()
+    cluster = env.cluster
+
+    # Mock database deletion failure and verify exception is raised
+    with patch("app.clusters.service.delete_cluster_in_db", side_effect=Exception("Mock DB exception")):
+        with pytest.raises(Exception, match="Mock DB exception"):
+            await delete_cluster(db_session, cluster)
+
+
+@pytest.mark.asyncio
+async def test_delete_cluster_active_project(db_session: AsyncSession):
+    """Test cluster deletion failure when cluster has active projects.."""
+    env = await factory.create_basic_test_environment(db_session, cluster_name="Test Cluster")
+    cluster = env.cluster
+
+    with (
+        patch("app.clusters.service.delete_vhost_and_user"),
+        pytest.raises(DeletionConflictException, match="Cannot delete cluster Test Cluster"),
+    ):
+        await delete_cluster(db_session, cluster)
 
 
 @pytest.mark.asyncio
@@ -152,7 +185,9 @@ async def test_get_clusters_with_resources(db_session: AsyncSession):
     cluster1 = env.cluster
 
     # Create second cluster
-    cluster2 = await factory.create_cluster(db_session, organization, name="cluster2", base_url="http://example.com")
+    cluster2 = await factory.create_cluster(
+        db_session, organization, name="cluster2", workloads_base_url="http://example.com"
+    )
 
     # Create cluster nodes
     await factory.create_cluster_node(db_session, cluster1, name="node1", gpu_count=1, status="Ready")
@@ -229,6 +264,7 @@ async def test_validate_cluster_accessible_to_user(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_update_cluster_nodes(db_session: AsyncSession):
     """Test cluster nodes update with real database operations."""
+    mock_message_sender = AsyncMock()
     # Create real test environment using factories
     env = await factory.create_basic_test_environment(db_session, cluster_name="test_cluster")
     cluster = env.cluster
@@ -277,9 +313,7 @@ async def test_update_cluster_nodes(db_session: AsyncSession):
         cluster_nodes=new_nodes,
         updated_at=updated_time,
     )
-
-    with patch("app.quotas.service.submit_quotas_allocation_to_cluster_queue"):
-        await update_cluster_nodes(db_session, cluster, message)
+    await update_cluster_nodes(db_session, cluster, message, message_sender=mock_message_sender)
 
     # Verify nodes were updated in real database
     updated_nodes = await get_cluster_nodes_from_db(db_session, cluster)
@@ -305,7 +339,7 @@ async def test_update_last_heartbeat_with_cluster_name_update(db_session: AsyncS
     env = await factory.create_basic_test_environment(db_session, org_name="AMD")
     organization = env.organization
     # Create cluster without name to test name setting during heartbeat
-    cluster = await factory.create_cluster(db_session, organization, name=None, base_url="http://example.com")
+    cluster = await factory.create_cluster(db_session, organization, name=None, workloads_base_url="http://example.com")
 
     message = HeartbeatMessage(
         message_type="heartbeat",
@@ -375,7 +409,9 @@ async def test_create_cluster_failure(db_session: AsyncSession):
     # Mock database failure and verify exception is raised
     with patch("app.clusters.service.create_cluster_in_db", side_effect=Exception("Mock DB exception")):
         with pytest.raises(Exception, match="Mock DB exception"):
-            await create_cluster(db_session, organization.id, creator, ClusterIn(base_url="http://example.com"))
+            await create_cluster(
+                db_session, organization.id, creator, ClusterIn(workloads_base_url="http://example.com")
+            )
 
 
 @pytest.mark.asyncio
@@ -433,7 +469,7 @@ async def test_update_last_heartbeat_mismatch_organization(db_session: AsyncSess
     env = await factory.create_basic_test_environment(db_session, org_name="SILO")
     organization = env.organization
     # Create cluster without name to test organization name validation
-    cluster = await factory.create_cluster(db_session, organization, name=None, base_url="http://example.com")
+    cluster = await factory.create_cluster(db_session, organization, name=None, workloads_base_url="http://example.com")
     original_heartbeat = cluster.last_heartbeat_at
 
     # Set up heartbeat message with mismatched organization name
@@ -454,20 +490,9 @@ async def test_update_last_heartbeat_mismatch_organization(db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-async def test_delete_cluster_db_failure(db_session: AsyncSession):
-    """Test cluster deletion failure when database operation fails."""
-    env = await factory.create_basic_test_environment(db_session, cluster_name="Test Cluster")
-    cluster = env.cluster
-
-    # Mock database deletion failure and verify exception is raised
-    with patch("app.clusters.service.delete_cluster_in_db", side_effect=Exception("Mock DB exception")):
-        with pytest.raises(Exception, match="Mock DB exception"):
-            await delete_cluster(db_session, cluster)
-
-
-@pytest.mark.asyncio
 async def test_updates_existing_nodes_with_new_information(db_session: AsyncSession):
     """Test that existing cluster nodes are updated with new information."""
+    mock_message_sender = AsyncMock()
     # Create real test environment using factories
     env = await factory.create_basic_test_environment(db_session, cluster_name="test_cluster")
     cluster = env.cluster
@@ -498,9 +523,7 @@ async def test_updates_existing_nodes_with_new_information(db_session: AsyncSess
         cluster_nodes=updated_nodes,
         updated_at=updated_time,
     )
-
-    with patch("app.quotas.service.submit_quotas_allocation_to_cluster_queue"):
-        await update_cluster_nodes(db_session, cluster, message)
+    await update_cluster_nodes(db_session, cluster, message, message_sender=mock_message_sender)
 
     # Verify node was updated in real database
     nodes = await get_cluster_nodes_from_db(db_session, cluster)
@@ -515,6 +538,7 @@ async def test_updates_existing_nodes_with_new_information(db_session: AsyncSess
 @pytest.mark.asyncio
 async def test_creates_new_nodes(db_session: AsyncSession):
     """Test that new cluster nodes are created from cluster nodes message."""
+    mock_message_sender = AsyncMock()
     # Create real test environment using factories
     env = await factory.create_basic_test_environment(db_session, cluster_name="test_cluster")
     cluster = env.cluster
@@ -544,9 +568,7 @@ async def test_creates_new_nodes(db_session: AsyncSession):
         cluster_nodes=new_nodes,
         updated_at=updated_time,
     )
-
-    with patch("app.quotas.service.submit_quotas_allocation_to_cluster_queue"):
-        await update_cluster_nodes(db_session, cluster, message)
+    await update_cluster_nodes(db_session, cluster, message, message_sender=mock_message_sender)
 
     # Verify new node was created in real database
     nodes = await get_cluster_nodes_from_db(db_session, cluster)
@@ -565,6 +587,7 @@ async def test_creates_new_nodes(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_deletes_nodes_not_in_message(db_session: AsyncSession):
     """Test that cluster nodes not present in the message are deleted."""
+    mock_message_sender = AsyncMock()
     # Create real test environment using factories
     env = await factory.create_basic_test_environment(db_session, cluster_name="test_cluster")
     cluster = env.cluster
@@ -580,9 +603,7 @@ async def test_deletes_nodes_not_in_message(db_session: AsyncSession):
         cluster_nodes=[],  # Empty list - should delete all existing nodes
         updated_at=updated_time,
     )
-
-    with patch("app.quotas.service.submit_quotas_allocation_to_cluster_queue"):
-        await update_cluster_nodes(db_session, cluster, message)
+    await update_cluster_nodes(db_session, cluster, message, message_sender=mock_message_sender)
 
     # Verify nodes were deleted from real database
     nodes = await get_cluster_nodes_from_db(db_session, cluster)
@@ -598,7 +619,9 @@ async def test_get_clusters_stats(db_session: AsyncSession):
     cluster1 = env.cluster
 
     # Create second cluster
-    cluster2 = await factory.create_cluster(db_session, organization, name="cluster2", base_url="http://example.com")
+    cluster2 = await factory.create_cluster(
+        db_session, organization, name="cluster2", workloads_base_url="http://example.com"
+    )
 
     # Create cluster nodes with different specs
     await factory.create_cluster_node(db_session, cluster1, name="node1", gpu_count=8, status="Ready", is_ready=True)
@@ -659,3 +682,39 @@ async def test_get_clusters_stats(db_session: AsyncSession):
     assert result.available_gpu_count == 16  # 8+8 = 16 from Ready nodes
     assert result.allocated_gpu_count == 3  # 1+1+1 = 3 from non-deleting quotas (pending, pending, ready)
     assert result.available_node_count == 2  # 2 Ready nodes
+
+
+@pytest.mark.asyncio
+@patch("app.clusters.service.get_client_uuid", return_value=uuid4())
+@patch("app.clusters.service.get_client_secret", return_value={"value": "secret"})
+@patch("app.clusters.service.get_public_issuer_url", return_value="http://url.com")
+@patch("app.clusters.service.build_cluster_kube_config", return_value=ClusterKubeConfig(kube_config="config"))
+async def test_get_cluster_kubeconfig_as_yaml(mock_build_config, __, ___, mock_get_uuid, db_session: AsyncSession):
+    env = await factory.create_basic_test_environment(db_session, cluster_name="cluster1")
+
+    result = await get_cluster_kubeconfig_as_yaml(env.cluster, MagicMock())
+    assert result.kube_config == "config"
+    mock_get_uuid.assert_called_once()
+
+    call_args = mock_build_config.call_args[0]
+    assert call_args[0] == env.cluster
+    assert call_args[1] == "http://url.com"
+    assert call_args[2] == "secret"
+
+
+@pytest.mark.asyncio
+async def test_get_cluster_kubeconfig_as_yaml_missing_kube_api_url(db_session: AsyncSession):
+    env = await factory.create_basic_test_environment(db_session, cluster_name="cluster1")
+    env.cluster.kube_api_url = None
+
+    with pytest.raises(ValueError, match="does not have a kube_api_url configured"):
+        await get_cluster_kubeconfig_as_yaml(env.cluster, AsyncMock())
+
+
+@pytest.mark.asyncio
+@patch("app.clusters.service.get_client_uuid", return_value=uuid4())
+@patch("app.clusters.service.get_client_secret", return_value={})
+async def test_get_cluster_kubeconfig_as_yaml_missing_client_secret(_, __, db_session: AsyncSession):
+    env = await factory.create_basic_test_environment(db_session, cluster_name="cluster1")
+    with pytest.raises(PreconditionNotMetException, match="doesn't have secret configured"):
+        await get_cluster_kubeconfig_as_yaml(env.cluster, AsyncMock())

@@ -33,11 +33,11 @@ async def verify_projects_ready(
             raise ValidationException(f"project id={project_id} not READY")
 
 
-async def resolve_project_storage_composite_status(configmap, project_secret, project_storage):
-    configmap_status = getattr(configmap, "status", None)
-    configmap_reason = getattr(configmap, "status_reason", None)
-    secret_status = getattr(project_secret, "status", None)
-    secret_reason = getattr(project_secret, "status_reason", None)
+async def resolve_project_storage_composite_status(configmap, organization_secret_assignment):
+    configmap_status = configmap.status
+    configmap_reason = configmap.status_reason
+    secret_status = organization_secret_assignment.status
+    secret_reason = organization_secret_assignment.status_reason
 
     reasons = []
     if configmap_reason:

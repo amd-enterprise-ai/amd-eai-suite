@@ -5,18 +5,11 @@
 from enum import StrEnum
 
 
-class SecretScope(StrEnum):
-    ORGANIZATION = "Organization"
-    PROJECT = "Project"
-
-
-class SecretType(StrEnum):
-    EXTERNAL = "External"
-    KUBERNETES_SECRET = "KubernetesSecret"
-
-
 class SecretUseCase(StrEnum):
     HUGGING_FACE = "HuggingFace"
+    S3 = "S3"
+    GENERIC = "Generic"
+    DATABASE = "Database"
 
 
 class SecretStatus(StrEnum):

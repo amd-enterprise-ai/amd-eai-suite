@@ -79,7 +79,7 @@ export const getFilteredData = <T>(
         return matches(item[field]);
       } else if (compositeFields) {
         return compositeFields.some((f) => {
-          let value;
+          let value: any;
           if ('path' in f && f.path) {
             value = get(item[f.field], f.path as string);
           } else {

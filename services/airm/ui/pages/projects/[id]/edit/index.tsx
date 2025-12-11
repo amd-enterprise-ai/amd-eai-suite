@@ -115,6 +115,7 @@ const ProjectEditPage: React.FC<Props> = ({
             size="sm"
             isIconOnly
             onPress={() => push(`/projects/${project.id}`)}
+            aria-label={t('actions.back')}
           >
             <IconChevronLeft size={16} />
           </Button>
@@ -140,6 +141,7 @@ const ProjectEditPage: React.FC<Props> = ({
           </Tab>
           <Tab key="secrets" title={t('tab.secrets.title')}>
             <ProjectSecrets
+              projectStorages={projectStorages}
               projectSecrets={projectSecretsData.projectSecrets}
               project={projectData}
               secrets={secretsData.secrets}
@@ -149,7 +151,6 @@ const ProjectEditPage: React.FC<Props> = ({
             <ProjectStorages
               project={projectData}
               projectStorages={projectStorages}
-              secrets={secrets}
               storages={storages}
             />
           </Tab>
@@ -236,8 +237,7 @@ export async function getServerSideProps(context: any) {
     const breadcrumb = [
       {
         title:
-          translations._nextI18Next?.initialI18nStore[locale]?.['projects']
-            ?.title,
+          translations._nextI18Next?.initialI18nStore[locale]?.projects?.title,
         href: '/projects',
       },
       {
@@ -246,7 +246,7 @@ export async function getServerSideProps(context: any) {
       },
       {
         title:
-          translations._nextI18Next?.initialI18nStore[locale]?.['projects']
+          translations._nextI18Next?.initialI18nStore[locale]?.projects
             ?.settings.navigation,
         href: getProjectEditUrl(context.params.id),
       },

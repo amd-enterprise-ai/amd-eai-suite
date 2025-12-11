@@ -8,17 +8,19 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.organizations.schemas import OrganizationResponse
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
 from app.users.models import User as UserModel
-from app.users.schemas import InvitedUserWithProjects, UserWithProjects
+from app.users.schemas import InvitedUserWithProjects, InviteUser, UserWithProjects
 from app.users.utils import (
     check_valid_email_domain,
+    create_user_in_keycloak,
     merge_invited_user_details_with_projects,
     merge_user_details,
     merge_user_details_with_projects,
 )
-from app.utilities.exceptions import ValidationException
+from app.utilities.exceptions import ConflictException, PreconditionNotMetException, ValidationException
 from app.utilities.security import Roles
 
 
@@ -429,3 +431,461 @@ def test_merge_invited_user_details_with_projects_calls_merge_invited_user_detai
 
     # Assert
     mock_merge_invited_user_details.assert_called_once_with(user, platform_admins)
+
+
+def test_merge_invited_user_details_platform_admin():
+    """Test merging invited user details for a platform admin."""
+    user = UserModel(
+        id=uuid.UUID("1c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        email="invited.admin@example.com",
+        keycloak_user_id="kc-admin-123",
+        organization_id=uuid.UUID("8c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        invited_at=datetime(2025, 2, 1, tzinfo=UTC),
+        invited_by="super@example.com",
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
+        created_by="super@example.com",
+        updated_by="super@example.com",
+    )
+    platform_admins = {"kc-admin-123"}
+
+    from app.users.utils import merge_invited_user_details
+
+    result = merge_invited_user_details(user, platform_admins)
+
+    assert result.id == user.id
+    assert result.email == "invited.admin@example.com"
+    assert result.invited_at == datetime(2025, 2, 1, tzinfo=UTC)
+    assert result.invited_by == "super@example.com"
+    assert result.role == Roles.PLATFORM_ADMINISTRATOR.value
+    assert result.created_at == datetime(2025, 1, 1, tzinfo=UTC)
+    assert result.updated_at == datetime(2025, 1, 1, tzinfo=UTC)
+
+
+def test_merge_invited_user_details_team_member():
+    """Test merging invited user details for a team member."""
+    user = UserModel(
+        id=uuid.UUID("1c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        email="invited.member@example.com",
+        keycloak_user_id="kc-member-456",
+        organization_id=uuid.UUID("8c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        invited_at=datetime(2025, 3, 15, tzinfo=UTC),
+        invited_by="admin@example.com",
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
+        created_by="admin@example.com",
+        updated_by="admin@example.com",
+    )
+    platform_admins = {"kc-other-admin"}  # User is not in platform admins
+
+    from app.users.utils import merge_invited_user_details
+
+    result = merge_invited_user_details(user, platform_admins)
+
+    assert result.id == user.id
+    assert result.email == "invited.member@example.com"
+    assert result.invited_at == datetime(2025, 3, 15, tzinfo=UTC)
+    assert result.invited_by == "admin@example.com"
+    assert result.role == Roles.TEAM_MEMBER.value
+
+
+def test_is_keycloak_user_active_with_complete_profile():
+    """Test is_keycloak_user_active returns True when firstName and lastName are present."""
+    from app.users.utils import is_keycloak_user_active
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+        "firstName": "John",
+        "lastName": "Doe",
+    }
+
+    assert is_keycloak_user_active(keycloak_user) is True
+
+
+def test_is_keycloak_user_active_missing_first_name():
+    """Test is_keycloak_user_active returns False when firstName is missing."""
+    from app.users.utils import is_keycloak_user_active
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+        "lastName": "Doe",
+    }
+
+    assert is_keycloak_user_active(keycloak_user) is False
+
+
+def test_is_keycloak_user_active_missing_last_name():
+    """Test is_keycloak_user_active returns False when lastName is missing."""
+    from app.users.utils import is_keycloak_user_active
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+        "firstName": "John",
+    }
+
+    assert is_keycloak_user_active(keycloak_user) is False
+
+
+def test_is_keycloak_user_active_missing_both_names():
+    """Test is_keycloak_user_active returns False when both names are missing."""
+    from app.users.utils import is_keycloak_user_active
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+    }
+
+    assert is_keycloak_user_active(keycloak_user) is False
+
+
+def test_is_keycloak_user_active_empty_first_name():
+    """Test is_keycloak_user_active returns True even with empty string firstName (key exists)."""
+    from app.users.utils import is_keycloak_user_active
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+        "firstName": "",
+        "lastName": "Doe",
+    }
+
+    # Function only checks for key presence, not value
+    assert is_keycloak_user_active(keycloak_user) is True
+
+
+def test_is_keycloak_user_inactive_with_complete_profile():
+    """Test is_keycloak_user_inactive returns False when firstName and lastName are present."""
+    from app.users.utils import is_keycloak_user_inactive
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+        "firstName": "John",
+        "lastName": "Doe",
+    }
+
+    assert is_keycloak_user_inactive(keycloak_user) is False
+
+
+def test_is_keycloak_user_inactive_missing_names():
+    """Test is_keycloak_user_inactive returns True when names are missing."""
+    from app.users.utils import is_keycloak_user_inactive
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+    }
+
+    assert is_keycloak_user_inactive(keycloak_user) is True
+
+
+def test_is_keycloak_user_inactive_missing_first_name():
+    """Test is_keycloak_user_inactive returns True when firstName is missing."""
+    from app.users.utils import is_keycloak_user_inactive
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+        "lastName": "Doe",
+    }
+
+    assert is_keycloak_user_inactive(keycloak_user) is True
+
+
+def test_is_keycloak_user_inactive_missing_last_name():
+    """Test is_keycloak_user_inactive returns True when lastName is missing."""
+    from app.users.utils import is_keycloak_user_inactive
+
+    keycloak_user = {
+        "id": "kc-123",
+        "username": "john.doe@example.com",
+        "email": "john.doe@example.com",
+        "firstName": "John",
+    }
+
+    assert is_keycloak_user_inactive(keycloak_user) is True
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.get_organization_by_id_from_keycloak")
+async def test_check_valid_email_domain_no_domains_configured(get_organization_by_id_from_keycloak):
+    """Test check_valid_email_domain when organization has no domains configured."""
+    get_organization_by_id_from_keycloak.return_value = {"domains": []}
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "some-keycloak-id"
+    kc_admin = AsyncMock()
+
+    # Should not raise exception when domains list is empty
+    await check_valid_email_domain("test@anydomain.com", organization, kc_admin)
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.get_organization_by_id_from_keycloak")
+async def test_check_valid_email_domain_multiple_domains_valid(get_organization_by_id_from_keycloak):
+    """Test check_valid_email_domain with multiple allowed domains - valid email."""
+    get_organization_by_id_from_keycloak.return_value = {
+        "domains": [
+            {"name": "example.com", "verified": True},
+            {"name": "example.org", "verified": True},
+            {"name": "test.com", "verified": True},
+        ]
+    }
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "some-keycloak-id"
+    kc_admin = AsyncMock()
+
+    # Should not raise for domain in the list
+    await check_valid_email_domain("user@example.org", organization, kc_admin)
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.get_organization_by_id_from_keycloak")
+async def test_check_valid_email_domain_multiple_domains_invalid(get_organization_by_id_from_keycloak):
+    """Test check_valid_email_domain with multiple allowed domains - invalid email."""
+    get_organization_by_id_from_keycloak.return_value = {
+        "domains": [
+            {"name": "example.com", "verified": True},
+            {"name": "example.org", "verified": True},
+        ]
+    }
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "some-keycloak-id"
+    kc_admin = AsyncMock()
+
+    with pytest.raises(
+        ValidationException, match="User email domain 'wrongdomain.com' is not in the organization's allowed domains"
+    ):
+        await check_valid_email_domain("user@wrongdomain.com", organization, kc_admin)
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.get_organization_by_id_from_keycloak")
+async def test_check_valid_email_domain_org_not_found(get_organization_by_id_from_keycloak):
+    """Test check_valid_email_domain when organization is not found in Keycloak."""
+    from app.utilities.exceptions import ExternalServiceError
+
+    get_organization_by_id_from_keycloak.return_value = None
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "non-existent-id"
+    kc_admin = AsyncMock()
+
+    with pytest.raises(ExternalServiceError, match="Organization not found in Keycloak"):
+        await check_valid_email_domain("test@example.com", organization, kc_admin)
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.get_organization_by_id_from_keycloak")
+async def test_check_valid_email_domain_case_sensitivity(get_organization_by_id_from_keycloak):
+    """Test that domain matching is case-sensitive (as per current implementation)."""
+    get_organization_by_id_from_keycloak.return_value = {"domains": [{"name": "Example.com", "verified": True}]}
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "some-keycloak-id"
+    kc_admin = AsyncMock()
+
+    # Current implementation is case-sensitive
+    with pytest.raises(ValidationException):
+        await check_valid_email_domain("user@example.com", organization, kc_admin)
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.set_temporary_password")
+@patch("app.users.utils.create_user")
+@patch("app.users.utils.enrich_organization_details")
+async def test_create_user_in_keycloak_no_idp_no_smtp_with_temp_password(
+    mock_enrich_org, mock_create_user, mock_set_temp_password
+):
+    """Test creating user in Keycloak when org has no IDP and no SMTP, with temp password."""
+    # Setup
+    kc_admin = AsyncMock()
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "org-123"
+
+    mock_enrich_org.return_value = OrganizationResponse(
+        id=uuid.UUID("8c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        name="Test Org",
+        domains=["example.com"],
+        idp_linked=False,
+        smtp_enabled=False,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
+        created_by="admin@example.com",
+        updated_by="admin@example.com",
+    )
+
+    mock_create_user.return_value = "new-user-kc-id"
+
+    user_in = InviteUser(email="newuser@example.com", roles=[], temporary_password="SecurePass123!")
+
+    result = await create_user_in_keycloak(kc_admin, user_in, organization)
+
+    # Assert
+    assert result == "new-user-kc-id"
+    mock_create_user.assert_called_once()
+    call_args = mock_create_user.call_args[1]
+    assert call_args["user_data"]["username"] == "newuser@example.com"
+    assert call_args["user_data"]["email"] == "newuser@example.com"
+    assert call_args["user_data"]["emailVerified"] is True
+    assert call_args["user_data"]["enabled"] is True
+    assert "UPDATE_PASSWORD" in call_args["user_data"]["requiredActions"]
+    assert "UPDATE_PROFILE" in call_args["user_data"]["requiredActions"]
+    mock_set_temp_password.assert_called_once_with(
+        kc_admin=kc_admin, user_id="new-user-kc-id", temp_password="SecurePass123!"
+    )
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.enrich_organization_details")
+async def test_create_user_in_keycloak_no_idp_no_smtp_no_temp_password(mock_enrich_org):
+    """Test creating user in Keycloak when org has no IDP and no SMTP, without temp password."""
+    # Setup
+    kc_admin = AsyncMock()
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "org-123"
+
+    mock_enrich_org.return_value = OrganizationResponse(
+        id=uuid.UUID("8c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        name="Test Org",
+        domains=["example.com"],
+        idp_linked=False,
+        smtp_enabled=False,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
+        created_by="admin@example.com",
+        updated_by="admin@example.com",
+    )
+
+    user_in = InviteUser(email="newuser@example.com", roles=[], temporary_password=None)
+
+    # Execute and Assert
+    from app.users.utils import create_user_in_keycloak
+
+    with pytest.raises(ConflictException, match="Temporary password is required for user creation"):
+        await create_user_in_keycloak(kc_admin, user_in, organization)
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.send_verify_email")
+@patch("app.users.utils.create_user")
+@patch("app.users.utils.enrich_organization_details")
+async def test_create_user_in_keycloak_with_smtp_enabled(mock_enrich_org, mock_create_user, mock_send_verify_email):
+    """Test creating user in Keycloak when SMTP is enabled."""
+    from app.organizations.schemas import OrganizationResponse
+    from app.users.schemas import InviteUser
+
+    # Setup
+    kc_admin = AsyncMock()
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "org-123"
+
+    mock_enrich_org.return_value = OrganizationResponse(
+        id=uuid.UUID("8c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        name="Test Org",
+        domains=["example.com"],
+        idp_linked=False,
+        smtp_enabled=True,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
+        created_by="admin@example.com",
+        updated_by="admin@example.com",
+    )
+    mock_create_user.return_value = "new-user-kc-id"
+
+    user_in = InviteUser(email="newuser@example.com", roles=[], temporary_password=None)
+
+    result = await create_user_in_keycloak(kc_admin, user_in, organization)
+
+    # Assert
+    assert result == "new-user-kc-id"
+    mock_create_user.assert_called_once()
+    call_args = mock_create_user.call_args[1]
+    assert call_args["user_data"]["username"] == "newuser@example.com"
+    assert call_args["user_data"]["email"] == "newuser@example.com"
+    assert call_args["user_data"]["emailVerified"] is False
+    assert call_args["user_data"]["enabled"] is True
+    assert "VERIFY_EMAIL" in call_args["user_data"]["requiredActions"]
+    assert "UPDATE_PASSWORD" in call_args["user_data"]["requiredActions"]
+    assert "UPDATE_PROFILE" in call_args["user_data"]["requiredActions"]
+    mock_send_verify_email.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.send_verify_email")
+@patch("app.users.utils.create_user")
+@patch("app.users.utils.enrich_organization_details")
+async def test_create_user_in_keycloak_with_idp_linked(mock_enrich_org, mock_create_user, mock_send_verify_email):
+    """Test creating user in Keycloak when IDP is linked and SMTP is enabled."""
+    from app.organizations.schemas import OrganizationResponse
+    from app.users.schemas import InviteUser
+
+    # Setup
+    kc_admin = AsyncMock()
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "org-123"
+
+    mock_enrich_org.return_value = OrganizationResponse(
+        id=uuid.UUID("8c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        name="Test Org",
+        domains=["example.com"],
+        idp_linked=True,
+        smtp_enabled=True,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
+        created_by="admin@example.com",
+        updated_by="admin@example.com",
+    )
+    mock_create_user.return_value = "new-user-kc-id"
+
+    user_in = InviteUser(email="newuser@example.com", roles=[], temporary_password=None)
+
+    # Execute
+    from app.users.utils import create_user_in_keycloak
+
+    result = await create_user_in_keycloak(kc_admin, user_in, organization)
+
+    # Assert - should use SMTP flow even when IDP is linked
+    assert result == "new-user-kc-id"
+    mock_send_verify_email.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.users.utils.enrich_organization_details")
+async def test_create_user_in_keycloak_org_not_configured(mock_enrich_org):
+    """Test creating user in Keycloak when organization is not properly configured."""
+    from app.organizations.schemas import OrganizationResponse
+    from app.users.schemas import InviteUser
+
+    # Setup
+    kc_admin = AsyncMock()
+    organization = AsyncMock()
+    organization.keycloak_organization_id = "org-123"
+
+    mock_enrich_org.return_value = OrganizationResponse(
+        id=uuid.UUID("8c375428-1a9b-4e48-a025-8c4e81d2804b"),
+        name="Test Org",
+        domains=["example.com"],
+        idp_linked=True,
+        smtp_enabled=False,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
+        created_by="admin@example.com",
+        updated_by="admin@example.com",
+    )
+
+    user_in = InviteUser(email="newuser@example.com", roles=[], temporary_password=None)
+
+    # Execute and Assert
+    from app.users.utils import create_user_in_keycloak
+
+    with pytest.raises(PreconditionNotMetException, match="Organization is not configured for user creation"):
+        await create_user_in_keycloak(kc_admin, user_in, organization)

@@ -38,52 +38,13 @@ export const DebugInfoModal: React.FC<DebugInfoModalProps> = ({
         >
           <div>
             <Accordion>
-              <AccordionItem title={t('debugInfoModal.ragDocumentsTitle')}>
-                <div className="mb-6 p-6 rounded-md bg-primary-200 text-primary-900">
-                  <IconInfoCircle className="inline mr-1.5 text-primary" />
-                  {t('debugInfoModal.ragDocumentsDescription')}
-                </div>
-                <div>
-                  {!!debugInfo.sources ? (
-                    debugInfo.sources.map((source, index) => (
-                      <div
-                        key={index}
-                        className="mb-6 p-6 bg-default-100 rounded-md"
-                      >
-                        <div className="flex items-left">
-                          <span className="rounded font-semibold">
-                            {index + 1}. {source.sourceId}
-                          </span>
-                        </div>
-                        <div className="mb-4">
-                          <a href={source.url} className=" hover:underline">
-                            {source.url}
-                          </a>
-                        </div>
-                        <div className=" rounded-xl ">{source.text}</div>
-                        <div className="mt-6">
-                          <span className="font-semibold mr-1">Score:</span>
-                          &nbsp;
-                          <span className="bg-secondary rounded px-2 py-1 text-sm font-bold text-white">
-                            {source.score || source.score == 0
-                              ? source.score.toFixed(2)
-                              : 'N/A'}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div>{t('debugInfoModal.noSources')}</div>
-                  )}
-                </div>
-              </AccordionItem>
               <AccordionItem title={t('debugInfoModal.promptsTitle')}>
                 <div className="mb-6 p-6 rounded-md bg-primary-200 text-primary-900">
                   <IconInfoCircle className="inline mr-1.5 text-primary" />
                   {t('debugInfoModal.promptsDescription')}
                 </div>
                 <div className="mb-6 p-6 bg-default-100 rounded-md">
-                  {!!debugInfo.messages ? (
+                  {debugInfo.messages && debugInfo.messages.length > 0 ? (
                     debugInfo.messages.map(
                       (message: Message, index: number) => (
                         <MemoizedChatMessage

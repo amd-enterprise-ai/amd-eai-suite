@@ -103,7 +103,7 @@ describe('ErrorMessage', () => {
     render(<ErrorMessage />);
 
     expect(
-      screen.queryByText('error.showDetailsActionLabel'),
+      screen.queryByText('actiosn.showDetails.title'),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId('chevron-down-icon')).not.toBeInTheDocument();
   });

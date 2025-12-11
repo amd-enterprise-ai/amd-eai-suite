@@ -67,6 +67,8 @@ describe('ActiveUsersTab', () => {
       isRoleManagementEnabled: true,
       isInviteEnabled: true,
       isAdministrator: true,
+      smtpEnabled: true,
+      isTempPasswordRequired: false,
     });
   });
 
@@ -79,7 +81,7 @@ describe('ActiveUsersTab', () => {
       { wrapper },
     );
 
-    mockUsersResponse.users.forEach((user) => {
+    mockUsersResponse.data.forEach((user) => {
       expect(
         screen.getByText(`${user.firstName} ${user.lastName}`),
       ).toBeInTheDocument();
@@ -96,7 +98,7 @@ describe('ActiveUsersTab', () => {
       { wrapper },
     );
 
-    const inviteButton = screen.getByLabelText('actions.addUser');
+    const inviteButton = screen.getByLabelText('actions.addUser.label');
     fireEvent.click(inviteButton);
 
     expect(mockOnInviteUserClick).toHaveBeenCalledTimes(1);
@@ -222,6 +224,8 @@ describe('ActiveUsersTab', () => {
           isRoleManagementEnabled: true,
           isAdministrator: true,
           ...state,
+          isTempPasswordRequired: false,
+          smtpEnabled: false,
         });
 
         const { unmount } = render(

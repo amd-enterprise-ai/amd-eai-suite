@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -11,7 +11,7 @@ from app.kubernetes.metrics_config import __get_configmap_data, get_metrics_clus
 
 @pytest.mark.asyncio
 @patch("app.kubernetes.metrics_config.client.CoreV1Api")
-async def test_get_configmap_data(mock_core_v1_api):
+async def test_get_configmap_data(mock_core_v1_api: MagicMock) -> None:
     # Mock the Kubernetes API response
     mock_configmap = AsyncMock()
     mock_configmap.data = {
@@ -31,7 +31,7 @@ async def test_get_configmap_data(mock_core_v1_api):
 
 @pytest.mark.asyncio
 @patch("app.kubernetes.metrics_config.__get_configmap_data")
-async def test_get_metrics_cluster_info(mock_get_configmap_data):
+async def test_get_metrics_cluster_info(mock_get_configmap_data: AsyncMock) -> None:
     # Mock the get_configmap_data response
     mock_get_configmap_data.return_value = {
         "GPUConfig": {"CustomLabels": {"ORG_NAME": "test-org", "KUBE_CLUSTER_NAME": "test-cluster"}}

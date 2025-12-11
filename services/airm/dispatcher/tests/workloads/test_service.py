@@ -98,7 +98,9 @@ def mock_request(method, path, *args, **kwargs):
 @patch("app.workloads.service.client.ApiClient")
 @patch("app.workloads.service.DynamicClient")
 @patch("app.workloads.service.get_common_vhost_connection_and_channel")
-async def test_process_workload(mock_get_conn_chan, mock_dynamic_client_class, _):
+async def test_process_workload(
+    mock_get_conn_chan: AsyncMock, mock_dynamic_client_class: MagicMock, _: MagicMock
+) -> None:
     """Test that process_workload processes workload messages correctly."""
 
     # Mock the connection return values (avoid real RabbitMQ)
@@ -136,8 +138,11 @@ async def test_process_workload(mock_get_conn_chan, mock_dynamic_client_class, _
 @patch("app.workloads.service.publish_to_common_feedback_queue")
 @patch("app.workloads.service.get_common_vhost_connection_and_channel")
 async def test_process_workload_general_exception(
-    mock_get_conn_chan, mock_publish_to_common_feedback_queue, mock_dynamic_client_class, _
-):
+    mock_get_conn_chan: AsyncMock,
+    mock_publish_to_common_feedback_queue: MagicMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     """Test that process_workload handles exceptions correctly."""
 
     # Mock the connection return values (avoid real RabbitMQ)
@@ -173,7 +178,9 @@ async def test_process_workload_general_exception(
 @pytest.mark.asyncio
 @patch("app.workloads.service.get_common_vhost_connection_and_channel")
 @patch("app.workloads.service.publish_to_common_feedback_queue")
-async def test_publish_workload_component_status_update(mock_publish_to_queue, mock_get_conn_chan):
+async def test_publish_workload_component_status_update(
+    mock_publish_to_queue: MagicMock, mock_get_conn_chan: AsyncMock
+) -> None:
     """Test that __publish_workload_component_status_update publishes the correct message."""
 
     # Mock the connection and channel
@@ -221,12 +228,12 @@ async def test_publish_workload_component_status_update(mock_publish_to_queue, m
 @patch("app.workloads.service.__publish_workload_status")
 @patch("app.workloads.service.__publish_workload_component_status_update")
 async def test_process_delete_workload_success(
-    mock_publish_workload_component_status_update,
-    mock_publish_workload_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    mock_publish_workload_component_status_update: AsyncMock,
+    mock_publish_workload_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     # Mock connection
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
@@ -264,12 +271,12 @@ async def test_process_delete_workload_success(
 @patch("app.workloads.service.__publish_workload_status")
 @patch("app.workloads.service.__publish_workload_component_status_update")
 async def test_process_delete_workload_no_resources_items_found(
-    mock_publish_workload_component_status_update,
-    mock_publish_workload_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    mock_publish_workload_component_status_update: AsyncMock,
+    mock_publish_workload_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     # Mock connection
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
@@ -300,12 +307,12 @@ async def test_process_delete_workload_no_resources_items_found(
 @patch("app.workloads.service.__publish_workload_status")
 @patch("app.workloads.service.__publish_workload_component_status_update")
 async def test_process_delete_workload_no_resources_found(
-    mock_publish_workload_component_status_update,
-    mock_publish_workload_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    mock_publish_workload_component_status_update: AsyncMock,
+    mock_publish_workload_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     # Mock connection
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
@@ -330,12 +337,12 @@ async def test_process_delete_workload_no_resources_found(
 @patch("app.workloads.service.__publish_workload_status")
 @patch("app.workloads.service.__publish_workload_component_status_update")
 async def test_process_delete_workload_handles_resource_exception(
-    mock_publish_workload_component_status_update,
-    mock_publish_workload_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    mock_publish_workload_component_status_update: AsyncMock,
+    mock_publish_workload_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     # Mock connection
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
@@ -364,12 +371,12 @@ async def test_process_delete_workload_handles_resource_exception(
 @patch("app.workloads.service.__publish_workload_status")
 @patch("app.workloads.service.__publish_workload_component_status_update")
 async def test_process_delete_workload_delete_fails(
-    mock_publish_workload_component_status_update,
-    mock_publish_workload_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    mock_publish_workload_component_status_update: AsyncMock,
+    mock_publish_workload_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
     workload_id = uuid4()
@@ -407,7 +414,7 @@ async def test_process_delete_workload_delete_fails(
     mock_publish_workload_status.assert_not_awaited()
 
     mock_publish_workload_component_status_update.assert_awaited_once()
-
+    assert mock_publish_workload_component_status_update.await_args is not None
     status_message = mock_publish_workload_component_status_update.await_args.args[0]
 
     assert isinstance(status_message, WorkloadComponentStatusMessage)
@@ -445,7 +452,9 @@ async def test_process_delete_workload_delete_fails(
     ],
 )
 @pytest.mark.asyncio
-async def test_start_watching_workload_components_kaiwo(kind, api_version, plural, expected_status_function):
+async def test_start_watching_workload_components_kaiwo(
+    kind: str, api_version: str, plural: str, expected_status_function: object
+) -> None:
     with (
         patch("app.workloads.service.start_generic_configmap_watcher") as mock_config_watcher,
         patch("app.workloads.service.start_kubernetes_watcher") as mock_watcher,
@@ -511,7 +520,7 @@ async def test_start_watching_workload_components_kaiwo(kind, api_version, plura
     ],
 )
 @pytest.mark.asyncio
-async def test_process_generic_event_deleted(kind, api_version, expected_status):
+async def test_process_generic_event_deleted(kind: str, api_version: str, expected_status: object) -> None:
     mock_resource = MagicMock()
     mock_resource.kind = kind
     mock_resource.api_version = api_version
@@ -569,7 +578,7 @@ async def test_process_generic_event_deleted(kind, api_version, expected_status)
 )
 @pytest.mark.asyncio
 @patch("app.workloads.service.__publish_workload_component_status_update")
-async def test_process_event_success(mock_publish, kind, api_version, status):
+async def test_process_event_success(mock_publish: AsyncMock, kind: str, api_version: str, status: object) -> None:
     # Create mock resource
     mock_resource = MagicMock()
     mock_resource.kind = kind
@@ -593,7 +602,7 @@ async def test_process_event_success(mock_publish, kind, api_version, status):
 
     # Verify that __publish_workload_component_status_update was called once
     mock_publish.assert_awaited_once()
-
+    assert mock_publish.await_args is not None
     # Get the message that was passed to __publish_workload_component_status_update
     status_message = mock_publish.await_args.args[0]
 
@@ -618,7 +627,7 @@ async def test_process_event_success(mock_publish, kind, api_version, status):
 )
 @pytest.mark.asyncio
 @patch("app.workloads.service.__publish_workload_component_status_update")
-async def test_process_event_missing_labels(mock_publish, labels):
+async def test_process_event_missing_labels(mock_publish: AsyncMock, labels: dict[str, str]) -> None:
     resource = MagicMock()
     resource.kind = "Ingress"
     resource.metadata.name = "test-ingress"
@@ -635,8 +644,11 @@ async def test_process_event_missing_labels(mock_publish, labels):
 @patch("app.workloads.service.start_kubernetes_watcher_if_resource_exists")
 @patch("app.workloads.service.get_installed_version_for_custom_resource")
 async def test_start_watching_workload_components(
-    mock_version, mocked_optional_watcher, mock_watcher, mock_configmap_watcher
-):
+    mock_version: MagicMock,
+    mocked_optional_watcher: MagicMock,
+    mock_watcher: MagicMock,
+    mock_configmap_watcher: MagicMock,
+) -> None:
     # Configure mock_watcher to return a completed future
     mock_watcher.return_value = asyncio.Future()
     mock_watcher.return_value.set_result(None)
@@ -668,9 +680,9 @@ async def test_start_watching_workload_components(
 @patch("app.workloads.service.__publish_auto_discovered_workload_component")
 @patch("app.workloads.service.__publish_workload_component_status_update")
 async def test_process_workload_component_event_handles_auto_discovered_components(
-    mock_publish_workload_component_status_update,
-    mock_publish_auto_discovered_workload_component,
-):
+    mock_publish_workload_component_status_update: AsyncMock,
+    mock_publish_auto_discovered_workload_component: AsyncMock,
+) -> None:
     mock_resource = MagicMock()
     mock_resource.kind = "KaiwoJob"
     mock_resource.api_version = "v1alphav1"
@@ -700,9 +712,9 @@ async def test_process_workload_component_event_handles_auto_discovered_componen
 @patch("app.workloads.service.get_common_vhost_connection_and_channel")
 @patch("app.workloads.service.publish_to_common_feedback_queue")
 async def test_publish_auto_discovered_workload_component(
-    mock_publish,
-    mock_get_conn_chan,
-):
+    mock_publish: MagicMock,
+    mock_get_conn_chan: AsyncMock,
+) -> None:
     mock_get_conn_chan.return_value = (AsyncMock(), AsyncMock())
     workload_id = uuid4()
     component_id = uuid4()

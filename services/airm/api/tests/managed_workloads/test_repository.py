@@ -598,9 +598,9 @@ async def test_select_workloads_with_aim_ids_filter(db_session: AsyncSession):
     env = await factory.create_basic_test_environment(db_session)
 
     # Create AIMs
-    aim1 = await create_aim(db_session, image_name="llama", image_tag="v1")
-    aim2 = await create_aim(db_session, image_name="gpt", image_tag="v2")
-    aim3 = await create_aim(db_session, image_name="mistral", image_tag="v3")
+    aim1 = await create_aim(db_session, resource_name="llama-v1", image_reference="docker.io/test/llama:v1")
+    aim2 = await create_aim(db_session, resource_name="gpt-v2", image_reference="docker.io/test/gpt:v2")
+    aim3 = await create_aim(db_session, resource_name="mistral-v3", image_reference="docker.io/test/mistral:v3")
 
     # Create workloads for different AIMs
     workload1 = await create_aim_workload(

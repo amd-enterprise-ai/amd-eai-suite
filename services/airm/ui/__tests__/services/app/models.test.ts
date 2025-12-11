@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { deleteModel } from '@/services/app/models';
+import { deleteModel, deployModel } from '@/services/app/models';
 
 import { APIRequestError } from '@/utils/app/errors';
 import { getStorageItem } from '@/utils/app/storage';
@@ -240,6 +240,84 @@ describe('Models Service - Delete Functionality', () => {
       await expect(deleteModel(mockModelId, mockProjectId)).rejects.toThrow(
         'Request timeout',
       );
+    });
+  });
+
+  describe('deployModel', () => {
+    it('should successfully deploy a model and return workload directly', async () => {
+      const mockWorkloadResponse = {
+        id: 'workload-123',
+        display_name: 'test-deployment',
+        status: 'pending',
+        type: 'inference',
+        created_at: '2024-01-01T00:00:00Z',
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockWorkloadResponse),
+      });
+
+      const result = await deployModel(mockModelId, mockProjectId);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `/api/models/${mockModelId}/deploy?project_id=${mockProjectId}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        },
+      );
+
+      // Should return the workload object directly (not wrapped in .data)
+      expect(result).toEqual({
+        id: 'workload-123',
+        displayName: 'test-deployment',
+        status: 'pending',
+        type: 'inference',
+        createdAt: '2024-01-01T00:00:00Z',
+      });
+    });
+
+    it('should convert snake_case response to camelCase', async () => {
+      const mockResponse = {
+        id: 'workload-456',
+        display_name: 'my-model-deployment',
+        project_id: mockProjectId,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await deployModel(mockModelId, mockProjectId);
+
+      expect(result).toEqual({
+        id: 'workload-456',
+        displayName: 'my-model-deployment',
+        projectId: mockProjectId,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      });
+    });
+
+    it('should throw APIRequestError when model not found (404)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('Model not found'),
+      });
+
+      const error = await deployModel(mockModelId, mockProjectId).catch(
+        (e) => e,
+      );
+      expect(error).toBeInstanceOf(APIRequestError);
+      expect(error.message).toContain('Failed to deploy model');
     });
   });
 });

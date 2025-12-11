@@ -219,9 +219,16 @@
           "title": "Connect to model",
           "externalUrl": "External URL (accessible from outside the cluster)",
           "internalUrl": "Internal URL (accessible only within the cluster)",
-          "codeExample": "The code snippet below uses the external URL. To access from within the cluster (e.g., from VSCode or JupyterLab workspaces), replace with the internal URL.",
+          "codeTitle": "Code snippet",
+          "codeExample": "Use this snippet to connect to the model.",
           "inferenceUrl": "Inference URL",
-          "openChat": "Open in chat"
+          "openChat": "Open in chat",
+          "useInternalUrl": "Use internal URL",
+          "languages": {
+            "curl": "cURL",
+            "python": "Python",
+            "javascript": "Javascript"
+          }
         }
       },
       "notifications": {
@@ -238,6 +245,9 @@
       "deployed": "Deployed",
       "deploying": "Deploying…",
       "undeploying": "Undeploying…"
+    },
+    "tooltips": {
+      "hfTokenRequired": "This model requires a Hugging Face token for deployment"
     }
   },
   "huggingFaceTokenDrawer": {
@@ -292,11 +302,22 @@
         "description": "This model requires a Hugging Face token for deployment. Please provide a valid token to proceed with the deployment.",
         "label": "Hugging Face token",
         "placeholder": "Select Hugging Face token"
+      },
+      "metric": {
+        "title": "Performance metric",
+        "label": "Performance metric",
+        "placeholder": "Default",
+        "description": "Metric selects the optimization goal.\n- latency: prioritize low end-to-end latency\n- throughput: prioritize sustained requests/second\n\nIf not specified AIM will default to the most appropriate metric based on the model and hardware."
+      },
+      "experimentalDeployment": {
+        "title": "Unoptimized deployment",
+        "label": "Allow",
+        "description": "Enabling this option will include all available deployment configurations and might result in subpar performance."
       }
     },
     "notifications": {
       "success": "Workload deployment started",
-      "error": "Error deploying workload"
+      "error": "Error deploying workload, reason: {{message}}"
     }
   },
   "tabs": {

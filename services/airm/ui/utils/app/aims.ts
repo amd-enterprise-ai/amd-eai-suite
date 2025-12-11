@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { type Aim, type ParsedAim, AimWorkloadStatus } from '@/types/aims';
+import {
+  type Aim,
+  type ParsedAim,
+  type RecommendedDeployment,
+  AimWorkloadStatus,
+} from '@/types/aims';
 import { WorkloadStatus } from '@/types/enums/workloads';
 
 /**
@@ -27,25 +32,50 @@ export const aimParser = (aim: Aim): ParsedAim => {
     workloadStatus: AimWorkloadStatus.NOT_DEPLOYED,
     isPreview,
     isHfTokenRequired: false,
+    recommendedDeployments: [],
+    availableMetrics: [],
   };
 
   for (const key in aim.labels) {
-    if (key.endsWith('.description.short') || key.endsWith('.description')) {
+    const lowerKey = key.toLowerCase();
+
+    if (
+      lowerKey.includes('description') &&
+      (lowerKey.includes('short') ||
+        (!lowerKey.includes('full') && lowerKey.endsWith('description')))
+    ) {
       parsedAim.description.short = aim.labels[key];
-    } else if (key.endsWith('.description.full')) {
+    } else if (lowerKey.includes('description') && lowerKey.includes('full')) {
       parsedAim.description.full = aim.labels[key];
-    } else if (key.endsWith('.image.title')) {
+    } else if (lowerKey.includes('image') && lowerKey.includes('title')) {
       parsedAim.title = aim.labels[key];
-    } else if (key.endsWith('.image.version')) {
+    } else if (lowerKey.includes('title') && !lowerKey.includes('image')) {
+      parsedAim.title = aim.labels[key];
+    } else if (lowerKey.includes('image') && lowerKey.includes('version')) {
       parsedAim.imageVersion = aim.labels[key];
-    } else if (key.endsWith('.model.tags')) {
+    } else if (lowerKey.includes('model') && lowerKey.includes('tags')) {
       parsedAim.tags = aim.labels[key].split(',').map((tag) => tag.trim());
-    } else if (key.endsWith('.model.canonicalName')) {
+    } else if (
+      lowerKey.includes('model') &&
+      lowerKey.includes('canonicalname')
+    ) {
       parsedAim.canonicalName = aim.labels[key];
-    } else if (key.endsWith('.hfToken.required')) {
+    } else if (lowerKey.includes('hftoken') && lowerKey.includes('required')) {
       parsedAim.isHfTokenRequired = aim.labels[key].toLowerCase() === 'true';
     }
   }
+
+  // Use recommendedDeployments parsed by backend
+  parsedAim.recommendedDeployments = aim.recommendedDeployments || [];
+
+  // Extract unique metrics from recommendedDeployments
+  parsedAim.availableMetrics = Array.from(
+    new Set(
+      parsedAim.recommendedDeployments
+        .map((d: RecommendedDeployment) => d.metric)
+        .filter(Boolean),
+    ),
+  );
 
   // Determine workload status
   const hasWorkload = !!aim.workload;

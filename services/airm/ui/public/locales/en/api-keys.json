@@ -67,7 +67,7 @@
         "validityPeriod": {
           "label": "Validity period",
           "placeholder": "Select validity period",
-          "description": "Default is set to never expire.",
+          "description": "Default is set to unlimited.",
           "options": {
             "1day": "1 day",
             "1week": "1 week",
@@ -75,7 +75,7 @@
             "30days": "30 days",
             "60days": "60 days",
             "90days": "90 days",
-            "never": "Never"
+            "never": "Unlimited"
           }
         },
         "modelDeployment": {

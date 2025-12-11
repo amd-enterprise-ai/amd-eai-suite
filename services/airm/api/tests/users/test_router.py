@@ -68,7 +68,7 @@ async def test_get_users_success(_):
     assert response.status_code == status.HTTP_200_OK
 
     assert response.json() == {
-        "users": [
+        "data": [
             {
                 "first_name": "John",
                 "last_name": "Doe",
@@ -616,12 +616,12 @@ async def test_get_invited_users_success(_):
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
 
     with TestClient(app) as client:
-        response = client.get("/v1/invited_users")
+        response = client.get("/v1/invited-users")
 
     assert response.status_code == status.HTTP_200_OK
 
     assert response.json() == {
-        "invited_users": [
+        "data": [
             {
                 "email": "john.doe@example.com",
                 "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
@@ -644,7 +644,7 @@ async def test_get_invited_users_not_in_role():
     mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
     with TestClient(app) as client:
-        response = client.get("/v1/invited_users")
+        response = client.get("/v1/invited-users")
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -658,7 +658,7 @@ async def test_get_invited_users_not_in_organization():
     app.dependency_overrides[get_session] = lambda: MagicMock(spec=AsyncSession)
 
     with TestClient(app) as client:
-        response = client.get("/v1/invited_users")
+        response = client.get("/v1/invited-users")
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -673,7 +673,7 @@ async def test_get_invited_users_no_organization():
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
 
     with TestClient(app) as client:
-        response = client.get("/v1/invited_users")
+        response = client.get("/v1/invited-users")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -709,7 +709,7 @@ async def test_resend_invitation_success(mock_get_user_in_organization, mock_res
     app.dependency_overrides[get_user_email] = lambda: mock_get_user()
 
     with TestClient(app) as client:
-        response = client.post("/v1/invited_users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend_invitation")
+        response = client.post("/v1/invited-users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend-invitation")
 
     assert response.status_code == status.HTTP_204_NO_CONTENT
     mock_resend_invitation.assert_called_once()
@@ -743,7 +743,7 @@ async def test_resend_invitation_user_not_found(mock_get_user_in_organization):
     app.dependency_overrides[get_user_email] = lambda: mock_get_user()
 
     with TestClient(app) as client:
-        response = client.post("/v1/invited_users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend_invitation")
+        response = client.post("/v1/invited-users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend-invitation")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     mock_get_user_in_organization.assert_called_once()
@@ -755,7 +755,7 @@ async def test_resend_invitation_not_in_role():
     mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
     with TestClient(app) as client:
-        response = client.post("/v1/invited_users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend_invitation")
+        response = client.post("/v1/invited-users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend-invitation")
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -769,7 +769,7 @@ async def test_resend_invitation_not_in_organization():
     app.dependency_overrides[get_session] = lambda: MagicMock(spec=AsyncSession)
 
     with TestClient(app) as client:
-        response = client.post("/v1/invited_users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend_invitation")
+        response = client.post("/v1/invited-users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend-invitation")
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -784,6 +784,6 @@ async def test_resend_invitation_no_organization():
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
 
     with TestClient(app) as client:
-        response = client.post("/v1/invited_users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend_invitation")
+        response = client.post("/v1/invited-users/0aa18e92-002c-45b7-a06e-dcdb0277974c/resend-invitation")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND

@@ -10,7 +10,7 @@ Library             RequestsLibrary
 Library             Collections
 Library             OperatingSystem
 Resource            common.resource
-Resource            ../catalog_projects.resource
+Resource            ../airm_projects.resource
 
 
 *** Variables ***
@@ -52,17 +52,20 @@ Create dataset
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
     TRY
         ${endpoint}=            Datasets endpoint
-        ${response}=            Post on session         ${API_SESSION}          ${endpoint}             params=${params}        json=${dataset_data}    expected_status=${expected_status}
-
-        # Debug logging to see what we got
-        Log                     Dataset creation response status: ${response.status_code}               DEBUG
-        Log                     Dataset creation response body: ${response.json()}                      DEBUG
-
+        Log                     POST ${endpoint} with data: ${dataset_data}     DEBUG
+        ${response}=            Safe Post Request         ${endpoint}             params=${params}        json=${dataset_data}    expected_status=${expected_status}
+        Log                     Dataset creation response: status=${response.status_code}               DEBUG
+        IF    ${response.status_code} in [200, 201]
+            ${response_json}=       Set Variable            ${response.json()}
+            ${dataset_id}=      Get From Dictionary     ${response_json}        id
+            ${dataset_name}=    Get From Dictionary     ${response_json}        name
+            Log                     Created dataset ${dataset_id} (${dataset_name})                         INFO
+        END
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         Log                     Failed to create dataset: ${error}              ERROR
@@ -89,7 +92,7 @@ Upload dataset
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
     # Ensure the file exists and get content
@@ -104,14 +107,19 @@ Upload dataset
     @{jsonl_file}=          Create List             data.jsonl              ${jsonl_content}
     &{files}=               Create Dictionary       jsonl=${jsonl_file}
 
-    # Get the endpoint and authorization
     ${endpoint}=            Datasets endpoint       action=upload
     ${access_token}=        Authorization token
     &{headers}=             Create Dictionary       Authorization=Bearer ${access_token}
 
-    # Make the request directly (like in Create chart request)
+    Log                     POST ${endpoint} with data: ${data}             DEBUG
     ${response}=            POST                    ${endpoint}             headers=${headers}      data=${data}            files=${files}          expected_status=${expected_status}              params=${params}
-
+    Log                     Upload dataset response: status=${response.status_code}                 DEBUG
+    IF    ${response.status_code} in [200, 201]
+        ${response_json}=       Set Variable            ${response.json()}
+        ${dataset_id}=      Get From Dictionary     ${response_json}        id
+        ${dataset_name}=    Get From Dictionary     ${response_json}        name
+        Log                     Uploaded dataset ${dataset_id} (${dataset_name})                         INFO
+    END
     RETURN                  ${response}
 
 Get dataset
@@ -125,7 +133,7 @@ Get dataset
     ...
     ...    Raise:
     ...    HTTPError: If the dataset is not found or request fails
-    [Arguments]             ${dataset_id}           ${expected_status}=any                          ${project_id}=${CURRENT_PROJECT_ID}
+    [Arguments]             ${dataset_id}           ${expected_status}=any                          ${project_id}=${TEST_PROJECT_ID}
     Create api session
 
     IF    $project_id == $None
@@ -135,7 +143,9 @@ Get dataset
 
     TRY
         ${endpoint}=            Datasets endpoint       ${dataset_id}
-        ${response}=            Get on session          ${API_SESSION}          ${endpoint}             expected_status=${expected_status}              params=${params}
+        Log                     GET ${endpoint} with params: ${params}          DEBUG
+        ${response}=            Safe Get Request          ${endpoint}             expected_status=${expected_status}              params=${params}
+        Log                     Get dataset response: status=${response.status_code}                    DEBUG
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         ${error_detail}=        Set variable            ${EMPTY}
@@ -167,16 +177,17 @@ List datasets
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
-    # Add optional filters if provided
     IF    "${type}" != "${None}"    Set to dictionary    ${params}    type=${type}
     IF    "${name}" != "${None}"    Set to dictionary    ${params}    name=${name}
 
     TRY
         ${endpoint}=            Datasets endpoint
-        ${response}=            Get on session          ${API_SESSION}          ${endpoint}             params=${params}        expected_status=${expected_status}
+        Log                     GET ${endpoint} with params: ${params}          DEBUG
+        ${response}=            Safe Get Request          ${endpoint}             params=${params}        expected_status=${expected_status}
+        Log                     List datasets response: status=${response.status_code}                  DEBUG
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         Log                     Failed to list datasets: ${error}               ERROR
@@ -190,7 +201,7 @@ List datasets with type filter
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
     Set To Dictionary       ${params}               type=${dataset_type}
@@ -205,7 +216,7 @@ List datasets with name filter
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
     Set To Dictionary       ${params}               name=${name}
@@ -231,13 +242,17 @@ Modify dataset
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
     TRY
         ${endpoint}=            Datasets endpoint       ${dataset_id}
-        # Use PUT as defined in the OpenAPI spec
-        ${response}=            Put on session          ${API_SESSION}          ${endpoint}             params=${params}        json=${dataset_data}    expected_status=${expected_status}
+        Log                     PUT ${endpoint} with data: ${dataset_data}      DEBUG
+        ${response}=            Safe Put Request          ${endpoint}             params=${params}        json=${dataset_data}    expected_status=${expected_status}
+        Log                     Modify dataset response: status=${response.status_code}                 DEBUG
+        IF    ${response.status_code} == 200
+            Log                     Modified dataset ${dataset_id}  INFO
+        END
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         Log                     Failed to modify dataset ${dataset_id}: ${error} ERROR
@@ -258,17 +273,22 @@ Delete dataset
     ...    Raises:
     ...    HTTPError: If the dataset is not found or deletion fails
     [Arguments]             ${dataset_id}           ${delete_from_storage}=${False}                 ${expected_status}=any                          ${params}=${None}
-    Create API Session
+    Create api session
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
     TRY
         ${endpoint}=            Datasets endpoint       ${dataset_id}
         Set To Dictionary       ${params}               delete_from_storage=${delete_from_storage}
-        ${response}=            Delete on session       ${API_SESSION}          ${endpoint}             params=${params}        expected_status=${expected_status}
+        Log                     DELETE ${endpoint} with params: ${params}       DEBUG
+        ${response}=            Safe Delete Request       ${endpoint}             params=${params}        expected_status=${expected_status}
+        Log                     Delete dataset response: status=${response.status_code}                 DEBUG
+        IF    ${response.status_code} == 204
+            Log                     Deleted dataset ${dataset_id}   INFO
+        END
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         ${error_msg}=           Set Variable            Failed to delete dataset ${dataset_id} (${error}). Response: ${error.response.text}
@@ -288,17 +308,23 @@ Batch delete datasets
     ...    Raises:
     ...    HTTPError: If the request fails
     [Arguments]             ${dataset_ids}          ${expected_status}=any                          ${params}=${None}
-    Create API Session
+    Create api session
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
     TRY
         ${endpoint}=            Datasets endpoint       action=delete
         ${data}=                Create dictionary       ids=${dataset_ids}
-        ${response}=            Post on session         ${API_SESSION}          ${endpoint}             json=${data}            expected_status=${expected_status}              params=${params}
+        Log                     POST ${endpoint} with data: ${data}             DEBUG
+        ${response}=            Safe Post Request         ${endpoint}             json=${data}            expected_status=${expected_status}              params=${params}
+        Log                     Batch delete datasets response: status=${response.status_code}         DEBUG
+        IF    ${response.status_code} in [200, 204]
+            ${count}=               Get Length              ${dataset_ids}
+            Log                     Batch deleted ${count} datasets         INFO
+        END
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         ${error_msg}=           Set Variable            Failed to batch delete datasets (${error}). Response: ${error.response.text}
@@ -319,17 +345,21 @@ Download dataset
     ...    Raises:
     ...    HTTPError: If the dataset is not found or download fails
     [Arguments]             ${dataset_id}           ${expected_status}=any                          ${params}=${None}
-    Create API Session
+    Create api session
 
     # Initialize params with project_id if not provided
     IF    $params == $None
-        ${params}=              Create Dictionary       project_id=${CURRENT_PROJECT_ID}
+        ${params}=              Create Dictionary       project_id=${TEST_PROJECT_ID}
     END
 
     TRY
         ${endpoint}=            Datasets endpoint       ${dataset_id}           download
-        # Use GET as defined in the API router
-        ${response}=            Get on session          ${API_SESSION}          ${endpoint}             params=${params}        expected_status=${expected_status}
+        Log                     GET ${endpoint}         DEBUG
+        ${response}=            Safe Get Request          ${endpoint}             params=${params}        expected_status=${expected_status}
+        Log                     Download dataset response: status=${response.status_code}               DEBUG
+        IF    ${response.status_code} == 200
+            Log                     Downloaded dataset ${dataset_id}        INFO
+        END
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         ${error_msg}=           Set Variable            Failed to download dataset ${dataset_id} (${error}). Response: ${error.response.text}
@@ -340,7 +370,7 @@ Download dataset
 Get Allowed Methods For Dataset Endpoint
     [Documentation]    Sends an OPTIONS request to a dataset endpoint and logs the Allow header.
     [Arguments]             ${dataset_id}           ${action}=${None}
-    Create API Session
+    Create api session
     ${endpoint}=            Datasets endpoint       ${dataset_id}           ${action}
     TRY
         ${response}=            Options on session      ${API_SESSION}          ${endpoint}             expected_status=any
@@ -360,7 +390,7 @@ Get Allowed Methods For Dataset Endpoint
 
 Verify Dataset API Methods
     [Documentation]    Checks if the running API supports PATCH for modify and GET for download.
-    Create API Session
+    Create api session
     ${dummy_id}=            Set Variable            00000000-0000-0000-0000-000000000000
     ${endpoint_modify}=     Datasets endpoint       ${dummy_id}
     ${endpoint_download}=                           Datasets endpoint       ${dummy_id}             download

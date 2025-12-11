@@ -35,7 +35,7 @@ export const displayBytesInOptimalUnit = (bytes: number): string => {
       Math.floor(Math.log(bytes) / Math.log(KBMultiplier)),
       sizes.length - 1,
     );
-    value = parseFloat((bytes / Math.pow(KBMultiplier, i)).toFixed(2));
+    value = parseFloat((bytes / KBMultiplier ** i).toFixed(2));
   }
   return `${value} ${sizes[i]}`;
 };

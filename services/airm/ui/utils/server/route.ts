@@ -55,7 +55,7 @@ export function handleError(error: any) {
   */
   logger.error(error);
 
-  let jsonErrorMessage;
+  let jsonErrorMessage: { detail?: string } | undefined;
   try {
     jsonErrorMessage = JSON.parse(error.message);
   } catch (e) {
@@ -80,7 +80,7 @@ export async function proxyRequest(
   */
 
   const method = req.method;
-  let body = undefined;
+  let body: string | undefined;
   let finalUrl = url;
   const searchParams = req.nextUrl.searchParams;
   const paramString = searchParams.toString();

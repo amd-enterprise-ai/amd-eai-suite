@@ -12,6 +12,26 @@ import {
 } from '@/types/filter-dropdown/use-filter-state';
 
 /**
+ * Determines which item the user specifically interacted with during first selection.
+ * Pure function extracted for clarity and testability.
+ */
+const determineUserFocusedItem = (
+  newKeys: string[],
+  currentKeys: Set<string>,
+): string => {
+  const newlySelectedKeys = newKeys.filter((key) => !currentKeys.has(key));
+  const deselectedKeys = Array.from(currentKeys).filter(
+    (key) => !newKeys.includes(key),
+  );
+
+  // Handle keyboard interaction - single item change
+  if (newlySelectedKeys.length === 1) return newlySelectedKeys[0];
+  if (deselectedKeys.length === 1) return deselectedKeys[0];
+
+  return newKeys[0];
+};
+
+/**
  * Custom hook for managing filter state, including internal state,
  * external state synchronization, and user interaction tracking.
  *
@@ -46,49 +66,44 @@ export const useFilterState = ({
   const isInternalUpdateRef = useRef(false);
   const isIntentionalResetRef = useRef(false);
   const lastExternalSelectedKeys = useRef<string[]>(selectedKeys || []);
-  const prevKeysStringRef = useRef<string>('');
-  const prevSetRef = useRef<Set<string> | null>(null);
-  const debouncedSyncExternal = useRef<ReturnType<typeof debounce> | null>(
-    null,
+
+  // Refs for stable callbacks - avoids recreating debounced function
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  const effectiveDefaultKeysRef = useRef(effectiveDefaultKeys);
+  const currentSelectedSetRef = useRef<Set<string>>(new Set());
+  const hasUserInteractedRef = useRef(hasUserInteracted);
+
+  /**
+   * Set representation of current selection for efficient lookups
+   */
+  const currentSelectedSet = useMemo(
+    () => new Set(internalSelectedKeys),
+    [internalSelectedKeys],
   );
 
-  /**
-   * Optimized Set creation - only recreates when keys actually change
-   */
-  const currentSelectedSet = useMemo(() => {
-    const keysString = internalSelectedKeys.join(',');
-    if (prevKeysStringRef.current === keysString && prevSetRef.current)
-      return prevSetRef.current;
+  // Keep refs in sync with latest values
+  onSelectionChangeRef.current = onSelectionChange;
+  effectiveDefaultKeysRef.current = effectiveDefaultKeys;
+  currentSelectedSetRef.current = currentSelectedSet;
+  hasUserInteractedRef.current = hasUserInteracted;
 
-    prevKeysStringRef.current = keysString;
-    const newSet = new Set(internalSelectedKeys);
-    prevSetRef.current = newSet;
-    return newSet;
-  }, [internalSelectedKeys]);
+  const [debouncedSyncExternalFn] = useState(() =>
+    debounce((keys: string[]) => {
+      const keysToSync =
+        keys.length || isIntentionalResetRef.current
+          ? keys
+          : effectiveDefaultKeysRef.current;
 
-  /**
-   * Debounced function to synchronize internal state with external state
-   * @param keys - Keys to synchronize
-   */
-  const debouncedSyncExternalFn = useMemo(
-    () =>
-      debounce((keys: string[]) => {
-        const keysToSync =
-          keys.length || isIntentionalResetRef.current
-            ? keys
-            : effectiveDefaultKeys;
+      lastExternalSelectedKeys.current = keysToSync.slice();
+      isInternalUpdateRef.current = true;
+      isIntentionalResetRef.current = false;
 
-        lastExternalSelectedKeys.current = keysToSync.slice();
-        isInternalUpdateRef.current = true;
-        isIntentionalResetRef.current = false;
+      onSelectionChangeRef.current?.(new Set(keysToSync));
 
-        onSelectionChange?.(new Set(keysToSync));
-
-        setTimeout(() => {
-          isInternalUpdateRef.current = false;
-        }, FILTER_CONSTANTS.STATE_SYNC_TIMEOUT);
-      }, FILTER_CONSTANTS.DEBOUNCE_DELAY),
-    [effectiveDefaultKeys, onSelectionChange],
+      setTimeout(() => {
+        isInternalUpdateRef.current = false;
+      }, FILTER_CONSTANTS.STATE_SYNC_TIMEOUT);
+    }, FILTER_CONSTANTS.DEBOUNCE_DELAY),
   );
 
   /**
@@ -114,84 +129,55 @@ export const useFilterState = ({
    * Updates internal state and schedules external sync
    * @param keys - Array of selected keys to update
    */
-  const updateInternalSelection = useCallback((keys: string[]) => {
-    setInternalSelectedKeys(keys);
-    debouncedSyncExternal.current?.(keys);
-  }, []);
+  const updateInternalSelection = useCallback(
+    (keys: string[]) => {
+      setInternalSelectedKeys(keys);
+      debouncedSyncExternalFn(keys);
+    },
+    [debouncedSyncExternalFn],
+  );
 
   /**
    * Resets the selection to default values
    */
   const handleReset = useCallback(() => {
-    const defaultKeys = effectiveDefaultKeys.slice();
+    const defaultKeys = effectiveDefaultKeysRef.current.slice();
     setInternalSelectedKeys(defaultKeys);
-    debouncedSyncExternal.current?.cancel();
+    debouncedSyncExternalFn.cancel();
     isIntentionalResetRef.current = true;
     lastExternalSelectedKeys.current = defaultKeys;
-    debouncedSyncExternal.current?.(defaultKeys);
+    debouncedSyncExternalFn(defaultKeys);
     setHasUserInteracted(false);
-  }, [effectiveDefaultKeys]);
-
-  /**
-   * Determines which item the user specifically interacted with during first selection
-   */
-  const determineUserFocusedItem = useCallback(
-    (newKeys: string[], currentKeys: Set<string>): string => {
-      const newlySelectedKeys = newKeys.filter((key) => !currentKeys.has(key));
-      const deselectedKeys = Array.from(currentKeys).filter(
-        (key) => !newKeys.includes(key),
-      );
-
-      // Handle keyboard interaction
-      if (newlySelectedKeys.length === 1) return newlySelectedKeys[0];
-      if (deselectedKeys.length === 1) return deselectedKeys[0];
-
-      return newKeys[0];
-    },
-    [],
-  );
+  }, [debouncedSyncExternalFn]);
 
   /**
    * Handles selection changes from the dropdown component with determining selection:
    * - first interaction uses focused item
    * - subsequent use full selection
+   * Uses refs for hasUserInteracted and currentSelectedSet to maintain stable reference.
    * @param keys - The new selection from the dropdown (can be Set or Array)
    */
   const handleSelectionChange = useCallback(
     (keys: Set<string> | string[]) => {
       const newKeysArray = Array.from(keys) as string[];
 
+      // If selection is empty, reset to defaults
       if (!newKeysArray.length) return handleReset();
 
-      const keysToSelect = !hasUserInteracted
-        ? [determineUserFocusedItem(newKeysArray, currentSelectedSet)]
+      const keysToSelect = !hasUserInteractedRef.current
+        ? [
+            determineUserFocusedItem(
+              newKeysArray,
+              currentSelectedSetRef.current,
+            ),
+          ]
         : newKeysArray;
 
       updateInternalSelection(keysToSelect);
       setHasUserInteracted(true);
     },
-    [
-      handleReset,
-      hasUserInteracted,
-      determineUserFocusedItem,
-      currentSelectedSet,
-      updateInternalSelection,
-    ],
+    [handleReset, updateInternalSelection],
   );
-
-  /**
-   * Marks that the user has interacted with the component
-   */
-  const onUserInteraction = useCallback(() => {
-    setHasUserInteracted(true);
-  }, []);
-
-  /**
-   * Updates the ref to store the current debounced function
-   */
-  useEffect(() => {
-    debouncedSyncExternal.current = debouncedSyncExternalFn;
-  }, [debouncedSyncExternalFn]);
 
   /**
    * Handles external state synchronization
@@ -233,11 +219,9 @@ export const useFilterState = ({
   }, [debouncedSyncExternalFn]);
 
   return {
-    internalSelectedKeys,
     currentSelectedSet,
     hasUserInteracted,
     handleSelectionChange,
     handleReset,
-    onUserInteraction,
   };
 };

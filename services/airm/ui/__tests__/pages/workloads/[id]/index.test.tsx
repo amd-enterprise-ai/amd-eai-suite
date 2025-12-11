@@ -14,6 +14,10 @@ import { useRouter } from 'next/router';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import { deleteWorkload, getWorkload } from '@/services/app/workloads';
 import { getCluster } from '@/services/app/clusters';
+import { getModel } from '@/services/app/models';
+import { getDataset } from '@/services/app/datasets';
+import { getChart } from '@/services/app/charts';
+import { getAimById } from '@/services/app/aims';
 
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
 import { Workload } from '@/types/workloads';
@@ -38,6 +42,26 @@ vi.mock('@/services/app/workloads', () => ({
 // Mock the cluster services
 vi.mock('@/services/app/clusters', () => ({
   getCluster: vi.fn(),
+}));
+
+// Mock model service
+vi.mock('@/services/app/models', () => ({
+  getModel: vi.fn(),
+}));
+
+// Mock dataset service
+vi.mock('@/services/app/datasets', () => ({
+  getDataset: vi.fn(),
+}));
+
+// Mock chart service
+vi.mock('@/services/app/charts', () => ({
+  getChart: vi.fn(),
+}));
+
+// Mock AIM service
+vi.mock('@/services/app/aims', () => ({
+  getAimById: vi.fn(),
 }));
 
 // Mock useSystemToast
@@ -137,6 +161,40 @@ describe('WorkloadDetailsPage', () => {
       lastHeartbeatAt: '2023-01-01T00:00:00Z',
       status: 'healthy',
     });
+    (getModel as Mock).mockResolvedValue({
+      id: 'model-1',
+      name: 'Test Model',
+      canonicalName: 'org/test-model',
+    });
+    (getDataset as Mock).mockResolvedValue({
+      id: 'dataset-1',
+      name: 'Test Dataset',
+      description: 'Test dataset description',
+    });
+    (getChart as Mock).mockResolvedValue({
+      id: 'chart-1',
+      name: 'Test Chart',
+      description: 'Test chart description',
+    });
+    (getAimById as Mock).mockResolvedValue({
+      id: 'aim-1',
+      imageName: 'test-aim-image',
+      imageTag: '1.0.0',
+      canonicalName: 'org/test-aim',
+      description: {
+        short: 'Test AIM description',
+        full: 'Full test AIM description',
+      },
+      labels: {
+        comAmdAimModelCanonicalName: 'org/test-aim',
+        comAmdAimTitle: 'Test AIM',
+      },
+      createdAt: '2023-01-01T00:00:00Z',
+      updatedAt: '2023-01-01T00:00:00Z',
+      createdBy: 'test-user',
+      updatedBy: 'test-user',
+      image: 'test-aim-image:1.0.0',
+    });
   });
 
   describe('Rendering', () => {
@@ -151,7 +209,7 @@ describe('WorkloadDetailsPage', () => {
         screen.getByText('details.sections.basicInformation'),
       ).toBeInTheDocument();
       expect(
-        screen.getByText('details.sections.clusterAndResources'),
+        screen.getByText('details.sections.resources'),
       ).toBeInTheDocument();
       expect(screen.getByText('details.sections.timeline')).toBeInTheDocument();
     });
@@ -182,11 +240,10 @@ describe('WorkloadDetailsPage', () => {
       ).toBeInTheDocument();
       expect(screen.getAllByText('Llama 7B Inference')[0]).toBeInTheDocument();
       expect(screen.getByText('workload-1')).toBeInTheDocument();
-      expect(screen.getByText('chart-1')).toBeInTheDocument();
 
-      // Cluster and Resources
+      // Project and Cluster sections
       expect(
-        screen.getByText('details.sections.clusterAndResources'),
+        screen.getByText('details.sections.resources'),
       ).toBeInTheDocument();
       await waitFor(() => {
         expect(screen.getByText('Test Cluster')).toBeInTheDocument();
@@ -197,12 +254,15 @@ describe('WorkloadDetailsPage', () => {
       expect(screen.getByText('details.sections.timeline')).toBeInTheDocument();
       expect(screen.getByText('test-user')).toBeInTheDocument();
 
-      // Model information
-      expect(
-        screen.getByText('details.sections.modelAndDataset'),
-      ).toBeInTheDocument();
-      expect(screen.getByText('Llama 7B')).toBeInTheDocument();
-      expect(screen.getByText('model-1')).toBeInTheDocument();
+      // Model section should display model info
+      await waitFor(() => {
+        expect(screen.getByText('Test Model')).toBeInTheDocument();
+      });
+
+      // Chart section should display chart info
+      await waitFor(() => {
+        expect(screen.getByText('Test Chart')).toBeInTheDocument();
+      });
 
       // Output
       expect(screen.getByText('details.sections.output')).toBeInTheDocument();
@@ -436,11 +496,16 @@ describe('WorkloadDetailsPage', () => {
     });
 
     it('opens chat when chat button is clicked', async () => {
+      (getWorkload as Mock).mockResolvedValue(mockWorkload);
+
       await act(async () => {
         render(<WorkloadDetailsPage workload={mockWorkload} />, { wrapper });
       });
 
-      const chatButton = screen.getByText('list.actions.chat.label');
+      const chatButton = await waitFor(() =>
+        screen.getByText('list.actions.chat.label'),
+      );
+
       await act(async () => {
         fireEvent.click(chatButton);
       });
@@ -449,15 +514,18 @@ describe('WorkloadDetailsPage', () => {
     });
 
     it('opens workspace in new window when workspace button is clicked', async () => {
+      (getWorkload as Mock).mockResolvedValue(mockWorkspaceWorkload);
+
       await act(async () => {
         render(<WorkloadDetailsPage workload={mockWorkspaceWorkload} />, {
           wrapper,
         });
       });
 
-      const workspaceButton = screen.getByText(
-        'list.actions.openWorkspace.label',
+      const workspaceButton = await waitFor(() =>
+        screen.getByText('list.actions.openWorkspace.label'),
       );
+
       await act(async () => {
         fireEvent.click(workspaceButton);
       });
@@ -469,22 +537,32 @@ describe('WorkloadDetailsPage', () => {
     });
 
     it('opens logs modal when logs button is clicked', async () => {
+      (getWorkload as Mock).mockResolvedValue(mockWorkload);
+
       await act(async () => {
         render(<WorkloadDetailsPage workload={mockWorkload} />, { wrapper });
       });
 
-      const logsButton = screen.getByText('list.actions.logs.label');
+      const logsButton = await waitFor(() =>
+        screen.getByText('list.actions.logs.label'),
+      );
+
       await act(async () => {
         fireEvent.click(logsButton);
       });
     });
 
     it('opens delete modal when delete button is clicked', async () => {
+      (getWorkload as Mock).mockResolvedValue(mockWorkload);
+
       await act(async () => {
         render(<WorkloadDetailsPage workload={mockWorkload} />, { wrapper });
       });
 
-      const deleteButton = screen.getByText('list.actions.delete.label');
+      const deleteButton = await waitFor(() =>
+        screen.getByText('list.actions.delete.label'),
+      );
+
       await act(async () => {
         fireEvent.click(deleteButton);
       });
@@ -546,7 +624,7 @@ describe('WorkloadDetailsPage', () => {
       await waitFor(() => {
         // Should render NoDataDisplay components for null resources
         expect(
-          screen.getByText('details.sections.clusterAndResources'),
+          screen.getByText('details.sections.resources'),
         ).toBeInTheDocument();
       });
     });
@@ -571,7 +649,7 @@ describe('WorkloadDetailsPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText('details.sections.clusterAndResources'),
+          screen.getByText('details.sections.resources'),
         ).toBeInTheDocument();
       });
     });
@@ -580,16 +658,6 @@ describe('WorkloadDetailsPage', () => {
       const workloadWithDataset = {
         ...mockWorkload,
         datasetId: 'dataset-1',
-        dataset: {
-          id: 'dataset-1',
-          name: 'Test Dataset',
-          path: '/datasets/test',
-          createdBy: 'test-user',
-          createdAt: '2023-01-01T00:00:00Z',
-          updatedAt: '2023-01-01T00:00:00Z',
-          type: 'Fine-tuning',
-          description: 'Test dataset description',
-        },
       };
 
       (getWorkload as Mock).mockResolvedValue(workloadWithDataset);
@@ -600,8 +668,72 @@ describe('WorkloadDetailsPage', () => {
         });
       });
 
-      expect(screen.getByText('Test Dataset')).toBeInTheDocument();
-      expect(screen.getByText('dataset-1')).toBeInTheDocument();
+      // Should display the dataset name from the mocked dataset
+      await waitFor(() => {
+        expect(screen.getByText('Test Dataset')).toBeInTheDocument();
+      });
+    });
+
+    it('handles workload with AIM', async () => {
+      const workloadWithAim = {
+        ...mockWorkload,
+        aimId: 'aim-1',
+      };
+
+      (getWorkload as Mock).mockResolvedValue(workloadWithAim);
+
+      await act(async () => {
+        render(<WorkloadDetailsPage workload={workloadWithAim} />, {
+          wrapper,
+        });
+      });
+
+      // Should display the AIM information from the mocked AIM
+      await waitFor(() => {
+        expect(screen.getByText('test-aim-image')).toBeInTheDocument();
+        expect(screen.getByText('1.0.0')).toBeInTheDocument();
+        expect(screen.getByText('org/test-aim')).toBeInTheDocument();
+      });
+    });
+
+    it('displays AIM card with skeleton while loading', async () => {
+      const workloadWithAim = {
+        ...mockWorkload,
+        aimId: 'aim-1',
+      };
+
+      // Delay the AIM response to test loading state
+      (getAimById as Mock).mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  id: 'aim-1',
+                  imageName: 'test-aim-image',
+                  imageTag: '1.0.0',
+                  canonicalName: 'org/test-model',
+                  description: {
+                    short: 'Test AIM description',
+                  },
+                }),
+              100,
+            ),
+          ),
+      );
+
+      (getWorkload as Mock).mockResolvedValue(workloadWithAim);
+
+      await act(async () => {
+        render(<WorkloadDetailsPage workload={workloadWithAim} />, {
+          wrapper,
+        });
+      });
+
+      // Should show AIM card header while loading
+      await waitFor(() => {
+        expect(screen.getByText('list.headers.aim.title')).toBeInTheDocument();
+      });
     });
   });
 

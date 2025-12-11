@@ -68,7 +68,7 @@ export const deleteUser = async (
 export const getInvitedUsers = async (
   accessToken: string,
 ): Promise<InvitedUsersResponse> => {
-  const url = `${process.env.AIRM_API_SERVICE_URL}/v1/invited_users`;
+  const url = `${process.env.AIRM_API_SERVICE_URL}/v1/invited-users`;
   const response = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',

@@ -16,8 +16,9 @@ import websockets
 from airm.messaging.schemas import WorkloadComponentKind, WorkloadStatus
 from app.logs.schemas import LogEntry, LogLevel
 from app.logs.service import (
-    WebSocketConnectionFactory,
+    _build_loki_query,
     _parse_and_validate_dates,
+    create_websocket_connection,
     get_workload_logs,
     stream_workload_logs,
 )
@@ -167,6 +168,74 @@ async def test_get_workload_logs_with_direction_parameter(mock_workload, mock_lo
     assert called_params["direction"] == "forward"
 
 
+@pytest.mark.asyncio
+async def test_get_workload_logs_with_workload_log_type(mock_workload, mock_loki_response):
+    """Test that workload log_type parameter is correctly handled."""
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock()
+    mock_response = MagicMock(spec=["json", "raise_for_status"])
+    mock_response.json.return_value = mock_loki_response
+    mock_response.raise_for_status = MagicMock()
+    mock_client.get.return_value = mock_response
+
+    # Test with workload log type (default)
+    await get_workload_logs(mock_workload, mock_client, log_type="workload")
+
+    # Verify the API was called with the correct query (should not include k8s_resource filter)
+    mock_client.get.assert_called_once()
+    called_params = mock_client.get.call_args[1]["params"]
+    assert "query" in called_params
+    # The query should include component names but not log_type="k8s_event"
+    assert "k8s_pod_name=~" in called_params["query"]
+    assert 'log_type="k8s_event"' not in called_params["query"]
+
+
+@pytest.mark.asyncio
+async def test_get_workload_logs_with_event_log_type(mock_workload, mock_loki_response):
+    """Test that event log_type parameter is correctly handled."""
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock()
+    mock_response = MagicMock(spec=["json", "raise_for_status"])
+    mock_response.json.return_value = mock_loki_response
+    mock_response.raise_for_status = MagicMock()
+    mock_client.get.return_value = mock_response
+
+    # Test with event log type
+    await get_workload_logs(mock_workload, mock_client, log_type="event")
+
+    # Verify the API was called with the correct query (should include log_type="k8s_event")
+    mock_client.get.assert_called_once()
+    called_params = mock_client.get.call_args[1]["params"]
+    assert "query" in called_params
+    # The query should include both component names and log_type="k8s_event"
+    assert "k8s_pod_name=~" in called_params["query"]
+    assert 'log_type="k8s_event"' in called_params["query"]
+
+
+@pytest.mark.asyncio
+async def test_get_workload_logs_with_log_type_and_level_filter(mock_workload, mock_loki_response):
+    """Test that log_type and level_filter parameters work together correctly."""
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock()
+    mock_response = MagicMock(spec=["json", "raise_for_status"])
+    mock_response.json.return_value = mock_loki_response
+    mock_response.raise_for_status = MagicMock()
+    mock_client.get.return_value = mock_response
+
+    # Test with event log type and warning level filter
+    await get_workload_logs(mock_workload, mock_client, log_type="event", level_filter=LogLevel.warning)
+
+    # Verify the API was called with the correct query
+    mock_client.get.assert_called_once()
+    called_params = mock_client.get.call_args[1]["params"]
+    assert "query" in called_params
+    query = called_params["query"]
+
+    # The query should include component names, event filter, and level filter
+    assert "k8s_pod_name=~" in query
+    assert 'log_type="k8s_event"' in query
+
+
 def test_parse_and_validate_dates_start_date_greater_than_end_date():
     """Test that ValueError is raised when start_date is greater than end_date."""
     # Create dates where start_date > end_date
@@ -202,117 +271,169 @@ def test_parse_and_validate_dates_valid_range():
 
 def test_build_loki_query_single_component_no_filter():
     """Test building Loki query for single component without level filter."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["test-deployment"]
     result = _build_loki_query(component_names)
 
-    expected = '{k8s_pod_name=~"test-deployment.*"}'
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}'
     assert result == expected
 
 
 def test_build_loki_query_multiple_components_no_filter():
     """Test building Loki query for multiple components without level filter."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["test-deployment", "worker-service", "api-gateway"]
     result = _build_loki_query(component_names)
 
-    expected = '{k8s_pod_name=~"test-deployment.*|worker-service.*|api-gateway.*"}'
+    expected = '{k8s_pod_name=~"test-deployment.*|worker-service.*|api-gateway.*", log_type!="k8s_event"}'
     assert result == expected
 
 
 def test_build_loki_query_empty_components():
     """Test building Loki query with empty component list."""
-    from app.logs.service import _build_loki_query
 
     component_names = []
     result = _build_loki_query(component_names)
 
-    expected = '{k8s_pod_name=~""}'
+    expected = '{k8s_pod_name=~"", log_type!="k8s_event"}'
     assert result == expected
 
 
 def test_build_loki_query_single_component_with_info_filter():
     """Test building Loki query with info level filter."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["test-deployment"]
     result = _build_loki_query(component_names, LogLevel.info)
 
     # Info level (20) and higher: info, unknown, warning, error, critical
-    expected = '{k8s_pod_name=~"test-deployment.*", level=~"info|unknown|warning|error|critical"}'
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}|detected_level="info" or detected_level="unknown" or detected_level="warn" or detected_level="error" or detected_level="fatal"'
     assert result == expected
 
 
 def test_build_loki_query_single_component_with_warning_filter():
     """Test building Loki query with warning level filter."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["test-deployment"]
     result = _build_loki_query(component_names, LogLevel.warning)
 
     # Warning level (30) and higher: warning, error, critical
-    expected = '{k8s_pod_name=~"test-deployment.*", level=~"warning|error|critical"}'
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}|detected_level="warn" or detected_level="error" or detected_level="fatal"'
     assert result == expected
 
 
 def test_build_loki_query_single_component_with_error_filter():
     """Test building Loki query with error level filter."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["test-deployment"]
     result = _build_loki_query(component_names, LogLevel.error)
 
     # Error level (40) and higher: error, critical
-    expected = '{k8s_pod_name=~"test-deployment.*", level=~"error|critical"}'
+    expected = (
+        '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}|detected_level="error" or detected_level="fatal"'
+    )
     assert result == expected
 
 
 def test_build_loki_query_single_component_with_critical_filter():
     """Test building Loki query with critical level filter."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["test-deployment"]
     result = _build_loki_query(component_names, LogLevel.critical)
 
-    # Critical level (50) only: critical
-    expected = '{k8s_pod_name=~"test-deployment.*", level=~"critical"}'
+    # Critical level (50): only critical
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}|detected_level="fatal"'
     assert result == expected
 
 
 def test_build_loki_query_single_component_with_trace_filter():
     """Test building Loki query with trace level filter (lowest level)."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["test-deployment"]
     result = _build_loki_query(component_names, LogLevel.trace)
 
     # Trace level (0) and higher: all levels
-    expected = '{k8s_pod_name=~"test-deployment.*", level=~"trace|debug|info|unknown|warning|error|critical"}'
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}|detected_level="trace" or detected_level="debug" or detected_level="info" or detected_level="unknown" or detected_level="warn" or detected_level="error" or detected_level="fatal"'
     assert result == expected
 
 
 def test_build_loki_query_single_component_with_debug_filter():
     """Test building Loki query with debug level filter."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["test-deployment"]
     result = _build_loki_query(component_names, LogLevel.debug)
 
     # Debug level (10) and higher: debug, info, unknown, warning, error, critical
-    expected = '{k8s_pod_name=~"test-deployment.*", level=~"debug|info|unknown|warning|error|critical"}'
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}|detected_level="debug" or detected_level="info" or detected_level="unknown" or detected_level="warn" or detected_level="error" or detected_level="fatal"'
     assert result == expected
 
 
 def test_build_loki_query_multiple_components_with_filter():
     """Test building Loki query for multiple components with level filter."""
-    from app.logs.service import _build_loki_query
 
     component_names = ["web-server", "database", "cache"]
     result = _build_loki_query(component_names, LogLevel.warning)
 
-    expected = '{k8s_pod_name=~"web-server.*|database.*|cache.*", level=~"warning|error|critical"}'
+    # Warning level and above with multiple components
+    expected = '{k8s_pod_name=~"web-server.*|database.*|cache.*", log_type!="k8s_event"}|detected_level="warn" or detected_level="error" or detected_level="fatal"'
+    assert result == expected
+
+
+def test_build_loki_query_with_workload_log_type():
+    """Test building Loki query with workload log type (default)."""
+    from app.logs.service import _build_loki_query
+
+    component_names = ["test-deployment"]
+    result = _build_loki_query(component_names, log_type="workload")
+
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}'
+    assert result == expected
+
+
+def test_build_loki_query_with_event_log_type():
+    """Test building Loki query with event log type."""
+    from app.logs.service import _build_loki_query
+
+    component_names = ["test-deployment"]
+    result = _build_loki_query(component_names, log_type="event")
+
+    # Event type should add log_type="k8s_event" filter
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type="k8s_event"}'
+    assert result == expected
+
+
+def test_build_loki_query_with_event_log_type_and_level_filter():
+    """Test building Loki query with event log type and level filter."""
+    from app.logs.service import _build_loki_query
+
+    component_names = ["test-deployment"]
+    result = _build_loki_query(component_names, LogLevel.warning, log_type="event")
+
+    # Should include both event filter and level filter
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type="k8s_event"}|detected_level="warn" or detected_level="error" or detected_level="fatal"'
+    assert result == expected
+
+
+def test_build_loki_query_with_workload_log_type_and_level_filter():
+    """Test building Loki query with workload log type and level filter."""
+    from app.logs.service import _build_loki_query
+
+    component_names = ["test-deployment"]
+    result = _build_loki_query(component_names, LogLevel.info, log_type="workload")
+
+    # Should include only level filter for workload type
+    expected = '{k8s_pod_name=~"test-deployment.*", log_type!="k8s_event"}|detected_level="info" or detected_level="unknown" or detected_level="warn" or detected_level="error" or detected_level="fatal"'
+    assert result == expected
+
+
+def test_build_loki_query_with_multiple_components_and_event_log_type():
+    """Test building Loki query with multiple components and event log type."""
+    from app.logs.service import _build_loki_query
+
+    component_names = ["web-server", "database", "cache"]
+    result = _build_loki_query(component_names, log_type="event")
+
+    # Should include multiple components with event filter
+    expected = '{k8s_pod_name=~"web-server.*|database.*|cache.*", log_type="k8s_event"}'
     assert result == expected
 
 
@@ -357,6 +478,14 @@ class MockWebSocket:
         if self.should_fail_ping:
             raise websockets.ConnectionClosed(None, None)
 
+    async def recv(self):
+        """Simulate WebSocket recv() method."""
+        try:
+            return next(self.message_iterator)
+        except StopIteration:
+            # When no more messages, simulate timeout by waiting indefinitely
+            await asyncio.sleep(float("inf"))
+
     def __aiter__(self):
         return self
 
@@ -370,7 +499,7 @@ class MockWebSocket:
 def create_mock_websocket_connect(mock_ws):
     """Helper to create a mock websockets.connect that returns the given MockWebSocket."""
 
-    async def mock_connect(url):
+    async def mock_connect(url, ping_interval=30, ping_timeout=10, close_timeout=10):
         return mock_ws
 
     return mock_connect
@@ -408,75 +537,75 @@ def sample_log_messages():
 
 
 @pytest.mark.asyncio
-async def test_websocket_connection_factory_basic_functionality():
-    """Test basic WebSocketConnectionFactory functionality."""
-    factory = WebSocketConnectionFactory("http://loki:3100")
+async def test_create_websocket_connection_basic_functionality():
+    """Test basic create_websocket_connection functionality."""
     workload_id = UUID("ab647a92-960b-4dcb-9262-77a9efa062c1")
     query = '{k8s_pod_name=~"test-deployment.*"}'
 
     mock_ws = MockWebSocket([])
+    call_count = 0
 
-    with patch("app.logs.service.websockets.connect", create_mock_websocket_connect(mock_ws)) as mock_connect:
+    async def mock_connect_with_counter(url, ping_interval=30, ping_timeout=10, close_timeout=10):
+        nonlocal call_count
+        call_count += 1
+        return mock_ws
+
+    with patch("app.logs.service.websockets.connect", mock_connect_with_counter):
         # Test connection creation
-        connection = await factory.get_or_create_connection(workload_id, query)
+        connection = await create_websocket_connection(workload_id, query)
         assert connection == mock_ws
+        assert call_count == 1
 
-        # Test connection reuse - should not call connect again
-        connection2 = await factory.get_or_create_connection(workload_id, query)
+        # Test that each call creates a new connection (no reuse)
+        connection2 = await create_websocket_connection(workload_id, query)
         assert connection2 == mock_ws
-
-        # Test connection cleanup
-        await factory.close_connection(workload_id, query)
-        assert mock_ws.close_called
+        assert call_count == 2  # Should have been called twice
 
 
 @pytest.mark.asyncio
-async def test_websocket_connection_factory_ping_failure():
-    """Test WebSocketConnectionFactory handles ping failures correctly."""
-    factory = WebSocketConnectionFactory("http://loki:3100")
+async def test_create_websocket_connection_multiple_calls():
+    """Test create_websocket_connection creates new connections each time."""
     workload_id = UUID("ab647a92-960b-4dcb-9262-77a9efa062c1")
     query = '{k8s_pod_name=~"test-deployment.*"}'
 
-    # First connection works
+    # Each connection should be created fresh
     mock_ws1 = MockWebSocket([])
-    # Second connection should be created when ping fails
     mock_ws2 = MockWebSocket([])
 
     connect_calls = [mock_ws1, mock_ws2]
     call_count = 0
 
-    async def mock_connect_multiple(url):
+    async def mock_connect_multiple(url, ping_interval=30, ping_timeout=10, close_timeout=10):
         nonlocal call_count
         ws = connect_calls[call_count]
         call_count += 1
         return ws
 
     with patch("app.logs.service.websockets.connect", mock_connect_multiple):
-        # Create initial connection
-        connection1 = await factory.get_or_create_connection(workload_id, query)
+        # Create first connection
+        connection1 = await create_websocket_connection(workload_id, query)
         assert connection1 == mock_ws1
         assert call_count == 1
 
-        # Simulate ping failure on first connection
-        mock_ws1.should_fail_ping = True
-
-        # Should create new connection when ping fails
-        connection2 = await factory.get_or_create_connection(workload_id, query)
+        # Create second connection - should always create a new one
+        connection2 = await create_websocket_connection(workload_id, query)
         assert connection2 == mock_ws2
         assert call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_stream_workload_logs_success(mock_workload, sample_log_messages):
-    """Test successful log streaming with real WebSocketConnectionFactory."""
-    factory = WebSocketConnectionFactory("http://loki:3100")
+    """Test successful log streaming."""
     mock_ws = MockWebSocket(sample_log_messages)
 
     with patch("app.logs.service.websockets.connect", create_mock_websocket_connect(mock_ws)):
         logs = []
         count = 0
 
-        async for log_entry in stream_workload_logs(mock_workload, factory):
+        async for log_entry_str in stream_workload_logs(mock_workload):
+            if log_entry_str == "[HEARTBEAT]":
+                continue
+            log_entry = LogEntry.model_validate_json(log_entry_str)
             logs.append(log_entry)
             count += 1
             if count >= 2:  # Stop after collecting expected logs
@@ -491,8 +620,7 @@ async def test_stream_workload_logs_success(mock_workload, sample_log_messages):
 
 @pytest.mark.asyncio
 async def test_stream_workload_logs_with_level_filter(mock_workload, sample_log_messages):
-    """Test log streaming with level filter using real factory."""
-    factory = WebSocketConnectionFactory("http://loki:3100")
+    """Test log streaming with level filter."""
     mock_ws = MockWebSocket(sample_log_messages)
 
     with patch("app.logs.service.websockets.connect", create_mock_websocket_connect(mock_ws)):
@@ -500,7 +628,10 @@ async def test_stream_workload_logs_with_level_filter(mock_workload, sample_log_
         count = 0
 
         # Only get error level and above
-        async for log_entry in stream_workload_logs(mock_workload, factory, level_filter=LogLevel.error):
+        async for log_entry_str in stream_workload_logs(mock_workload, level_filter=LogLevel.error):
+            if log_entry_str == "[HEARTBEAT]":
+                continue
+            log_entry = LogEntry.model_validate_json(log_entry_str)
             logs.append(log_entry)
             count += 1
             if count >= 2:
@@ -513,30 +644,30 @@ async def test_stream_workload_logs_with_level_filter(mock_workload, sample_log_
 @pytest.mark.asyncio
 async def test_stream_workload_logs_websocket_failure(mock_workload):
     """Test log streaming behavior when WebSocket connection fails."""
-    factory = WebSocketConnectionFactory("http://loki:3100")
 
-    async def failing_connect(url):
+    async def failing_connect(url, ping_interval=30, ping_timeout=10, close_timeout=10):
         raise websockets.WebSocketException("Connection failed")
 
     with patch("app.logs.service.websockets.connect", failing_connect):
         with pytest.raises(websockets.WebSocketException):
-            async for _ in stream_workload_logs(mock_workload, factory):
+            async for _ in stream_workload_logs(mock_workload):
                 pass  # Should not reach here
 
 
 @pytest.mark.asyncio
 async def test_stream_workload_logs_cancellation_cleanup(mock_workload, sample_log_messages):
     """Test that stream cancellation properly cleans up connections."""
-    factory = WebSocketConnectionFactory("http://loki:3100")
     mock_ws = MockWebSocket(sample_log_messages)
 
     with patch("app.logs.service.websockets.connect", create_mock_websocket_connect(mock_ws)):
-        stream_gen = stream_workload_logs(mock_workload, factory)
+        stream_gen = stream_workload_logs(mock_workload)
 
         # Start consuming the stream
         try:
-            log_entry = await stream_gen.__anext__()
-            assert log_entry.message == "First log message"
+            log_entry_str = await stream_gen.__anext__()
+            if log_entry_str != "[HEARTBEAT]":
+                log_entry = LogEntry.model_validate_json(log_entry_str)
+                assert log_entry.message == "First log message"
 
             # Simulate client disconnection
             raise asyncio.CancelledError("Client disconnected")
@@ -576,7 +707,6 @@ async def test_stream_workload_logs_malformed_json():
         ],
     )
 
-    factory = WebSocketConnectionFactory("http://loki:3100")
     malformed_messages = [
         "invalid json",  # Should be skipped
         json.dumps({"streams": [{"stream": {"level": "info"}, "values": []}]}),  # Valid but empty
@@ -587,11 +717,13 @@ async def test_stream_workload_logs_malformed_json():
         logs = []
         count = 0
 
-        async for log_entry in stream_workload_logs(mock_workload, factory):
-            logs.append(log_entry)
+        async for log_entry_str in stream_workload_logs(mock_workload):
             count += 1
             if count >= 5:  # Prevent infinite loop
                 break
+            if log_entry_str == "[HEARTBEAT]":
+                continue
+            logs.append(log_entry_str)
 
         # Should handle malformed JSON gracefully and continue
         assert len(logs) == 0  # No valid logs in this test
@@ -603,11 +735,10 @@ async def test_stream_workload_logs_no_components(mock_workload):
     # Remove components from workload
     mock_workload.components = []
 
-    factory = WebSocketConnectionFactory("http://loki:3100")
-
     logs = []
-    async for log_entry in stream_workload_logs(mock_workload, factory):
-        logs.append(log_entry)
+    async for log_entry_str in stream_workload_logs(mock_workload):
+        if log_entry_str != "[HEARTBEAT]":
+            logs.append(log_entry_str)
 
     # Should yield no logs when no components exist
     assert len(logs) == 0
@@ -616,7 +747,6 @@ async def test_stream_workload_logs_no_components(mock_workload):
 @pytest.mark.asyncio
 async def test_stream_workload_logs_no_start_time_filter(mock_workload):
     """Test log streaming without start_time filter accepts all logs."""
-    factory = WebSocketConnectionFactory("http://loki:3100")
 
     # Create test messages with past timestamps
     past_time = datetime.now(UTC).timestamp() - 3600  # 1 hour ago
@@ -653,7 +783,10 @@ async def test_stream_workload_logs_no_start_time_filter(mock_workload):
         count = 0
 
         # Call without start_time parameter
-        async for log_entry in stream_workload_logs(mock_workload, factory):
+        async for log_entry_str in stream_workload_logs(mock_workload):
+            if log_entry_str == "[HEARTBEAT]":
+                continue
+            log_entry = LogEntry.model_validate_json(log_entry_str)
             logs.append(log_entry)
             count += 1
             if count >= 2:

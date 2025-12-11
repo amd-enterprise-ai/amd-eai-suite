@@ -1,0 +1,132 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: s3-cleanup-test-job
+  labels:
+    app: s3-cleanup-test
+    test-type: storage-e2e
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: s3-cleanup-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: s3-cleanup
+          image: python:3.12-alpine
+          env:
+            - name: BUCKET_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: BUCKET_URL
+            - name: ACCESS_KEY_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: ACCESS_KEY_NAME
+            - name: SECRET_KEY_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: SECRET_KEY_NAME
+            - name: SECRET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: SECRET_NAME
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: SECRET_NAME_PLACEHOLDER # Will be replaced by Robot
+                  key: ACCESS_KEY_NAME_PLACEHOLDER # Will be replaced by Robot
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: SECRET_NAME_PLACEHOLDER # Will be replaced by Robot
+                  key: SECRET_KEY_NAME_PLACEHOLDER # Will be replaced by Robot
+            # Prefix for e2e test objects to delete
+            - name: TEST_DATA_PREFIX
+              value: "e2e-test-storage-"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "=== S3 Cleanup Test Job ==="
+              echo "Installing boto3..."
+              pip install -q boto3
+
+              echo "Cleaning up e2e test data from S3..."
+              python3 <<'EOF'
+              import os
+              import boto3
+              from urllib.parse import urlparse
+
+              # Parse bucket URL
+              bucket_url = os.environ['BUCKET_URL']
+              parsed = urlparse(bucket_url)
+              bucket_name = parsed.path.lstrip('/')
+              endpoint_url = f"{parsed.scheme}://{parsed.netloc}"
+
+              print(f"Bucket: {bucket_name}")
+              print(f"Endpoint: {endpoint_url}")
+              print(f"Prefix to delete: {os.environ['TEST_DATA_PREFIX']}")
+
+              # Create S3 client
+              s3 = boto3.client(
+                  's3',
+                  endpoint_url=endpoint_url,
+                  aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+                  aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+                  region_name='us-east-1'
+              )
+
+              # List all objects with the e2e-test prefix
+              prefix = os.environ['TEST_DATA_PREFIX']
+
+              try:
+                  # List objects
+                  response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+
+                  if 'Contents' not in response or len(response['Contents']) == 0:
+                      print(f"No objects found with prefix '{prefix}'")
+                  else:
+                      # Delete objects in batches
+                      objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+
+                      print(f"Found {len(objects_to_delete)} objects to delete:")
+                      for obj in objects_to_delete:
+                          print(f"  - {obj['Key']}")
+
+                      # Delete the objects
+                      s3.delete_objects(
+                          Bucket=bucket_name,
+                          Delete={'Objects': objects_to_delete}
+                      )
+
+                      print(f"✓ Successfully deleted {len(objects_to_delete)} test objects")
+
+              except s3.exceptions.NoSuchBucket:
+                  print(f"Bucket {bucket_name} does not exist - nothing to clean up")
+              except Exception as e:
+                  print(f"Warning: Error during cleanup (non-fatal): {e}")
+                  # Don't fail - cleanup is best-effort
+
+              EOF
+
+              echo "=== S3 Cleanup Complete ==="
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

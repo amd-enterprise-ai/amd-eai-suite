@@ -8,8 +8,7 @@ import { RefObject } from 'react';
 
 import { TimeRangePeriod } from '@/types/enums/metrics';
 import { TimeRange } from '@/types/metrics';
-import { Workload } from '@/types/workloads';
-import { WorkloadType, WorkloadStatus } from '@/types/enums/workloads';
+import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import InferenceRequestsCard from '@/components/features/workloads/InferenceRequestsCard';
 
 import wrapper from '@/__tests__/ProviderWrapper';
@@ -51,25 +50,6 @@ describe('InferenceRequestsCard', () => {
     categories: ['running_requests', 'waiting_requests'],
   };
 
-  const mockWorkload: Workload = {
-    id: 'test-workload-id',
-    type: WorkloadType.INFERENCE,
-    name: 'test-workload',
-    displayName: 'Test Inference Workload',
-    createdBy: 'test-user',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    status: WorkloadStatus.RUNNING,
-    chartId: 'test-chart-id',
-    clusterId: 'test-cluster-id',
-    cluster: {
-      id: 'test-cluster-id',
-      name: 'Test Cluster',
-      lastHeartbeatAt: '2024-01-01T00:00:00Z',
-      status: 'online' as any,
-    },
-  };
-
   const mockTimeRange: TimeRange = {
     start: new Date('2023-01-01T00:00:00Z'),
     end: new Date('2023-01-01T02:00:00Z'),
@@ -78,7 +58,7 @@ describe('InferenceRequestsCard', () => {
   const mockTimeRangePeriod = TimeRangePeriod['1H'];
 
   const defaultProps = {
-    workload: mockWorkload,
+    workload: mockWorkloads[0],
     timeRange: mockTimeRange,
     timeRangePeriod: mockTimeRangePeriod,
     width: 600,

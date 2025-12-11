@@ -13,13 +13,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
 import { useRouter } from 'next/router';
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 
 import useSystemToast from '@/hooks/useSystemToast';
 
-import { deleteWorkload, listWorkloads } from '@/services/app/workloads';
 import { getAims } from '@/services/app/aims';
 import { getModels } from '@/services/app/models';
+import { deleteWorkload, listWorkloads } from '@/services/app/workloads';
 
 import { getFilteredData } from '@/utils/app/data-table';
 import getWorkloadStatusVariants from '@/utils/app/workloads-status-variants';
@@ -31,7 +31,9 @@ import { SortDirection } from '@/types/enums/sort-direction';
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
 import { WorkloadsTableFields } from '@/types/enums/workloads-table-fields';
 import { ClientSideDataFilter, FilterValueMap } from '@/types/filters';
+import { Model } from '@/types/models';
 import { Workload } from '@/types/workloads';
+import { Aim } from '@/types/aims';
 
 import { ConfirmationModal } from '@/components/shared/Confirmation/ConfirmationModal';
 import ClientSideDataTable from '@/components/shared/DataTable/ClientSideDataTable';
@@ -39,7 +41,7 @@ import {
   ChipDisplay,
   DateDisplay,
   NoDataDisplay,
-  StatusBadgeDisplay,
+  StatusDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
 import { ActionsToolbar } from '@/components/shared/Toolbar/ActionsToolbar';
 
@@ -51,12 +53,6 @@ const defaultStatusSet = [
   WorkloadStatus.RUNNING,
   WorkloadStatus.FAILED,
   WorkloadStatus.DELETE_FAILED,
-];
-
-const defaultTypeSet = [
-  WorkloadType.MODEL_DOWNLOAD,
-  WorkloadType.INFERENCE,
-  WorkloadType.FINE_TUNING,
 ];
 
 const convertFilterValueMap = (
@@ -84,9 +80,7 @@ const convertFilterValueMap = (
   return newFilters;
 };
 
-interface DeployedModelsProps {}
-
-const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
+const DeployedModels: React.FC = ({}) => {
   const { t } = useTranslation(['workloads', 'models', 'common']);
   const { toast } = useSystemToast();
   const router = useRouter();
@@ -94,7 +88,6 @@ const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
 
   const [filters, setFilters] = useState<ClientSideDataFilter<Workload>[]>(
     convertFilterValueMap({
-      type: defaultTypeSet,
       status: defaultStatusSet,
     }),
   );
@@ -102,67 +95,6 @@ const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
   const [workloadBeingSelected, setWorkloadBeingSelected] = useState<
     Workload | undefined
   >(undefined);
-
-  const typeFilterItems = useMemo(
-    () => [
-      {
-        key: WorkloadType.MODEL_DOWNLOAD,
-        label: t(`type.${WorkloadType.MODEL_DOWNLOAD}`),
-      },
-      {
-        key: WorkloadType.INFERENCE,
-        label: t(`type.${WorkloadType.INFERENCE}`),
-      },
-      {
-        key: WorkloadType.FINE_TUNING,
-        label: t(`type.${WorkloadType.FINE_TUNING}`),
-      },
-    ],
-    [t],
-  );
-
-  const statusFilterItems = useMemo(
-    () => [
-      {
-        key: WorkloadStatus.ADDED,
-        label: t(`status.${WorkloadStatus.ADDED}`),
-      },
-      {
-        key: WorkloadStatus.PENDING,
-        label: t(`status.${WorkloadStatus.PENDING}`),
-      },
-      {
-        key: WorkloadStatus.RUNNING,
-        label: t(`status.${WorkloadStatus.RUNNING}`),
-      },
-      {
-        key: WorkloadStatus.TERMINATED,
-        label: t(`status.${WorkloadStatus.TERMINATED}`),
-      },
-      {
-        key: WorkloadStatus.COMPLETE,
-        label: t(`status.${WorkloadStatus.COMPLETE}`),
-      },
-      {
-        key: WorkloadStatus.FAILED,
-        label: t(`status.${WorkloadStatus.FAILED}`),
-      },
-      {
-        key: WorkloadStatus.DELETING,
-        label: t(`status.${WorkloadStatus.DELETING}`),
-      },
-      {
-        key: WorkloadStatus.DELETE_FAILED,
-        label: t(`status.${WorkloadStatus.DELETE_FAILED}`),
-        showDivider: true,
-      },
-      {
-        key: WorkloadStatus.DELETED,
-        label: t(`status.${WorkloadStatus.DELETED}`),
-      },
-    ],
-    [t],
-  );
 
   const queryClient = useQueryClient();
 
@@ -176,51 +108,42 @@ const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
   } = useQuery<Workload[]>({
     queryKey: ['project', activeProject, 'workloads'],
     queryFn: async () => {
-      return await listWorkloads(activeProject!);
+      return listWorkloads(activeProject!);
     },
     refetchInterval: 30000, // Refetch every 30 seconds
     enabled: !!activeProject,
   });
 
-  const { data: aims, isLoading: isAimsLoading } = useQuery({
+  const workloads = useMemo(() => {
+    if (!allWorkloads) return [];
+    const inferenceWorkloads = allWorkloads.filter(
+      (w) => w.type === WorkloadType.INFERENCE,
+    );
+    const filteredWorkloads = getFilteredData(inferenceWorkloads, filters);
+    return filteredWorkloads;
+  }, [allWorkloads, filters]);
+
+  const hasAimWorkloads = useMemo(
+    () => workloads.some((w) => w.aimId),
+    [workloads],
+  );
+
+  const hasModelWorkloads = useMemo(
+    () => workloads.some((w) => w.modelId),
+    [workloads],
+  );
+
+  const { data: aims = [] } = useQuery({
     queryKey: ['project', activeProject, 'aim-catalog'],
     queryFn: () => getAims(activeProject!),
-    enabled: !!activeProject,
+    enabled: !!activeProject && hasAimWorkloads,
   });
 
-  const { data: models, isLoading: isModelsLoading } = useQuery({
-    queryKey: ['project', activeProject, 'models'],
+  const { data: models = [] } = useQuery<Model[]>({
+    queryKey: ['project', activeProject, 'custom-models'],
     queryFn: () => getModels(activeProject!),
-    enabled: !!activeProject,
+    enabled: !!activeProject && hasModelWorkloads,
   });
-
-  // Create a mapping of aimId to canonicalName
-  const aimIdToCanonicalName = useMemo(() => {
-    const mapping = new Map<string, string>();
-    if (aims) {
-      aims.forEach((aim) => {
-        // Extract canonical name from labels
-        const canonicalNameKey = Object.keys(aim.labels).find((key) =>
-          key.endsWith('.canonicalName'),
-        );
-        if (canonicalNameKey) {
-          mapping.set(aim.id, aim.labels[canonicalNameKey]);
-        }
-      });
-    }
-    return mapping;
-  }, [aims]);
-
-  // Create a mapping of modelId to canonicalName
-  const modelIdToCanonicalName = useMemo(() => {
-    const mapping = new Map<string, string>();
-    if (models) {
-      models.forEach((model) => {
-        mapping.set(model.id, model.canonicalName);
-      });
-    }
-    return mapping;
-  }, [models]);
 
   useEffect(() => {
     if (workloadsError) {
@@ -231,13 +154,6 @@ const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
       );
     }
   }, [workloadsError, toast, t]);
-
-  const workloads = useMemo(() => {
-    if (!allWorkloads) return [];
-
-    const filteredWorkloads = getFilteredData(allWorkloads, filters);
-    return filteredWorkloads;
-  }, [allWorkloads, filters]);
 
   const { mutate: deleteWorkloadMutated, isPending: isDeletePending } =
     useMutation({
@@ -287,17 +203,40 @@ const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
     },
   ];
 
+  const aimsMap = useMemo(() => {
+    const map = new Map<string, Aim>();
+    aims.forEach((aim) => {
+      if (aim.workload?.id) {
+        map.set(aim.workload.id, aim);
+      }
+    });
+    return map;
+  }, [aims]);
+
+  const modelsMap = useMemo(() => {
+    const map = new Map<string, Model>();
+    models.forEach((model) => {
+      if (model.id) {
+        map.set(model.id, model);
+      }
+    });
+    return map;
+  }, [models]);
+
   const customRenderers: Partial<
     Record<WorkloadsTableFields, (item: Workload) => React.ReactNode | string>
   > = {
-    [WorkloadsTableFields.DISPLAY_NAME]: (item) =>
-      item.model?.name || item.displayName || item.name,
+    [WorkloadsTableFields.DISPLAY_NAME]: (item) => item.displayName,
     [WorkloadsTableFields.CANONICAL_NAME]: (item) => {
-      // Try model canonical name via modelId first, then AIM canonical name via aimId
-      const canonicalName =
-        (item.modelId ? modelIdToCanonicalName.get(item.modelId) : undefined) ||
-        (item.aimId ? aimIdToCanonicalName.get(item.aimId) : undefined);
-      return canonicalName || <NoDataDisplay />;
+      const model = item.modelId ? modelsMap.get(item.modelId) : undefined;
+      if (model?.canonicalName) {
+        return model.canonicalName;
+      }
+      const aim = aimsMap.get(item.id);
+      return (
+        aim?.canonicalName ||
+        item.userInputs?.canonicalName || <NoDataDisplay />
+      );
     },
     [WorkloadsTableFields.CREATED_AT]: (item) => (
       <DateDisplay date={item.createdAt} />
@@ -309,7 +248,7 @@ const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
       />
     ),
     [WorkloadsTableFields.STATUS]: (item: Workload) => (
-      <StatusBadgeDisplay
+      <StatusDisplay
         type={item[WorkloadsTableFields.STATUS] as WorkloadStatus}
         variants={getWorkloadStatusVariants(t)}
       />
@@ -380,33 +319,33 @@ const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
         placeholder: t('list.filters.search.placeholder'),
         type: FilterComponentType.TEXT,
       },
-      type: {
-        name: 'type',
-        label: t('list.filters.type.label'),
-        placeholder: t('list.filters.status.label'),
-        type: FilterComponentType.DROPDOWN,
-        defaultSelectedValues: defaultTypeSet.map(String),
-        fields: typeFilterItems,
-      },
       status: {
         name: 'status',
         label: t('list.filters.status.label'),
         placeholder: t('list.filters.status.label'),
         type: FilterComponentType.DROPDOWN,
         defaultSelectedValues: defaultStatusSet.map(String),
-        fields: statusFilterItems.map((field) => {
-          return {
-            props: {
-              description: String(field.label),
-              showDivider: field.showDivider,
-            },
-            key: String(field.key),
-            label: t(field.label),
-          };
-        }),
+        fields: [
+          WorkloadStatus.ADDED,
+          WorkloadStatus.PENDING,
+          WorkloadStatus.RUNNING,
+          WorkloadStatus.TERMINATED,
+          WorkloadStatus.COMPLETE,
+          WorkloadStatus.FAILED,
+          WorkloadStatus.DELETING,
+          WorkloadStatus.DELETE_FAILED,
+          WorkloadStatus.DELETED,
+        ].map((status) => ({
+          props: {
+            description: t(`status.${status}`),
+            showDivider: status === WorkloadStatus.DELETE_FAILED,
+          },
+          key: String(status),
+          label: t(`status.${status}`),
+        })),
       },
     }),
-    [t, typeFilterItems, statusFilterItems],
+    [t],
   );
 
   const handleFilterChange = (filters: FilterValueMap) => {
@@ -437,24 +376,20 @@ const DeployedModels: React.FC<DeployedModelsProps> = ({}) => {
         defaultSortDirection={SortDirection.DESC}
         translation={t}
         customRenderers={customRenderers}
-        isLoading={isWorkloadsLoading || isAimsLoading || isModelsLoading}
+        isLoading={isWorkloadsLoading}
         isFetching={isWorkloadsRefetching}
         idKey={'id'}
       />
       <ConfirmationModal
         isOpen={isDeleteWorkloadModalOpen}
         onConfirm={() => deleteWorkloadMutated(workloadBeingSelected?.id || '')}
-        description={
-          <Trans parent="span">
-            {t('customModels.list.actions.undeploy.confirmation.description', {
-              ns: 'models',
-              name:
-                workloadBeingSelected?.model?.name ||
-                workloadBeingSelected?.displayName ||
-                '',
-            })}
-          </Trans>
-        }
+        description={t(
+          'customModels.list.actions.undeploy.confirmation.description',
+          {
+            ns: 'models',
+            name: workloadBeingSelected?.displayName || '',
+          },
+        )}
         title={t('customModels.list.actions.undeploy.confirmation.title', {
           ns: 'models',
         })}

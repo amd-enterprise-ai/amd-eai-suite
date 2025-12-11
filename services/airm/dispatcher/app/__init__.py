@@ -6,6 +6,7 @@ import asyncio
 import os
 import sys
 from asyncio import Task
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -14,6 +15,8 @@ from loguru import logger
 
 from airm.utilities.fastapi import generic_exception_handler, value_error_handler
 
+from .aims.router import router as aims_router
+from .aims.service import publish_aim_cluster_models_message_to_queue
 from .clusters.router import router as clusters_router
 from .clusters.service import publish_cluster_nodes_message_to_queue
 from .config.app_config import AppConfig
@@ -39,7 +42,7 @@ tasks: list[Task] = []
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await startup_event()
     yield
     await shutdown_event()
@@ -78,6 +81,7 @@ async def startup_event():
         connection, channel = await get_common_vhost_connection_and_channel()
         await publish_cluster_nodes_message_to_queue(connection, channel)
         await publish_heartbeat_message_to_queue(connection, channel)
+        await publish_aim_cluster_models_message_to_queue(connection, channel)
     except Exception as e:
         logger.exception("Failed to connect or publish the message to RabbitMQ", e)
         sys.exit(1)
@@ -117,6 +121,7 @@ app = FastAPI(
 app.include_router(health_router, prefix="/v1")
 app.include_router(heartbeats_router, prefix="/v1")
 app.include_router(clusters_router, prefix="/v1")
+app.include_router(aims_router, prefix="/v1")
 
 app.add_exception_handler(Exception, generic_exception_handler)
-app.add_exception_handler(ValueError, value_error_handler)  # type: ignore
+app.add_exception_handler(ValueError, value_error_handler)

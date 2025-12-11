@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import app  # type: ignore
 from app.managed_workloads.schemas import ChartWorkloadResponse
 from app.utilities.database import get_session
-from app.utilities.exceptions import ConflictException, NotReadyException
+from app.utilities.exceptions import ConflictException, PreconditionNotMetException
 from app.utilities.security import (
     BearerToken,
     auth_token_claimset,
@@ -87,10 +87,10 @@ async def test_create_workspace_success(
 async def test_create_workspace_base_url_not_configured(
     mock_ensure_base_url, mock_ensure_healthy, db_session: AsyncSession, mock_claimset
 ):
-    """Test workspace creation fails with 409 when base URL not configured."""
+    """Test workspace creation fails with 428 when base URL not configured."""
     env = await factory.create_full_test_environment(db_session)
     mock_ensure_healthy.return_value = None
-    mock_ensure_base_url.side_effect = NotReadyException("No base URL configured")
+    mock_ensure_base_url.side_effect = PreconditionNotMetException("No base URL configured")
 
     setup_test_dependencies(env, db_session, mock_claimset)
     with get_test_client() as client:
@@ -99,7 +99,7 @@ async def test_create_workspace_base_url_not_configured(
             json={"image": "test-image", "gpus": 1, "memory_per_gpu": 128, "cpu_per_gpu": 4},
         )
 
-        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.status_code == status.HTTP_428_PRECONDITION_REQUIRED
 
 
 @patch("app.workspaces.router.create_development_workspace")

@@ -265,8 +265,8 @@ def test_validate_jsonl_success():
     file = UploadFile(filename="test.jsonl", file=io.BytesIO(file_content))
 
     with patch("app.utilities.config.MAX_FILE_SIZE_BYTES", 1000):
-        result = validate_jsonl(file)
-        assert result is True
+        # Should not raise an exception
+        validate_jsonl(file)
 
 
 def test_validate_jsonl_invalid_extension():

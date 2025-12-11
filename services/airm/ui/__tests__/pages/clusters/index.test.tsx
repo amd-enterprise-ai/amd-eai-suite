@@ -87,7 +87,7 @@ vi.mock('@/services/app/workloads', () => ({
 
 describe('clusters', () => {
   it('should not crash the page', async () => {
-    let _container;
+    let _container: HTMLElement | null = null;
     await act(() => {
       const { container } = render(
         <ClusterPage
@@ -264,7 +264,7 @@ describe('clusters', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('form.edit.title')).toBeVisible();
+      expect(screen.getByText('form.edit.title')).toBeInTheDocument();
     });
   });
 

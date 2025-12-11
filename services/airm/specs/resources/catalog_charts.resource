@@ -8,8 +8,9 @@ Documentation       High-level chart testing keywords.
 ...                 Uses the low-level API keywords from api/charts.resource to implement
 ...                 higher-level testing scenarios.
 Resource            api/charts.resource
-Resource            catalog_projects.resource
+Resource            airm_projects.resource
 Resource            test_data.resource
+Resource            common/resource_tracking.resource
 Library             String
 Library             uuid
 
@@ -18,6 +19,7 @@ Library             uuid
 ${TEMPLATE_FILE}        ${CURDIR}/../../workloads/templates/deployment.yaml
 ${VALUES_FILE}          ${CURDIR}/../../workloads/values.yaml
 ${SCHEMA_FILE}          ${CURDIR}/../../workloads/schema.yaml
+${SIGNATURE_FILE}       ${CURDIR}/../test_data/charts/signature.yaml
 ${TEST_CHART_ID}        ${None}
 ${TEST_CHART_NAME}      ${None}
 ${TEST_CHART_DATA}      ${None}
@@ -37,11 +39,11 @@ Valid chart data is prepared
     # Try to find and delete existing chart with same name
     ${chart_id}=            Find chart ID by name                           ${test_chart_name}      TEST_CHART_ID
     IF    $chart_id is not None
-        Log                     Found existing chart with name ${test_chart_name}, deleting it first
+        Log                     Found existing chart with name ${test_chart_name}, deleting it first                         DEBUG
         ${response}=            Delete chart            ${chart_id}             expected_status=204
     END
 
-    &{chart_data}=          Create Dictionary       name=${test_chart_name}                         type=${chart_type}      project_id=${CURRENT_PROJECT_ID}
+    &{chart_data}=          Create Dictionary       name=${test_chart_name}                         type=${chart_type}      project_id=${TEST_PROJECT_ID}
     Set Test Variable       ${TEST_CHART_DATA}      ${chart_data}
 
 Finetuning chart exists
@@ -69,7 +71,7 @@ The chart should not exist in database
     ${chart_id}=            Set Variable            ${TEST_CHART_ID}
 
     ${chart}=               Get chart               ${chart_id}             expected_status=404
-    Log                     Chart ${chart_id} does not exist in database (404 Not Found) as expected
+    Log                     Chart ${chart_id} does not exist in database (404 Not Found) as expected              DEBUG
 
 A chart exists
     [Documentation]    Creates a new chart and stores its ID as a test variable
@@ -88,7 +90,7 @@ A chart exists
     IF    ${has_direct_id}
         ${chart_id}=            Get from dictionary     ${json}                 id
         Set test variable       ${TEST_CHART_ID}        ${chart_id}
-        Log                     Using chart ID: ${chart_id}
+        Log                     Using chart ID: ${chart_id}                     DEBUG
     ELSE
         # Try to get it from charts array
         Dictionary Should Contain Key                   ${json}                 charts                  Chart response does not contain either direct ID or charts array
@@ -99,8 +101,29 @@ A chart exists
         Dictionary Should Contain Key                   ${chart}                id                      First chart in array does not contain ID
         ${chart_id}=            Get from dictionary     ${chart}                id
         Set test variable       ${TEST_CHART_ID}        ${chart_id}
-        Log                     Using chart ID from charts array: ${chart_id}
+        Log                     Using chart ID from charts array: ${chart_id}                   DEBUG
     END
+
+    # Verify chart was actually created by making a separate verification call
+    ${verify_response}=     Get chart               ${TEST_CHART_ID}        expected_status=200
+
+A chart exists without files
+    [Documentation]    Creates a new chart via API without template files and stores its ID
+    ...    This is the preferred method for workload API tests that don't need actual chart templates
+    Valid chart data is prepared
+
+    # Create chart using the file-less API keyword
+    ${response}=            Create chart without files    ${TEST_CHART_NAME}    INFERENCE
+
+    # Accept 201 as success for chart creation
+    Should Be Equal As Integers    ${response.status_code}    201    msg=Chart creation failed: ${response.text}
+
+    # Extract chart ID
+    ${json}=                Set Variable            ${response.json()}
+    Dictionary Should Contain Key    ${json}    id    msg=Chart response missing 'id' field
+    ${chart_id}=            Get from dictionary     ${json}                 id
+    Set test variable       ${TEST_CHART_ID}        ${chart_id}
+    Log                     Created chart without files, ID: ${chart_id}    DEBUG
 
     # Verify chart was actually created by making a separate verification call
     ${verify_response}=     Get chart               ${TEST_CHART_ID}        expected_status=200
@@ -115,11 +138,9 @@ A job chart exists
         Setup job test chart
     END
 
-    # Set TEST_CHART_ID to the job chart ID for consistency
     Set Test Variable       ${TEST_CHART_ID}        ${TEST_JOB_CHART_ID}
 
-    # Log the chart ID for debugging
-    Log                     Job chart exists with ID: ${TEST_CHART_ID}
+    Log                     Job chart exists with ID: ${TEST_CHART_ID}      DEBUG
 
 A service chart exists
     [Documentation]    Ensures a service chart exists in the system and stores its ID
@@ -131,11 +152,9 @@ A service chart exists
         Setup service test chart
     END
 
-    # Set TEST_CHART_ID to the service chart ID for consistency
     Set Test Variable       ${TEST_CHART_ID}        ${TEST_SERVICE_CHART_ID}
 
-    # Log the chart ID for debugging
-    Log                     Service chart exists with ID: ${TEST_CHART_ID}
+    Log                     Service chart exists with ID: ${TEST_CHART_ID}                  DEBUG
 
 Required chart files exist
     [Documentation]    Verifies required chart files exist
@@ -151,7 +170,7 @@ A chart does not exist
 Find chart ID by name
     [Documentation]    Find chart ID by chart name through API and set as variable
     [Arguments]             ${chart_name}           ${variable_name}=TEST_CHART_ID
-    Create API Session
+    Create api session
     ${endpoint}=            Charts endpoint
     ${response}=            GET On Session          ${API_SESSION}          ${endpoint}             expected_status=200
 
@@ -173,13 +192,8 @@ Find chart ID by name
 
     RETURN                  ${None}
 
-Initialize Chart Tracking
-    [Documentation]    Resets the list of created charts
-    ...    This keyword should be used in a test suite setup to ensure
-    ...    the tracking list starts empty for each test suite
-    @{empty_list}=          Create List
-    Set Suite Variable      ${CREATED_CHART_IDS}    ${empty_list}
-    Log                     Chart tracking initialized. CREATED_CHART_IDS: ${CREATED_CHART_IDS}     level=DEBUG
+# Initialize Chart Tracking is now imported from common/resource_tracking.resource
+# Clean Up All Created Charts is now imported from common/resource_tracking.resource
 
 Register Chart For Cleanup
     [Documentation]    Manually registers a chart ID to be cleaned up later
@@ -188,29 +202,3 @@ Register Chart For Cleanup
     [Arguments]             ${chart_id}
     Append To List          ${CREATED_CHART_IDS}    ${chart_id}
     Log                     Manually added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}                          level=DEBUG
-
-Clean Up All Created Charts
-    [Documentation]    Deletes all charts created during test execution
-    ...    This keyword should be used in a test suite teardown to ensure
-    ...    all charts created during testing are cleaned up properly.
-    ${count}=               Get Length              ${CREATED_CHART_IDS}
-
-    # Skip if no charts were created or list is empty
-    Return From Keyword If                          ${count} == 0           No charts to clean up
-    Log                     Cleaning up ${count} charts: ${CREATED_CHART_IDS}                       level=INFO
-
-    # Delete each chart individually
-    FOR    ${chart_id}    IN    @{CREATED_CHART_IDS}
-        TRY
-            Log                     Deleting chart ${chart_id}                      level=INFO
-            Delete chart            ${chart_id}             expected_status=any
-            Log                     Successfully deleted chart ${chart_id}          level=INFO
-        EXCEPT    AS    ${error}
-            Log                     Failed to delete chart ${chart_id}: ${error}    level=WARN
-        END
-    END
-
-    # Reset the list of created charts
-    @{empty_list}=          Create List
-    Set Suite Variable      ${CREATED_CHART_IDS}    ${empty_list}
-    Log                     Chart cleanup complete. CREATED_CHART_IDS reset to: ${CREATED_CHART_IDS}                        level=INFO

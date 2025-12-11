@@ -73,33 +73,44 @@ describe('EditCluster', () => {
     });
     await renderEditCluster();
 
-    const baseUrlInput = screen.getByLabelText('form.edit.field.baseUrl.label');
+    const baseUrlInput = screen.getByLabelText(
+      'form.edit.field.workloadsBaseUrl.label',
+    );
     await fireEvent.change(baseUrlInput, { target: { value: 'invalid-url' } });
 
     await waitFor(() =>
       expect(
-        screen.getByText('form.edit.field.baseUrl.error.invalid'),
+        screen.getByText('form.edit.field.workloadsBaseUrl.error.invalid'),
       ).toBeInTheDocument(),
     );
   });
 
-  it('Cluster base URL will be passed to API call', async () => {
+  it('Cluster URLs will be passed to API call', async () => {
     (editCluster as Mock).mockResolvedValueOnce({
       ...mockCluster,
     });
     await renderEditCluster();
 
-    const baseUrlInput = screen.getByLabelText('form.edit.field.baseUrl.label');
-    fireEvent.change(baseUrlInput, {
-      target: { value: 'https://example.com' },
-    });
+    await fireEvent.change(
+      screen.getByLabelText('form.edit.field.workloadsBaseUrl.label'),
+      {
+        target: { value: 'https://example.com' },
+      },
+    );
+    await fireEvent.change(
+      screen.getByLabelText('form.edit.field.kubeApiUrl.label'),
+      {
+        target: { value: 'https://k8s.example.com' },
+      },
+    );
 
     const saveButton = screen.getByText('form.edit.action.save');
     await fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(editCluster).toHaveBeenCalledWith(mockCluster.id, {
-        base_url: 'https://example.com',
+        workloads_base_url: 'https://example.com',
+        kube_api_url: 'https://k8s.example.com',
       });
     });
   });
@@ -110,10 +121,18 @@ describe('EditCluster', () => {
     });
     await renderEditCluster(mockOnOpenChange, true, undefined);
 
-    const baseUrlInput = screen.getByLabelText('form.edit.field.baseUrl.label');
-    fireEvent.change(baseUrlInput, {
-      target: { value: 'https://example.com' },
-    });
+    await fireEvent.change(
+      screen.getByLabelText('form.edit.field.workloadsBaseUrl.label'),
+      {
+        target: { value: 'https://example.com' },
+      },
+    );
+    await fireEvent.change(
+      screen.getByLabelText('form.edit.field.kubeApiUrl.label'),
+      {
+        target: { value: 'https://k8s.example.com' },
+      },
+    );
 
     const saveButton = screen.getByText('form.edit.action.save');
     await fireEvent.click(saveButton);
@@ -138,17 +157,26 @@ describe('EditCluster', () => {
     });
     await renderEditCluster();
 
-    const baseUrlInput = screen.getByLabelText('form.edit.field.baseUrl.label');
-    await fireEvent.change(baseUrlInput, {
-      target: { value: 'https://example.com' },
-    });
+    await fireEvent.change(
+      screen.getByLabelText('form.edit.field.workloadsBaseUrl.label'),
+      {
+        target: { value: 'https://example.com' },
+      },
+    );
+    await fireEvent.change(
+      screen.getByLabelText('form.edit.field.kubeApiUrl.label'),
+      {
+        target: { value: 'https://k8s.example.com' },
+      },
+    );
 
     const saveButton = screen.getByText('form.edit.action.save');
     await fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(editCluster).toHaveBeenCalledWith(mockCluster.id, {
-        base_url: 'https://example.com',
+        workloads_base_url: 'https://example.com',
+        kube_api_url: 'https://k8s.example.com',
       });
     });
 
@@ -162,17 +190,27 @@ describe('EditCluster', () => {
     (editCluster as Mock).mockRejectedValueOnce(mockErrorPayload);
     await renderEditCluster();
 
-    const baseUrlInput = screen.getByLabelText('form.edit.field.baseUrl.label');
-    await fireEvent.change(baseUrlInput, {
-      target: { value: 'https://example.com' },
-    });
+    await fireEvent.change(
+      screen.getByLabelText('form.edit.field.workloadsBaseUrl.label'),
+      {
+        target: { value: 'https://example.com' },
+      },
+    );
+
+    await fireEvent.change(
+      screen.getByLabelText('form.edit.field.kubeApiUrl.label'),
+      {
+        target: { value: 'https://k8s.example.com' },
+      },
+    );
 
     const saveButton = screen.getByText('form.edit.action.save');
     await fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(editCluster).toHaveBeenCalledWith(mockCluster.id, {
-        base_url: 'https://example.com',
+        workloads_base_url: 'https://example.com',
+        kube_api_url: 'https://k8s.example.com',
       });
     });
 

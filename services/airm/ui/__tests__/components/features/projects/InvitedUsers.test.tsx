@@ -39,6 +39,17 @@ vi.mock('@/services/app/organizations', async (importOriginal) => {
   };
 });
 
+// Mock useAccessControl to ensure resend invitation button is enabled
+vi.mock('@/hooks/useAccessControl', () => ({
+  useAccessControl: vi.fn(() => ({
+    isRoleManagementEnabled: true,
+    isInviteEnabled: true,
+    isAdministrator: true,
+    smtpEnabled: true,
+    isTempPasswordRequired: false,
+  })),
+}));
+
 const mockProject: ProjectWithMembers = {
   ...generateMockProjects(1)[0],
   users: [
@@ -75,8 +86,17 @@ const mockFullOrganization: Organization = {
 describe('InvitedUsers', () => {
   const mockFetchProjects = fetchProjects as Mock;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockFetchProjects.mockClear();
+
+    const { useAccessControl } = await import('@/hooks/useAccessControl');
+    vi.mocked(useAccessControl).mockReturnValue({
+      isRoleManagementEnabled: true,
+      isInviteEnabled: false,
+      isAdministrator: true,
+      smtpEnabled: false,
+      isTempPasswordRequired: false,
+    });
   });
 
   it('renders the component with Invited Users', () => {
@@ -124,6 +144,17 @@ describe('InvitedUsers', () => {
 describe('Invite User button enabled/disabled state', () => {
   const mockFetchOrg = fetchOrganization as Mock;
   let queryClient: QueryClient;
+
+  beforeEach(async () => {
+    const { useAccessControl } = await import('@/hooks/useAccessControl');
+    vi.mocked(useAccessControl).mockReturnValue({
+      isRoleManagementEnabled: true,
+      isInviteEnabled: false,
+      isAdministrator: true,
+      smtpEnabled: false,
+      isTempPasswordRequired: false,
+    });
+  });
 
   it('disables the Invite User button if org has identity provider', async () => {
     mockFetchOrg.mockResolvedValue({

@@ -35,6 +35,70 @@ spec:
 apiVersion: batch/v1
 kind: CronJob
 metadata:
+  name: "{{ .Release.Name }}-aim-models-dispatcher"
+  namespace: "{{ .Release.Namespace }}"
+spec:
+  concurrencyPolicy: Forbid
+  schedule: "*/5 * * * *"
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          annotations:
+            sidecar.istio.io/inject: "false"
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            - name: check-dispatcher-is-ready
+              command:
+                [
+                  "/bin/sh",
+                  "-c",
+                  "while ! nc -z \"$ENDPOINT_URL_TO_CHECK\" \"$ENDPOINT_PORT_TO_CHECK\"; do echo \"Waiting for Airm Dispatcher at ${ENDPOINT_URL_TO_CHECK}:${ENDPOINT_PORT_TO_CHECK}...\"; sleep 3; done; echo \"Airm Dispatcher is accepting connections at ${ENDPOINT_URL_TO_CHECK}:${ENDPOINT_PORT_TO_CHECK}.\"; sleep 3; exit 0"
+                ]
+              image: "{{ .Values.airm.utilities.netcat.image.repository }}:{{ .Values.airm.utilities.netcat.image.tag }}"
+              imagePullPolicy: "{{ .Values.airm.utilities.netcat.image.pullPolicy }}"
+              env:
+                - name: ENDPOINT_URL_TO_CHECK
+                  value: "{{ .Release.Name }}-dispatcher.{{ .Release.Namespace }}.svc.cluster.local"
+                - name: ENDPOINT_PORT_TO_CHECK
+                  value: "{{ .Values.airm.dispatcher.servicePort }}"
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: false
+                runAsUser: 0
+                capabilities:
+                  drop:
+                    - ALL
+                  add:
+                    - SETUID
+                    - SETGID
+                    - CHOWN
+                    - DAC_OVERRIDE
+                    - FOWNER
+                    - FSETID
+                seccompProfile:
+                  type: RuntimeDefault
+          containers:
+            - name: airm-aim-models-cron
+              command:
+                - curl
+                - -X
+                - POST
+                - http://{{ .Release.Name }}-dispatcher:{{ .Values.airm.dispatcher.servicePort }}/v1/aims/cluster-models
+              image: "{{ .Values.airm.utilities.curl.image.repository }}:{{ .Values.airm.utilities.curl.image.tag }}"
+              imagePullPolicy: "{{ .Values.airm.utilities.curl.image.pullPolicy }}"
+              resources:
+                requests:
+                  memory: "100Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "100Mi"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
   name: "{{ .Release.Name }}-heartbeat-dispatcher"
   namespace: "{{ .Release.Namespace }}"
 spec:
@@ -245,7 +309,7 @@ rules:
     resources: ["externalsecrets"]
     verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
   - apiGroups: ["aim.silogen.ai"]
-    resources: ["aimservices"]
+    resources: ["aimservices", "aimclustermodels"]
     verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]

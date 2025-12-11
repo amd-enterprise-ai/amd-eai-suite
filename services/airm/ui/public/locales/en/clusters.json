@@ -43,12 +43,20 @@
     "edit": {
       "title": "Edit Cluster",
       "field": {
-        "baseUrl": {
-          "label": "Base URL for the cluster.",
-          "placeholder": "Provide base URL for the cluster",
-          "emptyError": "Base URL must not be empty",
+        "workloadsBaseUrl": {
+          "label": "Base URL for workloads submitted to the cluster.",
+          "placeholder": "Provide base URL for the workloads",
+          "emptyError": "Workloads base URL must not be empty",
           "error": {
-            "invalid": "Base URL must be a valid URL (must start with http:// or https://)"
+            "invalid": "Workloads base URL must be a valid URL (must start with http:// or https://)"
+          }
+        },
+        "kubeApiUrl": {
+          "label": "Kube API URL for the cluster.",
+          "placeholder": "Provide Kube API URL",
+          "emptyError": "Kube API URL must not be empty",
+          "error": {
+            "invalid": "Kube API URL must be a valid URL (must start with http:// or https://)"
           }
         }
       },
@@ -61,6 +69,12 @@
         "error": "Failed to update cluster."
       }
     }
+  },
+  "config": {
+    "button": "View config",
+    "title": "View cluster kubeconfig",
+    "description": "You can use the following kubeconfig to connect to the cluster <strong>{{name}}</strong> via kubectl or similar tools.",
+    "disabled": "Kube API URL has not yet been configured for the cluster."
   },
   "list": {
     "pending": {

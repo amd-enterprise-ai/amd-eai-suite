@@ -5,6 +5,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Path, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..organizations.models import Organization
 from ..projects.models import Project
@@ -14,7 +15,7 @@ from .cluster_auth_client import ClusterAuthClient, get_cluster_auth_client
 from .schemas import (
     ApiKeyCreate,
     ApiKeyDetails,
-    ApiKeyResponse,
+    ApiKeysResponse,
     ApiKeyUpdate,
     ApiKeyWithFullKey,
     BindGroupRequest,
@@ -48,20 +49,21 @@ router = APIRouter(tags=["API Keys"])
     Returns truncated keys for security. Requires project membership.
     API keys control access to deployed AIM inference endpoints and other project resources.""",
     status_code=status.HTTP_200_OK,
-    response_model=list[ApiKeyResponse],
+    response_model=ApiKeysResponse,
 )
 async def get_api_keys(
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
-) -> list[ApiKeyResponse]:
+    session: AsyncSession = Depends(get_session),
+) -> ApiKeysResponse:
     """
     Get all API keys for a project.
 
     The user must be a member of the project to access its API keys.
     API keys are returned with truncated values for security.
     """
-    return await list_api_keys_for_project(session, organization, project)
+    api_keys = await list_api_keys_for_project(session, organization, project)
+    return ApiKeysResponse(data=api_keys)
 
 
 @router.post(
@@ -81,7 +83,7 @@ async def create_api_key(
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
     user: str = Depends(get_user_email),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> ApiKeyWithFullKey:
     """
@@ -108,7 +110,7 @@ async def get_api_key_details(
     api_key_id: UUID = Path(description="The ID of the API key"),
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> ApiKeyDetails:
     """
@@ -136,7 +138,7 @@ async def update_api_key_bindings(
     api_key_update: ApiKeyUpdate = Body(description="API key update data"),
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> ApiKeyDetails:
     """
@@ -144,9 +146,10 @@ async def update_api_key_bindings(
 
     Accepts aim_ids and automatically manages the underlying group bindings in Cluster Auth.
     """
-    return await update_api_key_bindings_with_cluster_auth(
+    api_key = await update_api_key_bindings_with_cluster_auth(
         session, organization, project, api_key_id, api_key_update, cluster_auth_client
     )
+    return api_key
 
 
 @router.delete(
@@ -163,7 +166,7 @@ async def delete_api_key(
     api_key_id: UUID = Path(description="The ID of the API key to delete"),
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> None:
     """
@@ -190,7 +193,7 @@ async def renew_api_key(
     increment: str | None = Query(None, description="Optional TTL increment (e.g., '1h', '24h')"),
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> RenewApiKeyResponse:
     """
@@ -219,7 +222,7 @@ async def bind_api_key_to_group(
     bind_request: BindGroupRequest = Body(description="Group binding request"),
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> dict:
     """
@@ -247,7 +250,7 @@ async def unbind_api_key_from_group(
     unbind_request: UnbindGroupRequest = Body(description="Group unbinding request"),
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> dict:
     """
@@ -275,7 +278,7 @@ async def create_group(
     group_in: GroupCreate = Body(description="Group creation data"),
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> GroupResponse:
     """
@@ -303,7 +306,7 @@ async def delete_group(
     group_id: str = Path(description="The ID of the group to delete"),
     project: Project = Depends(validate_and_get_project_from_query),
     organization: Organization = Depends(get_user_organization),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
 ) -> None:
     """

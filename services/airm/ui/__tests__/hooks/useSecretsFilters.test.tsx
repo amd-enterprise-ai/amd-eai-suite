@@ -58,13 +58,13 @@ describe('useSecretsFilters', () => {
     const { result } = renderHook(() => useSecretsFilters());
 
     act(() => {
-      result.current.handleFilterChange({ type: [SecretType.EXTERNAL] });
+      result.current.handleFilterChange({ type: [SecretType.EXTERNAL_SECRET] });
     });
 
     expect(result.current.filters).toHaveLength(1);
     expect(result.current.filters[0]).toEqual({
       field: 'type',
-      values: [SecretType.EXTERNAL],
+      values: [SecretType.EXTERNAL_SECRET],
     });
   });
 
@@ -104,7 +104,7 @@ describe('useSecretsFilters', () => {
     act(() => {
       result.current.handleFilterChange({
         search: ['test'],
-        type: [SecretType.EXTERNAL],
+        type: [SecretType.EXTERNAL_SECRET],
         scope: [SecretScope.ORGANIZATION],
       });
     });
@@ -142,7 +142,7 @@ describe('useSecretsFilters', () => {
     expect(result.current.filters).toHaveLength(1);
 
     act(() => {
-      result.current.handleFilterChange({ type: [SecretType.EXTERNAL] });
+      result.current.handleFilterChange({ type: [SecretType.EXTERNAL_SECRET] });
     });
 
     expect(result.current.filters).toHaveLength(1);

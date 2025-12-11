@@ -17,7 +17,8 @@ export const fetchUsers = async () => {
   if (!response.ok) {
     throw new Error(`Failed to get users: ${await getErrorMessage(response)}`);
   }
-  return response.json();
+  const json = await response.json();
+  return json;
 };
 
 export const fetchUser = async (userId: string): Promise<UserWithProjects> => {
@@ -25,7 +26,8 @@ export const fetchUser = async (userId: string): Promise<UserWithProjects> => {
   if (!response.ok) {
     throw new Error(`Failed to get user: ${await getErrorMessage(response)}`);
   }
-  return response.json();
+  const json = await response.json();
+  return json;
 };
 
 export const fetchInvitedUsers = async () => {
@@ -35,7 +37,8 @@ export const fetchInvitedUsers = async () => {
       `Failed to get invited users: ${await getErrorMessage(response)}`,
     );
   }
-  return response.json();
+  const json = await response.json();
+  return json;
 };
 
 export const inviteUser = async (inviteUserData: InviteUserRequest) => {

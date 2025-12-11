@@ -30,6 +30,20 @@ vi.mock('@tabler/icons-react', () => ({
   ),
 }));
 
+// Mock HeroUI Tooltip to render content directly
+vi.mock('@heroui/react', async () => {
+  const actual = await vi.importActual('@heroui/react');
+  return {
+    ...actual,
+    Tooltip: ({ children, content }: any) => (
+      <div data-testid="mock-tooltip">
+        {children}
+        {content && <div data-testid="tooltip-content">{content}</div>}
+      </div>
+    ),
+  };
+});
+
 interface TestItem {
   id: string;
   name: string;
@@ -585,7 +599,7 @@ describe('ThreeDotActionsDropdown', () => {
       const triggerButton = screen.getByText('action-dot-icon');
       await fireEvent.click(triggerButton);
 
-      // Wait for hints to appear
+      // Wait for hints to appear (they're rendered immediately with the mock)
       await waitFor(() => {
         expect(screen.getByText('This is an info hint')).toBeInTheDocument();
         expect(screen.getByText('This is a warning hint')).toBeInTheDocument();

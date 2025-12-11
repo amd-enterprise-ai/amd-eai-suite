@@ -61,7 +61,7 @@ async def get_workload_by_id_in_cluster(session: AsyncSession, workload_id: UUID
 
 async def update_workload_status(
     session: AsyncSession, workload: Workload, status: str, updated_at: datetime, updated_by: str
-):
+) -> None:
     workload.status = status
     workload.updated_at = updated_at
     workload.updated_by = updated_by
@@ -191,7 +191,7 @@ async def update_workload_component_status(
     status_reason: str | None,
     updated_at: datetime,
     updated_by: str,
-):
+) -> WorkloadComponent:
     component.status = status
     component.status_reason = status_reason
     component.updated_at = updated_at
@@ -279,7 +279,7 @@ async def get_last_updated_workload_time_summary_by_workload_id(
 
 async def increment_total_elapsed_seconds(
     session: AsyncSession, workload_time_summary: WorkloadTimeSummary, increment_seconds: float
-):
+) -> None:
     workload_time_summary.total_elapsed_seconds += increment_seconds
     set_updated_fields(workload_time_summary, "system")
     await session.flush()

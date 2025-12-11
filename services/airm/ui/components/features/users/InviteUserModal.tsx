@@ -2,13 +2,15 @@
 //
 // SPDX-License-Identifier: MIT
 
+import React, { useMemo } from 'react';
+
 import { Select, SelectItem } from '@heroui/react';
 import { IconAt } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
+import { useAccessControl } from '@/hooks/useAccessControl';
 import { useSystemToast } from '@/hooks/useSystemToast';
 
 import { fetchProjects } from '@/services/app/projects';
@@ -24,6 +26,7 @@ import { UserRole } from '@/types/enums/user-roles';
 import { FormField } from '@/types/forms/forms';
 import { ProjectsResponse } from '@/types/projects';
 import {
+  InvitedUser,
   InviteUserFormData,
   InviteUserRequest,
   InvitedUsersResponse,
@@ -31,8 +34,9 @@ import {
   UsersResponse,
 } from '@/types/users';
 
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import FormFieldComponent from '@/components/shared/ManagedForm/FormFieldComponent';
+import FormPasswordInput from '@/components/shared/ManagedForm/FormPasswordInput';
 
 import { ZodType, z } from 'zod';
 
@@ -57,6 +61,7 @@ const InviteUserModal: React.FC<Props> = ({
   const { t } = useTranslation(i18nKeySet);
   const { toast } = useSystemToast();
   const queryClient = useQueryClient();
+  const { isTempPasswordRequired } = useAccessControl();
 
   const { data: userData } = useQuery<UsersResponse>({
     queryKey: ['users'],
@@ -76,10 +81,7 @@ const InviteUserModal: React.FC<Props> = ({
   });
 
   const allUsers = useMemo(
-    () => [
-      ...(userData?.users || []),
-      ...(invitedUserData?.invitedUsers || []),
-    ],
+    () => [...(userData?.data || []), ...(invitedUserData?.data || [])],
     [userData, invitedUserData],
   );
 
@@ -96,7 +98,7 @@ const InviteUserModal: React.FC<Props> = ({
             (value) => {
               if (
                 allUsers.some(
-                  (user) =>
+                  (user: User | InvitedUser) =>
                     user.email.toLowerCase() ===
                     (value as string).trim().toLowerCase(),
                 )
@@ -116,6 +118,21 @@ const InviteUserModal: React.FC<Props> = ({
         roles: z
           .string()
           .nonempty(t('modal.addUser.form.roles.validation.selected') || ''),
+        tempPassword: z
+          .union([
+            z
+              .string()
+              .min(
+                8,
+                t('modal.addUser.form.tempPassword.validation.minLength') || '',
+              )
+              .max(
+                256,
+                t('modal.addUser.form.tempPassword.validation.maxLength') || '',
+              ),
+            z.literal(''), // allow empty string = "no temp password"
+          ])
+          .optional(),
       }),
     [t, allUsers],
   );
@@ -148,58 +165,64 @@ const InviteUserModal: React.FC<Props> = ({
     },
   });
 
-  const formContent: FormField<InviteUserFormData>[] = [
-    {
-      name: 'email',
-      label: t('modal.addUser.form.email.label'),
-      isRequired: true,
-      icon: (props) => <IconAt size="14" {...props} />,
-    },
-    {
-      name: 'roles',
-      label: t('modal.addUser.form.roles.label'),
-      isRequired: true,
-      component: (formElemProps) => (
-        <Select
-          labelPlacement="outside"
-          placeholder={t('modal.addUser.form.roles.placeholder')}
-          variant="bordered"
-          {...formElemProps}
-          defaultSelectedKeys={[UserRole.PLATFORM_ADMIN]}
-          disallowEmptySelection
-        >
-          <SelectItem key={UserRole.PLATFORM_ADMIN}>
-            {t('modal.addUser.form.roles.options.platformAdmin')}
-          </SelectItem>
-          <SelectItem key={UserRole.TEAM_MEMBER}>
-            {t('modal.addUser.form.roles.options.teamMember')}
-          </SelectItem>
-        </Select>
-      ),
-    },
-    {
-      name: 'projectIds',
-      label: t('modal.addUser.form.projects.label'),
-      placeholder: t('modal.addUser.form.projects.placeholder'),
-      isRequired: false,
-      component: (formElemProps) => (
-        <Select
-          data-testid="project-select"
-          labelPlacement="outside"
-          selectionMode="multiple"
-          defaultSelectedKeys={selectedProjectIds || []}
-          variant="bordered"
-          {...formElemProps}
-        >
-          {allProjects.map((project) => (
-            <SelectItem key={project.id} data-testid={`project-${project.id}`}>
-              {project.name}
+  const formContent: FormField<InviteUserFormData>[] = useMemo(
+    () => [
+      {
+        name: 'email',
+        label: t('modal.addUser.form.email.label'),
+        isRequired: true,
+        icon: (props) => <IconAt size="14" {...props} />,
+      },
+      {
+        name: 'roles',
+        label: t('modal.addUser.form.roles.label'),
+        isRequired: true,
+        component: (formElemProps) => (
+          <Select
+            labelPlacement="outside"
+            placeholder={t('modal.addUser.form.roles.placeholder')}
+            variant="bordered"
+            {...formElemProps}
+            defaultSelectedKeys={[UserRole.PLATFORM_ADMIN]}
+            disallowEmptySelection
+          >
+            <SelectItem key={UserRole.PLATFORM_ADMIN}>
+              {t('modal.addUser.form.roles.options.platformAdmin')}
             </SelectItem>
-          ))}
-        </Select>
-      ),
-    },
-  ];
+            <SelectItem key={UserRole.TEAM_MEMBER}>
+              {t('modal.addUser.form.roles.options.teamMember')}
+            </SelectItem>
+          </Select>
+        ),
+      },
+      {
+        name: 'projectIds',
+        label: t('modal.addUser.form.projects.label'),
+        placeholder: t('modal.addUser.form.projects.placeholder'),
+        isRequired: false,
+        component: (formElemProps) => (
+          <Select
+            data-testid="project-select"
+            labelPlacement="outside"
+            selectionMode="multiple"
+            defaultSelectedKeys={selectedProjectIds || []}
+            variant="bordered"
+            {...formElemProps}
+          >
+            {allProjects.map((project: any) => (
+              <SelectItem
+                key={project.id}
+                data-testid={`project-${project.id}`}
+              >
+                {project.name}
+              </SelectItem>
+            ))}
+          </Select>
+        ),
+      },
+    ],
+    [t, allProjects, selectedProjectIds],
+  );
 
   return (
     <DrawerForm<InviteUserFormData>
@@ -215,6 +238,7 @@ const InviteUserModal: React.FC<Props> = ({
               ? [UserRole.PLATFORM_ADMIN]
               : [],
           project_ids: data.projectIds,
+          temporary_password: data.tempPassword,
         } as InviteUserRequest);
       }}
       defaultValues={{
@@ -232,7 +256,16 @@ const InviteUserModal: React.FC<Props> = ({
               register={form.register}
             />
           ))}
-          <span className="text-small">{t('modal.addUser.instruction')}</span>
+          {isTempPasswordRequired && (
+            <FormPasswordInput
+              form={form}
+              name="tempPassword"
+              label={t('modal.addUser.form.tempPassword.label')}
+              placeholder={t('modal.addUser.form.tempPassword.placeholder')}
+              isRequired
+            />
+          )}
+          <p className="text-small">{t('modal.addUser.instruction')}</p>
         </div>
       )}
       onCancel={onOpenChange}

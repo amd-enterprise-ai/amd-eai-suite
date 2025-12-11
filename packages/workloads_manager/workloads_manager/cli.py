@@ -35,7 +35,7 @@ logger.add(sys.stderr, level="INFO", format="{message}")
 
 @click.group()
 @click.option("--debug", is_flag=True, help="Enable debug logging", envvar="WM_DEBUG", default=False)
-def cli(debug: bool):
+def cli(debug: bool) -> None:
     """Manage AI workloads, patches, and registration."""
     if debug:
         # Reset logger and set to DEBUG level with concise format
@@ -47,7 +47,7 @@ def cli(debug: bool):
 @cli.command()
 @click.option("--force", is_flag=True, help="Force reset of the repository")
 @click.option("--skip-patches", is_flag=True, help="Skip patch application")
-def init(force: bool = False, skip_patches: bool = False):
+def init(force: bool = False, skip_patches: bool = False) -> None:
     """Initialize or reset the workloads repository and apply patches.
 
     This will:
@@ -220,7 +220,7 @@ def create_patches():
     envvar="WM_SKIP_CONFIRMATIONS",
     default=False,
 )
-def register(workload: str | None, url: str, yes: bool = False):
+def register(workload: str | None, url: str, yes: bool = False) -> None:
     """Register a workload template to the service.
 
     If WORKLOAD is not provided, you will be prompted to select from available workloads.

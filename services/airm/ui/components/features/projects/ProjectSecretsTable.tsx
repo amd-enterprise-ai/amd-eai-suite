@@ -2,67 +2,44 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-
 import { useTranslation } from 'next-i18next';
 
-import { fetchProjectSecrets } from '@/services/app/secrets';
-
 import { getFilteredData } from '@/utils/app/data-table';
-import { displayTimestamp } from '@/utils/app/strings';
-
 import { ActionItem, TableColumns } from '@/types/data-table/clientside-table';
 import { CustomComparatorConfig } from '@/types/data-table/table-comparators';
 import { SecretsTableField } from '@/types/enums/secrets-table-field';
 import { ClientSideDataFilter } from '@/types/filters';
+import { ProjectSecretWithParentSecret } from '@/types/secrets';
+import { SecretUseCase } from '@/types/enums/secrets';
 import {
-  ProjectSecretWithParentSecret,
-  ProjectSecretsResponse,
-} from '@/types/secrets';
+  ClientSideDataTable,
+  StatusDisplay,
+  DateDisplay,
+} from '@/components/shared/DataTable';
 
-import { ClientSideDataTable } from '@/components/shared/DataTable';
-
-import { ProjectSecretStatus } from '../secrets';
-import { doesProjectSecretDataNeedToBeRefreshed } from '@/utils/app/secrets';
-import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@/utils/app/api-helpers';
+import getProjectSecretStatusVariants from '@/utils/app/project-secret-status-variants';
+import { ProjectSecretStatus } from '@/types/enums/secrets';
+import StatusError from '@/components/shared/StatusError/StatusError';
 
 interface Props {
   filters?: ClientSideDataFilter<ProjectSecretWithParentSecret>[];
   actions?: ActionItem<ProjectSecretWithParentSecret>[];
-  projectId: string;
+  isLoading: boolean;
   projectSecrets: ProjectSecretWithParentSecret[];
 }
 
 export const ProjectSecretsTable: React.FC<Props> = ({
   filters,
   actions,
-  projectId,
+  isLoading,
   projectSecrets,
 }) => {
   const { t } = useTranslation('secrets');
 
-  const { data: projectSecretsData, isLoading: isSecretsLoading } =
-    useQuery<ProjectSecretsResponse>({
-      queryKey: ['secrets', projectId],
-      queryFn: () => fetchProjectSecrets(projectId),
-      initialData: {
-        projectSecrets: projectSecrets,
-      },
-      refetchInterval: (query) => {
-        return !query.state.data ||
-          doesProjectSecretDataNeedToBeRefreshed(
-            query.state.data.projectSecrets,
-          )
-          ? DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA
-          : false;
-      },
-    });
-
   const filteredData = useMemo(() => {
-    const data = projectSecretsData.projectSecrets;
-    return getFilteredData(data, filters);
-  }, [projectSecretsData, filters]);
+    return getFilteredData(projectSecrets, filters);
+  }, [projectSecrets, filters]);
 
   const columns: TableColumns<SecretsTableField | null> = [
     {
@@ -70,11 +47,19 @@ export const ProjectSecretsTable: React.FC<Props> = ({
       sortable: true,
     },
     {
+      key: SecretsTableField.STATUS,
+      sortable: true,
+    },
+    {
       key: SecretsTableField.TYPE,
       sortable: true,
     },
     {
-      key: SecretsTableField.STATUS,
+      key: SecretsTableField.USE_CASE,
+      sortable: true,
+    },
+    {
+      key: SecretsTableField.SCOPE,
       sortable: true,
     },
     {
@@ -87,19 +72,40 @@ export const ProjectSecretsTable: React.FC<Props> = ({
       [SecretsTableField.NAME]: (item: ProjectSecretWithParentSecret) => (
         <span>{item.secret.name}</span>
       ),
+      [SecretsTableField.STATUS]: (item: ProjectSecretWithParentSecret) => (
+        <StatusDisplay
+          type={item.status}
+          variants={getProjectSecretStatusVariants(t)}
+          bypassProps={
+            item.status === ProjectSecretStatus.FAILED ||
+            item.status === ProjectSecretStatus.DELETE_FAILED ||
+            item.status === ProjectSecretStatus.SYNCED_ERROR
+              ? {
+                  isClickable: true,
+                  helpContent: <StatusError statusReason={item.statusReason} />,
+                }
+              : undefined
+          }
+        />
+      ),
       [SecretsTableField.TYPE]: (item: ProjectSecretWithParentSecret) => (
         <span data-testid={`secret-type-${item.secret.type}`}>
           {t(`secretType.${item.secret.type}`)}
         </span>
       ),
-      [SecretsTableField.STATUS]: (item: ProjectSecretWithParentSecret) => (
-        <ProjectSecretStatus
-          status={item.status}
-          statusReason={item.statusReason}
-        />
+      [SecretsTableField.USE_CASE]: (item: ProjectSecretWithParentSecret) => (
+        <span data-testid={`secret-use-case-${item.secret.useCase}`}>
+          {t(`useCase.${item.secret.useCase ?? SecretUseCase.GENERIC}`)}
+        </span>
       ),
-      [SecretsTableField.UPDATED_AT]: (item: ProjectSecretWithParentSecret) =>
-        displayTimestamp(new Date(item.updatedAt)),
+      [SecretsTableField.SCOPE]: (item: ProjectSecretWithParentSecret) => (
+        <span data-testid={`secret-scope-${item.secret.scope}`}>
+          {t(`secretScope.${item.secret.scope}`)}
+        </span>
+      ),
+      [SecretsTableField.UPDATED_AT]: (item: ProjectSecretWithParentSecret) => (
+        <DateDisplay date={item[SecretsTableField.UPDATED_AT]} />
+      ),
     }),
     [t],
   );
@@ -124,7 +130,7 @@ export const ProjectSecretsTable: React.FC<Props> = ({
         defaultSortByField={'name'}
         translation={t}
         idKey={'id'}
-        isLoading={isSecretsLoading}
+        isLoading={isLoading}
         rowActions={actions}
       />
     </div>

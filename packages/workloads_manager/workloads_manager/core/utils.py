@@ -6,14 +6,19 @@
 
 import os
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 import rich.table
 from loguru import logger
 from rich.console import Console
 
+if TYPE_CHECKING:
+    from ..models import WorkloadRegistrationResult
 
-def display_registration_result(result, console: Console) -> None:
+
+def display_registration_result(result: "WorkloadRegistrationResult", console: Console) -> None:
     """Display registration result in a formatted table.
 
     Args:
@@ -79,7 +84,7 @@ def display_registration_result(result, console: Console) -> None:
 
 
 @contextmanager
-def temp_file_with_content(content: str, suffix: str = ".yaml"):
+def temp_file_with_content(content: str, suffix: str = ".yaml") -> Iterator[str]:
     """Context manager for temporary files."""
     temp_file_path = None
     try:

@@ -25,6 +25,11 @@ import InviteUserModal from '@/components/features/users/InviteUserModal';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock, vi } from 'vitest';
+import {
+  mockUsersResponse,
+  mockInvitedUsersResponse,
+} from '@/__mocks__/services/app/users.data';
+import { mockProjectsResponse } from '@/__mocks__/services/app/projects.data';
 
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
@@ -37,56 +42,6 @@ vi.mock('@/hooks/useSystemToast', () => {
   };
   return { default: useSystemToast, useSystemToast };
 });
-
-const usersData = {
-  users: [
-    {
-      id: '1',
-      email: 'existing@example.com',
-      firstName: 'John',
-      lastName: 'Doe',
-      role: UserRole.PLATFORM_ADMIN,
-      projects: [
-        {
-          id: '1',
-          name: 'default',
-          description: 'Default Project',
-        },
-        {
-          id: '2',
-          name: 'test',
-          description: 'Another project',
-        },
-      ],
-    },
-  ],
-};
-
-const invitedUsersData = {
-  invitedUsers: [
-    {
-      id: 2,
-      email: 'existing-invite@example.com',
-      role: UserRole.PLATFORM_ADMIN,
-      projects: null,
-    },
-  ],
-};
-
-const projectsData = {
-  projects: [
-    {
-      id: '1',
-      name: 'default',
-      description: 'Default Project',
-    },
-    {
-      id: '2',
-      name: 'test',
-      description: 'Test Project',
-    },
-  ],
-};
 
 vi.mock('@/services/app/users', async (importOriginal) => {
   return {
@@ -104,15 +59,34 @@ vi.mock('@/services/app/projects', async (importOriginal) => {
   };
 });
 
+vi.mock('@/hooks/useAccessControl', () => ({
+  useAccessControl: vi.fn(() => ({
+    isRoleManagementEnabled: true,
+    isInviteEnabled: true,
+    isAdministrator: true,
+    smtpEnabled: true,
+    isTempPasswordRequired: false,
+  })),
+}));
+
 describe('InviteUserModal', () => {
   const onOpenChange = vi.fn();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
-    vi.mocked(fetchUsers).mockResolvedValue(usersData);
-    vi.mocked(fetchInvitedUsers).mockResolvedValue(invitedUsersData);
-    vi.mocked(fetchProjects).mockResolvedValue(projectsData);
+    vi.mocked(fetchUsers).mockResolvedValue(mockUsersResponse);
+    vi.mocked(fetchInvitedUsers).mockResolvedValue(mockInvitedUsersResponse);
+    vi.mocked(fetchProjects).mockResolvedValue(mockProjectsResponse);
+
+    const { useAccessControl } = await import('@/hooks/useAccessControl');
+    vi.mocked(useAccessControl).mockReturnValue({
+      isRoleManagementEnabled: true,
+      isInviteEnabled: true,
+      isAdministrator: true,
+      smtpEnabled: true,
+      isTempPasswordRequired: false,
+    });
   });
 
   it('renders the modal form', () => {
@@ -301,7 +275,7 @@ describe('InviteUserModal', () => {
     });
 
     fireEvent.change(screen.getByLabelText('modal.addUser.form.email.label'), {
-      target: { value: 'EXIsTING@example.com' },
+      target: { value: 'USER1@amd.com' },
     });
     const actionButton = screen.getByText('modal.addUser.actions.confirm');
     fireEvent.click(actionButton);
@@ -325,7 +299,7 @@ describe('InviteUserModal', () => {
     });
 
     fireEvent.change(screen.getByLabelText('modal.addUser.form.email.label'), {
-      target: { value: 'EXISTING-invite@example.com' },
+      target: { value: 'INVITED1@amd.com' },
     });
     const actionButton = screen.getByText('modal.addUser.actions.confirm');
     fireEvent.click(actionButton);
@@ -337,7 +311,7 @@ describe('InviteUserModal', () => {
   });
 
   it('Able invite a user to a project if the project is supplied as input', async () => {
-    (fetchProjects as Mock).mockResolvedValueOnce(projectsData);
+    (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
 
     await act(async () => {
       render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
@@ -364,7 +338,7 @@ describe('InviteUserModal', () => {
     await fireEvent.click(screen.getByTestId('project-select'));
 
     await waitFor(async () => {
-      await fireEvent.click(screen.getByTestId('project-1'));
+      await fireEvent.click(screen.getByTestId('project-project-1'));
     });
 
     const actionButton = screen.getByText('modal.addUser.actions.confirm');
@@ -374,7 +348,7 @@ describe('InviteUserModal', () => {
       expect(inviteUser).toHaveBeenCalledWith({
         email: 'newuser@example.com',
         roles: ['Platform Administrator'],
-        project_ids: ['1'],
+        project_ids: ['project-1'],
       });
     });
   });
@@ -383,7 +357,7 @@ describe('InviteUserModal', () => {
     const onSuccess = vi.fn(); // Mock success callback
 
     (inviteUser as Mock).mockResolvedValueOnce({});
-    (fetchProjects as Mock).mockResolvedValueOnce(projectsData);
+    (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
 
     await act(async () => {
       render(
@@ -408,7 +382,7 @@ describe('InviteUserModal', () => {
     });
 
     await fireEvent.click(screen.getByTestId('project-select'));
-    await fireEvent.click(screen.getByTestId('project-1'));
+    await fireEvent.click(screen.getByTestId('project-project-1'));
 
     const actionButton = screen.getByText('modal.addUser.actions.confirm');
     await fireEvent.click(actionButton);
@@ -417,9 +391,283 @@ describe('InviteUserModal', () => {
       expect(inviteUser).toHaveBeenCalledWith({
         email: 'newuser@example.com',
         roles: [UserRole.PLATFORM_ADMIN],
-        project_ids: ['1'],
+        project_ids: ['project-1'],
       });
       expect(onSuccess).toHaveBeenCalled();
+    });
+  });
+
+  describe('Temporary Password', () => {
+    it('does not show temporary password field when not required', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: false,
+      });
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      const tempPasswordField = screen.queryByLabelText(
+        'modal.addUser.form.tempPassword.label',
+      );
+      expect(tempPasswordField).not.toBeInTheDocument();
+    });
+
+    it('shows temporary password field when required', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      const tempPasswordField = screen.getByLabelText(
+        'modal.addUser.form.tempPassword.label',
+      );
+      expect(tempPasswordField).toBeInTheDocument();
+    });
+
+    it('validates temporary password minimum length', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: 'short' }, // Less than 8 characters
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      const errorMessage = await screen.findByText(
+        'modal.addUser.form.tempPassword.validation.minLength',
+      );
+      expect(errorMessage).toBeInTheDocument();
+    });
+
+    it('validates temporary password maximum length', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      // Create a password longer than 256 characters
+      const longPassword = 'a'.repeat(257);
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: longPassword },
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      const errorMessage = await screen.findByText(
+        'modal.addUser.form.tempPassword.validation.maxLength',
+      );
+      expect(errorMessage).toBeInTheDocument();
+    });
+
+    it('accepts valid temporary password (8-256 characters)', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      (inviteUser as Mock).mockResolvedValueOnce({});
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: 'ValidPass123' }, // Valid password
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [UserRole.PLATFORM_ADMIN],
+          project_ids: [],
+          temporary_password: 'ValidPass123',
+        });
+        expect(toastSuccessMock).toHaveBeenCalledWith(
+          'modal.addUser.notification.success',
+        );
+      });
+    });
+
+    it('includes temporary password in API call when provided', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      (inviteUser as Mock).mockResolvedValueOnce({});
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: 'TempPassword123' },
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith(
+          expect.objectContaining({
+            email: 'newuser@example.com',
+            temporary_password: 'TempPassword123',
+          }),
+        );
+      });
+    });
+
+    it('invites user with Team Member role and temporary password', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      (inviteUser as Mock).mockResolvedValueOnce({});
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      const selectTrigger = screen.getAllByLabelText(
+        'modal.addUser.form.roles.label',
+      );
+      await fireEvent.click(selectTrigger[1]);
+
+      const selectOption = screen.getAllByText(
+        'modal.addUser.form.roles.options.teamMember',
+      );
+      await fireEvent.click(selectOption[1]);
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: 'TempPassword123' },
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [],
+          project_ids: [],
+          temporary_password: 'TempPassword123',
+        });
+      });
     });
   });
 });

@@ -10,8 +10,10 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import app  # type: ignore
+from app.charts.config import INFERENCE_CHART_NAME
 from app.managed_workloads.enums import WorkloadStatus
-from app.managed_workloads.schemas import AllocatedResources, ChartWorkloadResponse
+from app.managed_workloads.schemas import AllocatedResources
+from app.managed_workloads.service import get_workload, list_workloads
 from app.metrics.constants import (
     VLLM_END_TO_END_LATENCY_LABEL,
     VLLM_INTER_TOKEN_LATENCY_LABEL,
@@ -39,6 +41,7 @@ from app.utilities.security import (
     get_user_organization,
     validate_and_get_project_from_query,
 )
+from app.workloads.enums import WorkloadType
 from tests import factory
 from tests.conftest import get_test_client
 
@@ -60,6 +63,13 @@ def setup_test_dependencies(env, db_session, mock_claimset):
 async def test_get_workloads(mock_list_workloads, db_session: AsyncSession, mock_claimset):
     """Test list managed workloads endpoint returns 200."""
     env = await factory.create_full_test_environment(db_session, with_chart=True, with_model=True)
+    # Create inference chart needed for capabilities
+    await factory.create_chart(
+        db_session,
+        name=INFERENCE_CHART_NAME,
+        chart_type=WorkloadType.INFERENCE,
+        creator="test@example.com",
+    )
     # Create a managed workload using the existing model
     managed_workload = await factory.create_chart_workload(
         db_session,
@@ -71,22 +81,32 @@ async def test_get_workloads(mock_list_workloads, db_session: AsyncSession, mock
         display_name="Test Workload",
     )
 
-    workload_response = ChartWorkloadResponse.model_validate(managed_workload)
-    mock_list_workloads.return_value = [workload_response]
+    workload_responses = await list_workloads(db_session, env.project.id)
+    workload_response = workload_responses[0]
+    mock_list_workloads.return_value = workload_responses
 
     setup_test_dependencies(env, db_session, mock_claimset)
 
     with get_test_client() as client:
         response = client.get(f"/v1/managed-workloads?project={env.project.id}")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.json()) == 1
-        assert response.json()[0]["id"] == str(workload_response.id)
+        response_data = response.json()
+        assert "data" in response_data
+        assert len(response_data["data"]) == 1
+        assert response_data["data"][0]["id"] == str(workload_response.id)
 
 
 @patch("app.managed_workloads.router.list_workloads")
 async def test_get_workloads_with_resources(mock_list_workloads, db_session: AsyncSession, mock_claimset):
     """Test list managed workloads with resources returns 200."""
     env = await factory.create_full_test_environment(db_session, with_chart=True, with_model=True)
+    # Create inference chart needed for capabilities
+    await factory.create_chart(
+        db_session,
+        name=INFERENCE_CHART_NAME,
+        chart_type=WorkloadType.INFERENCE,
+        creator="test@example.com",
+    )
     managed_workload = await factory.create_chart_workload(
         db_session,
         env.project,
@@ -97,8 +117,8 @@ async def test_get_workloads_with_resources(mock_list_workloads, db_session: Asy
         display_name="Test Workload",
     )
 
-    workload_response = ChartWorkloadResponse.model_validate(managed_workload)
-    mock_list_workloads.return_value = [workload_response]
+    workload_responses = await list_workloads(db_session, env.project.id)
+    mock_list_workloads.return_value = workload_responses
 
     setup_test_dependencies(env, db_session, mock_claimset)
 
@@ -107,13 +127,15 @@ async def test_get_workloads_with_resources(mock_list_workloads, db_session: Asy
         get_test_client() as client,
     ):
         # Mock the enrichment function to return response with allocated resources
-        enriched_response = ChartWorkloadResponse.model_validate(managed_workload)
+        enriched_response = workload_responses[0]
         enriched_response.allocated_resources = AllocatedResources(gpu_count=2, vram=32000.0)
         mock_enrich.return_value = [enriched_response]
 
         response = client.get(f"/v1/managed-workloads?project={env.project.id}&with_resources=true")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.json()) == 1
+        response_data = response.json()
+        assert "data" in response_data
+        assert len(response_data["data"]) == 1
         mock_enrich.assert_called_once()
 
 
@@ -121,6 +143,13 @@ async def test_get_workloads_with_resources(mock_list_workloads, db_session: Asy
 async def test_get_workload(mock_get_workload, db_session: AsyncSession, mock_claimset):
     """Test get workload details endpoint returns 200."""
     env = await factory.create_full_test_environment(db_session, with_chart=True, with_model=True)
+    # Create inference chart needed for capabilities
+    await factory.create_chart(
+        db_session,
+        name=INFERENCE_CHART_NAME,
+        chart_type=WorkloadType.INFERENCE,
+        creator="test@example.com",
+    )
     managed_workload = await factory.create_chart_workload(
         db_session,
         env.project,
@@ -132,7 +161,7 @@ async def test_get_workload(mock_get_workload, db_session: AsyncSession, mock_cl
         manifest="apiVersion: v1\nkind: Service\nmetadata:\n  name: test-service",
     )
 
-    workload_response = ChartWorkloadResponse.model_validate(managed_workload)
+    workload_response = await get_workload(db_session, [env.project], managed_workload.id)
     mock_get_workload.return_value = workload_response
 
     setup_test_dependencies(env, db_session, mock_claimset)
@@ -140,13 +169,21 @@ async def test_get_workload(mock_get_workload, db_session: AsyncSession, mock_cl
     with get_test_client() as client:
         response = client.get(f"/v1/managed-workloads/{managed_workload.id}")
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["id"] == str(managed_workload.id)
+        response_data = response.json()
+        assert response_data["id"] == str(managed_workload.id)
 
 
 @patch("app.managed_workloads.router.get_workload")
 async def test_get_workload_with_resources(mock_get_workload, db_session: AsyncSession, mock_claimset):
     """Test get workload details with resources returns 200."""
     env = await factory.create_full_test_environment(db_session, with_chart=True, with_model=True)
+    # Create inference chart needed for capabilities
+    await factory.create_chart(
+        db_session,
+        name=INFERENCE_CHART_NAME,
+        chart_type=WorkloadType.INFERENCE,
+        creator="test@example.com",
+    )
     managed_workload = await factory.create_chart_workload(
         db_session,
         env.project,
@@ -158,7 +195,7 @@ async def test_get_workload_with_resources(mock_get_workload, db_session: AsyncS
         manifest="apiVersion: v1\nkind: Service\nmetadata:\n  name: test-service",
     )
 
-    workload_response = ChartWorkloadResponse.model_validate(managed_workload)
+    workload_response = await get_workload(db_session, [env.project], managed_workload.id)
     mock_get_workload.return_value = workload_response
 
     setup_test_dependencies(env, db_session, mock_claimset)
@@ -168,13 +205,14 @@ async def test_get_workload_with_resources(mock_get_workload, db_session: AsyncS
         get_test_client() as client,
     ):
         # Mock the enrichment function to return response with allocated resources
-        enriched_response = ChartWorkloadResponse.model_validate(managed_workload)
+        enriched_response = await get_workload(db_session, [env.project], managed_workload.id)
         enriched_response.allocated_resources = AllocatedResources(gpu_count=2, vram=32000.0)
         mock_enrich.return_value = [enriched_response]
 
         response = client.get(f"/v1/managed-workloads/{managed_workload.id}?with_resources=true")
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["id"] == str(managed_workload.id)
+        response_data = response.json()
+        assert response_data["id"] == str(managed_workload.id)
         mock_enrich.assert_called_once()
 
 
@@ -197,6 +235,13 @@ async def test_get_workload_not_found(mock_get_workload, db_session: AsyncSessio
 async def test_chat_with_model(mock_stream, mock_select_workload, db_session: AsyncSession, mock_claimset):
     """Test chat with model endpoint returns streaming response."""
     env = await factory.create_full_test_environment(db_session, with_chart=True, with_model=True)
+    # Create inference chart needed for capabilities
+    await factory.create_chart(
+        db_session,
+        name=INFERENCE_CHART_NAME,
+        chart_type=WorkloadType.INFERENCE,
+        creator="test@example.com",
+    )
     managed_workload = await factory.create_chart_workload(
         db_session,
         env.project,
@@ -208,14 +253,13 @@ async def test_chat_with_model(mock_stream, mock_select_workload, db_session: As
         output={"internal_host": "http://test-host:8080"},
     )
 
-    workload_response = ChartWorkloadResponse.model_validate(managed_workload)
-    mock_select_workload.return_value = workload_response
+    mock_select_workload.return_value = managed_workload
     mock_stream.return_value = MagicMock()
 
     setup_test_dependencies(env, db_session, mock_claimset)
     with get_test_client() as client:
         response = client.post(
-            f"/v1/chat/{managed_workload.id}",
+            f"/v1/managed-workloads/{managed_workload.id}/chat",
             json={"messages": [{"content": "Hello", "role": "user"}], "stream": False},
         )
         assert response.status_code == status.HTTP_200_OK
@@ -231,7 +275,9 @@ async def test_chat_with_model_not_found(mock_select_workload, db_session: Async
 
     setup_test_dependencies(env, db_session, mock_claimset)
     with get_test_client() as client:
-        response = client.post(f"/v1/chat/{workload_id}", json={"messages": [{"content": "Hello", "role": "user"}]})
+        response = client.post(
+            f"/v1/managed-workloads/{workload_id}/chat", json={"messages": [{"content": "Hello", "role": "user"}]}
+        )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -239,6 +285,13 @@ async def test_chat_with_model_not_found(mock_select_workload, db_session: Async
 async def test_chat_with_model_not_running(mock_select_workload, db_session: AsyncSession, mock_claimset):
     """Test chat with non-running model returns 422."""
     env = await factory.create_full_test_environment(db_session, with_chart=True, with_model=True)
+    # Create inference chart needed for capabilities
+    await factory.create_chart(
+        db_session,
+        name=INFERENCE_CHART_NAME,
+        chart_type=WorkloadType.INFERENCE,
+        creator="test@example.com",
+    )
     managed_workload = await factory.create_chart_workload(
         db_session,
         env.project,
@@ -249,13 +302,13 @@ async def test_chat_with_model_not_running(mock_select_workload, db_session: Asy
         display_name="Test Workload",
     )
 
-    workload_response = ChartWorkloadResponse.model_validate(managed_workload)
-    mock_select_workload.return_value = workload_response
+    mock_select_workload.return_value = managed_workload
 
     setup_test_dependencies(env, db_session, mock_claimset)
     with get_test_client() as client:
         response = client.post(
-            f"/v1/chat/{managed_workload.id}", json={"messages": [{"content": "Hello", "role": "user"}]}
+            f"/v1/managed-workloads/{managed_workload.id}/chat",
+            json={"messages": [{"content": "Hello", "role": "user"}]},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -264,6 +317,13 @@ async def test_chat_with_model_not_running(mock_select_workload, db_session: Asy
 async def test_chat_with_model_no_host(mock_select_workload, db_session: AsyncSession, mock_claimset):
     """Test chat with model that has no host returns 422."""
     env = await factory.create_full_test_environment(db_session, with_chart=True, with_model=True)
+    # Create inference chart needed for capabilities
+    await factory.create_chart(
+        db_session,
+        name=INFERENCE_CHART_NAME,
+        chart_type=WorkloadType.INFERENCE,
+        creator="test@example.com",
+    )
     managed_workload = await factory.create_chart_workload(
         db_session,
         env.project,
@@ -275,13 +335,13 @@ async def test_chat_with_model_no_host(mock_select_workload, db_session: AsyncSe
         output={},  # No internal_host
     )
 
-    workload_response = ChartWorkloadResponse.model_validate(managed_workload)
-    mock_select_workload.return_value = workload_response
+    mock_select_workload.return_value = managed_workload
 
     setup_test_dependencies(env, db_session, mock_claimset)
     with get_test_client() as client:
         response = client.post(
-            f"/v1/chat/{managed_workload.id}", json={"messages": [{"content": "Hello", "role": "user"}]}
+            f"/v1/managed-workloads/{managed_workload.id}/chat",
+            json={"messages": [{"content": "Hello", "role": "user"}]},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 

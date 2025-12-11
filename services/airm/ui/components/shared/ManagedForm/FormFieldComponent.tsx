@@ -3,7 +3,12 @@
 // SPDX-License-Identifier: MIT
 import { Button, Input } from '@heroui/react';
 import { cn } from '@heroui/react';
-import { FieldValues, Path, UseFormRegister } from 'react-hook-form';
+import {
+  FieldValues,
+  Path,
+  UseFormRegister,
+  UseFormReturn,
+} from 'react-hook-form';
 
 import { FormField } from '@/types/forms/forms';
 
@@ -12,6 +17,7 @@ interface Props<T extends FieldValues> {
   isDisabled?: boolean;
   errorMessage?: string;
   register: UseFormRegister<T> | null;
+  form?: UseFormReturn<T>;
   defaultValue?: unknown;
   className?: string;
 }
@@ -23,6 +29,7 @@ export const FormFieldComponent = <T extends FieldValues>({
   errorMessage,
   className,
   register,
+  form,
 }: Props<T>) => {
   const Component = (formField.component as React.ElementType) || Input;
 
@@ -34,6 +41,7 @@ export const FormFieldComponent = <T extends FieldValues>({
         'text-opacity-disabled': formField.isReadOnly,
         'text-foreground': formField.isReadOnly,
       })}
+      form={form}
       name={formField.name}
       isDisabled={isDisabled}
       isRequired={formField.isRequired}

@@ -48,7 +48,7 @@ The codebase follows a modular architecture with domain-specific packages:
 
 ```bash
 # Copy environment variables template
-cp .env.local .env
+cp .env.example .env
 
 # Start supporting services (PostgreSQL, RabbitMQ, Minio, Keycloak)
 docker compose up -d
@@ -89,7 +89,7 @@ The test suite supports parallel execution using pytest-xdist with database-per-
 - **Single process**: When debugging specific modules or tests
 - **Manual worker count** (`-n 2`): For CI environments or when auto detection isn't optimal
 
-**Automated cleanup**: Orphaned Docker containers are automatically cleaned up before tests start using process-based detection. Manual cleanup with `uv run python3 tests/cleanup_test_docker.py` is available if needed.
+**Automated cleanup**: Testcontainers handles automatic container cleanup when test processes exit. Containers are properly managed across pytest-xdist workers using FileLock coordination.
 
 ### Development Workflow
 

@@ -103,6 +103,102 @@ describe('aims utils', () => {
       ).toBe(true);
       expect(aimParser(aimWithoutTokenLabel).isHfTokenRequired).toBe(false);
     });
+
+    it('parses recommendedDeployments correctly', () => {
+      const aimWithRecommendedDeployments: any = {
+        imageTag: '1.0.0',
+        labels: {},
+        recommendedDeployments: [
+          {
+            gpuModel: 'MI300X',
+            gpuCount: 1,
+            precision: 'fp8',
+            metric: 'latency',
+            description: 'Optimized for latency',
+          },
+          {
+            gpuModel: 'MI300X',
+            gpuCount: 1,
+            precision: 'fp8',
+            metric: 'throughput',
+            description: 'Optimized for throughput',
+          },
+        ],
+      };
+
+      const result = aimParser(aimWithRecommendedDeployments);
+      expect(result.recommendedDeployments).toHaveLength(2);
+      expect(result.recommendedDeployments[0].metric).toBe('latency');
+      expect(result.recommendedDeployments[1].metric).toBe('throughput');
+      expect(result.availableMetrics).toEqual(['latency', 'throughput']);
+    });
+
+    it('parses single recommendedDeployment correctly', () => {
+      const aimWithSingleDeployment: any = {
+        imageTag: '1.0.0',
+        labels: {},
+        recommendedDeployments: [
+          {
+            gpuModel: 'MI300X',
+            gpuCount: 1,
+            precision: 'fp8',
+            metric: 'latency',
+            description: 'Optimized for latency',
+          },
+        ],
+      };
+
+      const result = aimParser(aimWithSingleDeployment);
+      expect(result.recommendedDeployments).toHaveLength(1);
+      expect(result.recommendedDeployments[0].metric).toBe('latency');
+      expect(result.availableMetrics).toEqual(['latency']);
+    });
+
+    it('handles missing recommendedDeployments from API gracefully', () => {
+      const aimWithoutDeploymentsFromAPI: any = {
+        imageTag: '1.0.0',
+        labels: {},
+        // recommendedDeployments not provided by API
+      };
+
+      const result = aimParser(aimWithoutDeploymentsFromAPI);
+      expect(result.recommendedDeployments).toEqual([]);
+      expect(result.availableMetrics).toEqual([]);
+    });
+
+    it('extracts unique metrics from recommendedDeployments', () => {
+      const aimWithDuplicateMetrics: any = {
+        imageTag: '1.0.0',
+        labels: {},
+        recommendedDeployments: [
+          {
+            gpuModel: 'MI300X',
+            gpuCount: 1,
+            precision: 'fp8',
+            metric: 'latency',
+            description: 'Config 1',
+          },
+          {
+            gpuModel: 'MI300X',
+            gpuCount: 8,
+            precision: 'fp16',
+            metric: 'latency',
+            description: 'Config 2',
+          },
+          {
+            gpuModel: 'MI300X',
+            gpuCount: 1,
+            precision: 'fp8',
+            metric: 'throughput',
+            description: 'Config 3',
+          },
+        ],
+      };
+
+      const result = aimParser(aimWithDuplicateMetrics);
+      expect(result.recommendedDeployments).toHaveLength(3);
+      expect(result.availableMetrics).toEqual(['latency', 'throughput']);
+    });
   });
 
   describe('aimsParser', () => {

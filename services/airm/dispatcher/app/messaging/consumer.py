@@ -5,6 +5,7 @@
 import asyncio
 from asyncio import Task
 
+from aio_pika import abc
 from loguru import logger
 
 from airm.messaging.consumer import start_queue_consumer
@@ -36,7 +37,7 @@ from .config import (
 )
 
 
-async def __process_message(message):
+async def __process_message(message: abc.AbstractIncomingMessage) -> None:
     try:
         async with message.process(requeue=True):
             str_json = message.body.decode()

@@ -12,7 +12,7 @@ import {
 describe('getDocumentationLink', () => {
   it('returns the correct link for an exact match', () => {
     expect(getDocumentationLink('/workspaces')).toBe(
-      `${DOCS_BASE_URL}${DocWorkbenchBaseURI}/workspaces.html`,
+      `${DOCS_BASE_URL}${DocWorkbenchBaseURI}/workspaces/overview.html`,
     );
     expect(getDocumentationLink('/users')).toBe(
       `${DOCS_BASE_URL}${DocResourceManagerBaseURI}/users/manage-users.html`,
@@ -27,7 +27,7 @@ describe('getDocumentationLink', () => {
 
   it('returns the correct link for a subpath', () => {
     expect(getDocumentationLink('/projects/fake-project-id-url')).toBe(
-      `${DOCS_BASE_URL}${DocResourceManagerBaseURI}/projects/manage-projects.html`,
+      `${DOCS_BASE_URL}${DocResourceManagerBaseURI}/projects/project-dashboard.html`,
     );
   });
 

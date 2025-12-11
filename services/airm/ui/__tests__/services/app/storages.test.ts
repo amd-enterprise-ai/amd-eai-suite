@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 import {
+  assignStorageToProject,
   createStorage,
   deleteProjectStorage,
   deleteStorage,
@@ -125,6 +126,41 @@ describe('storages service', () => {
       await expect(updateStorageAssignment('req1', {} as any)).rejects.toThrow(
         APIRequestError,
       );
+    });
+  });
+
+  describe('assignStorageToProject', () => {
+    it('assigns storage to project and returns result', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      mockJson.mockResolvedValueOnce({ success: true });
+      const result = await assignStorageToProject('proj1', 'stor1');
+      expect(result).toEqual({ success: true });
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/projects/proj1/storages/stor1',
+        expect.objectContaining({
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+
+    it('throws APIRequestError on failure', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 400 });
+      await expect(assignStorageToProject('proj1', 'stor1')).rejects.toThrow(
+        APIRequestError,
+      );
+    });
+
+    it('throws APIRequestError with correct message on 404', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+      try {
+        await assignStorageToProject('proj1', 'stor1');
+      } catch (error) {
+        expect(error).toBeInstanceOf(APIRequestError);
+        expect((error as APIRequestError).message).toContain(
+          'Failed to assign storage to project',
+        );
+      }
     });
   });
 

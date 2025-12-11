@@ -47,7 +47,7 @@ import { ProjectWorkloadsMetricsResponse } from '@/types/workloads';
 import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
 import {
   ChipDisplay,
-  StatusBadgeDisplay,
+  StatusDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
 import ServerSideDataTable from '@/components/shared/DataTable/ServerSideDataTable';
 import ActionsToolbar from '@/components/shared/Toolbar/ActionsToolbar';
@@ -123,7 +123,7 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({ projectId }) => {
   const {
     isOpen: isDeleteWorkloadModalOpen,
     onOpen: onDeleteWorkloadModalOpen,
-    onOpenChange: onOpenChange,
+    onOpenChange,
   } = useDisclosure();
 
   const { mutate: deleteWorkloadMutation } = useMutation({
@@ -191,7 +191,7 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({ projectId }) => {
     [ProjectWorkloadsTableField.RUN_TIME]: (item) =>
       `${formatDurationFromSeconds(item.runTime)}`,
     [ProjectWorkloadsTableField.STATUS]: (item) => (
-      <StatusBadgeDisplay
+      <StatusDisplay
         type={item.status}
         variants={getWorkloadStatusVariants(workloadsT)}
       />
@@ -224,20 +224,22 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({ projectId }) => {
       WorkloadStatus.DELETING,
     ].includes(item.status);
 
-    return canBeDeleted
-      ? [
-          {
-            key: 'delete',
-            label: t('list.workloads.actions.delete.title'),
-            color: 'danger',
-            startContent: <IconTrash />,
-            onPress: (w: ProjectWorkloadWithMetrics) => {
-              setWorkloadSelected(w);
-              onDeleteWorkloadModalOpen();
-            },
-          },
-        ]
-      : [];
+    const actions = [];
+
+    if (canBeDeleted) {
+      actions.push({
+        key: 'delete',
+        label: t('list.workloads.actions.delete.title'),
+        color: 'danger' as const,
+        startContent: <IconTrash />,
+        onPress: (w: ProjectWorkloadWithMetrics) => {
+          setWorkloadSelected(w);
+          onDeleteWorkloadModalOpen();
+        },
+      });
+    }
+
+    return actions;
   };
 
   const typeFilterItems = useMemo(

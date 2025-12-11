@@ -29,7 +29,7 @@ from ..utilities.security import get_projects_accessible_to_user, validate_and_g
 from ..workloads.enums import WorkloadType
 from .enums import WorkloadStatus
 from .repository import select_workload
-from .schemas import AIMWorkloadResponse, ChartWorkloadResponse
+from .schemas import AIMWorkloadResponse, ChartWorkloadResponse, ManagedWorkloadsResponse
 from .service import (
     get_workload,
     list_workloads,
@@ -42,7 +42,7 @@ router = APIRouter(tags=["Managed Workloads"])
 
 @router.get(
     "/managed-workloads",
-    response_model=list[ChartWorkloadResponse | AIMWorkloadResponse],
+    response_model=ManagedWorkloadsResponse,
     status_code=status.HTTP_200_OK,
     summary="List managed workloads",
     description="""
@@ -56,10 +56,10 @@ async def get_workloads(
     type: list[WorkloadType] | None = Query(None, description="Filter by workload type(s)"),
     status: list[WorkloadStatus] | None = Query(None, description="Filter by workload status(es)"),
     with_resources: bool = Query(False, description="Whether to include allocated resources in the response"),
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
     prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
-) -> list[ChartWorkloadResponse | AIMWorkloadResponse]:
+) -> ManagedWorkloadsResponse:
     result_workloads = await list_workloads(
         session=session,
         project_id=project.id,
@@ -69,11 +69,11 @@ async def get_workloads(
 
     try:
         if with_resources:
-            return await enrich_with_resource_utilization(project.id, result_workloads, prometheus_client)
+            result_workloads = await enrich_with_resource_utilization(project.id, result_workloads, prometheus_client)
     except Exception as e:
         logger.exception("Error enriching workloads with resource utilization")
 
-    return result_workloads
+    return ManagedWorkloadsResponse(data=result_workloads)
 
 
 @router.get(
@@ -100,14 +100,14 @@ async def get_workload_endpoint(
     )
     try:
         if with_resources:
-            return (await enrich_with_resource_utilization(workload.project.id, [workload], prometheus_client))[0]
+            workload = (await enrich_with_resource_utilization(workload.project.id, [workload], prometheus_client))[0]
     except Exception as e:
         logger.exception(f"Error enriching workload {workload_id} with resource utilization")
     return workload
 
 
 @router.post(
-    "/chat/{workload_id}",
+    "/managed-workloads/{workload_id}/chat",
     summary="Chat with deployed AI model",
     description="""
         Send chat messages to deployed AI model for interactive conversations.
@@ -131,7 +131,7 @@ async def chat_with_model(
     workload_id: UUID = Path(description="The ID of the deployed model workload to chat with"),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     session: AsyncSession = Depends(get_session),
-):
+) -> StreamingResponse:
     # Get workload with latest status
     workload = await select_workload(session, workload_id, accessible_projects)
     if workload is None:
@@ -175,13 +175,13 @@ async def get_aim_workload_request_metrics(
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     start: AwareDatetime = Query(..., description="The start timestamp for the timeseries"),
     end: AwareDatetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsTimeseries:
     workload = await get_workload(
         session=session,
-        workload_id=workload_id,
         accessible_projects=accessible_projects,
+        workload_id=workload_id,
         require_aim=True,
     )
 
@@ -203,13 +203,13 @@ async def get_aim_time_to_first_token_metrics(
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     start: AwareDatetime = Query(..., description="The start timestamp for the timeseries"),
     end: AwareDatetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsTimeseries:
     workload = await get_workload(
         session=session,
-        workload_id=workload_id,
         accessible_projects=accessible_projects,
+        workload_id=workload_id,
         require_aim=True,
     )
 
@@ -231,13 +231,13 @@ async def get_aim_inter_token_latency_metrics(
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     start: AwareDatetime = Query(..., description="The start timestamp for the timeseries"),
     end: AwareDatetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsTimeseries:
     workload = await get_workload(
         session=session,
-        workload_id=workload_id,
         accessible_projects=accessible_projects,
+        workload_id=workload_id,
         require_aim=True,
     )
 
@@ -259,13 +259,13 @@ async def get_aim_end_to_end_latency_metrics(
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     start: AwareDatetime = Query(..., description="The start timestamp for the timeseries"),
     end: AwareDatetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsTimeseries:
     workload = await get_workload(
         session=session,
-        workload_id=workload_id,
         accessible_projects=accessible_projects,
+        workload_id=workload_id,
         require_aim=True,
     )
 
@@ -287,13 +287,13 @@ async def get_aim_kv_cache_usage_metric(
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     start: AwareDatetime = Query(..., description="The start timestamp for the timeseries"),
     end: AwareDatetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsScalarWithRange:
     workload = await get_workload(
         session=session,
-        workload_id=workload_id,
         accessible_projects=accessible_projects,
+        workload_id=workload_id,
         require_aim=True,
     )
 
@@ -313,13 +313,13 @@ async def get_aim_kv_cache_usage_metric(
 async def get_aim_total_tokens_metric(
     workload_id: UUID = Path(description="The ID of the workload to get the status of"),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsScalar:
     workload = await get_workload(
         session=session,
-        workload_id=workload_id,
         accessible_projects=accessible_projects,
+        workload_id=workload_id,
         require_aim=True,
     )
 

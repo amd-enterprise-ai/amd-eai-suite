@@ -44,7 +44,7 @@ Create cluster
     Create api session
     TRY
         ${endpoint}=            Clusters endpoint
-        ${response}=            Post on session         ${API_SESSION}          ${endpoint}             json=${cluster_data}    expected_status=${expected_status}
+        ${response}=            Safe Post Request         ${endpoint}             json=${cluster_data}    expected_status=${expected_status}
 
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
@@ -68,7 +68,7 @@ Get cluster
     Create api session
     TRY
         ${endpoint}=            Clusters endpoint       ${cluster_id}
-        ${response}=            Get on session          ${API_SESSION}          ${endpoint}             expected_status=${expected_status}
+        ${response}=            Safe Get Request          ${endpoint}             expected_status=${expected_status}
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         Log                     Failed to create cluster: ${error}              ERROR
@@ -91,7 +91,7 @@ Get clusters
     Create api session
     TRY
         ${endpoint}=            Clusters endpoint
-        ${response}=            Get on session          ${API_SESSION}          ${endpoint}             expected_status=${expected_status}
+        ${response}=            Safe Get Request          ${endpoint}             expected_status=${expected_status}
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         Log                     Failed to create cluster: ${error}              ERROR

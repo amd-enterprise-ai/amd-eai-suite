@@ -5,7 +5,12 @@
     "invited": "Invited Users"
   },
   "actions": {
-    "addUser": "Invite user"
+    "addUser": {
+      "label": "Invite user"
+    },
+    "editUser": {
+      "label": "Edit user"
+    }
   },
   "list": {
     "headers": {
@@ -20,6 +25,9 @@
       },
       "roles": {
         "title": "Roles"
+      },
+      "actions": {
+        "title": ""
       }
     },
     "filter": {
@@ -83,6 +91,15 @@
           "options": {
             "platformAdmin": "Platform Administrator",
             "teamMember": "Team Member"
+          }
+        },
+        "tempPassword": {
+          "label": "Temporary Password",
+          "placeholder": "Please enter a temporary password for this invited user",
+          "validation": {
+            "required": "Please enter a temporary password for this user.",
+            "minLength": "The temporary password must be at least 8 characters long.",
+            "maxLength": "The temporary password must be less than 256 characters long."
           }
         }
       },

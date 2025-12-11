@@ -1,0 +1,8 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: v2
+name: gpu-job
+description: GPU test workload for AIRM testing
+version: 1.0.0

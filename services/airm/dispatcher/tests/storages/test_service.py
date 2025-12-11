@@ -30,8 +30,11 @@ from app.storages.service import (
 @patch("app.storages.service.logger")
 @patch("app.storages.service._publish_s3_storage_status", new_callable=AsyncMock)
 async def test_process_project_s3_storage_create_success(
-    mock_publish_status, mock_logger, mock_create_configmap, mock_build_manifest
-):
+    mock_publish_status: AsyncMock,
+    mock_logger: MagicMock,
+    mock_create_configmap: MagicMock,
+    mock_build_manifest: MagicMock,
+) -> None:
     mock_build_manifest.return_value = {"metadata": {"name": "configmap"}}
     mock_create_configmap.return_value = MagicMock()
     message = ProjectS3StorageCreateMessage(
@@ -59,8 +62,11 @@ async def test_process_project_s3_storage_create_success(
 @patch("app.storages.service.logger")
 @patch("app.storages.service._publish_s3_storage_status", new_callable=AsyncMock)
 async def test_process_project_s3_storage_create_failure(
-    mock_publish_status, mock_logger, mock_create_configmap, mock_build_manifest
-):
+    mock_publish_status: AsyncMock,
+    mock_logger: MagicMock,
+    mock_create_configmap: MagicMock,
+    mock_build_manifest: MagicMock,
+) -> None:
     mock_build_manifest.return_value = {"metadata": {"name": "configmap"}}
     mock_create_configmap.side_effect = Exception("ConfigMap error!")
     message = ProjectS3StorageCreateMessage(
@@ -86,7 +92,9 @@ async def test_process_project_s3_storage_create_failure(
 @patch("app.storages.service.get_common_vhost_connection_and_channel", new_callable=AsyncMock)
 @patch("app.storages.service.publish_to_common_feedback_queue", new_callable=AsyncMock)
 @patch("app.storages.service.logger")
-async def test_publish_s3_storage_status(mock_logger, mock_publish, mock_get_conn):
+async def test_publish_s3_storage_status(
+    mock_logger: MagicMock, mock_publish: AsyncMock, mock_get_conn: AsyncMock
+) -> None:
     project_storage_id = uuid4()
     status = ConfigMapStatus.ADDED
     reason = "Test reason"
@@ -100,7 +108,9 @@ async def test_publish_s3_storage_status(mock_logger, mock_publish, mock_get_con
 @patch("app.storages.service.get_status_for_config_map")
 @patch("app.storages.service._publish_s3_storage_status", new_callable=AsyncMock)
 @patch("app.storages.service.logger")
-async def test_process_configmap_event_added(mock_logger, mock_publish_status, mock_get_status):
+async def test_process_configmap_event_added(
+    mock_logger: MagicMock, mock_publish_status: AsyncMock, mock_get_status: MagicMock
+) -> None:
     resource = MagicMock()
     resource.metadata = MagicMock()
     resource.metadata.labels = {"airm.silogen.ai/project-storage-id": "1234"}
@@ -117,7 +127,7 @@ async def test_process_configmap_event_added(mock_logger, mock_publish_status, m
 @pytest.mark.asyncio
 @patch("app.storages.service._publish_s3_storage_status", new_callable=AsyncMock)
 @patch("app.storages.service.logger")
-async def test_process_configmap_event_failed(mock_logger, mock_publish_status):
+async def test_process_configmap_event_failed(mock_logger: MagicMock, mock_publish_status: AsyncMock) -> None:
     resource = MagicMock()
     resource.metadata = MagicMock()
     resource.metadata.labels = {"airm.silogen.ai/project-storage-id": "1234"}
@@ -128,7 +138,7 @@ async def test_process_configmap_event_failed(mock_logger, mock_publish_status):
 
 @pytest.mark.asyncio
 @patch("app.storages.service.logger")
-async def test_process_configmap_event_missing_metadata(mock_logger):
+async def test_process_configmap_event_missing_metadata(mock_logger: MagicMock) -> None:
     resource = MagicMock()
     resource.metadata = None
     await _process_configmap_event(resource, "ADDED")
@@ -137,7 +147,7 @@ async def test_process_configmap_event_missing_metadata(mock_logger):
 
 @pytest.mark.asyncio
 @patch("app.storages.service.logger")
-async def test_process_configmap_event_missing_label(mock_logger):
+async def test_process_configmap_event_missing_label(mock_logger: MagicMock) -> None:
     resource = MagicMock()
     resource.metadata = MagicMock()
     resource.metadata.labels = {}
@@ -148,7 +158,7 @@ async def test_process_configmap_event_missing_label(mock_logger):
 @pytest.mark.asyncio
 @patch("app.storages.service._publish_s3_storage_status", new_callable=AsyncMock)
 @patch("app.storages.service.logger")
-async def test_process_storage_delete_error_sync(mock_logger, mock_publish_status):
+async def test_process_storage_delete_error_sync(mock_logger: MagicMock, mock_publish_status: AsyncMock) -> None:
     api_resource = MagicMock()
     api_resource.kind = "ConfigMap"
     delete_err = ApiException("delete failed")
@@ -165,10 +175,10 @@ async def test_process_storage_delete_error_sync(mock_logger, mock_publish_statu
 @patch("app.storages.service.logger")
 @patch("app.storages.service._publish_s3_storage_status", new_callable=AsyncMock)
 async def test_process_project_storage_delete_success(
-    mock_delete_resources,
-    mock_logger,
-    mock_publish_status,
-):
+    mock_delete_resources: AsyncMock,
+    mock_logger: MagicMock,
+    mock_publish_status: AsyncMock,
+) -> None:
     mock_delete_resources.return_value = True
     message = ProjectStorageDeleteMessage(
         message_type="project_storage_delete",
@@ -189,12 +199,12 @@ async def test_process_project_storage_delete_success(
 @patch("app.storages.service.client.ApiClient")
 @patch("app.storages.service.DynamicClient")
 async def test_process_project_storage_delete_none_found(
-    mock_dynamic_client,
-    mock_api_client,
-    mock_publish_status,
-    mock_logger,
-    mock_delete_resources,
-):
+    mock_dynamic_client: MagicMock,
+    mock_api_client: MagicMock,
+    mock_publish_status: AsyncMock,
+    mock_logger: MagicMock,
+    mock_delete_resources: AsyncMock,
+) -> None:
     mock_k8s_client = MagicMock()
     mock_api_client.return_value = mock_k8s_client
     mock_dynamic_client.return_value = MagicMock()
@@ -221,7 +231,9 @@ async def test_process_project_storage_delete_none_found(
 @patch("app.storages.service.delete_resources_by_label", side_effect=Exception("delete error"))
 @patch("app.storages.service._publish_s3_storage_status", new_callable=AsyncMock)
 @patch("app.storages.service.logger")
-async def test_process_project_storage_delete_exception(mock_logger, mock_publish_status, mock_delete_resources):
+async def test_process_project_storage_delete_exception(
+    mock_logger: MagicMock, mock_publish_status: AsyncMock, mock_delete_resources: MagicMock
+) -> None:
     message = ProjectStorageDeleteMessage(
         message_type="project_storage_delete",
         project_storage_id=uuid4(),

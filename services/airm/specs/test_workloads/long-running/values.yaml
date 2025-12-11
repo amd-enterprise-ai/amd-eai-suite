@@ -1,0 +1,14 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Default values for test-long-running
+image: busybox:latest
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "100m"
+    memory: "128Mi"
+sleepDuration: 3600

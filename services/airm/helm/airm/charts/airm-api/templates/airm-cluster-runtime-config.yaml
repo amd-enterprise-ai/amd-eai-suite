@@ -7,6 +7,7 @@ kind: AIMClusterRuntimeConfig
 metadata:
   name: amd-aim-cluster-runtime-config
 spec:
+  pvcHeadroomPercent: 100
   routing:
     enabled: true
     gatewayRef:
@@ -15,3 +16,4 @@ spec:
       name: {{ .Values.kgateway.gatewayName }}
       namespace: {{ .Values.kgateway.namespace }}
     pathTemplate: "{.metadata.namespace}/{.metadata.labels['airm.silogen.ai/workload-id']}"
+    requestTimeout: 30m

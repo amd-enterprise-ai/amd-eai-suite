@@ -10,12 +10,12 @@ import {
   waitFor,
 } from '@testing-library/react';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 import {
   generateMockProjectSecrets,
   generateMockProjectSecretsWithParentSecret,
   generateMockSecrets,
-} from '../../../../__mocks__/utils/secrets-mock';
+} from '@/__mocks__/utils/secrets-mock';
 
 import { ProjectStatus } from '@/types/enums/projects';
 import { ProjectSecretStatus } from '@/types/enums/secrets';
@@ -24,11 +24,18 @@ import { ProjectWithMembers } from '@/types/projects';
 import { ProjectSecrets } from '@/components/features/projects';
 
 import wrapper from '@/__tests__/ProviderWrapper';
+import { fetchProjectSecrets } from '@/services/app/secrets';
+import { generateMockProjectStoragesWithParentStorage } from '@/__mocks__/utils/storages-mock';
+import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@/utils/app/api-helpers';
+import { cloneDeep } from 'lodash';
 
-const mockFetchProjectSecrets = vi.fn();
-vi.mock('@/services/app/secrets', () => ({
-  fetchProjectSecrets: (...args: any[]) => mockFetchProjectSecrets(...args),
-}));
+vi.mock('@/services/app/secrets', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    fetchProjectSecrets: vi.fn(),
+  };
+});
 
 describe('ProjectSecrets', () => {
   const secrets = generateMockSecrets(1);
@@ -39,7 +46,7 @@ describe('ProjectSecrets', () => {
     invitedUsers: [],
   };
 
-  const projectSecrets = generateMockProjectSecretsWithParentSecret(1);
+  const mockProjectSecrets = generateMockProjectSecretsWithParentSecret(1);
 
   const setup = (
     props?: Partial<React.ComponentProps<typeof ProjectSecrets>>,
@@ -50,7 +57,8 @@ describe('ProjectSecrets', () => {
         <ProjectSecrets
           secrets={secrets}
           project={project}
-          projectSecrets={projectSecrets}
+          projectSecrets={props?.projectSecrets ?? []}
+          projectStorages={props?.projectStorages ?? []}
           {...props}
         />,
         { wrapper },
@@ -76,7 +84,7 @@ describe('ProjectSecrets', () => {
     expect(
       screen.queryByText('list.filter.scope.label'),
     ).not.toBeInTheDocument();
-    expect(mockFetchProjectSecrets).toHaveBeenCalled();
+    expect(fetchProjectSecrets).toHaveBeenCalled();
 
     expect(
       screen.getByText('actions.addProjectSecret.label'),
@@ -132,7 +140,7 @@ describe('ProjectSecrets', () => {
     expect(deleteAction.parentNode).not.toHaveAttribute('data-disabled');
   });
 
-  it('render delete row action to be disabled when in deleting state', () => {
+  it('render delete row action to be not disabled when in deleting state', () => {
     const mockSecrets = generateMockSecrets(1);
     const mockProjectId = 'mock-project-id';
     const mockProject = {
@@ -164,14 +172,93 @@ describe('ProjectSecrets', () => {
       'list.actions.delete.projectSecret.label',
     );
     expect(deleteAction).toBeInTheDocument();
+    expect(deleteAction.parentNode).not.toHaveAttribute('data-disabled');
+  });
+
+  it('render delete row action to be not disabled when in pending state', () => {
+    const mockSecrets = generateMockSecrets(1);
+    const mockProjectId = 'mock-project-id';
+    const mockProject = {
+      ...project,
+      status: ProjectStatus.READY,
+      id: mockProjectId,
+    };
+    const mockProjectSecrets = generateMockProjectSecretsWithParentSecret(
+      1,
+      mockProjectId,
+    );
+
+    mockProjectSecrets[0].status = ProjectSecretStatus.PENDING;
+    mockSecrets[0].projectSecrets = mockProjectSecrets;
+
+    setup({
+      project: mockProject,
+      secrets: mockSecrets,
+      projectSecrets: mockProjectSecrets,
+    });
+    const actionButton = screen.getByRole('button', {
+      name: 'list.actions.label',
+    });
+    expect(actionButton).toBeInTheDocument();
+
+    fireEvent.click(actionButton);
+
+    const deleteAction = screen.getByText(
+      'list.actions.delete.projectSecret.label',
+    );
+    expect(deleteAction).toBeInTheDocument();
+    expect(deleteAction.parentNode).not.toHaveAttribute(
+      'data-disabled',
+      'true',
+    );
+  });
+
+  it('render delete row action to be disabled when secret is in projectStorages', () => {
+    const mockSecrets = generateMockSecrets(1);
+    const mockProjectId = 'mock-project-id';
+    const mockProject = {
+      ...project,
+      status: ProjectStatus.READY,
+      id: mockProjectId,
+    };
+    const mockProjectSecrets = generateMockProjectSecretsWithParentSecret(
+      1,
+      mockProjectId,
+    );
+
+    mockProjectSecrets[0].status = ProjectSecretStatus.SYNCED;
+    mockSecrets[0].projectSecrets = mockProjectSecrets;
+
+    const mockProjectStorages = generateMockProjectStoragesWithParentStorage(
+      1,
+      mockProjectId,
+    );
+    mockProjectStorages[0].storage.secretId = mockProjectSecrets[0].secret.id;
+
+    setup({
+      project: mockProject,
+      secrets: mockSecrets,
+      projectSecrets: mockProjectSecrets,
+      projectStorages: mockProjectStorages,
+    });
+    const actionButton = screen.getByRole('button', {
+      name: 'list.actions.label',
+    });
+    expect(actionButton).toBeInTheDocument();
+
+    fireEvent.click(actionButton);
+
+    const deleteAction = screen.getByText(
+      'list.actions.delete.projectSecret.label',
+    );
+    expect(deleteAction).toBeInTheDocument();
     expect(deleteAction.parentNode).toHaveAttribute('data-disabled', 'true');
   });
 
   it('delete button shows secrets delete confirm modal ', () => {
     const mockSecrets = generateMockSecrets(1);
     const mockProjectId = 'mock-project-id';
-    const mockProjectSecrets = generateMockProjectSecrets(1, mockProjectId);
-    mockProjectSecrets[0].status = ProjectSecretStatus.PENDING;
+    mockProjectSecrets[0].status = ProjectSecretStatus.SYNCED;
     mockSecrets[0].projectSecrets = mockProjectSecrets;
     const mockProject = {
       ...project,
@@ -182,6 +269,7 @@ describe('ProjectSecrets', () => {
     setup({
       project: mockProject,
       secrets: mockSecrets,
+      projectSecrets: mockProjectSecrets,
     });
     const actionButton = screen.getByRole('button', {
       name: 'list.actions.label',
@@ -229,5 +317,106 @@ describe('ProjectSecrets', () => {
     await waitFor(() => {
       expect(screen.getByText('list.empty.description')).toBeInTheDocument();
     });
+  });
+
+  it('calls onRefresh when refresh button is clicked', async () => {
+    setup();
+
+    expect(fetchProjectSecrets).toBeCalledTimes(1);
+    act(() => {
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'data.refresh',
+        }),
+      );
+    });
+
+    expect(fetchProjectSecrets).toBeCalledTimes(2);
+  });
+
+  it('refetches the data if project secret is pending', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const mockSecrets = generateMockSecrets(1);
+    const mockProjectId = 'mock-project-id';
+    const mockProject = {
+      ...project,
+      status: ProjectStatus.READY,
+      id: mockProjectId,
+    };
+    const mockProjectSecrets = generateMockProjectSecretsWithParentSecret(
+      1,
+      mockProjectId,
+    );
+
+    mockProjectSecrets[0].status = ProjectSecretStatus.PENDING;
+    mockSecrets[0].projectSecrets = mockProjectSecrets;
+
+    // Immediately after page load
+    vi.mocked(fetchProjectSecrets).mockResolvedValueOnce({
+      projectSecrets: mockProjectSecrets,
+    });
+
+    let syncedProjectSecrets = cloneDeep(mockProjectSecrets);
+    syncedProjectSecrets[0].status = ProjectSecretStatus.SYNCED;
+    // After 10 seconds, synced
+    vi.mocked(fetchProjectSecrets).mockResolvedValueOnce({
+      projectSecrets: syncedProjectSecrets,
+    });
+
+    setup({
+      project: mockProject,
+      secrets: mockSecrets,
+      projectSecrets: mockProjectSecrets,
+    });
+
+    // On page load
+    expect(fetchProjectSecrets).toBeCalledTimes(1);
+
+    // After 10 seconds, synced secret
+    await act(() =>
+      vi.advanceTimersByTimeAsync(DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA),
+    );
+    expect(fetchProjectSecrets).toBeCalledTimes(2);
+
+    // No more polling
+    await act(() =>
+      vi.advanceTimersByTimeAsync(DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA),
+    );
+    expect(fetchProjectSecrets).toBeCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  it('should open add secret modal', () => {
+    setup();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'actions.addProjectSecret.label' }),
+    );
+
+    fireEvent.click(
+      screen.getByText('actions.addProjectSecret.options.add.label'),
+    );
+    expect(screen.getByText('form.add.title.project')).toBeInTheDocument();
+  });
+
+  it('should open assign secret modal', () => {
+    setup();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'actions.addProjectSecret.label' }),
+    );
+
+    fireEvent.click(
+      screen.getByText('actions.addProjectSecret.options.assign.label'),
+    );
+    expect(screen.getByText('form.assignOrgSecret.title')).toBeInTheDocument();
+  });
+
+  it('should render empty secrets list', () => {
+    setup();
+
+    expect(screen.getByText('title')).toBeInTheDocument();
+    expect(screen.getByText('list.empty.description')).toBeInTheDocument();
   });
 });

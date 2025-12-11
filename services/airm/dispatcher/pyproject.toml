@@ -4,7 +4,7 @@
 
 [project]
 name = "dispatcher"
-version = "0.2.3"
+version = "0.3.0"
 description = "AMD Resource Manager Dispatcher"
 readme = "README.md"
 requires-python = ">=3.13"

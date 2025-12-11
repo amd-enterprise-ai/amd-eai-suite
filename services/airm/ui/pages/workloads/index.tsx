@@ -21,8 +21,6 @@ import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import useSystemToast from '@/hooks/useSystemToast';
 
 import { deleteWorkload, listWorkloads } from '@/services/app/workloads';
-import { getAims } from '@/services/app/aims';
-import { getModels } from '@/services/app/models';
 
 import { getFilteredData } from '@/utils/app/data-table';
 import { displayMegabytesInGigabytes } from '@/utils/app/memory';
@@ -30,7 +28,7 @@ import getWorkloadStatusVariants from '@/utils/app/workloads-status-variants';
 import getWorkloadTypeVariants from '@/utils/app/workloads-type-variants';
 import { authOptions } from '@/utils/server/auth';
 
-import { TableColumns } from '@/types/data-table/clientside-table';
+import { ActionItem, TableColumns } from '@/types/data-table/clientside-table';
 import { FilterComponentType } from '@/types/enums/filters';
 import { SortDirection } from '@/types/enums/sort-direction';
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
@@ -45,7 +43,7 @@ import {
   ChipDisplay,
   DateDisplay,
   NoDataDisplay,
-  StatusBadgeDisplay,
+  StatusDisplay,
   TranslationDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
 import { ActionsToolbar } from '@/components/shared/Toolbar/ActionsToolbar';
@@ -64,10 +62,6 @@ const columns: TableColumns<WorkloadsTableFields | null> = [
     sortable: true,
   },
   {
-    key: WorkloadsTableFields.CANONICAL_NAME,
-    sortable: true,
-  },
-  {
     key: WorkloadsTableFields.VRAM,
     sortable: true,
   },
@@ -77,6 +71,10 @@ const columns: TableColumns<WorkloadsTableFields | null> = [
   },
   {
     key: WorkloadsTableFields.TYPE,
+    sortable: true,
+  },
+  {
+    key: WorkloadsTableFields.CREATED_BY,
     sortable: true,
   },
   {
@@ -251,46 +249,6 @@ const WorkloadsPage: React.FC = () => {
     refetchInterval: 30000,
   });
 
-  const { data: aims, isLoading: isAimsLoading } = useQuery({
-    queryKey: ['project', activeProject, 'aim-catalog'],
-    queryFn: () => getAims(activeProject!),
-    enabled: !!activeProject,
-  });
-
-  const { data: models, isLoading: isModelsLoading } = useQuery({
-    queryKey: ['project', activeProject, 'models'],
-    queryFn: () => getModels(activeProject!),
-    enabled: !!activeProject,
-  });
-
-  // Create a mapping of aimId to canonicalName
-  const aimIdToCanonicalName = useMemo(() => {
-    const mapping = new Map<string, string>();
-    if (aims) {
-      aims.forEach((aim) => {
-        // Extract canonical name from labels
-        const canonicalNameKey = Object.keys(aim.labels).find((key) =>
-          key.endsWith('.canonicalName'),
-        );
-        if (canonicalNameKey) {
-          mapping.set(aim.id, aim.labels[canonicalNameKey]);
-        }
-      });
-    }
-    return mapping;
-  }, [aims]);
-
-  // Create a mapping of modelId to canonicalName
-  const modelIdToCanonicalName = useMemo(() => {
-    const mapping = new Map<string, string>();
-    if (models) {
-      models.forEach((model) => {
-        mapping.set(model.id, model.canonicalName);
-      });
-    }
-    return mapping;
-  }, [models]);
-
   useEffect(() => {
     if (workloadsError) {
       toast.error(
@@ -346,13 +304,6 @@ const WorkloadsPage: React.FC = () => {
         />
       );
     },
-    [WorkloadsTableFields.CANONICAL_NAME]: (item) => {
-      // Try model canonical name via modelId first, then AIM canonical name via aimId
-      const canonicalName =
-        (item.modelId ? modelIdToCanonicalName.get(item.modelId) : undefined) ||
-        (item.aimId ? aimIdToCanonicalName.get(item.aimId) : undefined);
-      return canonicalName || <NoDataDisplay />;
-    },
     [WorkloadsTableFields.GPU]: (item) => {
       return !item.allocatedResources?.gpuCount ? (
         <NoDataDisplay />
@@ -374,7 +325,7 @@ const WorkloadsPage: React.FC = () => {
       />
     ),
     [WorkloadsTableFields.STATUS]: (item: Workload) => (
-      <StatusBadgeDisplay
+      <StatusDisplay
         type={item[WorkloadsTableFields.STATUS] as WorkloadStatus}
         variants={getWorkloadStatusVariants(t)}
       />
@@ -383,7 +334,7 @@ const WorkloadsPage: React.FC = () => {
 
   const actions = useMemo(
     () => (item: Workload) => {
-      const actionsList = [];
+      const actionsList: ActionItem<Workload>[] = [];
 
       actionsList.push({
         key: 'details',
@@ -400,6 +351,7 @@ const WorkloadsPage: React.FC = () => {
         item.status !== WorkloadStatus.DELETED
       ) {
         actionsList.push({
+          isDisabled: item.status !== WorkloadStatus.RUNNING, // Enabled only in running state.
           key: 'openWorkspace',
           label: t('list.actions.openWorkspace.label'),
           startContent: <IconExternalLink />,
@@ -482,7 +434,7 @@ const WorkloadsPage: React.FC = () => {
         defaultSortDirection={SortDirection.DESC}
         translation={t}
         customRenderers={customRenderers}
-        isLoading={isWorkloadsLoading || isAimsLoading || isModelsLoading}
+        isLoading={isWorkloadsLoading}
         isFetching={isWorkloadsRefetching}
         idKey={'id'}
       />

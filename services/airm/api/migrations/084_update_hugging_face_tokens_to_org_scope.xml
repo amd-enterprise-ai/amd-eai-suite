@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <changeSet id="update_hugging_face_tokens_to_org_scope" author="clydehoang1">
+    <!-- Migrate Hugging Face tokens to Organization scope to work with kubernetes secret v2 -->
+    <preConditions onFail="MARK_RAN">
+      <columnExists tableName="secrets" columnName="scope"/>
+    </preConditions>
+
+    <update tableName="secrets">
+      <column name="scope" value="Organization"/>
+      <where>use_case = 'HuggingFace' AND (scope = 'Project' OR scope IS NULL)</where>
+    </update>
+  </changeSet>
+</databaseChangeLog>

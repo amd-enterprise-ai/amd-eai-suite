@@ -56,3 +56,9 @@ class DatasetResponse(BaseEntityPublic):
     type: DatasetType = Field(description="The type of the dataset")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DatasetsResponse(BaseModel):
+    """Wrapper for collection of datasets."""
+
+    data: list[DatasetResponse] = Field(description="List of datasets")

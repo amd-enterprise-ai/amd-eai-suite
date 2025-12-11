@@ -88,7 +88,7 @@ export const displayHumanReadableBytes = (bytes: number): string => {
     Math.floor(Math.log(bytes) / Math.log(1024)),
     units.length - 1,
   );
-  const value = bytes / Math.pow(1024, i);
+  const value = bytes / 1024 ** i;
   return `${value.toFixed(2)} ${units[i]}`;
 };
 

@@ -2,33 +2,19 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DebugInfo, Message, ChatMessageWithDebug, Source } from '@/types/chat';
+import { DebugInfo, Message, ChatMessageWithDebug } from '@/types/chat';
 
 import type { InferenceSettings } from '@/types/models';
 
 export const mockInferenceSettings: InferenceSettings = {
-  collectionId: undefined,
-  ragEnabled: false,
-  hybridSearch: false,
-  certainty: 0,
-  topK: 4,
-  alpha: 0.5,
   systemPrompt: 'Test system prompt',
-  userPromptTemplate: '',
   temperature: 0.5,
   frequencyPenalty: 0.2,
   presencePenalty: 0.1,
 };
 
 export const mockInferenceSettingsExtreme: InferenceSettings = {
-  collectionId: undefined,
-  ragEnabled: false,
-  hybridSearch: false,
-  certainty: 0,
-  topK: 4,
-  alpha: 0.5,
   systemPrompt: '',
-  userPromptTemplate: '',
   temperature: 1.0,
   frequencyPenalty: -2.0,
   presencePenalty: 2.0,
@@ -49,18 +35,8 @@ export const mockSystemMessage: Message = {
   content: 'This is a system message',
 };
 
-export const mockSources: Source[] = [
-  {
-    url: 'https://example.com/doc1',
-    sourceId: 'doc1',
-    text: 'Retrieved document content',
-    score: 0.95,
-  },
-];
-
 export const mockDebugInfo: DebugInfo = {
   messages: [mockUserMessage, mockAssistantMessage],
-  sources: mockSources,
 };
 
 export const mockAssistantMessageWithDebugInfo: ChatMessageWithDebug = {

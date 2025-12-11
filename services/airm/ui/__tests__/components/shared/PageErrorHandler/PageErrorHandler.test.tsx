@@ -49,8 +49,7 @@ vi.mock('next-i18next', () => ({
         'error.unknown.title': 'Unknown Error',
         'error.unknown.description': 'An unexpected error occurred.',
         'error.refreshActionLabel': 'Try Again',
-        'error.showDetailsActionLabel': 'Show Details',
-        'error.hideDetailsActionLabel': 'Hide Details',
+        'actions.showDetails.title': 'Show Details',
         'error.label': 'Error',
         'charts.loading': 'Loading...',
       };

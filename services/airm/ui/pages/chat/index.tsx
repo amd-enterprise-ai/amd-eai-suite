@@ -20,7 +20,9 @@ import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
 
 import { ChatView } from '@/components/features/chat/ChatView';
 import { getAims } from '@/services/app/aims';
+import { getModels } from '@/services/app/models';
 import { Aim } from '@/types/aims';
+import { Model } from '@/types/models';
 
 const ChatPage = () => {
   const { toast } = useSystemToast();
@@ -41,18 +43,24 @@ const ChatPage = () => {
     enabled: !!activeProject,
   });
 
-  const { data: aims, error: aimsError } = useQuery<Aim[]>({
+  const { data: aims = [], error: aimsError } = useQuery<Aim[]>({
     queryKey: ['project', activeProject, 'aim-catalog'],
     queryFn: () => getAims(activeProject!),
+    enabled: !!activeProject,
+  });
+
+  const { data: models = [], error: modelsError } = useQuery<Model[]>({
+    queryKey: ['project', activeProject, 'custom-models'],
+    queryFn: () => getModels(activeProject!),
     enabled: !!activeProject,
   });
 
   const chatWorkloads = useMemo(() => {
     const workloadsFromAims = workloads.filter((workload) => {
       const associatedAim = aims?.find(
-        (aim) => aim.canonicalName === workload.userInputs?.canonicalName,
+        (aim) => aim.workload?.id === workload.id,
       );
-      return associatedAim && associatedAim.tags.includes('chat');
+      return associatedAim?.tags.includes('chat');
     });
 
     const includedWorkloadIds = new Set(workloadsFromAims.map((w) => w.id));
@@ -67,12 +75,12 @@ const ChatPage = () => {
     return [...workloadsFromAims, ...workloadsFromCharts];
   }, [workloads, aims]);
 
-  // Handle workloads or aims loading error
+  // Handle workloads, aims, or models loading error
   useEffect(() => {
-    if (aimsError || workloadsError) {
+    if (aimsError || workloadsError || modelsError) {
       toast.error(t('errors.workloadLoadingFailed'));
     }
-  }, [aimsError, workloadsError, toast, t]);
+  }, [aimsError, workloadsError, modelsError, toast, t]);
 
   return (
     <div className="flex flex-1 h-full w-full">

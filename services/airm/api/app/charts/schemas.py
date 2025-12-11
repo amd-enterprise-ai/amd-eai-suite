@@ -153,3 +153,9 @@ class ChartListResponse(BaseEntityPublic, ChartBase):
     usage_scope: Literal["user", "project"]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ChartsResponse(BaseModel):
+    """Wrapper for collection of charts."""
+
+    data: list[ChartListResponse] = Field(description="List of charts")

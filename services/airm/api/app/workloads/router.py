@@ -2,18 +2,25 @@
 #
 # SPDX-License-Identifier: MIT
 
+import asyncio
 import json
 from datetime import datetime
 from uuid import UUID
 
+import httpx
 import yaml
 from fastapi import APIRouter, Depends, File, Path, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..clusters.schemas import ClusterResponse, ClusterStatus
-from ..logs.schemas import LogDirectionLiteral, LogLevel, LogLevelLiteral
-from ..logs.service import get_loki_client, get_websocket_factory, get_workload_logs, stream_workload_logs
+from ..logs.schemas import LogDirectionLiteral, LogLevel, LogLevelLiteral, LogTypeLiteral, WorkloadLogsResponse
+from ..logs.service import get_loki_client, get_workload_logs, stream_workload_logs
+from ..messaging.sender import MessageSender, get_message_sender
+from ..organizations.models import Organization
 from ..projects.models import Project
+from ..users.models import User
 from ..utilities.database import get_session
 from ..utilities.enums import Roles
 from ..utilities.exceptions import NotFoundException, UnhealthyException, ValidationException
@@ -57,10 +64,11 @@ router = APIRouter(tags=["Workloads"])
     response_model=WorkloadResponse,
 )
 async def submit_workload(
-    user=Depends(get_user_email),
-    session=Depends(get_session),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
     token: str = Depends(BearerToken),
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     manifest: UploadFile = File(..., description="The YAML file to be uploaded."),
     workload_type: WorkloadType = Query(WorkloadType.CUSTOM, description="Type of workload being submitted."),
     display_name: str = Query(
@@ -81,7 +89,9 @@ async def submit_workload(
         yml_content = await validate_and_parse_workload_manifest(manifest)
     except yaml.YAMLError as ymlErr:
         raise ValidationException(f"Invalid YAML content in workload manifest: {ymlErr}")
-    return await submit_workload_to_cluster(session, project, yml_content, user, token, workload_type, display_name)
+    return await submit_workload_to_cluster(
+        session, project, yml_content, user, token, workload_type, display_name, message_sender
+    )
 
 
 @router.delete(
@@ -91,12 +101,13 @@ async def submit_workload(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_workload(
-    user=Depends(get_user),
-    session=Depends(get_session),
-    claimset=Depends(auth_token_claimset),
+    user: User = Depends(get_user),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
+    claimset: dict = Depends(auth_token_claimset),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     workload_id: UUID = Path(description="The ID of the workload to be deleted"),
-):
+) -> None:
     if is_user_in_role(claimset, Roles.PLATFORM_ADMINISTRATOR):
         workload = await get_workload_by_id_in_organization(session, workload_id, user.organization_id)
     else:
@@ -105,7 +116,7 @@ async def delete_workload(
     if not workload:
         raise NotFoundException(f"Workload with ID {workload_id} not found or access denied")
 
-    await submit_delete_workload(session, workload, user.email)
+    await submit_delete_workload(session, workload, user.email, message_sender)
 
 
 @router.get(
@@ -116,9 +127,9 @@ async def delete_workload(
     response_model=WorkloadsStats,
 )
 async def get_workload_stats(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
 ) -> WorkloadsStats:
     return await get_stats_for_workloads_in_organization(session, organization.id)
 
@@ -131,10 +142,10 @@ async def get_workload_stats(
     response_model=WorkloadWithComponents,
 )
 async def get_workload(
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     workload_id: UUID = Path(description="The ID of the workload to be retrieved"),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
-):
+) -> WorkloadWithComponents:
     workload = await get_workload_by_id_and_user_membership(session, workload_id, accessible_projects)
 
     if not workload:
@@ -152,7 +163,7 @@ async def get_workload(
 )
 async def get_workloads(
     project_id: UUID | None = Query(None, description="The ID of the project for which to retrieve workloads"),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
 ) -> Workloads:
     if project_id:
@@ -162,7 +173,12 @@ async def get_workloads(
         return await get_workloads_accessible_to_user(session, accessible_projects)
 
 
-@router.get("/workloads/{workload_id}/logs", operation_id="get_workload_logs", summary="Get logs for a workload")
+@router.get(
+    "/workloads/{workload_id}/logs",
+    operation_id="get_workload_logs",
+    summary="Get logs for a workload",
+    response_model=WorkloadLogsResponse,
+)
 async def workload_logs(
     workload_id: UUID = Path(description="The ID of the workload"),
     start_date: datetime = Query(
@@ -181,14 +197,18 @@ async def workload_logs(
     level: LogLevelLiteral | None = Query(
         default=None, description="Log level to filter by - filters logs at this level and above"
     ),
+    log_type: LogTypeLiteral = Query(
+        default="workload",
+        description="Type of logs to retrieve - 'workload' for workload logs, 'event' for Kubernetes events",
+    ),
     direction: LogDirectionLiteral = Query(
         default="forward",
         description="Direction of log retrieval - 'forward' for older logs first, 'backward' for newer logs first",
     ),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
-    loki_client=Depends(get_loki_client),
-):
+    loki_client: httpx.AsyncClient = Depends(get_loki_client),
+) -> WorkloadLogsResponse:
     """Get logs for a workload."""
     workload = await get_workload_by_id_and_user_membership(session, workload_id, accessible_projects)
     if not workload:
@@ -208,6 +228,7 @@ async def workload_logs(
             page_token=page_token,
             limit=limit,
             level_filter=level_filter,
+            log_type=log_type,
             direction=direction,
         )
 
@@ -260,16 +281,19 @@ async def workload_logs_stream(
     level: LogLevelLiteral | None = Query(
         default=None, description="Log level to filter by - filters logs at this level and above"
     ),
+    log_type: LogTypeLiteral = Query(
+        default="workload",
+        description="Type of logs to retrieve - 'workload' for workload logs, 'event' for Kubernetes events",
+    ),
     delay: int = Query(
         default=1,
         ge=1,
         le=30,
         description="Delay between polling requests in seconds (1-30 seconds)",
     ),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
-    websocket_factory=Depends(get_websocket_factory),
-):
+) -> StreamingResponse:
     """Stream workload logs in real-time via SSE."""
     workload = await get_workload_by_id_and_user_membership(session, workload_id, accessible_projects)
     if not workload:
@@ -282,20 +306,24 @@ async def workload_logs_stream(
     async def log_stream_generator():
         """Generate SSE events for log streaming."""
         try:
-            async for log_entry in stream_workload_logs(
+            async for message in stream_workload_logs(
                 workload=workload_with_components,
-                websocket_factory=websocket_factory,
                 start_time=start_time,
                 level_filter=level_filter,
+                log_type=log_type,
                 delay_seconds=delay,
             ):
-                log_data = {
-                    "timestamp": log_entry.timestamp,
-                    "level": log_entry.level.name,
-                    "message": log_entry.message,
-                }
-                yield f"data: {json.dumps(log_data)}\n\n"
+                yield f"data: {message}\n\n"
+
+            # Send completion marker when stream ends gracefully
+            yield "data: [DONE]\n\n"
+
+        except asyncio.CancelledError:
+            # Client disconnection - log and exit gracefully
+            logger.info(f"Log stream for workload {workload_id} cancelled by client")
+            return
         except Exception as e:
+            logger.error(f"Log stream error for workload {workload_id}: {e}")
             error_data = {"error": str(e)}
             yield f"data: {json.dumps(error_data)}\n\n"
 

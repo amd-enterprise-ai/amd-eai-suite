@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ClusterStatus } from '@/types/enums/cluster-status';
+import { ProjectStatus } from '@/types/enums/projects';
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
 import { Workload } from '@/types/workloads';
 
@@ -22,26 +22,20 @@ export const generateMockWorkspaceWorkloads = (
     updatedBy: 'system',
     displayName: '',
     name: '',
-    clusterId: '',
-    cluster: {
+    project: {
       id: '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      createdBy: 'user@amd.com',
-      updatedBy: 'user@amd.com',
-      baseUrl: 'https://workloads.staging.silogen.ai',
-      name: 'demo-cluster',
-      lastHeartbeatAt: new Date().toISOString(),
-      status: ClusterStatus.HEALTHY,
+      name: 'demo-project',
+      description: 'Demo project',
+      status: ProjectStatus.READY,
+      statusReason: null,
+      clusterId: '',
     },
     projectId: '',
     status,
     type,
     chartId: '',
     modelId: null,
-    model: null,
     datasetId: null,
-    dataset: null,
     userInputs: {
       gpus: 1,
       image: '',
@@ -101,12 +95,10 @@ export const generateMockWorkspaceWorkloads = (
         .replace(/[-:.TZ]/g, '')
         .slice(0, 14)}`,
       name: `mw-dev-tracking-${name}-${Math.floor(Math.random() * 1000000000)}-${workloadId.slice(0, 4)}`,
-      clusterId,
-      cluster: {
-        ...template.cluster,
-        id: clusterId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+      project: {
+        ...template.project,
+        id: projectId,
+        clusterId,
       },
       projectId,
       status,

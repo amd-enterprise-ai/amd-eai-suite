@@ -77,7 +77,9 @@ export const validateFileInput = (
 
 export const createFileList = (files: File[]): FileList => {
   const dt = new DataTransfer();
-  files.forEach((file) => dt.items.add(file));
+  files.forEach((file) => {
+    dt.items.add(file);
+  });
   return dt.files;
 };
 

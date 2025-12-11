@@ -5,12 +5,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { LogEntry, WorkloadLogParams } from '@/types/workloads';
-import { getWorkloadLogsStream } from '@/services/app/workloads';
 
 export interface UseWorkloadLogsStreamOptions {
   workloadId: string;
-  params?: WorkloadLogParams;
-  autoStart?: boolean;
 }
 
 export interface UseWorkloadLogsStreamReturn {
@@ -18,133 +15,117 @@ export interface UseWorkloadLogsStreamReturn {
   isLoading: boolean;
   isStreaming: boolean;
   error: string | null;
-  startStreaming: () => void;
+  startStreaming: (params: WorkloadLogParams) => void;
   stopStreaming: () => void;
   clearLogs: () => void;
 }
 
+/**
+ * Build SSE stream URL with query parameters
+ */
+const buildStreamUrl = (
+  workloadId: string,
+  params: WorkloadLogParams = {},
+): string => {
+  const urlParams = new URLSearchParams();
+  if (params.startDate) urlParams.append('start_date', params.startDate);
+  if (params.level) urlParams.append('level', params.level);
+  if (params.logType) urlParams.append('log_type', params.logType);
+
+  const queryString = urlParams.toString();
+  return `/api/workloads/${workloadId}/logs/stream${queryString ? `?${queryString}` : ''}`;
+};
+
 export const useWorkloadLogsStream = ({
   workloadId,
-  params = {},
-  autoStart = false,
 }: UseWorkloadLogsStreamOptions): UseWorkloadLogsStreamReturn => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const readerRef = useRef<ReadableStreamDefaultReader<LogEntry> | null>(null);
-  const streamRef = useRef<ReadableStream<LogEntry> | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const paramsRef = useRef<WorkloadLogParams>({});
 
   const stopStreaming = useCallback(() => {
-    if (readerRef.current) {
-      try {
-        // Cancel through the reader, which automatically unlocks the stream
-        readerRef.current.cancel();
-      } catch (cancelError) {
-        // Ignore cancel errors - the stream might already be closed/errored
-        console.debug(
-          'Reader cancel error (expected if stream already closed):',
-          cancelError,
-        );
-      } finally {
-        readerRef.current = null;
-      }
+    if (eventSourceRef.current) {
+      console.debug('[SSE] Stopping stream');
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
-    // Don't cancel the stream directly if it has a reader - it's already cancelled above
-    streamRef.current = null;
+
     setIsStreaming(false);
+    setIsLoading(false);
   }, []);
 
-  const startStreaming = useCallback(async () => {
-    if (isStreaming) {
-      return;
-    }
-
-    // Stop any existing stream first to prevent conflicts
-    if (readerRef.current || streamRef.current) {
-      console.log('[HOOK] Cleaning up existing stream before restart');
-      // Inline cleanup to avoid circular dependency
-      if (readerRef.current) {
-        try {
-          readerRef.current.cancel();
-        } catch (cancelError) {
-          console.debug('Reader cancel error during restart:', cancelError);
-        } finally {
-          readerRef.current = null;
-        }
+  const connect = useCallback(
+    (params: WorkloadLogParams) => {
+      paramsRef.current = params;
+      // Close existing connection if any
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
-      streamRef.current = null;
-      // Small delay to ensure cleanup completes
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
 
-    setIsStreaming(true);
-    setIsLoading(true);
-    setError(null);
+      const url = buildStreamUrl(workloadId, params);
+      console.debug('[SSE] Connecting to:', url);
 
-    try {
-      const stream = await getWorkloadLogsStream(workloadId, params);
-      streamRef.current = stream;
-      const reader = stream.getReader();
-      readerRef.current = reader;
-      setIsLoading(false);
+      setIsStreaming(true);
+      setIsLoading(true);
+      setLogs([]);
 
-      while (true) {
+      const eventSource = new EventSource(url);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        console.debug('[SSE] Connection opened');
+        setIsLoading(false);
+        setError(null);
+      };
+
+      eventSource.onmessage = (event) => {
         try {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
+          // Handle special markers
+          if (event.data === '[DONE]') {
+            console.debug('[SSE] Received [DONE] marker, closing connection');
+            stopStreaming();
+            return;
+          } else if (event.data === '[HEARTBEAT]') {
+            return;
           }
 
-          setLogs((prevLogs) => [...prevLogs, value]);
-        } catch (readError) {
-          // Handle read errors (e.g., stream cancelled)
-          const errorMessage =
-            readError instanceof Error ? readError.message : String(readError);
-          const errorName = readError instanceof Error ? readError.name : '';
-
-          if (
-            errorName === 'AbortError' ||
-            errorMessage.includes('cancelled')
-          ) {
-            // Stream was cancelled, this is expected
-            break;
-          } else {
-            throw readError;
-          }
+          const logEntry: LogEntry = JSON.parse(event.data);
+          setLogs((prev) => [...prev, logEntry]);
+        } catch (err: any) {
+          console.error('[SSE] Failed to parse message:', err);
+          setError(`[SSE] Failed to parse message ${err?.message}`);
         }
+      };
+
+      eventSource.onerror = (event) => {
+        console.error('[SSE] Connection error:', event);
+        stopStreaming();
+        setError('Log streaming connection error. Please try again later.');
+      };
+    },
+    [workloadId, stopStreaming],
+  );
+
+  const startStreaming = useCallback(
+    (params: WorkloadLogParams = {}) => {
+      // Prevent starting if already connected
+      if (isStreaming && eventSourceRef.current) {
+        console.debug('[SSE] Already connected, ignoring start request');
+        return;
       }
-    } catch (err) {
-      // Only set error if it's not a cancellation
-      if (
-        err instanceof Error &&
-        !err.message.includes('cancelled') &&
-        !err.message.includes('aborted') &&
-        err.name !== 'AbortError'
-      ) {
-        setError(err.message);
-      }
-    } finally {
-      setIsStreaming(false);
-      readerRef.current = null;
-      streamRef.current = null;
-    }
-  }, [workloadId, JSON.stringify(params)]); // Use JSON.stringify to make params dependency stable
+
+      connect(params);
+    },
+    [isStreaming, connect],
+  );
 
   const clearLogs = useCallback(() => {
     setLogs([]);
   }, []);
-
-  useEffect(() => {
-    if (autoStart) {
-      startStreaming();
-    }
-
-    return () => {
-      stopStreaming();
-    };
-  }, [autoStart, startStreaming, stopStreaming]);
 
   // Cleanup on unmount
   useEffect(() => {

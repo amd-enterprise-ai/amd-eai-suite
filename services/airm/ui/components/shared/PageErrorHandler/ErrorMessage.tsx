@@ -42,11 +42,11 @@ function ErrorMessage({ message = '', code, onRefresh }: ErrorMessageProps) {
           <h1>
             {isKnownError ? t(`error.${code}.title`) : t(`error.unknown.title`)}
           </h1>
-          <div className="dark:text-default-500 text-default-600">
+          <p>
             {isKnownError
               ? t(`error.${code}.description`)
               : t(`error.unknown.description`)}
-          </div>
+          </p>
           {message && (
             <div className="w-full mt-2">
               <Button
@@ -56,11 +56,13 @@ function ErrorMessage({ message = '', code, onRefresh }: ErrorMessageProps) {
                 endContent={
                   <IconChevronDown
                     size={16}
-                    className={`transition-transform ${isErrorExpanded ? 'rotate-180' : ''}`}
+                    className={`transition-transform ${
+                      isErrorExpanded ? 'rotate-180' : ''
+                    }`}
                   />
                 }
               >
-                {t('error.showDetailsActionLabel')}
+                {t('actions.showDetails.title')}
               </Button>
               <div
                 className={`overflow-hidden transition-all duration-300 ${

@@ -18,10 +18,7 @@ import {
 import { listWorkloads } from '@/services/app/workloads';
 
 import { generateMockApiKey } from '@/__mocks__/utils/api-keys-mock';
-
-import { ClusterStatus } from '@/types/enums/cluster-status';
-import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
-import { Workload } from '@/types/workloads';
+import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 
 import CreateApiKey from '@/components/features/api-keys/CreateApiKey';
 
@@ -36,70 +33,6 @@ const mockApiKeyDetails = {
   numUses: 0,
   groups: ['auth-group-1', 'auth-group-2'],
 };
-
-// Mock workloads data to match the original mock deployments
-const mockWorkloads: Workload[] = [
-  {
-    id: 'workload-1',
-    name: 'gpt-4-deployment',
-    displayName: 'GPT-4 Deployment',
-    status: WorkloadStatus.RUNNING,
-    type: WorkloadType.INFERENCE,
-    createdBy: 'test-user',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    chartId: 'chart-1',
-    clusterId: 'cluster-1',
-    cluster: {
-      id: 'cluster-1',
-      name: 'test-cluster',
-      lastHeartbeatAt: '2024-01-01T00:00:00Z',
-      status: ClusterStatus.HEALTHY,
-    },
-    aimId: 'aim-1',
-    clusterAuthGroupId: 'auth-group-1',
-  },
-  {
-    id: 'workload-2',
-    name: 'llama-2-deployment',
-    displayName: 'LLaMA 2 Deployment',
-    status: WorkloadStatus.RUNNING,
-    type: WorkloadType.INFERENCE,
-    createdBy: 'test-user',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    chartId: 'chart-2',
-    clusterId: 'cluster-1',
-    cluster: {
-      id: 'cluster-1',
-      name: 'test-cluster',
-      lastHeartbeatAt: '2024-01-01T00:00:00Z',
-      status: ClusterStatus.HEALTHY,
-    },
-    aimId: 'aim-2',
-    clusterAuthGroupId: 'auth-group-2',
-  },
-  {
-    id: 'workload-3',
-    name: 'mistral-deployment',
-    displayName: 'Mistral Deployment',
-    status: WorkloadStatus.RUNNING,
-    type: WorkloadType.INFERENCE,
-    createdBy: 'test-user',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    chartId: 'chart-3',
-    clusterId: 'cluster-1',
-    cluster: {
-      id: 'cluster-1',
-      name: 'test-cluster',
-      lastHeartbeatAt: '2024-01-01T00:00:00Z',
-      status: ClusterStatus.HEALTHY,
-    },
-    aimId: 'aim-3',
-    clusterAuthGroupId: 'auth-group-3',
-  },
-];
 
 vi.mock('@/services/app/api-keys', () => ({
   createApiKey: vi.fn(),
@@ -128,8 +61,11 @@ const mockOnClose = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Mock the listWorkloads to return our mock data
-  mockListWorkloads.mockResolvedValue(mockWorkloads);
+  // Mock the listWorkloads to return workloads with AIM deployments (workload-11, 12, 13)
+  const aimWorkloads = mockWorkloads.filter(
+    (w) => w.aimId && w.clusterAuthGroupId,
+  );
+  mockListWorkloads.mockResolvedValue(aimWorkloads);
   // Mock fetchApiKeyDetails to return mock API key details
   mockFetchApiKeyDetails.mockResolvedValue(mockApiKeyDetails);
 });
@@ -323,13 +259,13 @@ describe('CreateApiKey', () => {
 
       // Check for mock deployment options - use getAllByText to handle multiple instances
       await waitFor(() => {
-        const gptOptions = screen.getAllByText('GPT-4 Deployment');
+        const gptOptions = screen.getAllByText('AIM GPT-4 Deployment');
         expect(gptOptions.length).toBeGreaterThan(0);
 
-        const llamaOptions = screen.getAllByText('LLaMA 2 Deployment');
+        const llamaOptions = screen.getAllByText('AIM LLaMA 2 Deployment');
         expect(llamaOptions.length).toBeGreaterThan(0);
 
-        const mistralOptions = screen.getAllByText('Mistral Deployment');
+        const mistralOptions = screen.getAllByText('AIM Mistral Deployment');
         expect(mistralOptions.length).toBeGreaterThan(0);
       });
     });
@@ -553,12 +489,12 @@ describe('CreateApiKey', () => {
       // Wait for options to appear
       await waitFor(() => {
         expect(
-          screen.getAllByText('Mistral Deployment').length,
+          screen.getAllByText('AIM Mistral Deployment').length,
         ).toBeGreaterThan(0);
       });
 
       // Select Mistral deployment
-      const mistralOption = screen.getAllByText('Mistral Deployment')[0];
+      const mistralOption = screen.getAllByText('AIM Mistral Deployment')[0];
       await act(async () => {
         fireEvent.click(mistralOption);
       });
@@ -737,14 +673,14 @@ describe('CreateApiKey', () => {
 
       // Wait for options to appear
       await waitFor(() => {
-        expect(screen.getAllByText('GPT-4 Deployment').length).toBeGreaterThan(
-          0,
-        );
+        expect(
+          screen.getAllByText('AIM GPT-4 Deployment').length,
+        ).toBeGreaterThan(0);
       });
 
       // Select multiple options (HeroUI Select manages internal state)
-      const gptOption = screen.getAllByText('GPT-4 Deployment')[0];
-      const llamaOption = screen.getAllByText('LLaMA 2 Deployment')[0];
+      const gptOption = screen.getAllByText('AIM GPT-4 Deployment')[0];
+      const llamaOption = screen.getAllByText('AIM LLaMA 2 Deployment')[0];
 
       await act(async () => {
         fireEvent.click(gptOption);
@@ -823,11 +759,11 @@ describe('CreateApiKey', () => {
 
       // Verify deployments are available
       await waitFor(() => {
-        expect(screen.getAllByText('GPT-4 Deployment').length).toBeGreaterThan(
-          0,
-        );
         expect(
-          screen.getAllByText('LLaMA 2 Deployment').length,
+          screen.getAllByText('AIM GPT-4 Deployment').length,
+        ).toBeGreaterThan(0);
+        expect(
+          screen.getAllByText('AIM LLaMA 2 Deployment').length,
         ).toBeGreaterThan(0);
       });
     });
@@ -872,31 +808,8 @@ describe('CreateApiKey', () => {
     });
 
     it('filters workloads to only show deployed AIMs', async () => {
-      // Add a workload without aimId or clusterAuthGroupId
-      const workloadsWithNonAIM: Workload[] = [
-        ...mockWorkloads,
-        {
-          id: 'workload-4',
-          name: 'non-aim-deployment',
-          displayName: 'Non-AIM Deployment',
-          status: WorkloadStatus.RUNNING,
-          type: WorkloadType.INFERENCE,
-          createdBy: 'test-user',
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z',
-          chartId: 'chart-4',
-          clusterId: 'cluster-1',
-          cluster: {
-            id: 'cluster-1',
-            name: 'test-cluster',
-            lastHeartbeatAt: '2024-01-01T00:00:00Z',
-            status: ClusterStatus.HEALTHY,
-          },
-          // No aimId or clusterAuthGroupId
-        },
-      ];
-
-      mockListWorkloads.mockResolvedValue(workloadsWithNonAIM);
+      // Use all mock workloads (some with aimId, some without)
+      mockListWorkloads.mockResolvedValue(mockWorkloads);
 
       await act(async () => {
         render(<CreateApiKey {...defaultProps} />, {
@@ -915,19 +828,19 @@ describe('CreateApiKey', () => {
 
       // Should only show the 3 workloads with aimId and clusterAuthGroupId
       await waitFor(() => {
-        expect(screen.getAllByText('GPT-4 Deployment').length).toBeGreaterThan(
-          0,
-        );
         expect(
-          screen.getAllByText('LLaMA 2 Deployment').length,
+          screen.getAllByText('AIM GPT-4 Deployment').length,
         ).toBeGreaterThan(0);
         expect(
-          screen.getAllByText('Mistral Deployment').length,
+          screen.getAllByText('AIM LLaMA 2 Deployment').length,
+        ).toBeGreaterThan(0);
+        expect(
+          screen.getAllByText('AIM Mistral Deployment').length,
         ).toBeGreaterThan(0);
       });
 
-      // Non-AIM deployment should not appear
-      expect(screen.queryByText('Non-AIM Deployment')).not.toBeInTheDocument();
+      // Non-AIM deployments should not appear (e.g., workload-1 "Llama 7B Inference")
+      expect(screen.queryByText('Llama 7B Inference')).not.toBeInTheDocument();
     });
   });
 });

@@ -10,14 +10,13 @@ import {
 } from '@/services/app/aims';
 import { APIRequestError } from '@/utils/app/errors';
 
-vi.mock('@/utils/app/api-helpers', () => ({
-  getErrorMessage: vi.fn().mockResolvedValue('error message'),
-  convertCamelToSnakeParams: vi.fn((params) =>
-    new URLSearchParams(params).toString(),
-  ),
-  convertCamelToSnake: vi.fn((data) => data),
-  convertSnakeToCamel: vi.fn((data) => data),
-}));
+vi.mock('@/utils/app/api-helpers', async () => {
+  const actual = await vi.importActual('@/utils/app/api-helpers');
+  return {
+    ...actual,
+    getErrorMessage: vi.fn().mockResolvedValue('error message'),
+  };
+});
 
 vi.mock('@/utils/app/aims', () => ({
   aimsParser: vi.fn((aims) => aims),
@@ -39,7 +38,7 @@ describe('aims service', () => {
     it('returns aims on success', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: mockJson.mockResolvedValueOnce([{ id: '1' }]),
+        json: mockJson.mockResolvedValueOnce({ data: [{ id: '1' }] }),
       });
       const result = await getAims('proj1');
       expect(result).toEqual([{ id: '1' }]);
@@ -82,6 +81,7 @@ describe('aims service', () => {
       const result = await deployAim('aim1', 'proj1', {
         cacheModel: true,
         replicas: 1,
+        allowUnoptimized: false,
       });
       expect(result).toEqual({ success: true });
     });
@@ -89,8 +89,36 @@ describe('aims service', () => {
     it('throws APIRequestError on failure', async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 400 });
       await expect(
-        deployAim('aim1', 'proj1', { cacheModel: true, replicas: 1 }),
+        deployAim('aim1', 'proj1', {
+          cacheModel: true,
+          replicas: 1,
+          allowUnoptimized: false,
+        }),
       ).rejects.toThrow(APIRequestError);
+    });
+
+    it('handles allowUnoptimized parameter correctly', async () => {
+      const testCases = [
+        { allowUnoptimized: true, expected: true },
+        { allowUnoptimized: false, expected: false },
+      ];
+
+      for (const { allowUnoptimized, expected } of testCases) {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: mockJson.mockResolvedValueOnce({ success: true }),
+        });
+
+        await deployAim('aim1', 'proj1', {
+          cacheModel: true,
+          replicas: 1,
+          allowUnoptimized,
+        });
+
+        const callArgs = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+        const body = JSON.parse(callArgs[1].body);
+        expect(body.allow_unoptimized).toBe(expected);
+      }
     });
   });
 

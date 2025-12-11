@@ -4,7 +4,7 @@
 
 from ..clusters.schemas import ClusterResponse, ClusterStatus
 from ..projects.models import Project
-from .exceptions import NotReadyException, UnhealthyException
+from .exceptions import PreconditionNotMetException, UnhealthyException
 
 
 # TODO This check is a bit strange and perhaps out of place?
@@ -14,5 +14,7 @@ def ensure_cluster_healthy(project: Project) -> None:
 
 
 def ensure_base_url_configured(project: Project) -> None:
-    if not project.cluster.base_url:
-        raise NotReadyException("Cluster does not have a base URL configured. Please contact your administrator.")
+    if not project.cluster.workloads_base_url:
+        raise PreconditionNotMetException(
+            "Cluster does not have a base URL configured. Please contact your administrator."
+        )

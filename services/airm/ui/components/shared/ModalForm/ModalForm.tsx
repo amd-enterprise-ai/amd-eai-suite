@@ -66,7 +66,7 @@ export const ModalForm = <T extends FieldValues>({
     if (onCancel) {
       onCancel();
     } else {
-      onOpenChange && onOpenChange();
+      onOpenChange?.();
     }
   }, [onCancel, onOpenChange]);
 

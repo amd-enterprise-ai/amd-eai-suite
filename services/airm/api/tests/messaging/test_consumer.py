@@ -17,6 +17,7 @@ from airm.messaging.schemas import (
     ProjectSecretStatus,
     ProjectSecretsUpdateMessage,
     ProjectStorageUpdateMessage,
+    SecretScope,
     WorkloadStatusMessage,
 )
 from app.clusters.models import Cluster
@@ -168,6 +169,7 @@ async def test_process_message_update_project_secret_status(_, __, mock_update_p
     message = ProjectSecretsUpdateMessage(
         message_type="project_secrets_update",
         project_secret_id=uuid4(),
+        secret_scope=SecretScope.PROJECT,
         status=ProjectSecretStatus.SYNCED.value,
         reason="The reason for the update",
         updated_at=datetime.datetime.now(datetime.UTC),

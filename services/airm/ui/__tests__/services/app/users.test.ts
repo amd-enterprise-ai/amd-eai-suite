@@ -33,10 +33,10 @@ describe('users service', () => {
     it('returns users on success', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: vi.fn().mockResolvedValue([{ id: '1' }]),
+        json: vi.fn().mockResolvedValue({ data: [{ id: '1' }] }),
       });
       const users = await fetchUsers();
-      expect(users).toEqual([{ id: '1' }]);
+      expect(users).toEqual({ data: [{ id: '1' }] });
       expect(mockFetch).toHaveBeenCalledWith('/api/users');
     });
 
@@ -67,10 +67,10 @@ describe('users service', () => {
     it('returns invited users on success', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: vi.fn().mockResolvedValue([{ id: '2' }]),
+        json: vi.fn().mockResolvedValue({ data: [{ id: '2' }] }),
       });
       const users = await fetchInvitedUsers();
-      expect(users).toEqual([{ id: '2' }]);
+      expect(users).toEqual({ data: [{ id: '2' }] });
       expect(mockFetch).toHaveBeenCalledWith('/api/invited-users');
     });
 

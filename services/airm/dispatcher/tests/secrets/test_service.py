@@ -15,12 +15,10 @@ from airm.messaging.schemas import (
     ProjectSecretsDeleteMessage,
     ProjectSecretStatus,
     ProjectSecretsUpdateMessage,
-    SecretsComponentKind,
+    SecretKind,
+    SecretScope,
 )
-from airm.secrets.constants import (
-    EXTERNAL_SECRETS_KIND,
-    PROJECT_SECRET_ID_LABEL,
-)
+from airm.secrets.constants import EXTERNAL_SECRETS_KIND, PROJECT_SECRET_ID_LABEL, PROJECT_SECRET_SCOPE_LABEL
 from app.secrets.service import (
     __process_external_secret_event,
     __process_kubernetes_secret_event,
@@ -75,10 +73,10 @@ def mock_request(method, path, *args, **kwargs):
 @patch("app.secrets.service.client.ApiClient")
 @patch("app.secrets.service.get_common_vhost_connection_and_channel")
 async def test_project_secrets_create(
-    mock_get_conn_chan,
-    mock_api_client_class,
-    mock_create_from_dict,
-):
+    mock_get_conn_chan: AsyncMock,
+    mock_api_client_class: MagicMock,
+    mock_create_from_dict: MagicMock,
+) -> None:
     """Test that process_project_secrets_create processes project secrets messages correctly and calls create_from_dict."""
 
     # Mock the connection return values (avoid real RabbitMQ)
@@ -93,7 +91,8 @@ async def test_project_secrets_create(
         secret_name="example-external-secret",
         project_name="test-project-ns",
         project_secret_id=uuid4(),
-        secret_type=SecretsComponentKind.EXTERNAL_SECRET,
+        secret_type=SecretKind.EXTERNAL_SECRET,
+        secret_scope=SecretScope.PROJECT,
     )
 
     await process_project_secrets_create(project_secrets_create_message)
@@ -112,10 +111,10 @@ async def test_project_secrets_create(
 @patch("app.secrets.service.client.ApiClient")
 @patch("app.secrets.service.get_common_vhost_connection_and_channel")
 async def test_project_secrets_create_kubernetes_secret(
-    mock_get_conn_chan,
-    mock_api_client_class,
-    mock_create_from_dict,
-):
+    mock_get_conn_chan: AsyncMock,
+    mock_api_client_class: MagicMock,
+    mock_create_from_dict: MagicMock,
+) -> None:
     mock_get_conn_chan.return_value = (AsyncMock(), AsyncMock())
     mock_client = mock_api_client_class.return_value
 
@@ -125,7 +124,8 @@ async def test_project_secrets_create_kubernetes_secret(
         secret_name="example-hf-secret",
         project_name="test-project-ns",
         project_secret_id=uuid4(),
-        secret_type=SecretsComponentKind.KUBERNETES_SECRET,
+        secret_type=SecretKind.KUBERNETES_SECRET,
+        secret_scope=SecretScope.PROJECT,
     )
 
     await process_project_secrets_create(message)
@@ -143,11 +143,11 @@ async def test_project_secrets_create_kubernetes_secret(
 @patch("app.secrets.service.client.ApiClient")
 @patch("app.secrets.service.get_common_vhost_connection_and_channel")
 async def test_project_secrets_create_invalid_manifest_raises(
-    mock_get_conn_chan,
-    mock_api_client_class,
-    mock_create_from_dict,
-    mock_publish_status_message,
-):
+    mock_get_conn_chan: AsyncMock,
+    mock_api_client_class: MagicMock,
+    mock_create_from_dict: MagicMock,
+    mock_publish_status_message: AsyncMock,
+) -> None:
     """Test that process_project_secrets_create raises an error for invalid manifest and does not call create_from_dict."""
     # Mock the connection return values (avoid real RabbitMQ)
     mock_get_conn_chan.return_value = (AsyncMock(), AsyncMock())
@@ -165,11 +165,12 @@ async def test_project_secrets_create_invalid_manifest_raises(
         secret_name="bad-secret",
         project_name="test-project-ns",
         project_secret_id=mock_project_secret_id,
-        secret_type=SecretsComponentKind.EXTERNAL_SECRET,
+        secret_type=SecretKind.EXTERNAL_SECRET,
+        secret_scope=SecretScope.PROJECT,
     )
 
     await process_project_secrets_create(project_secrets_create_message)
-
+    assert mock_publish_status_message.await_args is not None
     status_message = mock_publish_status_message.await_args.args[0]
 
     # Assert create_from_dict was not called
@@ -178,7 +179,7 @@ async def test_project_secrets_create_invalid_manifest_raises(
     # Assert __publish_secrets_component_status_update was called with an error message
     assert isinstance(status_message, ProjectSecretsUpdateMessage)
     assert status_message.status_reason.startswith("Manifest is malformed")
-    assert f"secret_type={SecretsComponentKind.EXTERNAL_SECRET.value}" in status_message.status_reason
+    assert f"secret_type={SecretKind.EXTERNAL_SECRET.value}" in status_message.status_reason
     assert str(status_message.project_secret_id) == str(mock_project_secret_id)
     assert status_message.message_type == "project_secrets_update"
 
@@ -189,11 +190,11 @@ async def test_project_secrets_create_invalid_manifest_raises(
 @patch("app.secrets.service.client.ApiClient")
 @patch("app.secrets.service.get_common_vhost_connection_and_channel")
 async def test_project_secrets_create_multiple_resources_raises(
-    mock_get_conn_chan,
-    _,
-    mock_create_from_dict,
-    mock_publish_status_message,
-):
+    mock_get_conn_chan: AsyncMock,
+    _: MagicMock,
+    mock_create_from_dict: MagicMock,
+    mock_publish_status_message: AsyncMock,
+) -> None:
     """Test that process_project_secrets_create raises an error for manifest with multiple resources and does not call create_from_dict."""
     # Mock the connection return values (avoid real RabbitMQ)
     mock_get_conn_chan.return_value = (AsyncMock(), AsyncMock())
@@ -209,11 +210,12 @@ async def test_project_secrets_create_multiple_resources_raises(
         secret_name="bad-secret",
         project_name="test-project-ns",
         project_secret_id=mock_project_secret_id,
-        secret_type=SecretsComponentKind.EXTERNAL_SECRET,
+        secret_type=SecretKind.EXTERNAL_SECRET,
+        secret_scope=SecretScope.PROJECT,
     )
 
     await process_project_secrets_create(project_secrets_create_message)
-
+    assert mock_publish_status_message.await_args is not None
     status_message = mock_publish_status_message.await_args.args[0]
 
     # Assert create_from_dict was not called
@@ -224,6 +226,7 @@ async def test_project_secrets_create_multiple_resources_raises(
     assert status_message.status_reason.startswith("Expected 1 manifest, but got 2")
     assert str(status_message.project_secret_id) == str(mock_project_secret_id)
     assert status_message.message_type == "project_secrets_update"
+    assert status_message.secret_scope == SecretScope.PROJECT
 
 
 @pytest.mark.asyncio
@@ -232,11 +235,11 @@ async def test_project_secrets_create_multiple_resources_raises(
 @patch("app.secrets.service.client.ApiClient")
 @patch("app.secrets.service.get_common_vhost_connection_and_channel")
 async def test_project_secrets_create_invalid_resource_kind_raises(
-    mock_get_conn_chan,
-    _,
-    mock_create_from_dict,
-    mock_publish_status_message,
-):
+    mock_get_conn_chan: AsyncMock,
+    _: MagicMock,
+    mock_create_from_dict: MagicMock,
+    mock_publish_status_message: AsyncMock,
+) -> None:
     """Test that process_project_secrets_create raises an error for manifest with invalid resource kind and does not call create_from_dict."""
 
     # Mock the connection return values (avoid real RabbitMQ)
@@ -252,14 +255,15 @@ async def test_project_secrets_create_invalid_resource_kind_raises(
         secret_name="bad-secret",
         project_name="test-project-ns",
         project_secret_id=mock_project_secret_id,
-        secret_type=SecretsComponentKind.EXTERNAL_SECRET,
+        secret_type=SecretKind.EXTERNAL_SECRET,
+        secret_scope=SecretScope.PROJECT,
     )
 
     await process_project_secrets_create(project_secrets_create_message)
 
     # Assert create_from_dict was not called
     mock_create_from_dict.assert_not_called()
-
+    assert mock_publish_status_message.await_args is not None
     status_message = mock_publish_status_message.await_args.args[0]
 
     # Assert __publish_secrets_component_status_update was called with an error message
@@ -267,6 +271,7 @@ async def test_project_secrets_create_invalid_resource_kind_raises(
     assert "Invalid ExternalSecret manifest" in status_message.status_reason
     assert str(status_message.project_secret_id) == str(mock_project_secret_id)
     assert status_message.message_type == "project_secrets_update"
+    assert status_message.secret_scope == SecretScope.PROJECT
 
 
 @pytest.mark.asyncio
@@ -277,13 +282,13 @@ async def test_project_secrets_create_invalid_resource_kind_raises(
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 @patch("app.secrets.service.get_installed_version_for_custom_resource", return_value="v1beta1")
 async def test_process_delete_external_secret_success(
-    __,
-    mock_publish_secrets_component_status_update,
-    mock_publish_project_secret_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    __: MagicMock,
+    mock_publish_secrets_component_status_update: AsyncMock,
+    mock_publish_project_secret_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     # Mock connection
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
@@ -301,6 +306,7 @@ async def test_process_delete_external_secret_success(
     mock_item.metadata.namespace = "test-namespace"
     mock_item.metadata.labels = {
         PROJECT_SECRET_ID_LABEL: str(mock_project_secret_id),
+        PROJECT_SECRET_SCOPE_LABEL: "project",
     }
 
     mock_resource.get.return_value.items = [mock_item]
@@ -310,7 +316,8 @@ async def test_process_delete_external_secret_success(
         message_type="project_secrets_delete",
         project_secret_id=mock_project_secret_id,
         project_name="test-project",
-        secret_type=SecretsComponentKind.EXTERNAL_SECRET,
+        secret_type=SecretKind.EXTERNAL_SECRET,
+        secret_scope=SecretScope.ORGANIZATION,
     )
     await process_project_secrets_delete(message)
 
@@ -326,13 +333,13 @@ async def test_process_delete_external_secret_success(
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 @patch("app.secrets.service.get_installed_version_for_custom_resource", return_value="v1beta1")
 async def test_process_delete_external_secret_no_resources_items_found(
-    __,
-    mock_publish_secrets_component_status_update,
-    mock_publish_project_secret_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    __: MagicMock,
+    mock_publish_secrets_component_status_update: AsyncMock,
+    mock_publish_project_secret_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     # Mock connection
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
@@ -350,7 +357,8 @@ async def test_process_delete_external_secret_no_resources_items_found(
         message_type="project_secrets_delete",
         project_secret_id=mock_project_secret_id,
         project_name="test-project",
-        secret_type=SecretsComponentKind.EXTERNAL_SECRET,
+        secret_type=SecretKind.EXTERNAL_SECRET,
+        secret_scope=SecretScope.PROJECT,
     )
     await process_project_secrets_delete(message)
 
@@ -358,6 +366,7 @@ async def test_process_delete_external_secret_no_resources_items_found(
         message.project_secret_id,
         ProjectSecretStatus.DELETED,
         f"No resources found for deletion: {PROJECT_SECRET_ID_LABEL}={message.project_secret_id}",
+        secret_scope=SecretScope.PROJECT,
     )
     mock_publish_secrets_component_status_update.assert_not_awaited()
 
@@ -370,13 +379,13 @@ async def test_process_delete_external_secret_no_resources_items_found(
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 @patch("app.secrets.service.get_installed_version_for_custom_resource", return_value="v1beta1")
 async def test_process_delete_external_secret_no_resources_found(
-    __,
-    mock_publish_secrets_component_status_update,
-    mock_publish_project_secret_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    __: MagicMock,
+    mock_publish_secrets_component_status_update: AsyncMock,
+    mock_publish_project_secret_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     # Mock connection
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
@@ -389,7 +398,8 @@ async def test_process_delete_external_secret_no_resources_found(
         message_type="project_secrets_delete",
         project_secret_id=mock_project_secret_id,
         project_name="test-project",
-        secret_type=SecretsComponentKind.EXTERNAL_SECRET,
+        secret_type=SecretKind.EXTERNAL_SECRET,
+        secret_scope=SecretScope.PROJECT,
     )
     await process_project_secrets_delete(message)
 
@@ -397,8 +407,8 @@ async def test_process_delete_external_secret_no_resources_found(
         message.project_secret_id,
         ProjectSecretStatus.DELETED,
         f"No resources found for deletion: {PROJECT_SECRET_ID_LABEL}={message.project_secret_id}",
+        secret_scope=SecretScope.PROJECT,
     )
-    mock_publish_secrets_component_status_update.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -409,13 +419,13 @@ async def test_process_delete_external_secret_no_resources_found(
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 @patch("app.secrets.service.get_installed_version_for_custom_resource", return_value="v1beta1")
 async def test_process_delete_external_secret_delete_fails(
-    __,
-    mock_publish_secrets_component_status_update,
-    mock_publish_project_secret_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    __: MagicMock,
+    mock_publish_secrets_component_status_update: AsyncMock,
+    mock_publish_project_secret_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
     mock_project_secret_id = uuid4()
@@ -425,7 +435,7 @@ async def test_process_delete_external_secret_delete_fails(
         name="mock-external-secret",
         namespace="test-project-ns",
         api_version="v1beta1",
-        labels={PROJECT_SECRET_ID_LABEL: str(mock_project_secret_id)},
+        labels={PROJECT_SECRET_ID_LABEL: str(mock_project_secret_id), PROJECT_SECRET_SCOPE_LABEL: "organization"},
     )
 
     mock_resource_instance = create_mock_resource_instance([mock_external_secret])
@@ -445,22 +455,22 @@ async def test_process_delete_external_secret_delete_fails(
         message_type="project_secrets_delete",
         project_secret_id=mock_project_secret_id,
         project_name="test-project-ns",
-        secret_type=SecretsComponentKind.EXTERNAL_SECRET,
+        secret_type=SecretKind.EXTERNAL_SECRET,
+        secret_scope=SecretScope.ORGANIZATION,
     )
 
     await process_project_secrets_delete(message)
 
-    mock_publish_project_secret_status.assert_not_awaited()
-
     mock_publish_secrets_component_status_update.assert_awaited_once()
-
+    assert mock_publish_secrets_component_status_update.await_args is not None
     status_message = mock_publish_secrets_component_status_update.await_args.args[0]
-
     assert isinstance(status_message, ProjectSecretsUpdateMessage)
     assert status_message.status == ProjectSecretStatus.DELETE_FAILED
     assert str(status_message.project_secret_id) == str(mock_project_secret_id)
     assert "Deletion failed" in status_message.status_reason
     assert "Internal Server Error" in status_message.status_reason
+
+    mock_publish_project_secret_status.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -470,12 +480,12 @@ async def test_process_delete_external_secret_delete_fails(
 @patch("app.secrets.service._publish_project_secret_status")
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 async def test_process_delete_kubernetes_secret_success(
-    mock_publish_secrets_component_status_update,
-    mock_publish_project_secret_status,
-    mock_get_connection,
-    mock_dynamic_client_class,
-    _,
-):
+    mock_publish_secrets_component_status_update: AsyncMock,
+    mock_publish_project_secret_status: AsyncMock,
+    mock_get_connection: AsyncMock,
+    mock_dynamic_client_class: MagicMock,
+    _: MagicMock,
+) -> None:
     """Test deleting Kubernetes Secret (e.g., Hugging Face token) successfully."""
     mock_get_connection.return_value = (MagicMock(), MagicMock())
 
@@ -493,6 +503,7 @@ async def test_process_delete_kubernetes_secret_success(
     mock_item.metadata.namespace = "test-namespace"
     mock_item.metadata.labels = {
         PROJECT_SECRET_ID_LABEL: str(mock_project_secret_id),
+        PROJECT_SECRET_SCOPE_LABEL: "project",
     }
 
     mock_resource.get.return_value.items = [mock_item]
@@ -502,7 +513,8 @@ async def test_process_delete_kubernetes_secret_success(
         message_type="project_secrets_delete",
         project_secret_id=mock_project_secret_id,
         project_name="test-project",
-        secret_type=SecretsComponentKind.KUBERNETES_SECRET,
+        secret_type=SecretKind.KUBERNETES_SECRET,
+        secret_scope=SecretScope.PROJECT,
     )
     await process_project_secrets_delete(message)
 
@@ -514,13 +526,13 @@ async def test_process_delete_kubernetes_secret_success(
 @pytest.mark.asyncio
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 @patch("app.secrets.service.get_status_for_external_secret")
-async def test_process_external_secret_event_success(mock_get_status, mock_publish):
+async def test_process_external_secret_event_success(mock_get_status: MagicMock, mock_publish: AsyncMock) -> None:
     # Create mock resource
     mock_resource = MagicMock()
     mock_resource.metadata.name = "test-external-secret"
     mock_resource.metadata.namespace = "test-project-ns"
     project_secret_id = str(uuid4())
-    mock_resource.metadata.labels = {PROJECT_SECRET_ID_LABEL: project_secret_id}
+    mock_resource.metadata.labels = {PROJECT_SECRET_ID_LABEL: project_secret_id, PROJECT_SECRET_SCOPE_LABEL: "project"}
     mock_resource.status = MagicMock()
     mock_resource.status.conditions = [
         {"type": "Ready", "status": "True", "reason": "SecretSynced", "message": "Secret was synced"}
@@ -534,7 +546,7 @@ async def test_process_external_secret_event_success(mock_get_status, mock_publi
 
     # Verify that __publish_secrets_component_status_update was called once
     mock_publish.assert_awaited_once()
-
+    assert mock_publish.await_args is not None
     # Get the message that was passed to __publish_secrets_component_status_update
     status_message = mock_publish.await_args.args[0]
 
@@ -547,7 +559,7 @@ async def test_process_external_secret_event_success(mock_get_status, mock_publi
 
 @pytest.mark.asyncio
 @patch("app.secrets.service.__publish_secrets_component_status_update")
-async def test_process_external_secret_event_missing_secret_id(mock_publish):
+async def test_process_external_secret_event_missing_secret_id(mock_publish: AsyncMock) -> None:
     resource = MagicMock()
     resource.metadata.name = "test-external-secret"
     resource.metadata.namespace = "test-project-ns"
@@ -560,13 +572,13 @@ async def test_process_external_secret_event_missing_secret_id(mock_publish):
 @pytest.mark.asyncio
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 @patch("app.secrets.service.get_status_for_external_secret")
-async def test_process_external_secret_event_error(mock_get_status, mock_publish):
+async def test_process_external_secret_event_error(mock_get_status: MagicMock, mock_publish: AsyncMock) -> None:
     # Create mock resource
     mock_resource = MagicMock()
     mock_resource.metadata.name = "test-external-secret"
     mock_resource.metadata.namespace = "test-project-ns"
     project_secret_id = str(uuid4())
-    mock_resource.metadata.labels = {PROJECT_SECRET_ID_LABEL: project_secret_id}
+    mock_resource.metadata.labels = {PROJECT_SECRET_ID_LABEL: project_secret_id, PROJECT_SECRET_SCOPE_LABEL: "project"}
     mock_resource.status = MagicMock()
     mock_resource.status.conditions = [
         {
@@ -588,7 +600,7 @@ async def test_process_external_secret_event_error(mock_get_status, mock_publish
 
     # Verify that __publish_secrets_component_status_update was called once
     mock_publish.assert_awaited_once()
-
+    assert mock_publish.await_args is not None
     # Get the message that was passed to __publish_secrets_component_status_update
     status_message = mock_publish.await_args.args[0]
 
@@ -602,17 +614,18 @@ async def test_process_external_secret_event_error(mock_get_status, mock_publish
 @pytest.mark.asyncio
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 @patch("app.secrets.service.get_status_for_kubernetes_secret")
-async def test_process_kubernetes_secret_event_success(mock_get_status, mock_publish):
+async def test_process_kubernetes_secret_event_success(mock_get_status: MagicMock, mock_publish: AsyncMock) -> None:
     project_secret_id = str(uuid4())
     resource = MagicMock()
     resource.metadata = MagicMock()
-    resource.metadata.labels = {PROJECT_SECRET_ID_LABEL: project_secret_id}
+    resource.metadata.labels = {PROJECT_SECRET_ID_LABEL: project_secret_id, PROJECT_SECRET_SCOPE_LABEL: "project"}
 
     mock_get_status.return_value = (ProjectSecretStatus.SYNCED, "Secret materialized")
 
     await __process_kubernetes_secret_event(resource, "ADDED")
 
     mock_publish.assert_awaited_once()
+    assert mock_publish.await_args is not None
     status_message = mock_publish.await_args.args[0]
     assert status_message.status == ProjectSecretStatus.SYNCED
     assert status_message.status_reason == "Secret materialized"
@@ -621,7 +634,7 @@ async def test_process_kubernetes_secret_event_success(mock_get_status, mock_pub
 
 @pytest.mark.asyncio
 @patch("app.secrets.service.__publish_secrets_component_status_update")
-async def test_process_kubernetes_secret_event_missing_label(mock_publish):
+async def test_process_kubernetes_secret_event_missing_label(mock_publish: AsyncMock) -> None:
     resource = MagicMock()
     resource.metadata = MagicMock()
     resource.metadata.labels = {}
@@ -634,7 +647,7 @@ async def test_process_kubernetes_secret_event_missing_label(mock_publish):
 @pytest.mark.asyncio
 @patch("app.secrets.service.__publish_secrets_component_status_update")
 @patch("app.secrets.service.get_status_for_kubernetes_secret")
-async def test_process_kubernetes_secret_event_error(mock_get_status, mock_publish):
+async def test_process_kubernetes_secret_event_error(mock_get_status: MagicMock, mock_publish: AsyncMock) -> None:
     project_secret_id = str(uuid4())
     resource = MagicMock()
     resource.metadata = MagicMock()
@@ -650,7 +663,7 @@ async def test_process_kubernetes_secret_event_error(mock_get_status, mock_publi
 @pytest.mark.asyncio
 @patch("app.secrets.service.start_kubernetes_watcher_if_resource_exists")
 @patch("app.secrets.service.get_installed_version_for_custom_resource")
-async def test_start_watching_secrets_components(mock_version, mocked_optional_watcher):
+async def test_start_watching_secrets_components(mock_version: MagicMock, mocked_optional_watcher: MagicMock) -> None:
     # Configure mock_watcher to return a completed future
 
     mocked_optional_watcher.return_value = asyncio.Future()

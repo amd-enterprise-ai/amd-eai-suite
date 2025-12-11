@@ -1,0 +1,128 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: s3-reader-test-job
+  labels:
+    app: s3-reader-test
+    test-type: storage-e2e
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: s3-reader-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: s3-reader
+          image: python:3.12-alpine
+          env:
+            - name: BUCKET_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: BUCKET_URL
+            - name: ACCESS_KEY_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: ACCESS_KEY_NAME
+            - name: SECRET_KEY_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: SECRET_KEY_NAME
+            - name: SECRET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: STORAGE_CONFIG_MAP_NAME # Will be replaced by Robot
+                  key: SECRET_NAME
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: SECRET_NAME_PLACEHOLDER # Will be replaced by Robot
+                  key: ACCESS_KEY_NAME_PLACEHOLDER # Will be replaced by Robot
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: SECRET_NAME_PLACEHOLDER # Will be replaced by Robot
+                  key: SECRET_KEY_NAME_PLACEHOLDER # Will be replaced by Robot
+            - name: TEST_DATA_KEY
+              value: "PLACEHOLDER"
+            - name: EXPECTED_CONTENT
+              value: "PLACEHOLDER"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "=== S3 Reader Test Job ==="
+              echo "Installing boto3..."
+              pip install -q boto3
+
+              echo "Reading test data from S3..."
+              python3 <<'EOF'
+              import os
+              import sys
+              import boto3
+              from urllib.parse import urlparse
+
+              # Parse bucket URL
+              bucket_url = os.environ['BUCKET_URL']
+              parsed = urlparse(bucket_url)
+              bucket_name = parsed.path.lstrip('/')
+              endpoint_url = f"{parsed.scheme}://{parsed.netloc}"
+
+              print(f"Bucket: {bucket_name}")
+              print(f"Endpoint: {endpoint_url}")
+              print(f"Object Key: {os.environ['TEST_DATA_KEY']}")
+
+              # Create S3 client
+              s3 = boto3.client(
+                  's3',
+                  endpoint_url=endpoint_url,
+                  aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+                  aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+                  region_name='us-east-1'
+              )
+
+              # Read test data
+              test_key = os.environ['TEST_DATA_KEY']
+              expected_content = os.environ['EXPECTED_CONTENT']
+
+              try:
+                  response = s3.get_object(Bucket=bucket_name, Key=test_key)
+                  actual_content = response['Body'].read().decode('utf-8')
+
+                  print(f"✓ Successfully read data from s3://{bucket_name}/{test_key}")
+                  print(f"  Content: {actual_content}")
+
+                  if actual_content == expected_content:
+                      print(f"✓ Content matches expected value")
+                  else:
+                      print(f"✗ Content mismatch!")
+                      print(f"  Expected: {expected_content}")
+                      print(f"  Actual: {actual_content}")
+                      sys.exit(1)
+
+              except s3.exceptions.NoSuchKey:
+                  print(f"✗ Object not found: s3://{bucket_name}/{test_key}")
+                  sys.exit(1)
+              except Exception as e:
+                  print(f"✗ Error reading object: {e}")
+                  sys.exit(1)
+              EOF
+
+              echo "=== S3 Read Complete ==="
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

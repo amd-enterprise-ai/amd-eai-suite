@@ -33,7 +33,7 @@ from app.projects.service import (
     update_project_status_from_components,
 )
 from app.quotas.schemas import QuotaBase, QuotaResponse
-from app.utilities.exceptions import NotFoundException, UnhealthyException, ValidationException
+from app.utilities.exceptions import ConflictException, NotFoundException, UnhealthyException, ValidationException
 from tests import factory
 
 
@@ -55,6 +55,7 @@ from tests import factory
     autospec=True,
 )
 @patch("app.projects.service.create_group", return_value="1fa3c3b8-31af-1413-3143-1234567890ab")
+@patch("app.projects.service.get_project_by_name_in_organization", return_value=None)
 @patch(
     "app.projects.service.get_active_project_count_per_cluster",
     return_value=1,
@@ -71,7 +72,7 @@ from tests import factory
         updated_by="test@example.com",
     ),
 )
-async def test_create_project(_, __, ___, ____):
+async def test_create_project(_, __, ___, ____, _____):
     project_data = ProjectCreate(
         name="test-project",
         description="A test project",
@@ -88,7 +89,7 @@ async def test_create_project(_, __, ___, ____):
         id=uuid4(),
         organization_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
         name="TestCluster",
-        base_url="https://test-cluster.example.com",
+        workloads_base_url="https://test-cluster.example.com",
         last_heartbeat_at=datetime.now(tz=UTC),
         created_at=datetime(2023, 1, 1, tzinfo=UTC),
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -108,22 +109,7 @@ async def test_create_project(_, __, ___, ____):
 
 
 @pytest.mark.asyncio
-@patch(
-    "app.projects.service.create_project_in_db",
-    return_value=Project(
-        name="test-project",
-        description="A test project",
-        organization_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
-        cluster_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
-        id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
-        created_at="2023-01-01T00:00:00Z",
-        updated_at="2023-01-01T00:00:00Z",
-        created_by="test@example.com",
-        updated_by="test@example.com",
-    ),
-    autospec=True,
-)
-async def test_create_project_unhealthy_cluster(_):
+async def test_create_project_unhealthy_cluster():
     project_data = ProjectCreate(
         name="test-project",
         description="A test project",
@@ -140,7 +126,7 @@ async def test_create_project_unhealthy_cluster(_):
         id=uuid4(),
         organization_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
         name="TestCluster",
-        base_url="https://test-cluster.example.com",
+        workloads_base_url="https://test-cluster.example.com",
         last_heartbeat_at=datetime.now(tz=UTC) - timedelta(10),
         created_at=datetime(2023, 1, 1, tzinfo=UTC),
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -158,21 +144,43 @@ async def test_create_project_unhealthy_cluster(_):
 
 
 @pytest.mark.asyncio
-@patch(
-    "app.projects.service.create_project_in_db",
-    return_value=Project(
+@patch("app.projects.service.get_project_by_name_in_organization", return_value=MagicMock(spec=Project))
+async def test_create_project_duplicate_name(_):
+    project_data = ProjectCreate(
         name="test-project",
         description="A test project",
+        cluster_id=uuid4(),
+        quota=QuotaBase(
+            cpu_milli_cores=1000,
+            memory_bytes=1024 * 1024 * 1024,
+            ephemeral_storage_bytes=5 * 1024 * 1024 * 1024,
+            gpu_count=0,
+            description="test quota",
+        ),
+    )
+    cluster = ClusterModel(
+        id=uuid4(),
         organization_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
-        cluster_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
-        id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
-        created_at="2023-01-01T00:00:00Z",
-        updated_at="2023-01-01T00:00:00Z",
+        name="TestCluster",
+        workloads_base_url="https://test-cluster.example.com",
+        last_heartbeat_at=datetime.now(tz=UTC),
+        created_at=datetime(2023, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2023, 1, 1, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-    ),
-    autospec=True,
-)
+    )
+    creator = "test_creator"
+
+    with pytest.raises(ConflictException) as e:
+        await create_project(
+            AsyncMock(spec=KeycloakAdmin), AsyncMock(spec=AsyncSession), cluster, project_data, creator
+        )
+
+    assert "Project with name test-project already exists." in str(e.value)
+
+
+@pytest.mark.asyncio
+@patch("app.projects.service.get_project_by_name_in_organization", return_value=None)
 @patch(
     "app.projects.service.get_active_project_count_per_cluster",
     return_value=2000,
@@ -194,7 +202,7 @@ async def test_create_project_too_many_projects(_, __):
         id=uuid4(),
         organization_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
         name="TestCluster",
-        base_url="https://test-cluster.example.com",
+        workloads_base_url="https://test-cluster.example.com",
         last_heartbeat_at=datetime.now(tz=UTC),
         created_at=datetime(2023, 1, 1, tzinfo=UTC),
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -344,7 +352,7 @@ async def test_create_quota_success(
     cluster = ClusterResponse(
         id=str(env.cluster.id),
         name="test-cluster",
-        base_url="https://test-cluster.example.com",
+        workloads_base_url="https://test-cluster.example.com",
         created_at="2023-01-01T00:00:00Z",
         updated_at="2023-01-01T00:00:00Z",
         created_by="test@example.com",
@@ -380,8 +388,9 @@ async def test_create_quota_success(
         updated_by="test@example.com",
     )
     mock_create_quota.return_value = expected_quota
+    mock_message_sender = AsyncMock()
 
-    result = await create_quota(session, env.project, cluster, quota_data, user)
+    result = await create_quota(session, env.project, cluster, quota_data, user, mock_message_sender)
 
     assert result == expected_quota
 
@@ -409,7 +418,7 @@ async def test_create_quota_validation_error(mock_validate_quota, mock_get_clust
     cluster = ClusterResponse(
         id=str(env.cluster.id),
         name="test-cluster",
-        base_url="https://test-cluster.example.com",
+        workloads_base_url="https://test-cluster.example.com",
         created_at="2023-01-01T00:00:00Z",
         updated_at="2023-01-01T00:00:00Z",
         created_by="test@example.com",
@@ -429,9 +438,10 @@ async def test_create_quota_validation_error(mock_validate_quota, mock_get_clust
     mock_get_cluster_resources.return_value = cluster_with_resources
 
     mock_validate_quota.return_value = ["CPU exceeds limit", "Memory exceeds limit"]
+    mock_message_sender = AsyncMock()
 
     with pytest.raises(ValidationException) as exc_info:
-        await create_quota(session, env.project, cluster, quota_data, user)
+        await create_quota(session, env.project, cluster, quota_data, user, mock_message_sender)
 
     assert "Quota exceeds available cluster resources" in str(exc_info.value)
     assert "CPU exceeds limit" in str(exc_info.value)
@@ -565,12 +575,13 @@ async def test_submit_delete_project_success(
 
     user = "test_user@example.com"
     gpu_vendor = "NVIDIA"
+    mock_message_sender = AsyncMock()
 
-    await submit_delete_project(db_session, project, user, gpu_vendor)
+    await submit_delete_project(db_session, project, user, gpu_vendor, mock_message_sender)
 
     mock_ensure_safe_to_delete.assert_called_once_with(project)
-    mock_delete_quota.assert_called_once_with(db_session, quota, project.cluster, gpu_vendor, user)
-    mock_delete_namespace.assert_called_once_with(db_session, project, user)
+    mock_delete_quota.assert_called_once_with(db_session, quota, project.cluster, gpu_vendor, user, mock_message_sender)
+    mock_delete_namespace.assert_called_once_with(db_session, project, user, mock_message_sender)
     mock_update_project_status.assert_called_once_with(
         db_session, project, ProjectStatus.DELETING, "Project is being deleted", user
     )
@@ -597,12 +608,13 @@ async def test_submit_delete_project_with_none_gpu_vendor(
 
     user = "test_user@example.com"
     gpu_vendor = None
+    mock_message_sender = AsyncMock()
 
-    await submit_delete_project(db_session, project, user, gpu_vendor)
+    await submit_delete_project(db_session, project, user, gpu_vendor, mock_message_sender)
 
     mock_ensure_safe_to_delete.assert_called_once_with(project)
-    mock_delete_quota.assert_called_once_with(db_session, quota, project.cluster, gpu_vendor, user)
-    mock_delete_namespace.assert_called_once_with(db_session, project, user)
+    mock_delete_quota.assert_called_once_with(db_session, quota, project.cluster, gpu_vendor, user, mock_message_sender)
+    mock_delete_namespace.assert_called_once_with(db_session, project, user, mock_message_sender)
     mock_update_project_status.assert_called_once_with(
         db_session, project, ProjectStatus.DELETING, "Project is being deleted", user
     )
@@ -629,11 +641,12 @@ async def test_submit_delete_project_not_safe_to_delete(
 
     user = "test_user@example.com"
     gpu_vendor = "NVIDIA"
+    mock_message_sender = AsyncMock()
 
     mock_ensure_safe_to_delete.side_effect = ValidationException("Project has active workloads")
 
     with pytest.raises(ValidationException) as exc_info:
-        await submit_delete_project(db_session, project, user, gpu_vendor)
+        await submit_delete_project(db_session, project, user, gpu_vendor, mock_message_sender)
 
     assert "Project has active workloads" in str(exc_info.value)
     mock_ensure_safe_to_delete.assert_called_once_with(project)

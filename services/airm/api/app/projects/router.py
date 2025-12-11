@@ -5,9 +5,14 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Path, Query, status
+from prometheus_api_client import PrometheusConnect
 from pydantic import AwareDatetime
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from airm.messaging.schemas import SecretKind
 
 from ..clusters.service import get_cluster_by_id, get_cluster_with_resources
+from ..messaging.sender import MessageSender, get_message_sender
 from ..metrics.schemas import (
     MetricsScalarWithRange,
     MetricsTimeseries,
@@ -31,14 +36,22 @@ from ..metrics.service import (
 )
 from ..metrics.utils import validate_datetime_range
 from ..namespaces.service import create_namespace_for_project
-from ..secrets.enums import SecretType, SecretUseCase
-from ..secrets.repository import get_project_secret, get_secret_in_organization
-from ..secrets.schemas import ProjectSecretsWithParentSecret
+from ..organizations.models import Organization
+from ..secrets.enums import SecretUseCase
+from ..secrets.models import OrganizationScopedSecret, ProjectScopedSecret
+from ..secrets.repository import (
+    get_organization_scoped_secret_in_organization,
+    get_organization_secret_assignment,
+    get_secret_in_organization,
+)
+from ..secrets.schemas import ProjectSecretIn, ProjectSecretsWithParentSecret, SecretWithProjects
 from ..secrets.service import (
-    assign_projects_to_secret,
+    add_organization_secret_assignments,
+    create_project_scoped_secret_in_organization,
+    delete_project_scoped_secret,
     ensure_can_remove_secret_from_projects,
     get_project_secrets_in_project,
-    submit_delete_project_secret,
+    remove_organization_secret_assignments,
 )
 from ..storages.repository import get_project_storage, get_storage_in_organization
 from ..storages.schemas import ProjectStoragesWithParentStorage
@@ -67,6 +80,7 @@ from ..utilities.keycloak_admin import (
 from ..utilities.security import (
     auth_token_claimset,
     ensure_platform_administrator,
+    ensure_user_can_view_project,
     get_projects_accessible_to_user,
     get_user_email,
     get_user_organization,
@@ -119,7 +133,7 @@ router = APIRouter(tags=["Projects"])
     response_model=Projects,
 )
 async def get_submittable_projects(
-    projects=Depends(get_projects_accessible_to_user),
+    projects: list[Project] = Depends(get_projects_accessible_to_user),
 ) -> Projects:
     return await get_submittable_projects_from_db(projects)
 
@@ -137,9 +151,9 @@ async def get_submittable_projects(
     response_model=ProjectsWithResourceAllocation,
 )
 async def get_projects(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
 ) -> ProjectsWithResourceAllocation:
     return await get_projects_with_resource_allocation(session, organization)
 
@@ -152,10 +166,10 @@ async def get_projects(
     response_model=ProjectWithUsers,
 )
 async def get_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     project_id: UUID = Path(description="The ID of the project to be retrieved"),
 ) -> ProjectWithUsers:
     project = await get_project_by_id(session, organization.id, project_id)
@@ -170,11 +184,12 @@ async def get_project(
     response_model=ProjectResponse,
 )
 async def create_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    user=Depends(get_user_email),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
+    session: AsyncSession = Depends(get_session),
     project_in: ProjectCreate = Body(description="The project to be created in the user's organization"),
 ) -> ProjectResponse:
     cluster = await get_cluster_by_id(session, organization.id, project_in.cluster_id)
@@ -186,8 +201,8 @@ async def create_project(
         project=project_in,
         creator=user,
     )
-    await create_quota(session, project_db, cluster, project_in.quota, user)
-    await create_namespace_for_project(session, project_db, cluster.id, user)
+    await create_quota(session, project_db, cluster, project_in.quota, user, message_sender)
+    await create_namespace_for_project(session, project_db, cluster.id, user, message_sender)
     return ProjectResponse.model_validate(project_db)
 
 
@@ -199,10 +214,11 @@ async def create_project(
     response_model=ProjectResponse,
 )
 async def update_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    user=Depends(get_user_email),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The ID of the project to be updated"),
     project_edit: ProjectEdit = Body(description="The updated project details"),
 ) -> ProjectResponse:
@@ -210,7 +226,7 @@ async def update_project(
 
     project_updated = await update_project_in_db(session, project_db, project_edit, user)
 
-    await update_project_quota(session, project_db, project_db.cluster, project_edit.quota, user)
+    await update_project_quota(session, project_db, project_db.cluster, project_edit.quota, user, message_sender)
     return ProjectResponse.model_validate(project_updated)
 
 
@@ -221,18 +237,19 @@ async def update_project(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    user=Depends(get_user_email),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The ID of the project to be deleted"),
-):
+) -> None:
     project = await get_project_by_id(session, organization.id, project_id)
 
     cluster_with_resources = await get_cluster_with_resources(session, project.cluster)
     gpu_vendor = cluster_with_resources.gpu_info.vendor if cluster_with_resources.gpu_info else None
 
-    await submit_delete_project(session, project, user, gpu_vendor)
+    await submit_delete_project(session, project, user, gpu_vendor, message_sender)
 
 
 @router.post(
@@ -242,13 +259,13 @@ async def delete_project(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def add_users_to_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The ID of the project to which users are to be added"),
     project_add_users: ProjectAddUsers = Body(description="The IDs of the users to be added to the project"),
     kc_admin: KeycloakAdmin = Depends(get_kc_admin),
-):
+) -> None:
     project = await get_project_by_id(session, organization.id, project_id)
     await add_users_to_project_and_keycloak_group(
         kc_admin=kc_admin,
@@ -265,13 +282,13 @@ async def add_users_to_project(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def remove_user_from_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The ID of the project from which the user is to be removed"),
     user_id: UUID = Path(description="The ID of the user to be removed from the project"),
     kc_admin: KeycloakAdmin = Depends(get_kc_admin),
-):
+) -> None:
     project = await get_project_by_id(session, organization.id, project_id)
     await remove_user_from_project_and_keycloak_group(
         kc_admin=kc_admin, session=session, project=project, user_id=user_id
@@ -286,7 +303,7 @@ async def remove_user_from_project(
     response_model=Workloads,
 )
 async def get_project_workloads(
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     project_id: UUID = Path(description="The ID of the project for which to retrieve workloads"),
 ) -> Workloads:
@@ -302,11 +319,11 @@ async def get_project_workloads(
     response_model=ProjectWorkloadsStats,
 )
 async def get_project_workload_stats(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The ID of the project from which to retrieve workload statistics"),
-):
+) -> ProjectWorkloadsStats:
     project = await get_project_in_organization(session, organization.id, project_id)
     if not project:
         raise NotFoundException(f"Project with ID {project_id} not found in your organization")
@@ -327,13 +344,13 @@ async def get_project_workload_stats(
     response_model=MetricsTimeseries,
 )
 async def get_gpu_device_utilization_timeseries_for_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
     project_id: UUID = Path(description="The ID of the project for which to return metrics"),
     start: AwareDatetime = Query(..., description="The start timestamp for the timeseries"),
     end: AwareDatetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsTimeseries:
     project = await get_project_in_organization(session, organization.id, project_id)
     if not project:
@@ -359,13 +376,13 @@ async def get_gpu_device_utilization_timeseries_for_project(
     response_model=MetricsTimeseries,
 )
 async def get_gpu_memory_utilization_timeseries_for_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
     project_id: UUID = Path(description="The ID of the project for which to return metrics"),
     start: AwareDatetime = Query(..., description="The start timestamp for the timeseries"),
     end: AwareDatetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsTimeseries:
     project = await get_project_in_organization(session, organization.id, project_id)
     if not project:
@@ -391,11 +408,11 @@ async def get_gpu_memory_utilization_timeseries_for_project(
     response_model=WorkloadsWithMetrics,
 )
 async def get_project_workloads_metrics(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The unique ID of the project to retrieve workloads for"),
-    prometheus_client=Depends(get_prometheus_client),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
     pagination_params: PaginationConditions = Depends(get_pagination_query_params),
     sort_params: list[SortCondition] | None = Depends(get_sort_query_params),
     filter_params: list[FilterCondition] | None = Depends(get_filter_query_params),
@@ -433,12 +450,12 @@ async def get_project_workloads_metrics(
     response_model=MetricsScalarWithRange,
 )
 async def get_average_wait_time_for_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
     project_id: UUID = Path(description="The ID of the project for which to return average wait time metric"),
     start: AwareDatetime = Query(..., description="The start timestamp used to calculate the average wait time"),
     end: AwareDatetime = Query(..., description="The end timestamp used to calculate the average wait time"),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ) -> MetricsScalarWithRange:
     project = await get_project_in_organization(session, organization.id, project_id)
     if not project:
@@ -462,8 +479,8 @@ async def get_average_wait_time_for_project(
     response_model=MetricsScalarWithRange,
 )
 async def get_avg_gpu_idle_time_for_project(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
     project_id: UUID = Path(description="The ID of the project for which to return Average GPU Idle time metric"),
     start: AwareDatetime = Query(
         ...,
@@ -473,8 +490,8 @@ async def get_avg_gpu_idle_time_for_project(
         ...,
         description="The end timestamp used to calculate the the Average GPU idle time",
     ),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsScalarWithRange:
     project = await get_project_in_organization(session, organization.id, project_id)
     if not project:
@@ -495,18 +512,14 @@ async def get_avg_gpu_idle_time_for_project(
     response_model=ProjectSecretsWithParentSecret,
 )
 async def get_project_secrets(
-    claimset=Depends(auth_token_claimset),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The unique ID of the project to retrieve secrets for"),
     use_case: SecretUseCase | None = Query(None, description="Filter secrets by use case"),
-    secret_type: SecretType | None = Query(None, description="Filter secrets by type"),
+    secret_type: SecretKind | None = Query(None, description="Filter secrets by type"),
 ) -> ProjectSecretsWithParentSecret:
-    if is_user_in_role(claimset, Roles.PLATFORM_ADMINISTRATOR):
-        project = await get_project_in_organization(session, organization.id, project_id)
-    else:
-        accessible_projects = await get_projects_accessible_to_user(claimset, session)
-        project = await validate_and_get_project_from_query(accessible_projects, project_id)
+    project = await get_project_in_organization(session, organization.id, project_id)
 
     if not project:
         raise NotFoundException("Project not found")
@@ -521,26 +534,27 @@ async def get_project_secrets(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def assign_project_secrets(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    user=Depends(get_user_email),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The unique ID of the project to retrieve secrets for"),
     secret_id: UUID = Path(description="The ID of the secret to be assigned to the project"),
-):
+) -> None:
     project = await get_project_in_organization(session, organization.id, project_id)
     if not project:
         raise NotFoundException("Project not found")
 
-    secret = await get_secret_in_organization(session, organization.id, secret_id)
-    if not secret:
+    org_secret = await get_organization_scoped_secret_in_organization(session, organization.id, secret_id)
+    if not org_secret:
         raise NotFoundException("Secret not found")
 
-    project_secret = await get_project_secret(session, secret_id, project_id)
-    if project_secret:
+    assigned_secret = await get_organization_secret_assignment(session, secret_id, project_id)
+    if assigned_secret:
         raise ValidationException("Secret already assigned to this Project")
 
-    await assign_projects_to_secret(session, organization.id, secret, [project_id], user)
+    await add_organization_secret_assignments(session, organization.id, org_secret, [project_id], user, message_sender)
 
 
 @router.delete(
@@ -550,27 +564,33 @@ async def assign_project_secrets(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_project_secret(
-    claimset=Depends(auth_token_claimset),
-    organization=Depends(get_user_organization),
-    user=Depends(get_user_email),
-    session=Depends(get_session),
+    claimset: dict = Depends(auth_token_claimset),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
     project_id: UUID = Path(description="The unique ID of the project to retrieve secrets for"),
     secret_id: UUID = Path(description="The ID of the secret to be unassigned from the project"),
-):
+) -> None:
     # Platform admins can delete secrets from any project
     # Regular users can only delete secrets from projects they are members of
     if not is_user_in_role(claimset, Roles.PLATFORM_ADMINISTRATOR):
         await validate_and_get_project_from_query(accessible_projects, project_id)
 
-    project_secret = await get_project_secret(session, secret_id, project_id)
+    secret = await get_secret_in_organization(session, organization.id, secret_id)
 
-    if not project_secret:
-        raise NotFoundException("Project Secret not found")
+    if not secret:
+        raise NotFoundException("Secret not found")
 
     await ensure_can_remove_secret_from_projects(session, [project_id], secret_id)
 
-    await submit_delete_project_secret(session, organization.id, project_secret, user)
+    if isinstance(secret, ProjectScopedSecret):
+        await delete_project_scoped_secret(session, secret, user, message_sender)
+    elif isinstance(secret, OrganizationScopedSecret):
+        await remove_organization_secret_assignments(session, secret, [project_id], message_sender)
+    else:
+        raise ValidationException("Unknown secret type for deletion")
 
 
 @router.get(
@@ -581,17 +601,12 @@ async def delete_project_secret(
     response_model=ProjectStoragesWithParentStorage,
 )
 async def get_project_storages(
-    claimset=Depends(auth_token_claimset),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
+    _: None = Depends(ensure_user_can_view_project),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The unique ID of the project to retrieve storages for"),
 ) -> ProjectStoragesWithParentStorage:
-    if is_user_in_role(claimset, Roles.PLATFORM_ADMINISTRATOR):
-        project = await get_project_in_organization(session, organization.id, project_id)
-    else:
-        accessible_projects = await get_projects_accessible_to_user(claimset, session)
-        project = await validate_and_get_project_from_query(accessible_projects, project_id)
-
+    project = await get_project_in_organization(session, organization.id, project_id)
     if not project:
         raise NotFoundException("Project not found")
 
@@ -605,13 +620,14 @@ async def get_project_storages(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def assign_project_storages(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    user=Depends(get_user_email),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The unique ID of the project to assign a storage to"),
     storage_id: UUID = Path(description="The ID of the storage to be assigned to the project"),
-):
+) -> None:
     project = await get_project_in_organization(session, organization.id, project_id)
     if not project:
         raise NotFoundException("Project not found")
@@ -624,7 +640,7 @@ async def assign_project_storages(
     if project_storage:
         raise ValidationException("Storage already assigned to this Project")
 
-    await assign_projects_to_storage(session, organization.id, storage, [project_id], user)
+    await assign_projects_to_storage(session, organization.id, storage, [project_id], user, message_sender)
 
 
 @router.delete(
@@ -634,16 +650,43 @@ async def assign_project_storages(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_project_storage(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    user=Depends(get_user_email),
-    session=Depends(get_session),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The unique ID of the project to retrieve storages for"),
     storage_id: UUID = Path(description="The ID of the storage to be unassigned from the project"),
-):
+) -> None:
     project_storage = await get_project_storage(session, storage_id, project_id)
 
     if not project_storage:
         raise NotFoundException("Project Storage not found")
 
-    await submit_delete_project_storage(session, organization.id, project_storage, user)
+    await submit_delete_project_storage(session, organization.id, project_storage, user, message_sender)
+
+
+@router.post(
+    "/projects/{project_id}/secrets",
+    operation_id="create_project_secret",
+    summary="Create a new project-scoped secret",
+    status_code=status.HTTP_201_CREATED,
+    response_model=SecretWithProjects,
+)
+async def create_project_secret(
+    claimset: dict = Depends(auth_token_claimset),
+    organization: Organization = Depends(get_user_organization),
+    user: str = Depends(get_user_email),
+    message_sender: MessageSender = Depends(get_message_sender),
+    session: AsyncSession = Depends(get_session),
+    accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
+    project_id: UUID = Path(description="The ID of the project to create the secret in"),
+    secret_in: ProjectSecretIn = Body(description="The project-scoped secret to be created"),
+) -> SecretWithProjects:
+    if not is_user_in_role(claimset, Roles.PLATFORM_ADMINISTRATOR):
+        await validate_and_get_project_from_query(accessible_projects, project_id)
+
+    project_secret = await create_project_scoped_secret_in_organization(
+        session, organization.id, project_id, user, secret_in, message_sender
+    )
+    return project_secret

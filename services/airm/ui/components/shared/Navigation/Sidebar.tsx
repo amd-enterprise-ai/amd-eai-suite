@@ -101,17 +101,15 @@ export const Sidebar: React.FC = () => {
         {session ? (
           <div>
             {isAdministrator && (
-              <>
-                <CollapsibleSection
-                  title="sections.resourceManagement.title"
-                  icon={IconServer}
-                  items={airmMenuItems}
-                  isSidebarMini={isSidebarMini}
-                  sectionId="resource-management"
-                  isExpanded={getSectionExpanded('resource-management')}
-                  onToggle={handleSectionToggle}
-                />
-              </>
+              <CollapsibleSection
+                title="sections.resourceManagement.title"
+                icon={IconServer}
+                items={airmMenuItems}
+                isSidebarMini={isSidebarMini}
+                sectionId="resource-management"
+                isExpanded={getSectionExpanded('resource-management')}
+                onToggle={handleSectionToggle}
+              />
             )}
             <CollapsibleSection
               title="sections.aiWorkbench.title"

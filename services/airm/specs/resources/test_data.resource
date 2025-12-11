@@ -14,7 +14,7 @@ Library             Process
 Resource            api/common.resource    # Need this for Catalog endpoint and Auth token
 Resource            api/charts.resource    # Need this for Get chart verification
 Resource            ./catalog_models.resource
-Resource            ./catalog_projects.resource
+Resource            ./airm_projects.resource
 
 
 *** Variables ***
@@ -45,7 +45,7 @@ Setup job test chart
     ${access_token}=        Authorization token
     ${catalog_endpoint}=    Catalog endpoint  # Gets base URL like http://localhost:8001/v1
     ${job_chart_dir}=       Normalize Path          ${CURDIR}/../test_data/job-chart
-    ${cmd}=                 Set Variable            python ${CHART_UPLOADER} --api-url=${catalog_endpoint} --token=${access_token} --workload-dir=${job_chart_dir} --force
+    ${cmd}=                 Set Variable            python3 ${CHART_UPLOADER} --api-url=${catalog_endpoint} --token=${access_token} --workload-dir=${job_chart_dir} --force
 
     ${result}=              Run Process             ${cmd}                  shell=True              stdout=PIPE             stderr=PIPE
 
@@ -65,7 +65,7 @@ Setup service test chart
     ${access_token}=        Authorization token
     ${catalog_endpoint}=    Catalog endpoint
     ${service_chart_dir}=                           Normalize Path          ${CURDIR}/../test_data/service-chart
-    ${cmd}=                 Set Variable            python ${CHART_UPLOADER} --api-url=${catalog_endpoint} --token=${access_token} --workload-dir=${service_chart_dir} --force
+    ${cmd}=                 Set Variable            python3 ${CHART_UPLOADER} --api-url=${catalog_endpoint} --token=${access_token} --workload-dir=${service_chart_dir} --force
 
     ${result}=              Run Process             ${cmd}                  shell=True              stdout=PIPE             stderr=PIPE
 
@@ -95,7 +95,7 @@ Valid adapter data is prepared
     ${adapter_data}=        Create dictionary
     ...                     name=${adapter_name}
     ...                     description=Test merged model description
-    ...                     model_weights_path=default-bucket/models/${CURRENT_PROJECT_SLUG}/adapters/${adapter_name}
+    ...                     model_weights_path=default-bucket/models/${TEST_PROJECT_SLUG}/adapters/${adapter_name}
     ...                     type=MergedModel
     ...                     base_model_id=${TEST_BASE_MODEL_ID}
     ...                     canonical_name=test/merged-model
@@ -115,7 +115,7 @@ Valid dataset data is prepared
     ${dataset_data}=        Create dictionary
     ...                     name=${dataset_name}
     ...                     description=${dataset_desc}
-    ...                     path=default-bucket/datasets/${CURRENT_PROJECT_SLUG}/${dataset_name}
+    ...                     path=default-bucket/datasets/${TEST_PROJECT_SLUG}/${dataset_name}
     ...                     type=${dataset_type}
     Set test variable       ${TEST_DATASET_DATA}    ${dataset_data}
     Set test variable       ${TEST_DATASET_NAME}    ${dataset_name}
@@ -127,7 +127,7 @@ Valid dataset data is prepared
     Set test variable       ${TEST_DATASET_DESCRIPTION}                     ${dataset_desc}
     Set test variable       ${TEST_DATASET_TYPE}    ${dataset_type}
     Set test variable       ${TEST_DATASET_ID}      ${None}
-    Set Test Variable       ${TEST_DATASET_PATH}    default-bucket/datasets/${CURRENT_PROJECT_SLUG}/${dataset_name}
+    Set Test Variable       ${TEST_DATASET_PATH}    default-bucket/datasets/${TEST_PROJECT_SLUG}/${dataset_name}
 
     Log                     Prepared dataset test data with name: ${dataset_name}
     Log                     Expected derived name in response: ${derived_name}
@@ -148,13 +148,11 @@ Valid dataset upload data is prepared
     ${dataset_desc}=        Set variable            Upload test dataset description
     ${dataset_type}=        Set variable            Fine-tuning
 
-    # Set paths for test data - use the correct sample.jsonl in datasets directory
     ${dataset_file}=        Set variable            ${CURDIR}/../test_data/datasets/sample.jsonl
 
     # Verify file exists
     File should exist       ${dataset_file}         msg=Test dataset file not found: ${dataset_file}
 
-    # Set test variables for use by other keywords
     Set test variable       ${TEST_DATASET_NAME}    ${dataset_name}
     # The API transforms the name by converting hyphens to spaces and capitalizing words
     ${name_with_spaces}=    Replace String          ${dataset_name}         -                       ${SPACE}

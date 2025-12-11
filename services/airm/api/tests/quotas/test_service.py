@@ -5,13 +5,14 @@
 """Quotas service tests."""
 
 import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airm.messaging.schemas import (
     ClusterQuotaAllocation,
+    ClusterQuotasAllocationMessage,
     ClusterQuotasFailureMessage,
     ClusterQuotasStatusMessage,
     GPUVendor,
@@ -177,14 +178,20 @@ async def test_create_quota_for_cluster_success(db_session: AsyncSession):
     )
 
     # Mock only external messaging service
-    with patch("app.quotas.service.submit_quotas_allocation_to_cluster_queue", autospec=True) as mock_submit_quotas:
-        result = await create_quota_for_cluster(db_session, env.project, env.cluster, gpu_vendor, quota_in, creator)
+    mock_message_sender = AsyncMock()
+    result = await create_quota_for_cluster(
+        db_session, env.project, env.cluster, gpu_vendor, quota_in, creator, mock_message_sender
+    )
 
     # Verify external service calls were made
-    mock_submit_quotas.assert_called_once()
+    mock_message_sender.enqueue.assert_called_once()
 
+    # Verify message is ClusterQuotasAllocationMessage
+    call_args = mock_message_sender.enqueue.call_args[0]
+    assert call_args[0] == env.cluster.id  # cluster_id
+    assert isinstance(call_args[1], ClusterQuotasAllocationMessage)
     # 2 valid quotas + 1 catchall quota
-    assert len(mock_submit_quotas.call_args[0]) == 3
+    assert len(call_args[1].quota_allocations) == 3
 
     # Verify quota was created in real database
     assert result is not None
@@ -228,14 +235,14 @@ async def test_update_quota_for_cluster_with_resource_changes(db_session: AsyncS
     )
 
     # Mock only external messaging service and resource change detection
-    with (
-        patch("app.quotas.service.have_quota_resources_changed", return_value=True),
-        patch("app.quotas.service.send_quotas_allocation_to_cluster_queue", autospec=True) as mock_send_quotas,
-    ):
-        result = await update_quota_for_cluster(db_session, env.cluster, quota, edits, gpu_vendor, updater)
+    mock_message_sender = AsyncMock()
+    with patch("app.quotas.service.have_quota_resources_changed", return_value=True):
+        result = await update_quota_for_cluster(
+            db_session, env.cluster, quota, edits, gpu_vendor, updater, mock_message_sender
+        )
 
     # Verify messaging service was called
-    mock_send_quotas.assert_called_once()
+    mock_message_sender.enqueue.assert_called_once()
 
     # Verify quota was updated with PENDING status in real database
     await db_session.refresh(quota)
@@ -244,6 +251,10 @@ async def test_update_quota_for_cluster_with_resource_changes(db_session: AsyncS
     assert quota.memory_bytes == 2000000000
     assert quota.ephemeral_storage_bytes == 3000000000
     assert quota.gpu_count == 3
+
+    # Verify return value matches updated quota
+    assert result.cpu_milli_cores == 600
+    assert result.status == QuotaStatus.PENDING
 
 
 @pytest.mark.asyncio
@@ -276,18 +287,21 @@ async def test_update_quota_for_cluster_no_resource_changes(db_session: AsyncSes
     )
 
     # Mock only resource change detection
-    with (
-        patch("app.quotas.service.have_quota_resources_changed", return_value=False),
-        patch("app.quotas.service.send_quotas_allocation_to_cluster_queue", autospec=True) as mock_send_quotas,
-    ):
-        result = await update_quota_for_cluster(db_session, env.cluster, quota, edits, gpu_vendor, updater)
+    mock_message_sender = AsyncMock()
+    with patch("app.quotas.service.have_quota_resources_changed", return_value=False):
+        result = await update_quota_for_cluster(
+            db_session, env.cluster, quota, edits, gpu_vendor, updater, mock_message_sender
+        )
 
     # Verify no message was sent to cluster queue
-    mock_send_quotas.assert_not_called()
+    mock_message_sender.enqueue.assert_not_called()
 
     # Verify quota maintains READY status in real database
     await db_session.refresh(quota)
     assert quota.status == QuotaStatus.READY
+
+    # Verify return value reflects no changes
+    assert result.status == QuotaStatus.READY
 
 
 @pytest.mark.asyncio
@@ -324,11 +338,11 @@ async def test_delete_quota_for_cluster_success(db_session: AsyncSession):
     updater = "platform-admin"
 
     # Mock only external messaging service
-    with patch("app.quotas.service.submit_quotas_allocation_to_cluster_queue", autospec=True) as mock_submit_quotas:
-        result = await delete_quota_for_cluster(db_session, quota1, env.cluster, gpu_vendor, updater)
+    mock_message_sender = AsyncMock()
+    result = await delete_quota_for_cluster(db_session, quota1, env.cluster, gpu_vendor, updater, mock_message_sender)
 
     # Verify messaging service was called
-    mock_submit_quotas.assert_called_once()
+    mock_message_sender.enqueue.assert_called_once()
 
     # Verify quota status was updated to DELETING in real database
     await db_session.refresh(quota1)
@@ -522,11 +536,13 @@ async def test_create_quota_with_mixed_status_quotas(db_session: AsyncSession):
     )
 
     # Mock only external messaging service
-    with patch("app.quotas.service.submit_quotas_allocation_to_cluster_queue", autospec=True) as mock_submit_quotas:
-        result = await create_quota_for_cluster(db_session, env.project, env.cluster, gpu_vendor, quota_in, creator)
+    mock_message_sender = AsyncMock()
+    result = await create_quota_for_cluster(
+        db_session, env.project, env.cluster, gpu_vendor, quota_in, creator, mock_message_sender
+    )
 
     # Verify external service calls were made
-    mock_submit_quotas.assert_called_once()
+    mock_message_sender.enqueue.assert_called_once()
 
     # Verify quota was created in real database
     assert result is not None
@@ -570,14 +586,14 @@ async def test_update_quota_for_cluster_success(db_session: AsyncSession):
     )
 
     # Mock only external messaging service and resource change detection
-    with (
-        patch("app.quotas.service.have_quota_resources_changed", return_value=True),
-        patch("app.quotas.service.send_quotas_allocation_to_cluster_queue", autospec=True) as mock_send_quotas,
-    ):
-        result = await update_quota_for_cluster(db_session, env.cluster, quota, edits, gpu_vendor, updater)
+    mock_message_sender = AsyncMock()
+    with patch("app.quotas.service.have_quota_resources_changed", return_value=True):
+        result = await update_quota_for_cluster(
+            db_session, env.cluster, quota, edits, gpu_vendor, updater, mock_message_sender
+        )
 
     # Verify messaging service was called
-    mock_send_quotas.assert_called_once()
+    mock_message_sender.enqueue.assert_called_once()
 
     # Verify quota was updated with PENDING status in real database
     await db_session.refresh(quota)

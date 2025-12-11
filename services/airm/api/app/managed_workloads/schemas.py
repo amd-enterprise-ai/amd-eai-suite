@@ -71,3 +71,9 @@ class AIMWorkloadResponse(ManagedWorkloadResponse):
     aim_id: UUID = Field(..., description="The ID of the associated AIM")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ManagedWorkloadsResponse(BaseModel):
+    """Wrapper for collection of managed workloads."""
+
+    data: list[ChartWorkloadResponse | AIMWorkloadResponse] = Field(description="List of managed workloads")

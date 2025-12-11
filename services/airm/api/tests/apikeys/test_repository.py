@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,16 +22,17 @@ async def test_create_api_key(db_session: AsyncSession):
     env = await factory.create_basic_test_environment(db_session)
     creator = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key = await create_api_key(
         session=db_session,
-        name="Test API Key",
+        name=f"Test API Key {unique_suffix}",
         truncated_key="amd_aim_api_key_••••••••1234",
         cluster_auth_key_id="cluster-auth-key-id-123",
         project_id=env.project.id,
         creator=creator,
     )
 
-    assert api_key.name == "Test API Key"
+    assert api_key.name == f"Test API Key {unique_suffix}"
     assert api_key.truncated_key == "amd_aim_api_key_••••••••1234"
     assert api_key.cluster_auth_key_id == "cluster-auth-key-id-123"
     assert api_key.project_id == env.project.id
@@ -42,9 +44,10 @@ async def test_create_api_key_duplicate_name_raises_conflict(db_session: AsyncSe
     env = await factory.create_basic_test_environment(db_session)
     creator = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     await create_api_key(
         session=db_session,
-        name="Duplicate Key",
+        name=f"Duplicate Key {unique_suffix}",
         truncated_key="amd_aim_api_key_••••••••1234",
         cluster_auth_key_id="cluster-auth-key-id-123",
         project_id=env.project.id,
@@ -54,7 +57,7 @@ async def test_create_api_key_duplicate_name_raises_conflict(db_session: AsyncSe
     with pytest.raises(ConflictException) as exc_info:
         await create_api_key(
             session=db_session,
-            name="Duplicate Key",
+            name=f"Duplicate Key {unique_suffix}",
             truncated_key="amd_aim_api_key_••••••••5678",
             cluster_auth_key_id="cluster-auth-key-id-456",
             project_id=env.project.id,
@@ -69,9 +72,10 @@ async def test_get_api_keys_for_project(db_session: AsyncSession):
     env = await factory.create_basic_test_environment(db_session)
     creator = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key1 = await create_api_key(
         session=db_session,
-        name="Key 1",
+        name=f"Key 1 {unique_suffix}",
         truncated_key="amd_aim_api_key_••••••••1111",
         cluster_auth_key_id="key-id-1",
         project_id=env.project.id,
@@ -80,7 +84,7 @@ async def test_get_api_keys_for_project(db_session: AsyncSession):
 
     api_key2 = await create_api_key(
         session=db_session,
-        name="Key 2",
+        name=f"Key 2 {unique_suffix}",
         truncated_key="amd_aim_api_key_••••••••2222",
         cluster_auth_key_id="key-id-2",
         project_id=env.project.id,
@@ -99,9 +103,10 @@ async def test_get_api_key_by_id(db_session: AsyncSession):
     env = await factory.create_basic_test_environment(db_session)
     creator = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     created_key = await create_api_key(
         session=db_session,
-        name="Specific Key",
+        name=f"Specific Key {unique_suffix}",
         truncated_key="amd_aim_api_key_••••••••9999",
         cluster_auth_key_id="specific-key-id",
         project_id=env.project.id,
@@ -112,7 +117,7 @@ async def test_get_api_key_by_id(db_session: AsyncSession):
 
     assert retrieved_key is not None
     assert retrieved_key.id == created_key.id
-    assert retrieved_key.name == "Specific Key"
+    assert retrieved_key.name == f"Specific Key {unique_suffix}"
 
 
 @pytest.mark.asyncio
@@ -126,9 +131,10 @@ async def test_get_api_key_by_id_wrong_project_returns_none(db_session: AsyncSes
     )
     creator = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     created_key = await create_api_key(
         session=db_session,
-        name="Project 1 Key",
+        name=f"Project 1 Key {unique_suffix}",
         truncated_key="amd_aim_api_key_••••••••8888",
         cluster_auth_key_id="project1-key-id",
         project_id=env1.project.id,
@@ -145,9 +151,10 @@ async def test_delete_api_key(db_session: AsyncSession):
     env = await factory.create_basic_test_environment(db_session)
     creator = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     created_key = await create_api_key(
         session=db_session,
-        name="Key to Delete",
+        name=f"Key to Delete {unique_suffix}",
         truncated_key="amd_aim_api_key_••••••••6666",
         cluster_auth_key_id="delete-key-id",
         project_id=env.project.id,

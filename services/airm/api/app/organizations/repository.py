@@ -32,7 +32,7 @@ async def get_organization_by_keycloak_org_id(session: AsyncSession, keycloak_or
 # Create a new organization
 async def create_organization(
     session: AsyncSession, organization_name: str, keycloak_organization_id: str, keycloak_group_id: str
-):
+) -> OrganizationModel:
     new_organization = OrganizationModel(
         name=organization_name, keycloak_organization_id=keycloak_organization_id, keycloak_group_id=keycloak_group_id
     )

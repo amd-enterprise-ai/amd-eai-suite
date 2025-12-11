@@ -4,6 +4,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from kubernetes.client.models import V1CronJob, V1DaemonSet, V1Deployment, V1Job, V1Pod, V1Service, V1StatefulSet
 from loguru import logger
@@ -49,7 +50,7 @@ standard_event_status_mappings = {
 }
 
 
-def get_status_for_job(resource: V1Job, _) -> tuple[CommonComponentStatus | JobStatus | None, str]:
+def get_status_for_job(resource: V1Job, _: Any) -> tuple[CommonComponentStatus | JobStatus | None, str]:
     status = resource.status
     spec = resource.spec
 
@@ -72,7 +73,9 @@ def get_status_for_job(resource: V1Job, _) -> tuple[CommonComponentStatus | JobS
     return JobStatus.PENDING, "Job has not started yet"
 
 
-def get_status_for_deployment(resource: V1Deployment, _) -> tuple[CommonComponentStatus | DeploymentStatus | None, str]:
+def get_status_for_deployment(
+    resource: V1Deployment, _: Any
+) -> tuple[CommonComponentStatus | DeploymentStatus | None, str]:
     status = resource.status
     if not status:
         return None, "Deployment status is missing."
@@ -90,7 +93,7 @@ def get_status_for_deployment(resource: V1Deployment, _) -> tuple[CommonComponen
     return None, "Deployment status could not be determined."
 
 
-def get_status_for_config_map(_, event_type) -> tuple[CommonComponentStatus | ConfigMapStatus | None, str]:
+def get_status_for_config_map(_: Any, event_type: str) -> tuple[CommonComponentStatus | ConfigMapStatus | None, str]:
     if event_type == "ADDED":
         return ConfigMapStatus.ADDED.value, "Resource has been added to the cluster."
     elif event_type == "DELETED":
@@ -99,7 +102,7 @@ def get_status_for_config_map(_, event_type) -> tuple[CommonComponentStatus | Co
     return None, "Config status could not be determined."
 
 
-def get_status_for_service(resource: V1Service, _) -> tuple[CommonComponentStatus | ServiceStatus | None, str]:
+def get_status_for_service(resource: V1Service, _: Any) -> tuple[CommonComponentStatus | ServiceStatus | None, str]:
     # Basic integrity check
     if not resource.spec.ports:
         return ServiceStatus.INVALID, "Service has no defined ports."
@@ -119,7 +122,7 @@ def get_status_for_service(resource: V1Service, _) -> tuple[CommonComponentStatu
     return ServiceStatus.READY, "Service is configured properly."
 
 
-def get_status_for_kaiwo_job(resource, _) -> tuple[CommonComponentStatus | KaiwoJobStatus | None, str]:
+def get_status_for_kaiwo_job(resource: Any, _: Any) -> tuple[CommonComponentStatus | KaiwoJobStatus | None, str]:
     status_value = resource.get("status", {}).get("status") if isinstance(resource, dict) else None
     try:
         status = KaiwoJobStatus(status_value)
@@ -129,7 +132,9 @@ def get_status_for_kaiwo_job(resource, _) -> tuple[CommonComponentStatus | Kaiwo
         return None, "Status information could not be determined"
 
 
-def get_status_for_kaiwo_service(resource, _) -> tuple[CommonComponentStatus | KaiwoServiceStatus | None, str]:
+def get_status_for_kaiwo_service(
+    resource: Any, _: Any
+) -> tuple[CommonComponentStatus | KaiwoServiceStatus | None, str]:
     status_value = resource.get("status", {}).get("status") if isinstance(resource, dict) else None
     try:
         status = KaiwoServiceStatus(status_value)
@@ -139,7 +144,7 @@ def get_status_for_kaiwo_service(resource, _) -> tuple[CommonComponentStatus | K
         return None, "Status information could not be determined"
 
 
-def get_status_for_aim_service(resource, _) -> tuple[CommonComponentStatus | AIMServiceStatus | None, str]:
+def get_status_for_aim_service(resource: Any, _: Any) -> tuple[CommonComponentStatus | AIMServiceStatus | None, str]:
     status_value = resource.get("status", {}).get("status") if isinstance(resource, dict) else None
     try:
         status = AIMServiceStatus(status_value)
@@ -149,14 +154,14 @@ def get_status_for_aim_service(resource, _) -> tuple[CommonComponentStatus | AIM
         return None, "Status information could not be determined"
 
 
-def get_status_for_http_route(_, event_type) -> tuple[CommonComponentStatus | HTTPRouteStatus | None, str]:
+def get_status_for_http_route(_: Any, event_type: str) -> tuple[CommonComponentStatus | HTTPRouteStatus | None, str]:
     if event_type == "ADDED":
         return HTTPRouteStatus.ADDED.value, "HTTPRoute resource has been added to the cluster."
 
     return None, "HTTPRoute status could not be determined."
 
 
-def get_status_for_ingress(_, event_type) -> tuple[CommonComponentStatus | IngressStatus | None, str]:
+def get_status_for_ingress(_: Any, event_type: str) -> tuple[CommonComponentStatus | IngressStatus | None, str]:
     if event_type == "ADDED":
         return IngressStatus.ADDED.value, "Ingress resource has been added to the cluster."
 
@@ -164,7 +169,7 @@ def get_status_for_ingress(_, event_type) -> tuple[CommonComponentStatus | Ingre
 
 
 def get_status_for_stateful_set(
-    resource: V1StatefulSet, _
+    resource: V1StatefulSet, _: Any
 ) -> tuple[CommonComponentStatus | StatefulSetStatus | None, str]:
     status = resource.status
     spec = resource.spec
@@ -186,7 +191,9 @@ def get_status_for_stateful_set(
     return None, "StatefulSet status could not be determined"
 
 
-def get_status_for_daemon_set(resource: V1DaemonSet, _) -> tuple[CommonComponentStatus | DaemonSetStatus | None, str]:
+def get_status_for_daemon_set(
+    resource: V1DaemonSet, _: Any
+) -> tuple[CommonComponentStatus | DaemonSetStatus | None, str]:
     status = resource.status
 
     # Get daemon counts
@@ -219,7 +226,7 @@ def get_status_for_daemon_set(resource: V1DaemonSet, _) -> tuple[CommonComponent
     return None, "DaemonSet status could not be determined"
 
 
-def get_status_for_cron_job(resource: V1CronJob, _) -> tuple[CommonComponentStatus | CronJobStatus | None, str]:
+def get_status_for_cron_job(resource: V1CronJob, _: Any) -> tuple[CommonComponentStatus | CronJobStatus | None, str]:
     status = resource.status
     spec = resource.spec
     if spec.suspend:
@@ -232,7 +239,7 @@ def get_status_for_cron_job(resource: V1CronJob, _) -> tuple[CommonComponentStat
     return CronJobStatus.READY, "CronJob is scheduled but hasn't run yet"
 
 
-def get_status_for_pod(resource: V1Pod, _) -> tuple[CommonComponentStatus | PodStatus | None, str]:
+def get_status_for_pod(resource: V1Pod, _: Any) -> tuple[CommonComponentStatus | PodStatus | None, str]:
     status = resource.status
 
     phase = status.phase
@@ -260,7 +267,7 @@ def __parse_workload_submitter(annotations: dict[str, str]) -> str | None:
     return submitter
 
 
-def extract_workload_component_data(resource) -> WorkloadComponentData:
+def extract_workload_component_data(resource: Any) -> WorkloadComponentData:
     metadata = get_attr_or_key(resource, "metadata")
     labels = get_attr_or_key(metadata, "labels", {}) or {}
     annotations = get_attr_or_key(metadata, "annotations", {}) or {}

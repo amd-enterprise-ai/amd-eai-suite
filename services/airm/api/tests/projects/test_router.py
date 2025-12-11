@@ -10,8 +10,15 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from airm.messaging.schemas import ProjectSecretStatus, ProjectStorageStatus, WorkloadStatus
+from airm.messaging.schemas import (
+    ProjectSecretStatus,
+    ProjectStorageStatus,
+    SecretKind,
+    SecretScope,
+    WorkloadStatus,
+)
 from app import app  # type: ignore
 from app.clusters.schemas import (  # Add import for ClusterStatus
     ClusterResources,
@@ -44,12 +51,14 @@ from app.projects.schemas import (
     ProjectWithUsers,
 )
 from app.quotas.schemas import QuotaBase, QuotaResponse  # Add import for QuotaCreate
-from app.secrets.enums import SecretScope, SecretStatus, SecretType, SecretUseCase
-from app.secrets.models import ProjectSecret as ProjectSecretModel
+from app.secrets.enums import SecretStatus, SecretUseCase
+from app.secrets.models import OrganizationScopedSecret, ProjectScopedSecret
 from app.secrets.schemas import (
+    ProjectSecret,
     ProjectSecretsWithParentSecret,
     ProjectSecretWithParentSecret,
     SecretResponse,
+    SecretWithProjects,
 )
 from app.storages.enums import StorageScope, StorageStatus, StorageType
 from app.storages.models import ProjectStorage as ProjectStorageModel
@@ -61,6 +70,7 @@ from app.utilities.security import (
     Roles,
     auth_token_claimset,
     ensure_platform_administrator,
+    ensure_user_can_view_project,
     get_projects_accessible_to_user,
     get_user,
     get_user_email,
@@ -161,7 +171,8 @@ def get_test_project_with_quota(name="project", description="A test project", cl
 COMMON_CLUSTER_WITH_RESOURCES = ClusterWithResources(
     id=uuid4(),
     name="TestCluster",
-    base_url="http://test-cluster.example.com",
+    workloads_base_url="http://test-cluster.example.com",
+    kube_api_url=None,
     last_heartbeat_at=datetime.now(tz=UTC),
     created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -212,7 +223,8 @@ COMMON_PROJECT_OUT = ProjectWithClusterAndQuota(
     cluster=ClusterResponse(
         id="e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
         name="cluster1",
-        base_url="http://cluster1.example.com",
+        workloads_base_url="http://cluster1.example.com",
+        kube_api_url="https://k8s.example.com:6443",
         last_heartbeat_at=datetime(2025, 3, 10, 12, 0, 0, tzinfo=UTC),
         created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -237,7 +249,7 @@ COMMON_PROJECT_OUT = ProjectWithClusterAndQuota(
 COMMON_SECRET = SecretResponse(
     id=uuid4(),
     name="secretname",
-    type=SecretType.EXTERNAL,
+    type=SecretKind.EXTERNAL_SECRET,
     scope=SecretScope.ORGANIZATION,
     status=SecretStatus.SYNCED,
     status_reason=None,
@@ -309,7 +321,8 @@ COMMON_PROJECT_STORAGE = ProjectStorageWithParentStorage(
     return_value=ClusterResponse(
         id=uuid4(),
         name="TestCluster",
-        base_url="https://test-cluster.example.com",
+        workloads_base_url="https://test-cluster.example.com",
+        kube_api_url="https://k8s.example.com:6443",
         last_heartbeat_at=datetime.now(tz=UTC),
         created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -328,8 +341,7 @@ async def test_create_project_success(
     mock_quota_db = MagicMock()
     mock_create_quota.return_value = mock_quota_db
 
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -369,7 +381,8 @@ async def test_create_project_success(
     return_value=ClusterResponse(
         id=uuid4(),
         name="TestCluster",
-        base_url="https://test-cluster.example.com",
+        workloads_base_url="https://test-cluster.example.com",
+        kube_api_url="https://k8s.example.com:6443",
         last_heartbeat_at=datetime.now(tz=UTC),
         created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -378,8 +391,7 @@ async def test_create_project_success(
     ),
 )
 async def test_create_project_name_conflict(_, __):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -403,8 +415,7 @@ async def test_create_project_name_conflict(_, __):
 
 @pytest.mark.asyncio
 async def test_create_project_no_user():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -442,8 +453,7 @@ async def test_create_project_not_in_role():
 
 @pytest.mark.asyncio
 async def test_create_project_no_organization():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -460,8 +470,7 @@ async def test_create_project_no_organization():
 
 @pytest.mark.asyncio
 async def test_create_project_invalid_input():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -491,8 +500,7 @@ async def test_create_project_invalid_input():
 @patch("app.projects.router.add_users_to_project_and_keycloak_group", return_value=None)
 @pytest.mark.asyncio
 async def test_add_users_to_project_success(_, __):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -534,8 +542,7 @@ async def test_add_users_to_project_not_in_role():
 
 @pytest.mark.asyncio
 async def test_add_users_to_project_no_organization():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -558,8 +565,7 @@ async def test_add_users_to_project_no_organization():
 )
 @pytest.mark.asyncio
 async def test_add_users_to_project_no_project_found(_):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -589,8 +595,7 @@ async def test_add_users_to_project_no_project_found(_):
 )
 @patch("app.projects.router.add_users_to_project_and_keycloak_group")
 async def test_add_users_to_project_value_error(add_users_to_project_and_keycloak_group, _):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -623,8 +628,7 @@ async def test_add_users_to_project_value_error(add_users_to_project_and_keycloa
 @patch("app.projects.router.remove_user_from_project_and_keycloak_group", return_value=None)
 @pytest.mark.asyncio
 async def test_remove_user_from_project_success(_, __):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -662,8 +666,7 @@ async def test_remove_user_from_project_not_in_role():
 
 @pytest.mark.asyncio
 async def test_remove_user_from_project_no_organization():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -685,8 +688,7 @@ async def test_remove_user_from_project_no_organization():
 )
 @pytest.mark.asyncio
 async def test_remove_user_from_project_no_project_found(_):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -715,8 +717,7 @@ async def test_remove_user_from_project_no_project_found(_):
 )
 @patch("app.projects.router.remove_user_from_project_and_keycloak_group")
 async def test_remove_user_from_project_value_error(remove_user_from_project_and_keycloak_group, _):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -742,8 +743,7 @@ async def test_remove_user_from_project_value_error(remove_user_from_project_and
 
 @pytest.mark.asyncio
 async def test_update_project_success():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: Organization(
         id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization1", keycloak_organization_id="123"
     )
@@ -813,8 +813,7 @@ async def test_update_project_not_in_role():
 
 @pytest.mark.asyncio
 async def test_update_project_no_organization():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -846,8 +845,7 @@ async def test_update_project_no_organization():
 )
 @pytest.mark.asyncio
 async def test_update_project_no_project_found(_):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -885,7 +883,7 @@ async def test_update_project_invalid_input():
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
     app.dependency_overrides[get_user_organization] = lambda: MagicMock()
     app.dependency_overrides[get_user_email] = lambda: "test@example.com"
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     valid_project_id = "b7c13f41-258d-44b1-a694-5dd4ccda660c"
 
@@ -947,10 +945,9 @@ async def test_update_project_invalid_input():
     side_effect=NotFoundException("Project not found"),
 )
 async def test_get_project_not_found(_):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: MagicMock(spec=Organization)
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
 
     with TestClient(app) as client:
         response = client.get("/v1/projects/0aa18e92-002c-45b7-a06e-dcdb0277974c")
@@ -965,8 +962,7 @@ async def test_get_project_not_in_organization():
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     with TestClient(app) as client:
         response = client.get("/v1/projects/0aa18e92-002c-45b7-a06e-dcdb0277974c")
@@ -976,8 +972,7 @@ async def test_get_project_not_in_organization():
 
 @pytest.mark.asyncio
 async def test_get_project_no_organization():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -988,17 +983,6 @@ async def test_get_project_no_organization():
         response = client.get("/v1/projects/0aa18e92-002c-45b7-a06e-dcdb0277974c")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.asyncio
-async def test_get_project_not_in_role():
-    mock_ensure_platform_administrator = MagicMock(spec_set=[])
-    mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
-    with TestClient(app) as client:
-        response = client.get("/v1/projects/0aa18e92-002c-45b7-a06e-dcdb0277974c")
-
-    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
@@ -1036,7 +1020,8 @@ async def test_get_project_not_in_role():
         cluster=ClusterResponse(
             id="e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
             name="cluster1",
-            base_url="https://test-cluster.example.com",
+            workloads_base_url="https://test-cluster.example.com",
+            kube_api_url="https://k8s.example.com:6443",
             last_heartbeat_at=datetime(2025, 3, 10, 12, 0, 0, tzinfo=UTC),
             created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
             updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -1058,8 +1043,7 @@ async def test_get_project_not_in_role():
     ),
 )
 async def test_get_project_with_invited_users_success(_, __):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -1104,7 +1088,8 @@ async def test_get_project_with_invited_users_success(_, __):
             "created_by": "test@example.com",
             "updated_at": "2025-01-01T12:00:00Z",
             "updated_by": "test@example.com",
-            "base_url": "https://test-cluster.example.com",
+            "workloads_base_url": "https://test-cluster.example.com",
+            "kube_api_url": "https://k8s.example.com:6443",
         },
         "quota": {
             "cpu_milli_cores": 1000,
@@ -1167,7 +1152,8 @@ async def test_get_project_with_invited_users_success(_, __):
             updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
             created_by="test@example.com",
             updated_by="test@example.com",
-            base_url="https://example.com",
+            workloads_base_url="https://example.com",
+            kube_api_url="https://k8s.example.com:6443",
         ),
         quota=QuotaResponse(
             id="78f6da5c-e78c-46df-bb2d-934abd05221f",
@@ -1184,8 +1170,7 @@ async def test_get_project_with_invited_users_success(_, __):
     ),
 )
 async def test_get_project_success(_, __):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -1193,7 +1178,7 @@ async def test_get_project_success(_, __):
     )
 
     app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
 
     with TestClient(app) as client:
         response = client.get("/v1/projects/0aa18e92-002c-45b7-a06e-dcdb0277974c")
@@ -1230,7 +1215,8 @@ async def test_get_project_success(_, __):
             "created_by": "test@example.com",
             "updated_at": "2025-01-01T12:00:00Z",
             "updated_by": "test@example.com",
-            "base_url": "https://example.com",
+            "workloads_base_url": "https://example.com",
+            "kube_api_url": "https://k8s.example.com:6443",
         },
         "invited_users": [],
         "quota": {
@@ -1278,7 +1264,8 @@ async def test_get_project_success(_, __):
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    base_url="https://example.com",
+                    workloads_base_url="https://example.com",
+                    kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
                         memory_bytes=16 * 1024 * 1024 * 1024,  # 16 GB
@@ -1327,7 +1314,8 @@ async def test_get_project_success(_, __):
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    base_url="https://example.com",
+                    workloads_base_url="https://example.com",
+                    kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
                         memory_bytes=16 * 1024 * 1024 * 1024,  # 16 GB
@@ -1361,8 +1349,7 @@ async def test_get_project_success(_, __):
     ),
 )
 async def test_get_projects_success(_):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     app.dependency_overrides[get_user_organization] = lambda: Organization(
         id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization1", keycloak_organization_id="123"
@@ -1390,7 +1377,8 @@ async def test_get_projects_success(_):
                     "updated_at": "2025-01-01T12:00:00Z",
                     "created_by": "test@example.com",
                     "updated_by": "test@example.com",
-                    "base_url": "https://example.com",
+                    "workloads_base_url": "https://example.com",
+                    "kube_api_url": "https://k8s.example.com:6443",
                     "name": "cluster1",
                     "last_heartbeat_at": "2025-03-10T12:00:00Z",
                     "available_resources": {
@@ -1456,7 +1444,8 @@ async def test_get_projects_success(_):
                     "updated_at": "2025-01-01T12:00:00Z",
                     "created_by": "test@example.com",
                     "updated_by": "test@example.com",
-                    "base_url": "https://example.com",
+                    "workloads_base_url": "https://example.com",
+                    "kube_api_url": "https://k8s.example.com:6443",
                     "name": "cluster1",
                     "last_heartbeat_at": "2025-03-10T12:00:00Z",
                     "available_resources": {
@@ -1526,8 +1515,7 @@ async def test_get_projects_success(_):
     ),
 )
 async def test_get_projects_no_projects(_, __):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: MagicMock(spec=Organization)
     app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
 
@@ -1540,8 +1528,7 @@ async def test_get_projects_no_projects(_, __):
 
 @pytest.mark.asyncio
 async def test_get_projects_no_organization():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -1556,8 +1543,7 @@ async def test_get_projects_no_organization():
 
 @pytest.mark.asyncio
 async def test_get_projects_not_in_role():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     mock_ensure_platform_administrator = MagicMock(spec_set=[])
     mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
@@ -1592,7 +1578,8 @@ async def test_get_projects_not_in_role():
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    base_url="https://example.com",
+                    workloads_base_url="https://example.com",
+                    kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
                         memory_bytes=16 * 1024 * 1024 * 1024,  # 16 GB
@@ -1641,7 +1628,8 @@ async def test_get_projects_not_in_role():
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    base_url="https://example.com",
+                    workloads_base_url="https://example.com",
+                    kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
                         memory_bytes=16 * 1024 * 1024 * 1024,  # 16 GB
@@ -1677,7 +1665,8 @@ async def test_get_projects_not_in_role():
 @patch(
     "app.clusters.router.get_cluster_by_id",
     return_value=ClusterResponse(
-        base_url="https://test-cluster.example.com",
+        workloads_base_url="https://test-cluster.example.com",
+        kube_api_url="https://k8s.example.com:6443",
         id="e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
         name="cluster1",
         last_heartbeat_at=datetime(2025, 3, 10, 12, 0, 0, tzinfo=UTC),
@@ -1688,8 +1677,7 @@ async def test_get_projects_not_in_role():
     ),
 )
 async def test_get_cluster_projects_success(_, __):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     app.dependency_overrides[get_user_organization] = lambda: Organization(
         id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization1", keycloak_organization_id="123"
@@ -1717,7 +1705,8 @@ async def test_get_cluster_projects_success(_, __):
                     "updated_at": "2025-01-01T12:00:00Z",
                     "created_by": "test@example.com",
                     "updated_by": "test@example.com",
-                    "base_url": "https://example.com",
+                    "workloads_base_url": "https://example.com",
+                    "kube_api_url": "https://k8s.example.com:6443",
                     "name": "cluster1",
                     "last_heartbeat_at": "2025-03-10T12:00:00Z",
                     "available_resources": {
@@ -1783,7 +1772,8 @@ async def test_get_cluster_projects_success(_, __):
                     "updated_at": "2025-01-01T12:00:00Z",
                     "created_by": "test@example.com",
                     "updated_by": "test@example.com",
-                    "base_url": "https://example.com",
+                    "workloads_base_url": "https://example.com",
+                    "kube_api_url": "https://k8s.example.com:6443",
                     "name": "cluster1",
                     "last_heartbeat_at": "2025-03-10T12:00:00Z",
                     "available_resources": {
@@ -1844,8 +1834,7 @@ async def test_get_cluster_projects_success(_, __):
 @pytest.mark.asyncio
 @patch("app.clusters.router.get_cluster_by_id", side_effect=NotFoundException("Cluster not found"))
 async def test_get_projects_no_cluster(_):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     app.dependency_overrides[get_user_organization] = lambda: Organization(
         id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization1", keycloak_organization_id="123"
@@ -1861,8 +1850,7 @@ async def test_get_projects_no_cluster(_):
 
 @pytest.mark.asyncio
 async def test_get_cluster_projects_not_in_role():
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     mock_ensure_platform_administrator = MagicMock(spec_set=[])
     mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
@@ -1881,8 +1869,7 @@ async def test_get_submittable_projects_no_user():
     mock_get_projects_accessible_to_user = MagicMock(spec_set=str)
     mock_get_projects_accessible_to_user.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: mock_get_projects_accessible_to_user()
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[auth_token_claimset] = lambda: MagicMock(spec_set=dict)
 
     with TestClient(app) as client:
@@ -1909,7 +1896,8 @@ async def test_get_submittable_projects_no_user():
                 cluster=ClusterResponse(
                     id="e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
                     name="cluster1",
-                    base_url="https://test-cluster.example.com",
+                    workloads_base_url="https://test-cluster.example.com",
+                    kube_api_url="https://k8s.example.com:6443",
                     last_heartbeat_at=datetime(2025, 3, 10, 12, 0, 0, tzinfo=UTC),
                     created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -1933,8 +1921,7 @@ async def test_get_submittable_projects_no_user():
     ),
 )
 async def test_get_submittable_projects_success(_):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: MagicMock(spec_set=[])
 
     with TestClient(app) as client:
@@ -1952,7 +1939,7 @@ async def test_delete_project_with_quota_success(
     mock_get_cluster_with_resources,
     mock_get_project_by_id,
 ):
-    mock_session = AsyncMock()
+    mock_session = AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_session] = lambda: mock_session
     app.dependency_overrides[get_user_organization] = lambda: Organization(
         id=uuid4(), name="Org", keycloak_organization_id="kc"
@@ -1976,14 +1963,16 @@ async def test_delete_project_with_quota_success(
     assert response.status_code == status.HTTP_204_NO_CONTENT
     mock_get_project_by_id.assert_called_once()
     mock_get_cluster_with_resources.assert_called_once_with(mock_session, project.cluster)
-    mock_submit_delete_project.assert_called_once_with(mock_session, project, "test_user", None)
+    # Verify submit_delete_project was called (send_message is injected by FastAPI, so we use ANY)
+    from unittest.mock import ANY
+
+    mock_submit_delete_project.assert_called_once_with(mock_session, project, "test_user", None, ANY)
 
 
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_by_id", side_effect=NotFoundException("Project not found"))
 async def test_delete_project_not_found(mock_get_project_by_id):
-    mock_session = AsyncMock()
-    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: Organization(
         id=uuid4(), name="Org", keycloak_organization_id="kc"
     )
@@ -2001,8 +1990,8 @@ async def test_delete_project_not_found(mock_get_project_by_id):
 @patch("app.projects.router.get_project_in_organization")
 @patch("app.projects.router.get_stats_for_workloads_in_project")
 async def test_get_project_workload_stats_success(mock_get_stats, mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2042,8 +2031,8 @@ async def test_get_project_workload_stats_success(mock_get_stats, mock_get_proje
 @patch("app.projects.router.get_project_in_organization", return_value=None)
 @patch("app.projects.router.get_stats_for_workloads_in_project", return_value=None)
 async def test_get_project_workload_stats_project_not_found(_, __):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2067,8 +2056,8 @@ async def test_get_project_workload_stats_project_not_found(_, __):
 @patch("app.projects.router.get_project_in_organization", autospec=True)
 @patch("app.projects.router.get_workloads_metrics_by_project", autospec=True)
 async def test_get_project_workload_metrics_success(mock_get_metrics, mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2123,8 +2112,8 @@ async def test_get_project_workload_metrics_success(mock_get_metrics, mock_get_p
 @patch("app.projects.router.get_project_in_organization", autospec=True)
 @patch("app.projects.router.get_workloads_metrics_by_project", autospec=True)
 async def test_get_project_workload_metrics_project_not_found(mock_get_metrics, mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2156,14 +2145,14 @@ async def test_get_project_workload_metrics_project_not_found(mock_get_metrics, 
     return_value=Project(id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="project1"),
 )
 async def test_get_gpu_device_utilization_timeseries_for_project_success(_, __, ___):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock()
     mock_get_user_organization.return_value = Organization(
         id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization 1", keycloak_organization_id="123"
     )
     app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
 
     with TestClient(app) as client:
         response = client.get(
@@ -2228,8 +2217,8 @@ async def test_get_gpu_device_utilization_timeseries_for_project_success(_, __, 
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_in_organization", autospec=True)
 async def test_get_gpu_device_utilization_timeseries_for_project_project_not_found(mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2255,7 +2244,7 @@ async def test_get_gpu_device_utilization_timeseries_for_project_project_not_fou
 async def test_get_gpu_device_utilization_timeseries_for_project_not_in_role():
     mock_ensure_platform_administrator = MagicMock()
     mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: mock_ensure_platform_administrator()
     project_id = uuid4()
 
     with TestClient(app) as client:
@@ -2268,12 +2257,12 @@ async def test_get_gpu_device_utilization_timeseries_for_project_not_in_role():
 
 @pytest.mark.asyncio
 async def test_get_gpu_device_utilization_timeseries_for_project_no_organization():
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock()
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     project_id = uuid4()
 
     with TestClient(app) as client:
@@ -2295,14 +2284,14 @@ async def test_get_gpu_device_utilization_timeseries_for_project_no_organization
     return_value=Project(id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="project1"),
 )
 async def test_get_gpu_memory_utilization_timeseries_for_project_success(_, __, ___):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock()
     mock_get_user_organization.return_value = Organization(
         id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization 1", keycloak_organization_id="123"
     )
     app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
 
     with TestClient(app) as client:
         response = client.get(
@@ -2367,8 +2356,8 @@ async def test_get_gpu_memory_utilization_timeseries_for_project_success(_, __, 
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_in_organization", autospec=True)
 async def test_get_gpu_memory_utilization_timeseries_for_project_project_not_found(mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2394,7 +2383,7 @@ async def test_get_gpu_memory_utilization_timeseries_for_project_project_not_fou
 async def test_get_gpu_memory_utilization_timeseries_for_project_not_in_role():
     mock_ensure_platform_administrator = MagicMock()
     mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: mock_ensure_platform_administrator()
     project_id = uuid4()
 
     with TestClient(app) as client:
@@ -2407,12 +2396,12 @@ async def test_get_gpu_memory_utilization_timeseries_for_project_not_in_role():
 
 @pytest.mark.asyncio
 async def test_get_gpu_memory_utilization_timeseries_for_project_no_organization():
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock()
     mock_get_user_organization.side_effect = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     project_id = uuid4()
 
     with TestClient(app) as client:
@@ -2437,8 +2426,8 @@ async def test_get_gpu_memory_utilization_timeseries_for_project_no_organization
     ),
 )
 async def test_average_wait_time_for_project_success(_, __, mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2474,8 +2463,8 @@ async def test_average_wait_time_for_project_success(_, __, mock_get_project):
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_in_organization", autospec=True)
 async def test_get_average_wait_time_for_project_project_not_found(mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2501,7 +2490,7 @@ async def test_get_average_wait_time_for_project_project_not_found(mock_get_proj
 async def test_get_average_wait_time_for_project_not_in_role():
     mock_ensure_platform_administrator = MagicMock()
     mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: mock_ensure_platform_administrator()
     project_id = uuid4()
 
     with TestClient(app) as client:
@@ -2526,8 +2515,8 @@ async def test_get_average_wait_time_for_project_not_in_role():
     ),
 )
 async def test_get_avg_gpu_idle_time_for_project_success(_, __, mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2563,8 +2552,8 @@ async def test_get_avg_gpu_idle_time_for_project_success(_, __, mock_get_project
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_in_organization", autospec=True)
 async def test_get_avg_gpu_idle_time_for_project_project_not_found(mock_get_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     app.dependency_overrides[get_user] = lambda: MagicMock()
 
     mock_get_user_organization = MagicMock()
@@ -2590,7 +2579,7 @@ async def test_get_avg_gpu_idle_time_for_project_project_not_found(mock_get_proj
 async def test_get_avg_gpu_idle_time_for_project_not_in_role():
     mock_ensure_platform_administrator = MagicMock()
     mock_ensure_platform_administrator.side_effect = HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    app.dependency_overrides[ensure_platform_administrator] = lambda: mock_ensure_platform_administrator()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: mock_ensure_platform_administrator()
     project_id = uuid4()
 
     with TestClient(app) as client:
@@ -2606,9 +2595,10 @@ async def test_get_avg_gpu_idle_time_for_project_not_in_role():
 @patch("app.projects.router.is_user_in_role", return_value=True)
 @patch("app.projects.router.get_project_in_organization", return_value=MagicMock(spec=Project))
 async def test_get_project_storages_platform_admin(_, __, mock_get_project_storages_in_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: MagicMock()
     app.dependency_overrides[auth_token_claimset] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     mock_get_project_storages_in_project.return_value = ProjectStoragesWithParentStorage(
         project_storages=[COMMON_PROJECT_STORAGE]
     )
@@ -2623,11 +2613,12 @@ async def test_get_project_storages_platform_admin(_, __, mock_get_project_stora
 @patch("app.projects.router.get_project_storages_in_project")
 @patch("app.projects.router.is_user_in_role", return_value=False)
 @patch("app.projects.router.get_projects_accessible_to_user", return_value=MagicMock(autospec=True))
-@patch("app.projects.router.validate_and_get_project_from_query", return_value=MagicMock(spec=Project))
+@patch("app.projects.router.get_project_in_organization", return_value=MagicMock(spec=Project))
 async def test_get_project_storages_team_member(_, __, ___, mock_get_project_storages_in_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: MagicMock()
     app.dependency_overrides[auth_token_claimset] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     mock_get_project_storages_in_project.return_value = ProjectStoragesWithParentStorage(
         project_storages=[COMMON_PROJECT_STORAGE]
     )
@@ -2636,34 +2627,15 @@ async def test_get_project_storages_team_member(_, __, ___, mock_get_project_sto
         response = client.get(f"/v1/projects/{uuid4()}/storages")
 
     assert response.status_code == status.HTTP_200_OK
-
-
-@pytest.mark.asyncio
-@patch("app.projects.router.get_project_storages_in_project")
-@patch("app.projects.router.is_user_in_role", return_value=False)
-@patch("app.projects.router.get_projects_accessible_to_user", return_value=MagicMock(autospec=True))
-@patch("app.projects.router.validate_and_get_project_from_query", side_effect=HTTPException(status_code=403))
-async def test_get_project_storages_team_member_no_access(_, __, ___, mock_get_project_storages_in_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[get_user_organization] = lambda: MagicMock()
-    app.dependency_overrides[auth_token_claimset] = lambda: MagicMock()
-    mock_get_project_storages_in_project.return_value = ProjectStoragesWithParentStorage(
-        project_storages=[COMMON_PROJECT_STORAGE]
-    )
-
-    with TestClient(app) as client:
-        response = client.get(f"/v1/projects/{uuid4()}/storages")
-
-    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
 @patch("app.projects.router.is_user_in_role", return_value=True)
 @patch("app.projects.router.get_project_in_organization", return_value=None)
 async def test_get_project_storages_team_member_no_project(_, __):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: MagicMock()
-    app.dependency_overrides[auth_token_claimset] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
 
     with TestClient(app) as client:
         response = client.get(f"/v1/projects/{uuid4()}/storages")
@@ -2677,7 +2649,7 @@ async def test_get_project_storages_team_member_no_project(_, __):
     "app.projects.router.submit_delete_project_storage",
 )
 async def test_delete_project_storage_not_found(_, __):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -2703,11 +2675,9 @@ async def test_delete_project_storage_not_found(_, __):
 
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_storage")
-@patch(
-    "app.projects.router.submit_delete_project_storage",
-)
+@patch("app.projects.router.submit_delete_project_storage")
 async def test_delete_project_storage_success(mock_submit_delete_project_storage, mock_get_project_storage):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -2740,11 +2710,12 @@ async def test_delete_project_storage_success(mock_submit_delete_project_storage
 @patch("app.projects.router.get_project_secrets_in_project")
 @patch("app.projects.router.is_user_in_role", return_value=False)
 @patch("app.projects.router.get_projects_accessible_to_user", return_value=MagicMock(autospec=True))
-@patch("app.projects.router.validate_and_get_project_from_query", return_value=MagicMock(spec=Project))
+@patch("app.projects.router.get_project_in_organization", return_value=MagicMock(spec=Project))
 async def test_get_project_secrets_team_member(_, __, ___, mock_get_project_secrets_in_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: MagicMock()
     app.dependency_overrides[auth_token_claimset] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
     mock_get_project_secrets_in_project.return_value = ProjectSecretsWithParentSecret(
         project_secrets=[COMMON_PROJECT_SECRET]
     )
@@ -2767,9 +2738,10 @@ async def test_get_project_secrets_filtered_by_use_case(
     mock_project = MagicMock(spec=Project)
     mock_get_project.return_value = mock_project
 
-    app.dependency_overrides[get_session] = lambda: AsyncMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: MagicMock()
     app.dependency_overrides[auth_token_claimset] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
 
     mock_get_project_secrets_in_project.return_value = ProjectSecretsWithParentSecret(project_secrets=[])
 
@@ -2778,7 +2750,7 @@ async def test_get_project_secrets_filtered_by_use_case(
             f"/v1/projects/{uuid4()}/secrets",
             params={
                 "use_case": SecretUseCase.HUGGING_FACE.value,
-                "secret_type": SecretType.KUBERNETES_SECRET.value,
+                "secret_type": SecretKind.KUBERNETES_SECRET.value,
             },
         )
 
@@ -2788,36 +2760,17 @@ async def test_get_project_secrets_filtered_by_use_case(
     args, kwargs = mock_get_project_secrets_in_project.call_args
     # Arguments are passed positionally; ensure filters were forwarded.
     assert len(args) >= 5
-    assert args[3] == SecretType.KUBERNETES_SECRET
+    assert args[3] == SecretKind.KUBERNETES_SECRET
     assert args[4] == SecretUseCase.HUGGING_FACE
-
-
-@pytest.mark.asyncio
-@patch("app.projects.router.get_project_secrets_in_project")
-@patch("app.projects.router.is_user_in_role", return_value=False)
-@patch("app.projects.router.get_projects_accessible_to_user", return_value=MagicMock(autospec=True))
-@patch("app.projects.router.validate_and_get_project_from_query", side_effect=HTTPException(status_code=403))
-async def test_get_project_secrets_team_member_no_access(_, __, ___, mock_get_project_secrets_in_project):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
-    app.dependency_overrides[get_user_organization] = lambda: MagicMock()
-    app.dependency_overrides[auth_token_claimset] = lambda: MagicMock()
-    mock_get_project_secrets_in_project.return_value = ProjectSecretsWithParentSecret(
-        project_secrets=[COMMON_PROJECT_SECRET]
-    )
-
-    with TestClient(app) as client:
-        response = client.get(f"/v1/projects/{uuid4()}/secrets")
-
-    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
 @patch("app.projects.router.is_user_in_role", return_value=True)
 @patch("app.projects.router.get_project_in_organization", return_value=None)
 async def test_get_project_secrets_team_member_no_project(_, __):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
     app.dependency_overrides[get_user_organization] = lambda: MagicMock()
-    app.dependency_overrides[auth_token_claimset] = lambda: MagicMock()
+    app.dependency_overrides[ensure_user_can_view_project] = lambda: MagicMock()
 
     with TestClient(app) as client:
         response = client.get(f"/v1/projects/{uuid4()}/secrets")
@@ -2826,15 +2779,15 @@ async def test_get_project_secrets_team_member_no_project(_, __):
 
 
 @pytest.mark.asyncio
-@patch("app.projects.router.get_project_secret", return_value=None)
+@patch("app.projects.router.get_secret_in_organization", return_value=None)
 @patch(
-    "app.projects.router.submit_delete_project_secret",
+    "app.projects.router.delete_project_scoped_secret",
 )
 @patch(
     "app.projects.router.ensure_can_remove_secret_from_projects",
 )
 async def test_delete_project_secret_not_found(_, __, ___):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -2863,21 +2816,21 @@ async def test_delete_project_secret_not_found(_, __, ___):
         response = client.delete(f"/v1/projects/{project_id}/secrets/{secret_id}")
 
     assert response.status_code == 404
-    assert "Project Secret not found" in response.json()["detail"]
+    assert "Secret not found" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
-@patch("app.projects.router.get_project_secret")
+@patch("app.projects.router.get_secret_in_organization")
 @patch(
-    "app.projects.router.submit_delete_project_secret",
+    "app.projects.router.delete_project_scoped_secret",
 )
 @patch(
     "app.projects.router.ensure_can_remove_secret_from_projects",
 )
 async def test_delete_project_secret_success(
-    mock_ensure_can_remove_secret_from_projects, mock_submit_delete_project_secret, mock_get_project_secret
+    mock_ensure_can_remove_secret_from_projects, mock_delete_project_scoped_secret, mock_get_project_secret
 ):
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -2902,28 +2855,28 @@ async def test_delete_project_secret_success(
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
     app.dependency_overrides[auth_token_claimset] = lambda: mock_claimset
 
-    mock_project_secret = ProjectSecretModel(
-        id=uuid4(), secret_id=secret_id, project_id=project_id, status=ProjectSecretStatus.SYNCED
+    mock_project_scoped_secret = ProjectScopedSecret(
+        id=secret_id, name="test-secret", project_id=project_id, status=SecretStatus.SYNCED
     )
-    mock_get_project_secret.return_value = mock_project_secret
+    mock_get_project_secret.return_value = mock_project_scoped_secret
 
     with TestClient(app) as client:
         response = client.delete(f"/v1/projects/{project_id}/secrets/{secret_id}")
 
     assert response.status_code == 204
-    mock_submit_delete_project_secret.assert_called_once()
+    mock_delete_project_scoped_secret.assert_called_once()
     mock_ensure_can_remove_secret_from_projects.assert_called_once()
 
 
 @pytest.mark.asyncio
-@patch("app.projects.router.get_project_secret")
-@patch("app.projects.router.submit_delete_project_secret")
+@patch("app.projects.router.get_secret_in_organization")
+@patch("app.projects.router.delete_project_scoped_secret")
 @patch("app.projects.router.ensure_can_remove_secret_from_projects")
 async def test_delete_project_secret_platform_admin_no_membership(
-    mock_ensure_can_remove_secret_from_projects, mock_submit_delete_project_secret, mock_get_project_secret
+    mock_ensure_can_remove_secret_from_projects, mock_delete_project_scoped_secret, mock_get_project_secret
 ):
     """Platform admins can delete secrets from any project, even if they're not members."""
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -2945,26 +2898,26 @@ async def test_delete_project_secret_platform_admin_no_membership(
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: []
     app.dependency_overrides[auth_token_claimset] = lambda: mock_claimset
 
-    mock_project_secret = ProjectSecretModel(
-        id=uuid4(), secret_id=secret_id, project_id=project_id, status=ProjectSecretStatus.SYNCED
+    mock_project_scoped_secret = ProjectScopedSecret(
+        id=secret_id, name="test-secret", project_id=project_id, status=SecretStatus.SYNCED
     )
-    mock_get_project_secret.return_value = mock_project_secret
+    mock_get_project_secret.return_value = mock_project_scoped_secret
 
     with TestClient(app) as client:
         response = client.delete(f"/v1/projects/{project_id}/secrets/{secret_id}")
 
     assert response.status_code == 204
-    mock_submit_delete_project_secret.assert_called_once()
+    mock_delete_project_scoped_secret.assert_called_once()
     mock_ensure_can_remove_secret_from_projects.assert_called_once()
 
 
 @pytest.mark.asyncio
-@patch("app.projects.router.get_project_secret")
-@patch("app.projects.router.submit_delete_project_secret")
+@patch("app.projects.router.get_secret_in_organization")
+@patch("app.projects.router.delete_project_scoped_secret")
 @patch("app.projects.router.ensure_can_remove_secret_from_projects")
 async def test_delete_project_secret_secret_ref_by_storage_error(
     mock_ensure_can_remove_secret_from_projects,
-    mock_submit_delete_project_secret,
+    mock_delete_project_scoped_secret,
     mock_get_project_secret,
 ):
     """
@@ -2972,7 +2925,7 @@ async def test_delete_project_secret_secret_ref_by_storage_error(
     should fail and must not submit a delete message.
     """
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -2995,10 +2948,10 @@ async def test_delete_project_secret_secret_ref_by_storage_error(
     secret_id = uuid4()
 
     # The project-secret exists
-    mock_project_secret = ProjectSecretModel(
-        id=uuid4(), secret_id=secret_id, project_id=project_id, status=ProjectSecretStatus.SYNCED
+    mock_project_scoped_secret = ProjectScopedSecret(
+        id=secret_id, name="test-secret", project_id=project_id, status=SecretStatus.SYNCED
     )
-    mock_get_project_secret.return_value = mock_project_secret
+    mock_get_project_secret.return_value = mock_project_scoped_secret
 
     # Simulate validation failure: secret still referenced by storages
     mock_ensure_can_remove_secret_from_projects.side_effect = ValidationException(
@@ -3010,22 +2963,81 @@ async def test_delete_project_secret_secret_ref_by_storage_error(
 
     assert response.status_code == 400
     mock_ensure_can_remove_secret_from_projects.assert_called_once()
-    mock_submit_delete_project_secret.assert_not_called()
+    mock_delete_project_scoped_secret.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.projects.router.get_secret_in_organization")
+@patch("app.projects.router.remove_organization_secret_assignments")
+@patch("app.projects.router.ensure_can_remove_secret_from_projects")
+async def test_delete_organization_scoped_secret_success(
+    mock_ensure_can_remove_secret_from_projects,
+    mock_remove_organization_secret_assignments,
+    mock_get_secret,
+):
+    """Test deleting an organization-scoped secret from a project."""
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+
+    mock_get_user_organization = MagicMock(spec=Organization)
+    mock_get_user_organization.return_value = Organization(
+        id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization1", keycloak_organization_id="123"
+    )
+
+    mock_get_user = MagicMock(spec_set=str)
+    mock_get_user.return_value = "test_user"
+
+    project_id = uuid4()
+    secret_id = uuid4()
+
+    # Mock project with matching ID to ensure user has access
+    mock_project = MagicMock(spec=Project)
+    mock_project.id = project_id
+
+    # Mock claimset without platform admin role (regular user)
+    mock_claimset = {"realm_access": {"roles": []}}
+
+    app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
+    app.dependency_overrides[get_user_email] = lambda: mock_get_user()
+    app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
+    app.dependency_overrides[auth_token_claimset] = lambda: mock_claimset
+
+    # Mock organization-scoped secret
+    mock_org_secret = OrganizationScopedSecret(
+        id=secret_id,
+        name="test-org-secret",
+        organization_id="0aa18e92-002c-45b7-a06e-dcdb0277974c",
+        status=SecretStatus.SYNCED,
+    )
+    mock_get_secret.return_value = mock_org_secret
+
+    with TestClient(app) as client:
+        response = client.delete(f"/v1/projects/{project_id}/secrets/{secret_id}")
+
+    assert response.status_code == 204
+    mock_ensure_can_remove_secret_from_projects.assert_called_once_with(
+        mock_ensure_can_remove_secret_from_projects.call_args[0][0], [project_id], secret_id
+    )
+    mock_remove_organization_secret_assignments.assert_called_once_with(
+        mock_remove_organization_secret_assignments.call_args[0][0],
+        mock_org_secret,
+        [project_id],
+        mock_remove_organization_secret_assignments.call_args[0][3],
+    )
 
 
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_in_organization")
-@patch("app.projects.router.get_secret_in_organization")
-@patch("app.projects.router.get_project_secret")
-@patch("app.projects.router.assign_projects_to_secret")
+@patch("app.projects.router.get_organization_scoped_secret_in_organization")
+@patch("app.projects.router.get_organization_secret_assignment")
+@patch("app.projects.router.add_organization_secret_assignments")
 async def test_assign_project_secrets_success(
-    mock_assign_projects_to_secret,
-    mock_get_project_secret,
+    mock_add_organization_secret_assignments,
+    mock_get_organization_secret_assignment,
     mock_get_secret,
     mock_get_project,
 ):
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -3036,6 +3048,7 @@ async def test_assign_project_secrets_success(
     mock_get_user = MagicMock(spec_set=str)
     mock_get_user.return_value = "test_user"
     app.dependency_overrides[get_user_email] = lambda: mock_get_user()
+    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
 
     # Mock get project_in_organization
     project_id = uuid4()
@@ -3052,7 +3065,7 @@ async def test_assign_project_secrets_success(
     mock_secret.name = "Test Secret"
     mock_get_secret.return_value = mock_secret
 
-    mock_get_project_secret.return_value = None
+    mock_get_organization_secret_assignment.return_value = None
 
     with TestClient(app) as client:
         response = client.put(f"/v1/projects/{project_id}/secrets/{secret_id}/assign")
@@ -3061,30 +3074,30 @@ async def test_assign_project_secrets_success(
     assert response.status_code == 204
     mock_get_project.assert_called_once()
     mock_get_secret.assert_called_once()
-    mock_get_project_secret.assert_called_once()
-    mock_assign_projects_to_secret.assert_called_once()
+    mock_get_organization_secret_assignment.assert_called_once()
+    mock_add_organization_secret_assignments.assert_called_once()
 
 
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_in_organization")
-@patch("app.projects.router.get_secret_in_organization")
-@patch("app.projects.router.get_project_secret")
-@patch("app.projects.router.assign_projects_to_secret")
+@patch("app.projects.router.get_organization_scoped_secret_in_organization")
+@patch("app.projects.router.get_organization_secret_assignment")
+@patch("app.projects.router.add_organization_secret_assignments")
 async def test_assign_project_secrets_project_not_found(
-    mock_assign_projects_to_secret,
-    mock_get_project_secret,
+    mock_add_organization_secret_assignments,
+    mock_get_organization_secret_assignment,
     mock_get_secret,
     mock_get_project,
 ):
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
         id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization1", keycloak_organization_id="123"
     )
     app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
-
+    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
     mock_get_user = MagicMock(spec_set=str)
     mock_get_user.return_value = "test_user"
     app.dependency_overrides[get_user_email] = lambda: mock_get_user()
@@ -3101,23 +3114,23 @@ async def test_assign_project_secrets_project_not_found(
     assert "Project not found" in response.json()["detail"]
     mock_get_project.assert_called_once()
     mock_get_secret.assert_not_called()
-    mock_get_project_secret.assert_not_called()
-    mock_assign_projects_to_secret.assert_not_called()
+    mock_get_organization_secret_assignment.assert_not_called()
+    mock_add_organization_secret_assignments.assert_not_called()
 
 
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_in_organization")
-@patch("app.projects.router.get_secret_in_organization")
-@patch("app.projects.router.get_project_secret")
-@patch("app.projects.router.assign_projects_to_secret")
+@patch("app.projects.router.get_organization_scoped_secret_in_organization")
+@patch("app.projects.router.get_organization_secret_assignment")
+@patch("app.projects.router.add_organization_secret_assignments")
 async def test_assign_project_secrets_secret_not_found(
-    mock_assign_projects_to_secret,
+    mock_add_organization_secret_assignments,
     mock_get_project_secret,
     mock_get_secret,
     mock_get_project,
 ):
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -3128,6 +3141,7 @@ async def test_assign_project_secrets_secret_not_found(
     mock_get_user = MagicMock(spec_set=str)
     mock_get_user.return_value = "test_user"
     app.dependency_overrides[get_user_email] = lambda: mock_get_user()
+    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
 
     project_id = uuid4()
     mock_project = MagicMock()
@@ -3148,7 +3162,7 @@ async def test_assign_project_secrets_secret_not_found(
     mock_get_project.assert_called_once()
     mock_get_secret.assert_called_once()
     mock_get_project_secret.assert_not_called()
-    mock_assign_projects_to_secret.assert_not_called()
+    mock_add_organization_secret_assignments.assert_not_called()
 
     assert response.status_code == 404
     assert "Secret not found" in response.json()["detail"]
@@ -3156,21 +3170,21 @@ async def test_assign_project_secrets_secret_not_found(
 
 @pytest.mark.asyncio
 @patch("app.projects.router.get_project_in_organization")
-@patch("app.projects.router.get_secret_in_organization")
-@patch("app.projects.router.get_project_secret")
-@patch("app.projects.router.assign_projects_to_secret")
+@patch("app.projects.router.get_organization_scoped_secret_in_organization")
+@patch("app.projects.router.get_organization_secret_assignment")
+@patch("app.projects.router.add_organization_secret_assignments")
 async def test_assign_project_secrets_already_assigned(
-    mock_assign_projects_to_secret, mock_get_project_secret, mock_get_secret, mock_get_project
+    mock_add_organization_secret_assignments, mock_get_organization_secret_assignment, mock_get_secret, mock_get_project
 ):
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
         id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="Organization1", keycloak_organization_id="123"
     )
     app.dependency_overrides[get_user_organization] = lambda: mock_get_user_organization()
-
+    app.dependency_overrides[ensure_platform_administrator] = lambda: MagicMock(spec_set=[])
     mock_get_user = MagicMock(spec_set=str)
     mock_get_user.return_value = "test_user"
     app.dependency_overrides[get_user_email] = lambda: mock_get_user()
@@ -3189,12 +3203,12 @@ async def test_assign_project_secrets_already_assigned(
     mock_secret.name = "Test Secret"
     mock_get_secret.return_value = mock_secret
 
-    project_secret_id = uuid4()
-    project_secret = MagicMock()
-    project_secret.id = project_secret_id
-    project_secret.project_id = project_id
-    project_secret.secret_id = secret_id
-    mock_get_project_secret.return_value = project_secret
+    organization_secret_assignment_id = uuid4()
+    organization_secret_assignment = MagicMock()
+    organization_secret_assignment.id = organization_secret_assignment_id
+    organization_secret_assignment.project_id = project_id
+    organization_secret_assignment.organization_secret_id = secret_id
+    mock_get_organization_secret_assignment.return_value = organization_secret_assignment
 
     with TestClient(app) as client:
         response = client.put(f"/v1/projects/{project_id}/secrets/{secret_id}/assign")
@@ -3203,8 +3217,8 @@ async def test_assign_project_secrets_already_assigned(
     assert response.json()["detail"] == "Secret already assigned to this Project"
     mock_get_project.assert_called_once()
     mock_get_secret.assert_called_once()
-    mock_get_project_secret.assert_called_once()
-    mock_assign_projects_to_secret.assert_not_called()
+    mock_get_organization_secret_assignment.assert_called_once()
+    mock_add_organization_secret_assignments.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -3219,7 +3233,7 @@ async def test_assign_project_storage_success(
     mock_get_project,
 ):
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -3271,7 +3285,7 @@ async def test_assign_project_storage_project_not_found(
     mock_get_project,
 ):
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -3312,7 +3326,7 @@ async def test_assign_project_storage_storage_not_found(
     mock_get_project,
 ):
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -3361,7 +3375,7 @@ async def test_assign_project_storages_already_assigned(
     mock_get_project,
 ):
     # Dependencies
-    app.dependency_overrides[get_session] = lambda: MagicMock()
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
 
     mock_get_user_organization = MagicMock(spec=Organization)
     mock_get_user_organization.return_value = Organization(
@@ -3403,3 +3417,97 @@ async def test_assign_project_storages_already_assigned(
     mock_get_storage.assert_called_once()
     mock_get_project_storage.assert_called_once()
     mock_assign_projects_to_storage.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.projects.router.create_project_scoped_secret_in_organization")
+@patch("app.projects.router.is_user_in_role", return_value=True)
+async def test_create_project_secret(
+    mock_is_user_in_role,
+    mock_create_project_scoped_secret_in_organization,
+):
+    app.dependency_overrides[get_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[get_user_organization] = lambda: Organization(
+        id="org-uuid", name="Test Org", keycloak_organization_id="kc-123"
+    )
+    app.dependency_overrides[get_user_email] = lambda: "test@example.com"
+    app.dependency_overrides[auth_token_claimset] = lambda: {"realm_access": {"roles": ["PlatformAdministrator"]}}
+    app.dependency_overrides[get_projects_accessible_to_user] = lambda: [
+        Project(id="0aa18e92-002c-45b7-a06e-dcdb0277974c", name="project1", description="Description 1")
+    ]
+
+    project_id = "0aa18e92-002c-45b7-a06e-dcdb0277974c"
+    secret_id = str(uuid4())
+    now = datetime(2025, 3, 10, 10, 0, 0, tzinfo=UTC)
+
+    project_secret = ProjectSecret(
+        project_id=project_id,
+        project_name="project1",
+        status=ProjectSecretStatus.SYNCED,
+        status_reason=None,
+        created_at=now,
+        updated_at=now,
+        created_by="test@example.com",
+        updated_by="test@example.com",
+        id=uuid4(),
+    )
+
+    secret_response = SecretWithProjects(
+        id=secret_id,
+        name="test-secret",
+        type=SecretKind.KUBERNETES_SECRET,
+        scope=SecretScope.PROJECT,
+        status=SecretStatus.SYNCED,
+        status_reason=None,
+        created_at=now,
+        updated_at=now,
+        created_by="test@example.com",
+        updated_by="test@example.com",
+        use_case=SecretUseCase.HUGGING_FACE,
+        project_secrets=[project_secret],
+    )
+    mock_create_project_scoped_secret_in_organization.return_value = secret_response
+
+    manifest_yaml = """apiVersion: v1
+        kind: Secret
+        metadata:
+          name: test-secret
+        type: Opaque
+        data:
+          username: dXNlcm5hbWU=
+          password: cGFzc3dvcmQ="""
+
+    payload = {
+        "name": "test-secret",
+        "scope": "Project",
+        "type": "KubernetesSecret",
+        "use_case": "HuggingFace",
+        "manifest": manifest_yaml,
+    }
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/v1/projects/{project_id}/secrets",
+                json=payload,
+                headers={"Authorization": "Bearer testtoken"},
+            )
+
+        if response.status_code != 201:
+            print(f"Response status: {response.status_code}")
+            print(f"Response body: {response.text}")
+
+    finally:
+        app.dependency_overrides = {}
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["id"] == secret_id
+    assert data["name"] == "test-secret"
+    assert data["type"] == "KubernetesSecret"
+    assert data["scope"] == "Project"
+    assert data["use_case"] == "HuggingFace"
+    assert len(data["project_secrets"]) == 1
+    assert data["project_secrets"][0]["project_id"] == project_id
+
+    mock_create_project_scoped_secret_in_organization.assert_called_once()

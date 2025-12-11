@@ -10,23 +10,25 @@ from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import OpenIdConnect
 from keycloak import KeycloakAdmin, KeycloakOpenID
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..organizations.models import Organization
 from ..organizations.repository import get_organization_by_keycloak_org_id
 from ..projects.models import Project
-from ..projects.repository import get_projects_by_names_in_organization
+from ..projects.repository import get_project_in_organization, get_projects_by_names_in_organization
 from ..users.models import User
 from ..users.repository import create_user_in_organization, get_user_by_email, update_last_active_at
 from ..utilities.database import get_session
+from .config import KEYCLOAK_INTERNAL_URL, KEYCLOAK_PUBLIC_URL, KEYCLOAK_REALM
 from .enums import Roles
+from .exceptions import NotFoundException
 from .keycloak_admin import get_kc_admin
 from .keycloak_admin import get_user as get_keycloak_user
 
-KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "airm")
-KEYCLOAK_SERVER_URL = os.getenv("KEYCLOAK_SERVER_URL", "http://localhost:8080")
 OPENID_CONFIGURATION_URL = os.getenv(
-    "OPENID_CONFIGURATION_URL", f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration"
+    "OPENID_CONFIGURATION_URL", f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration"
 )
-KEYCLOAK_PUBLIC_OPENID = KeycloakOpenID(server_url=KEYCLOAK_SERVER_URL, client_id=None, realm_name=KEYCLOAK_REALM)
+KEYCLOAK_OPENID = KeycloakOpenID(server_url=KEYCLOAK_INTERNAL_URL, client_id=None, realm_name=KEYCLOAK_REALM)
 
 DISABLE_JWT_VALIDATION = os.getenv("DISABLE_JWT_VALIDATION", "true") == "true"
 
@@ -56,7 +58,7 @@ class OpenIdAuthorization(OpenIdConnect):
 BearerToken = OpenIdAuthorization(openIdConnectUrl=OPENID_CONFIGURATION_URL, auto_error=True)
 
 
-def auth_token_claimset(authorization: str = Depends(BearerToken)):
+def auth_token_claimset(authorization: str = Depends(BearerToken)) -> dict:
     """
     Parses and verifies the JWT token from the Authorization header.
 
@@ -82,7 +84,7 @@ def auth_token_claimset(authorization: str = Depends(BearerToken)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token scheme. Please include Bearer in Authorization header.",
             )
-        return KEYCLOAK_PUBLIC_OPENID.decode_token(token, validate=not DISABLE_JWT_VALIDATION)
+        return KEYCLOAK_OPENID.decode_token(token, validate=not DISABLE_JWT_VALIDATION)
     except Exception as exc:
         logger.exception("Exception while reading token", exc)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Validation of token failed: {exc}")
@@ -95,7 +97,7 @@ def is_user_in_role(claimset: dict, role: Roles) -> bool:
     return role.value in claimset.get("realm_access", {}).get("roles", [])
 
 
-def ensure_platform_administrator(claimset: dict = Depends(auth_token_claimset)):
+def ensure_platform_administrator(claimset: dict = Depends(auth_token_claimset)) -> None:
     """
     Dependable that checks if the token has the special admin role.
     """
@@ -105,7 +107,7 @@ def ensure_platform_administrator(claimset: dict = Depends(auth_token_claimset))
         )
 
 
-def ensure_super_administrator(claimset: dict = Depends(auth_token_claimset)):
+def ensure_super_administrator(claimset: dict = Depends(auth_token_claimset)) -> None:
     """
     Dependable that checks if the token has the super admin role.
     """
@@ -141,7 +143,9 @@ def __get_group_names_from_claimset(claimset: dict) -> list[str]:
     return []
 
 
-async def get_user_organization(claimset: dict = Depends(auth_token_claimset), session=Depends(get_session)):
+async def get_user_organization(
+    claimset: dict = Depends(auth_token_claimset), session: AsyncSession = Depends(get_session)
+) -> Organization:
     """
     Dependable that retrieves the organization of the user from the database depending on the id in the token.
     This is the relevant part of the token:
@@ -172,7 +176,7 @@ def get_user_email(claimset: dict = Depends(auth_token_claimset)) -> str:
     return email
 
 
-async def get_user(email: str = Depends(get_user_email), session=Depends(get_session)) -> User:
+async def get_user(email: str = Depends(get_user_email), session: AsyncSession = Depends(get_session)) -> User:
     """
     Dependable that retrieves the user object from the database
     """
@@ -185,8 +189,8 @@ async def get_user(email: str = Depends(get_user_email), session=Depends(get_ses
 async def create_logged_in_user_in_system(
     kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     claimset: dict = Depends(auth_token_claimset),
-    session=Depends(get_session),
-):
+    session: AsyncSession = Depends(get_session),
+) -> None:
     """
     Dependable that checks if the logged in user exists in the database, and if not, creates it.
     This is to account for cases where users are federated from some IDP to keycloak directly
@@ -227,8 +231,8 @@ async def create_logged_in_user_in_system(
 
 async def track_user_activity_from_token(
     claimset: dict = Depends(auth_token_claimset),
-    session=Depends(get_session),
-):
+    session: AsyncSession = Depends(get_session),
+) -> None:
     email = claimset.get("email")
     auth_time = claimset.get("iat")
     if not email or auth_time is None:
@@ -243,9 +247,29 @@ async def track_user_activity_from_token(
         await update_last_active_at(session, existing_user, auth_timestamp)
 
 
+async def ensure_user_can_view_project(
+    project_id: UUID,
+    claimset: dict = Depends(auth_token_claimset),
+    session: AsyncSession = Depends(get_session),
+    organization: Organization = Depends(get_user_organization),
+) -> None:
+    """
+    Ensure the user can view the specified project details.
+    Raises NotFoundException if the project is not found or not accessible.
+    """
+    project = await get_project_in_organization(session, organization.id, project_id)
+
+    if not project:
+        raise NotFoundException(f"Project with ID {project_id} not found in organization {organization.id}.")
+    if not is_user_in_role(claimset, Roles.PLATFORM_ADMINISTRATOR):
+        accessible_projects = await get_projects_accessible_to_user(claimset, session)
+        if project not in accessible_projects:
+            raise NotFoundException(f"Project with ID {project_id} not found.")
+
+
 async def get_projects_accessible_to_user(
     claimset: dict = Depends(auth_token_claimset),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ) -> list[Project]:
     """
     Dependable that retrieves projects accessible to the user based on Keycloak group membership.

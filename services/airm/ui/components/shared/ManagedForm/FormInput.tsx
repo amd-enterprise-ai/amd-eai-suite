@@ -19,6 +19,7 @@ export const FormInput = <T extends FieldValues>({
   icon: Icon,
   name,
   className,
+  onChange: customOnChange,
   ...props
 }: Props<T>): React.ReactElement => {
   const registration = form.register(name as Path<T>);
@@ -26,7 +27,7 @@ export const FormInput = <T extends FieldValues>({
 
   // remove form value when the component unmounts
   const unregisterField = useCallback(() => {
-    if (!!name) {
+    if (name) {
       form.unregister(name, {
         keepValue: false,
       });
@@ -37,12 +38,25 @@ export const FormInput = <T extends FieldValues>({
     return unregisterField;
   }, [unregisterField]);
 
+  // Chain the onChange handlers if a custom one is provided
+  // Note: Not using useCallback here since registration.onChange and customOnChange
+  // may change, and the performance impact of recreating this function is negligible
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Call registration's onChange first (updates form state)
+    registration.onChange(e);
+    // Then call custom onChange if provided
+    if (customOnChange) {
+      customOnChange(e);
+    }
+  };
+
   return (
     <Input
       labelPlacement="outside"
       variant="bordered"
       {...props}
       {...registration}
+      onChange={handleChange}
       className={cn(className, {
         'text-opacity-disabled': props?.isReadOnly,
         'text-foreground': props?.isReadOnly,

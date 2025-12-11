@@ -22,7 +22,7 @@ from .schemas import KaiwoQueueConfig
 from .utils import convert_to_cluster_quotas_allocations, convert_to_kaiwo_queue_config
 
 
-async def process_cluster_quotas_allocation(message: ClusterQuotasAllocationMessage):
+async def process_cluster_quotas_allocation(message: ClusterQuotasAllocationMessage) -> None:
     logger.info("Cluster quotas allocation handler received message")
     logger.debug(f"Processing ClusterQuotasAllocationMessage: {message}")
     kaiwo_queue_config = convert_to_kaiwo_queue_config(message)
@@ -52,13 +52,13 @@ async def __process_kaiwo_queue_config_event(resource, event_type):
         await __publish_quotas_failure_message()
 
 
-async def __publish_quotas_allocations_status_message(message: ClusterQuotasStatusMessage):
+async def __publish_quotas_allocations_status_message(message: ClusterQuotasStatusMessage) -> None:
     connection, channel = await get_common_vhost_connection_and_channel()
     await publish_to_common_feedback_queue(message=message, connection=connection, channel=channel)
     logger.info(f"Published quotas allocation status message to queue {message.json()}")
 
 
-async def __publish_quotas_failure_message(reason: str | None = None):
+async def __publish_quotas_failure_message(reason: str | None = None) -> None:
     connection, channel = await get_common_vhost_connection_and_channel()
     message = ClusterQuotasFailureMessage(
         message_type="cluster_quotas_failure",

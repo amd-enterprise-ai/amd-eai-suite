@@ -2,8 +2,15 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useMemo } from 'react';
-import { Card, CardFooter, CardHeader, Chip, Divider } from '@heroui/react';
+import { useMemo, useState, useRef, useEffect } from 'react';
+import {
+  Card,
+  CardFooter,
+  CardHeader,
+  Chip,
+  Divider,
+  Tooltip,
+} from '@heroui/react';
 
 import { Aim } from '@/types/aims';
 import { useTranslation } from 'next-i18next';
@@ -20,7 +27,7 @@ import {
 
 import { IconCheck, IconLock } from '@tabler/icons-react';
 
-import { IconLoaderQuarter } from '@tabler/icons-react';
+import Status, { Intent } from '@/components/shared/Status/Status';
 
 interface Props {
   item: Aim;
@@ -32,6 +39,50 @@ interface Props {
 export const AIMCard = ({ item, onDeploy, onUndeploy, onConnect }: Props) => {
   const workload = item.workload;
   const { t } = useTranslation('models', { keyPrefix: 'aimCatalog' });
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isDescriptionLong, setIsDescriptionLong] = useState(false);
+  const descriptionRef = useRef<HTMLDivElement>(null);
+
+  // CSS-based overflow detection: check if content overflows when clamped to 3 lines
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (!descriptionRef.current) return;
+
+      const element = descriptionRef.current;
+      const isClamped = element.classList.contains('line-clamp-3');
+
+      if (isClamped) {
+        // When clamped, compare scrollHeight to clientHeight
+        // If scrollHeight > clientHeight, content overflows
+        setIsDescriptionLong(element.scrollHeight > element.clientHeight);
+      } else {
+        // When expanded, temporarily apply clamp to check if it would overflow
+        element.classList.add('line-clamp-3');
+        const wouldOverflow = element.scrollHeight > element.clientHeight;
+        element.classList.remove('line-clamp-3');
+        setIsDescriptionLong(wouldOverflow);
+      }
+    };
+
+    // Re-check when card size changes (observe parent container for width changes)
+    const resizeObserver = new ResizeObserver(() => {
+      checkOverflow();
+    });
+
+    // Use requestAnimationFrame to ensure layout is complete
+    const frameId = requestAnimationFrame(() => {
+      checkOverflow();
+      if (descriptionRef.current?.parentElement) {
+        resizeObserver.observe(descriptionRef.current.parentElement);
+      }
+    });
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+    };
+  }, [item.description.short, isDescriptionExpanded]);
+
   const cardActions = useMemo(() => {
     const actions = [];
 
@@ -64,12 +115,12 @@ export const AIMCard = ({ item, onDeploy, onUndeploy, onConnect }: Props) => {
 
   return (
     <Card
-      className="max-w-[420px] min-w-[380px] flex-1 dark:bg-default-100/50 p-1"
+      className="flex-1 dark:bg-default-100/50 p-1 grid grid-cols-1 grid-rows-[1fr_auto_auto]"
       key={item.id}
       shadow="sm"
       radius="md"
       classNames={{
-        header: `flex items-center justify-between`,
+        header: `flex items-center justify-between min-h-0`,
         footer: `flex flex-nowrap gap-2 justify-between items-start`,
       }}
     >
@@ -79,73 +130,98 @@ export const AIMCard = ({ item, onDeploy, onUndeploy, onConnect }: Props) => {
             <ModelIcon iconName={item.canonicalName} width={48} height={48} />
           </div>
           <div className="flex items-start flex-col  gap-1">
-            <div className="text-md font-semibold flex flex-row gap-2">
+            <div className="text-md font-semibold flex flex-row gap-2 leading-tight">
               {item.title}
               {isDeployed(workload) && (
-                <Chip
-                  size="sm"
+                <Status
+                  label={t('status.deployed')}
                   color="success"
-                  variant="light"
-                  startContent={<IconCheck size={12} />}
-                >
-                  {t('status.deployed')}
-                </Chip>
+                  icon={IconCheck}
+                  size="sm"
+                  isTextColored
+                />
               )}
               {isDeploying(workload) && (
-                <Chip
-                  size="sm"
+                <Status
+                  label={t('status.deploying')}
+                  intent={Intent.PENDING}
                   color="default"
-                  variant="light"
-                  startContent={
-                    <IconLoaderQuarter className="animate-spin" size={12} />
-                  }
-                  classNames={{ base: 'text-foreground/60' }}
-                >
-                  {t('status.deploying')}
-                </Chip>
+                  size="sm"
+                  isSubtle
+                />
               )}
               {isUndeploying(workload) && (
-                <Chip
-                  size="sm"
+                <Status
+                  label={t('status.undeploying')}
+                  intent={Intent.PENDING}
                   color="default"
-                  variant="light"
-                  startContent={
-                    <IconLoaderQuarter className="animate-spin" size={12} />
-                  }
-                  classNames={{ base: 'text-foreground/60' }}
-                >
-                  {t('status.undeploying')}
-                </Chip>
+                  size="sm"
+                  isSubtle
+                />
               )}
             </div>
             <div className="text-sm text-foreground/40">{item.imageTag}</div>
-            <div className="text-sm text-foreground/60">
+            <p
+              ref={descriptionRef}
+              className={`text-sm transition-colors ${
+                isDescriptionExpanded ? '' : 'line-clamp-3'
+              } ${
+                isDescriptionLong
+                  ? 'cursor-pointer hover:text-foreground/80'
+                  : ''
+              }`}
+              onClick={
+                isDescriptionLong
+                  ? () => setIsDescriptionExpanded(!isDescriptionExpanded)
+                  : undefined
+              }
+              role={isDescriptionLong ? 'button' : undefined}
+              tabIndex={isDescriptionLong ? 0 : undefined}
+              aria-expanded={
+                isDescriptionLong ? isDescriptionExpanded : undefined
+              }
+              onKeyDown={
+                isDescriptionLong
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === 'Space') {
+                        e.preventDefault();
+                        setIsDescriptionExpanded(!isDescriptionExpanded);
+                      }
+                    }
+                  : undefined
+              }
+            >
               {item.description.short}
-            </div>
+            </p>
           </div>
         </div>
       </CardHeader>
+
       <Divider />
-      <CardFooter>
-        <div className="flex flex-wrap gap-1">
-          {item.isHfTokenRequired && (
-            <Chip variant="flat" color="default" size="sm">
-              <IconLock size={12} />
-            </Chip>
-          )}
-          {item.isPreview && (
-            <Chip variant="flat" color="warning" size="sm">
-              Preview
-            </Chip>
-          )}
-          {item.tags?.map((tag) => (
-            <Chip key={tag} variant="bordered" size="sm">
-              {tag}
-            </Chip>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <ThreeDotActionsDropdown actions={cardActions} item={item} />
+      <CardFooter className="flex flex-col">
+        <div className="flex flex-row justify-between w-full">
+          <div className="flex flex-wrap gap-1">
+            {item.isHfTokenRequired && (
+              <Tooltip content={t('tooltips.hfTokenRequired')}>
+                <Chip variant="flat" color="default" size="sm">
+                  <IconLock size={12} />
+                </Chip>
+              </Tooltip>
+            )}
+            {item.isPreview && (
+              <Chip variant="flat" color="warning" size="sm">
+                Preview
+              </Chip>
+            )}
+            {item.tags?.map((tag) => (
+              <Chip key={tag} variant="bordered" size="sm">
+                {tag}
+              </Chip>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <ThreeDotActionsDropdown actions={cardActions} item={item} />
+          </div>
         </div>
       </CardFooter>
     </Card>

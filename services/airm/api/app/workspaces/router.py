@@ -6,6 +6,9 @@ from fastapi import APIRouter, Depends, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..managed_workloads.schemas import ChartWorkloadResponse
+from ..messaging.sender import MessageSender, get_message_sender
+from ..projects.models import Project
+from ..users.models import User
 from ..utilities.checks import ensure_base_url_configured, ensure_cluster_healthy
 from ..utilities.database import get_session
 from ..utilities.security import (
@@ -42,11 +45,12 @@ async def create_workspace_endpoint(
     request: DevelopmentWorkspaceRequest,
     workspace_type: WorkspaceType = Path(..., description="Type of workspace to create"),
     display_name: str | None = Query(None, description="User-friendly display name for the workload"),
-    project=Depends(validate_and_get_project_from_query),
-    user=Depends(get_user),
+    project: Project = Depends(validate_and_get_project_from_query),
+    user: User = Depends(get_user),
     token: str = Depends(BearerToken),
+    message_sender: MessageSender = Depends(get_message_sender),
     session: AsyncSession = Depends(get_session),
-):
+) -> ChartWorkloadResponse:
     ensure_cluster_healthy(project)
     ensure_base_url_configured(project)
 
@@ -57,5 +61,6 @@ async def create_workspace_endpoint(
         request=request,
         token=token,
         workspace_type=workspace_type,
+        message_sender=message_sender,
         display_name=display_name,
     )

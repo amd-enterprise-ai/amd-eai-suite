@@ -2,18 +2,22 @@
 #
 # SPDX-License-Identifier: MIT
 
-from pydantic import BaseModel, ConfigDict, Field
+import ast
+from typing import Any
+
+from loguru import logger
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from ..managed_workloads.schemas import AIMWorkloadResponse
 from ..utilities.schema import BaseEntityPublic
 
 
 class AIMBase(BaseEntityPublic):
-    """Basic AIM information to avoid circular dependency."""
+    """Basic AIM information from AIMClusterModel."""
 
-    image_name: str = Field(..., description="The AIM image name")
-    image_tag: str = Field(..., description="The AIM image tag")
-    labels: dict[str, str] = Field(default_factory=dict, description="AIM labels")
+    image_reference: str = Field(..., description="Full image reference (e.g., registry/repo:tag)")
+    labels: dict[str, Any] = Field(default_factory=dict, description="Image metadata labels from Kaiwo")
+    status: str = Field(..., description="Status of the AIMClusterModel (e.g., Ready, Pending)")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -24,6 +28,47 @@ class AIMResponse(AIMBase):
     workload: AIMWorkloadResponse | None = Field(
         None, description="The active workload deployment for this AIM (None if not deployed)"
     )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def image_name(self) -> str:
+        """Extract image name from image_reference."""
+        ref_without_tag = (
+            self.image_reference.rsplit(":", 1)[0] if ":" in self.image_reference else self.image_reference
+        )
+        return ref_without_tag.rsplit("/", 1)[-1]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def image_tag(self) -> str:
+        """Extract image tag from image_reference."""
+        return self.image_reference.rsplit(":", 1)[-1] if ":" in self.image_reference else "latest"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def canonical_name(self) -> str | None:
+        """Extract canonical name from labels, checking for any matching suffix."""
+        for key, value in self.labels.items():
+            if key.endswith(".canonicalName"):
+                return value
+        return None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recommended_deployments(self) -> list[dict[str, Any]]:
+        for key, value in self.labels.items():
+            if key.endswith(".model.recommendedDeployments"):
+                try:
+                    parsed = ast.literal_eval(value)
+                    # Handle tuple (legacy format without brackets)
+                    if isinstance(parsed, tuple):
+                        return list(parsed)
+                    # Ensure it's always a list
+                    return parsed if isinstance(parsed, list) else [parsed]
+                except (ValueError, SyntaxError) as e:
+                    logger.warning(f"Failed to parse recommended deployments: {e}")
+                    return []
+        return []
 
 
 class AIMDeployRequest(BaseModel):
@@ -45,4 +90,22 @@ class AIMDeployRequest(BaseModel):
     hf_token: str | None = Field(
         None,
         description="Hugging Face token for accessing private models (if required).",
+    )
+    metric: str | None = Field(
+        None,
+        description="Performance optimization metric (latency or throughput).",
+    )
+    allow_unoptimized: bool = Field(
+        False,
+        description="Allow unoptimized deployment configurations if available in the cluster.",
+    )
+
+
+class AIMsResponse(BaseModel):
+    """Wrapper for collection of AIMs."""
+
+    data: list[AIMResponse] = Field(description="List of AIMs")
+    metric: str | None = Field(
+        None,
+        description="Performance optimization metric (latency or throughput).",
     )

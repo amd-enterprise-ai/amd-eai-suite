@@ -34,19 +34,30 @@ export const generateMockStorages = (n: number): Storage[] => {
 export const generateMockProjectStorages = (n: number): ProjectStorage[] => {
   return Array.from({ length: n }, (_, index) => ({
     id: `project-storage-${index}`,
-    name: `Project Storage ${index}`,
-    displayName: `Project Storage ${index}`,
-    type: StorageType.S3,
+    projectId: `project-${index}`,
+    projectName: `Project ${index}`,
+    scope: StorageScope.PROJECT,
     status: ProjectStorageStatus.SYNCED,
     statusReason: null,
-    scope: StorageScope.PROJECT,
     createdAt: new Date().toISOString(),
     createdBy: `user-${index}`,
     updatedAt: new Date().toISOString(),
     updatedBy: `user-${index}`,
-    projectId: `project-${index}`,
-    projectName: `Project ${index}`,
-    projectStorages: [],
+    storage: {
+      id: `storage-${index}`,
+      name: `Storage ${index}`,
+      displayName: `Storage ${index}`,
+      type: StorageType.S3,
+      status: StorageStatus.SYNCED,
+      statusReason: null,
+      scope: StorageScope.ORGANIZATION,
+      createdAt: new Date().toISOString(),
+      createdBy: `user-${index}`,
+      updatedAt: new Date().toISOString(),
+      updatedBy: `user-${index}`,
+      projectStorages: [],
+      secretId: `secret-${index}`,
+    },
   }));
 };
 

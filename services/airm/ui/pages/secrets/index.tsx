@@ -16,19 +16,32 @@ import { getStorages } from '@/services/server/storages';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@/utils/app/api-helpers';
 import { doesStorageDataNeedToBeRefreshed } from '@/utils/app/storages';
 import { authOptions } from '@/utils/server/auth';
-import { isSecretActioning } from '@/utils/app/secrets';
+import {
+  doesSecretDataNeedToBeRefreshed,
+  isSecretActioning,
+} from '@/utils/app/secrets';
 
 import { ActionFieldHintType } from '@/types/enums/data-table';
 import { ProjectStatus } from '@/types/enums/projects';
-import { ProjectSecretStatus, SecretScope } from '@/types/enums/secrets';
+import {
+  ProjectSecretStatus,
+  SecretScope,
+  SecretStatus,
+} from '@/types/enums/secrets';
 import { Project } from '@/types/projects';
 import { Secret, SecretsResponse } from '@/types/secrets';
 import { StoragesResponse } from '@/types/storages';
 
-import { AddSecret, AssignSecret } from '@/components/features/secrets';
+import {
+  AddSecret,
+  AssignSecret,
+  SecretsTable,
+} from '@/components/features/secrets';
 import DeleteSecretModal from '@/components/features/secrets/DeleteSecretModal';
-import { SecretsPageContent } from '@/components/features/secrets/SecretsPageContent';
 import { ActionButton } from '@/components/shared/Buttons';
+import { useSecretsFilters } from '@/hooks/useSecretsFilters';
+import { fetchSecrets } from '@/services/app/secrets';
+import ActionsToolbar from '@/components/shared/Toolbar/ActionsToolbar';
 
 interface Props {
   projects: Project[];
@@ -66,6 +79,27 @@ const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
     },
   });
 
+  const { filters, handleFilterChange, filterConfig } = useSecretsFilters({
+    includeScope: true,
+  });
+
+  // React Query for fetching secrets
+  const {
+    data: secretsData,
+    isLoading: isSecretsLoading,
+    refetch: refetchSecrets,
+  } = useQuery<SecretsResponse>({
+    queryKey: ['secrets'],
+    queryFn: fetchSecrets,
+    initialData: secrets,
+    refetchInterval: (query) => {
+      return !query.state.data ||
+        doesSecretDataNeedToBeRefreshed(query.state.data?.secrets)
+        ? DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA
+        : false;
+    },
+  });
+
   // State management at page level
   const [targetSecret, setTargetSecret] = useState<Secret | null>(null);
 
@@ -84,7 +118,7 @@ const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
 
   const checkDeleteDisabled = useCallback(
     (s: Secret) => {
-      return isSecretActioning(s) || checkSecretIsAttachedToStorage(s);
+      return checkSecretIsAttachedToStorage(s);
     },
     [checkSecretIsAttachedToStorage],
   );
@@ -100,7 +134,7 @@ const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
   const actions = useMemo(
     () => [
       {
-        key: 'edit',
+        key: 'assign',
         onPress: (s: Secret) => {
           setTargetSecret(s);
           onAssignSecretFormOpenChange();
@@ -129,11 +163,6 @@ const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
           {
             showHint: checkSecretIsAttachedToStorage,
             message: t('list.actions.delete.hint.storage'),
-            type: ActionFieldHintType.WARNING,
-          },
-          {
-            showHint: isSecretActioning,
-            message: t('list.actions.delete.hint.actionPending'),
             type: ActionFieldHintType.WARNING,
           },
         ],
@@ -170,14 +199,28 @@ const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
     [targetSecret],
   );
 
-  const addButton = (
-    <ActionButton primary onPress={onAddSecretFormOpenChange}>
-      {t('actions.add')}
-    </ActionButton>
-  );
-
-  const additionalModals = (
+  return (
     <>
+      <ActionsToolbar
+        filterConfig={filterConfig}
+        onFilterChange={handleFilterChange}
+        onRefresh={refetchSecrets}
+        endContent={
+          <ActionButton primary onPress={onAddSecretFormOpenChange}>
+            {t('actions.add')}
+          </ActionButton>
+        }
+      />
+
+      <SecretsTable
+        secrets={secretsData.secrets}
+        isSecretsLoading={isSecretsLoading}
+        filters={filters}
+        actions={actions}
+        showScopeColumn={true}
+        showAssignedToColumn={true}
+      />
+
       <AddSecret
         isOpen={isAddSecretFormOpen}
         onClose={onClose}
@@ -204,17 +247,6 @@ const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
         queryKeyToInvalidate={['secrets']}
       />
     </>
-  );
-
-  return (
-    <SecretsPageContent
-      initialSecrets={secrets}
-      showScopeColumn={true}
-      showAddButton={true}
-      additionalActions={addButton}
-      additionalModals={additionalModals}
-      actions={actions}
-    />
   );
 };
 

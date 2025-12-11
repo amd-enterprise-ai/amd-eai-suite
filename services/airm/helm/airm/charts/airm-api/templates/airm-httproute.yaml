@@ -30,8 +30,8 @@ spec:
             type: RegularExpression
             value: .*/stream.*
       timeouts:
-        backendRequest: 30m
-        request: 30m
+        backendRequest: {{ .Values.kgateway.airmapi.timeouts.stream.backendRequest }}
+        request: {{ .Values.kgateway.airmapi.timeouts.stream.request }}
     - backendRefs:
         - group: ""
           kind: Service
@@ -47,8 +47,8 @@ spec:
             type: PathPrefix
             value: /
       timeouts:
-        backendRequest: 20s
-        request: 90s
+        backendRequest: {{ .Values.kgateway.airmapi.timeouts.nonStream.backendRequest }}
+        request: {{ .Values.kgateway.airmapi.timeouts.nonStream.request }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -77,5 +77,5 @@ spec:
             type: PathPrefix
             value: /
       timeouts:
-        backendRequest: 20s
-        request: 90s
+        backendRequest: {{ .Values.kgateway.airmui.timeouts.backendRequest }}
+        request: {{ .Values.kgateway.airmui.timeouts.request }}

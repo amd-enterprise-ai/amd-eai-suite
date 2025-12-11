@@ -24,6 +24,7 @@ import { doesStorageDataNeedToBeRefreshed } from '@/utils/app/storages';
 import { authOptions } from '@/utils/server/auth';
 
 import { ProjectStatus } from '@/types/enums/projects';
+import { SecretUseCase } from '@/types/enums/secrets';
 import {
   ProjectStorageStatus,
   StorageStatus,
@@ -67,20 +68,23 @@ const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
     onClose: onAddSecretFormClose,
   } = useDisclosure();
 
-  const { data: storagesData, isLoading: isStoragesLoading } =
-    useQuery<StoragesResponse>({
-      queryKey: ['storages'],
-      queryFn: () => fetchStorages(),
-      initialData: {
-        storages,
-      },
-      refetchInterval: (query) => {
-        return !query.state.data ||
-          doesStorageDataNeedToBeRefreshed(query.state.data.storages)
-          ? DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA
-          : false;
-      },
-    });
+  const {
+    data: storagesData,
+    isLoading: isStoragesLoading,
+    refetch: refetchStorages,
+  } = useQuery<StoragesResponse>({
+    queryKey: ['storages'],
+    queryFn: () => fetchStorages(),
+    initialData: {
+      storages,
+    },
+    refetchInterval: (query) => {
+      return !query.state.data ||
+        doesStorageDataNeedToBeRefreshed(query.state.data.storages)
+        ? DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA
+        : false;
+    },
+  });
 
   const { data: secretsData } = useQuery<SecretsResponse>({
     queryKey: ['secrets'],
@@ -163,8 +167,7 @@ const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
   const handleFilterChange = useCallback((filters: FilterValueMap) => {
     const newFilters: ClientSideDataFilter<Storage>[] = [];
     if (
-      filters &&
-      filters.search &&
+      filters?.search &&
       filters.search.length > 0 &&
       !(filters.search.length === 1 && filters.search[0] === '')
     ) {
@@ -173,13 +176,13 @@ const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
         values: filters.search,
       });
     }
-    if (filters && filters.scope && filters.scope.length > 0) {
+    if (filters?.scope && filters.scope.length > 0) {
       newFilters.push({
         field: 'scope',
         values: filters.scope,
       });
     }
-    if (filters && filters.type && filters.type.length > 0) {
+    if (filters?.type && filters.type.length > 0) {
       newFilters.push({
         field: 'type',
         values: filters.type,
@@ -209,10 +212,11 @@ const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
   );
 
   return (
-    <div className="py-8">
+    <>
       <div className="flex items-center justify-between pb-4">
         <StoragesListFilter
           onFilterChange={handleFilterChange}
+          onRefresh={refetchStorages}
           actionButton={
             <AddStorageButton
               storageTypes={{
@@ -238,6 +242,7 @@ const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
         secrets={secretsData?.secrets || secrets}
         projects={projectsData?.projects || projects}
         onClose={onAddSecretFormClose}
+        restrictToUseCases={[SecretUseCase.S3]}
       />
 
       {targetStorage ? (
@@ -268,7 +273,7 @@ const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
         isStoragesLoading={isStoragesLoading}
         actions={actions}
       />
-    </div>
+    </>
   );
 };
 

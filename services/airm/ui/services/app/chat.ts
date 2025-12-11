@@ -22,17 +22,17 @@ export const streamChatResponse = async (
 ) => {
   const { toast } = useSystemToast();
 
-  const retrievalController = new AbortController();
-  const data = await retrieval(
+  const chatController = new AbortController();
+  const data = await sendChatRequest(
     workloadId,
     chatBody,
     projectId,
-    retrievalController,
+    chatController,
   );
 
   if (!data) {
     toast.error('No response received');
-    throw new Error(`No response for retrieval`);
+    throw new Error('No response received from chat request');
   }
   const decoder = new TextDecoder();
 
@@ -49,7 +49,7 @@ export const streamChatResponse = async (
       let currentChunk = '';
       while (!done) {
         if (stopConversationRef.current === true) {
-          retrievalController.abort();
+          chatController.abort();
           done = true;
           break;
         }
@@ -90,11 +90,11 @@ export const streamChatResponse = async (
   };
 };
 
-export const retrieval = async (
+export const sendChatRequest = async (
   workloadId: string,
   chatBody: ChatBody,
   projectId: string,
-  retrievalController: AbortController,
+  chatController: AbortController,
 ) => {
   const body = JSON.stringify(chatBody);
 
@@ -105,14 +105,14 @@ export const retrieval = async (
       headers: {
         'Content-Type': 'application/json',
       },
-      signal: retrievalController.signal,
+      signal: chatController.signal,
       body,
     },
   );
 
   if (!response.ok) {
     throw new Error(
-      `Failed to trigger chat retrieval due to: ${await getErrorMessage(response)}`,
+      `Failed to send chat request: ${await getErrorMessage(response)}`,
     );
   }
   return response.body;

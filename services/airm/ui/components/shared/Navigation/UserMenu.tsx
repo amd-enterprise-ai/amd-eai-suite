@@ -20,11 +20,7 @@ import { useTheme } from 'next-themes';
 
 import { logout } from '@/utils/app/auth';
 
-interface Props {
-  // Add any props you need for the usermenu here
-}
-
-export const UserMenu: React.FC<Props> = () => {
+export const UserMenu: React.FC = () => {
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation('common');

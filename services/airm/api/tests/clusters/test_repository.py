@@ -35,14 +35,18 @@ async def test_create_cluster(db_session: AsyncSession):
     env = await factory.create_basic_test_environment(db_session)
 
     cluster = await create_cluster_repo(
-        db_session, env.organization.id, env.creator, ClusterIn(base_url="https://example.com")
+        db_session,
+        env.organization.id,
+        env.creator,
+        ClusterIn(workloads_base_url="https://example.com", kube_api_url="https://k8s.example.com:6443"),
     )
 
     assert cluster.organization_id == env.organization.id
     assert cluster.created_by == env.creator
     assert cluster.name is None  # Repository function doesn't set name
     assert cluster.updated_by == env.creator
-    assert cluster.base_url == "https://example.com"
+    assert cluster.workloads_base_url == "https://example.com"
+    assert cluster.kube_api_url == "https://k8s.example.com:6443"
 
 
 @pytest.mark.asyncio
@@ -53,12 +57,16 @@ async def test_create_cluster_duplicate_name_raises_error(db_session: AsyncSessi
     cluster_name = "Duplicate Cluster"
 
     await factory.create_cluster(
-        db_session, env.organization, name=cluster_name, creator=env.creator, base_url="https://example.com"
+        db_session, env.organization, name=cluster_name, creator=env.creator, workloads_base_url="https://example.com"
     )
 
     with pytest.raises(IntegrityError):
         await factory.create_cluster(
-            db_session, env.organization, name=cluster_name, creator=env.creator, base_url="https://example.com"
+            db_session,
+            env.organization,
+            name=cluster_name,
+            creator=env.creator,
+            workloads_base_url="https://example.com",
         )
 
 
@@ -251,12 +259,22 @@ async def test_get_cluster_by_invalid_id_raises_exception(db_session: AsyncSessi
     "edit_obj, expected",
     [
         (
-            ClusterIn(base_url="https://updated.example.com"),
-            {"name": "original-name", "base_url": "https://updated.example.com"},
+            ClusterIn(
+                workloads_base_url="https://updated.example.com", kube_api_url="https://k8s.updated.example.com:6443"
+            ),
+            {
+                "name": "original-name",
+                "workloads_base_url": "https://updated.example.com",
+                "kube_api_url": "https://k8s.updated.example.com:6443",
+            },
         ),
         (
             ClusterNameEdit(name="updated-name"),
-            {"name": "updated-name", "base_url": "https://example.com"},
+            {
+                "name": "updated-name",
+                "workloads_base_url": "https://example.com",
+                "kube_api_url": "https://k8s.example.com:6443",
+            },
         ),
     ],
 )
@@ -264,14 +282,15 @@ async def test_update_cluster(db_session: AsyncSession, edit_obj, expected):
     """Test updating cluster attributes with parametrize."""
     env = await factory.create_basic_test_environment(db_session)
     cluster = await factory.create_cluster(
-        db_session, env.organization, name="original-name", base_url="https://example.com"
+        db_session, env.organization, name="original-name", workloads_base_url="https://example.com"
     )
     updated_by = "updater@example.com"
 
     updated_cluster = await update_cluster(db_session, cluster, edit_obj, updated_by)
 
     assert updated_cluster.name == expected["name"]
-    assert updated_cluster.base_url == expected["base_url"]
+    assert updated_cluster.workloads_base_url == expected["workloads_base_url"]
+    assert updated_cluster.kube_api_url == expected["kube_api_url"]
     assert updated_cluster.updated_by == updated_by
 
 

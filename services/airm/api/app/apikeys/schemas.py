@@ -107,3 +107,9 @@ class GroupResponse(BaseModel):
 
     id: str = Field(description="The unique identifier of the group")
     name: str = Field(description="The name of the group")
+
+
+class ApiKeysResponse(BaseModel):
+    """Wrapper for collection of API keys."""
+
+    data: list[ApiKeyResponse] = Field(description="List of API keys")

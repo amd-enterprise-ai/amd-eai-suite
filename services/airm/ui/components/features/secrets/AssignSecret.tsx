@@ -18,7 +18,7 @@ import { FormField } from '@/types/forms/forms';
 import { Project } from '@/types/projects';
 import { AssignSecretFormData, Secret } from '@/types/secrets';
 
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import { FormFieldComponent } from '@/components/shared/ManagedForm/FormFieldComponent';
 
 import { z } from 'zod';

@@ -5,6 +5,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..utilities.database import get_session
 from ..utilities.exceptions import NotFoundException, ValidationException
@@ -16,7 +17,7 @@ from .repository import (
     list_charts,
     update_chart,
 )
-from .schemas import ChartCreate, ChartListResponse, ChartResponse, ChartUpdate
+from .schemas import ChartCreate, ChartResponse, ChartsResponse, ChartUpdate
 from .service import get_chart
 
 router = APIRouter(tags=["Charts"])
@@ -36,12 +37,13 @@ router = APIRouter(tags=["Charts"])
 )
 async def create_chart_endpoint(
     chart: ChartCreate = Form(),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     user: str = Depends(get_user_email),
-    _=Depends(ensure_super_administrator),
-):
+    _: None = Depends(ensure_super_administrator),
+) -> ChartResponse:
     try:
-        return await create_chart(session, chart, user)
+        chart_obj = await create_chart(session, chart, user)
+        return chart_obj
     except ValueError as e:
         raise ValidationException(str(e))
 
@@ -61,19 +63,20 @@ async def create_chart_endpoint(
 async def update_chart_endpoint(
     chart_id: UUID,
     chart_update: ChartUpdate = Form(),
-    session=Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     user: str = Depends(get_user_email),
-    _=Depends(ensure_super_administrator),
-):
+    _: None = Depends(ensure_super_administrator),
+) -> ChartResponse:
     try:
-        return await update_chart(session, chart_id, chart_update, user)
+        chart = await update_chart(session, chart_id, chart_update, user)
+        return chart
     except ValueError as e:
         raise ValidationException(str(e))
 
 
 @router.get(
     "/charts",
-    response_model=list[ChartListResponse],
+    response_model=ChartsResponse,
     status_code=status.HTTP_200_OK,
     summary="List workload templates",
     description="""
@@ -83,11 +86,12 @@ async def update_chart_endpoint(
     """,
 )
 async def get_charts(
-    session=Depends(get_session),
-    _=Depends(get_user_email),
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(get_user_email),
     chart_type: WorkloadType | None = Query(default=None, alias="type"),
-):
-    return await list_charts(session, chart_type)
+) -> ChartsResponse:
+    charts = await list_charts(session, chart_type)
+    return ChartsResponse(data=charts)
 
 
 @router.get(
@@ -103,10 +107,11 @@ async def get_charts(
 )
 async def get_chart_endpoint(
     chart_id: UUID,
-    session=Depends(get_session),
-    _=Depends(get_user_email),
-):
-    return await get_chart(session, chart_id=chart_id)
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(get_user_email),
+) -> ChartResponse:
+    chart = await get_chart(session, chart_id=chart_id)
+    return chart
 
 
 @router.delete(
@@ -122,9 +127,9 @@ async def get_chart_endpoint(
 )
 async def delete_chart_endpoint(
     chart_id: UUID,
-    session=Depends(get_session),
-    _=Depends(ensure_super_administrator),
-):
+    session: AsyncSession = Depends(get_session),
+    _: None = Depends(ensure_super_administrator),
+) -> None:
     deleted = await delete_chart(session, chart_id)
     if not deleted:
         raise NotFoundException("Chart not found")

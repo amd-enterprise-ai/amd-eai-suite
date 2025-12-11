@@ -21,8 +21,6 @@ export const getChatSettings = (): InferenceSettings => {
     }
   }
 
-  settings.ragEnabled = false;
-  settings.collectionId = undefined;
   return settings;
 };
 

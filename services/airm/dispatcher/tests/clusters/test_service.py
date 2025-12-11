@@ -16,7 +16,7 @@ from app.clusters.service import (
 
 
 @pytest.mark.asyncio
-async def test_publish_cluster_nodes_message_to_queue():
+async def test_publish_cluster_nodes_message_to_queue() -> None:
     fake_connection = MagicMock()
     fake_channel = MagicMock()
     fake_cluster_nodes = [MagicMock()]
@@ -31,7 +31,7 @@ async def test_publish_cluster_nodes_message_to_queue():
 
 
 @pytest.mark.asyncio
-async def test___publish_cluster_nodes_message_to_queue():
+async def test___publish_cluster_nodes_message_to_queue() -> None:
     fake_node = MagicMock(spec=ClusterNode)
     fake_cluster_nodes = [fake_node]
 
@@ -44,6 +44,7 @@ async def test___publish_cluster_nodes_message_to_queue():
         )
 
         assert mock_publish.await_count == 1
+        assert mock_publish.await_args is not None
         kwargs = mock_publish.await_args.kwargs
 
         message = kwargs["message"]

@@ -53,20 +53,27 @@ async def test_get_aim(mock_get_aim, db_session: AsyncSession, mock_claimset, mo
     with get_test_client() as client:
         response = client.get(f"/v1/aims/{aim.id}")
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["id"] == str(aim.id)
-        assert response.json()["image_name"] == aim.image_name
-        assert response.json()["image_tag"] == aim.image_tag
+        response_data = response.json()
+        assert response_data["id"] == str(aim.id)
+        assert response_data["image_reference"] == aim.image_reference
+        # Verify computed fields are present
+        assert "image_name" in response_data
+        assert "image_tag" in response_data
 
 
 @patch("app.aims.router.deploy_aim")
 @patch("app.aims.router.ensure_cluster_healthy")
+@patch("app.aims.router.ensure_base_url_configured")
 async def test_deploy_aim(
-    mock_ensure_healthy, mock_deploy_aim, db_session: AsyncSession, mock_claimset, mock_cluster_auth_client
+    mock_ensure_healthy,
+    mock_ensure_base_url_configured,
+    mock_deploy_aim,
+    db_session: AsyncSession,
+    mock_claimset,
+    mock_cluster_auth_client,
 ):
     """Test deploy AIM endpoint returns 202."""
     env = await create_basic_test_environment(db_session)
-    mock_ensure_healthy.return_value = None
-
     aim = await create_aim(db_session)
     workload = await create_aim_workload(
         db_session, env.project, aim, name="test-deployment", display_name="Test Deployment"
@@ -82,6 +89,9 @@ async def test_deploy_aim(
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert response.json()["id"] == str(workload.id)
 
+    mock_ensure_base_url_configured.assert_called_once()
+    mock_ensure_healthy.assert_called_once()
+
 
 @patch("app.aims.router.undeploy_aim")
 @patch("app.aims.router.ensure_cluster_healthy")
@@ -90,7 +100,9 @@ async def test_undeploy_aim(
 ):
     """Test undeploy AIM endpoint returns 204."""
     env = await create_basic_test_environment(db_session)
-    aim = await create_aim(db_session, image_name="aim", image_tag="test-model-v1.0")
+    aim = await create_aim(
+        db_session, resource_name="aim-test-model-v1-0", image_reference="docker.io/amd/aim:test-model-v1.0"
+    )
 
     mock_ensure_healthy.return_value = None
     mock_undeploy_aim.return_value = None

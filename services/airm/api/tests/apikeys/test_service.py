@@ -48,8 +48,9 @@ async def test_create_api_key_with_cluster_auth(db_session: AsyncSession, mock_c
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Test Production Key",
+        name=f"Test Production Key {unique_suffix}",
         ttl="24h",
         renewable=True,
         num_uses=0,
@@ -65,7 +66,7 @@ async def test_create_api_key_with_cluster_auth(db_session: AsyncSession, mock_c
         cluster_auth_client=mock_cluster_auth_client,
     )
 
-    assert result.name == "Test Production Key"
+    assert result.name == f"Test Production Key {unique_suffix}"
     assert len(result.full_key) > 0  # Just check that a key was generated
     assert result.full_key.startswith("amd_aim_api_key_")  # Check for prefix
     assert result.truncated_key.startswith("amd_aim_api_key_••••••••")  # Check truncated format
@@ -80,15 +81,16 @@ async def test_list_api_keys_for_project(db_session: AsyncSession, mock_cluster_
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in1 = ApiKeyCreate(
-        name="Key 1",
+        name=f"Key 1 {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
         meta={},
     )
     api_key_in2 = ApiKeyCreate(
-        name="Key 2",
+        name=f"Key 2 {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
@@ -105,8 +107,8 @@ async def test_list_api_keys_for_project(db_session: AsyncSession, mock_cluster_
     keys = await list_api_keys_for_project(db_session, env.organization, env.project)
 
     assert len(keys) == 2
-    assert keys[0].name in ["Key 1", "Key 2"]
-    assert keys[1].name in ["Key 1", "Key 2"]
+    assert keys[0].name in [f"Key 1 {unique_suffix}", f"Key 2 {unique_suffix}"]
+    assert keys[1].name in [f"Key 1 {unique_suffix}", f"Key 2 {unique_suffix}"]
 
 
 @pytest.mark.asyncio
@@ -114,8 +116,9 @@ async def test_get_api_key_details_from_cluster_auth(db_session: AsyncSession, m
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Detailed Key",
+        name=f"Detailed Key {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
@@ -130,7 +133,7 @@ async def test_get_api_key_details_from_cluster_auth(db_session: AsyncSession, m
         db_session, env.organization, env.project, created.id, mock_cluster_auth_client
     )
 
-    assert details.name == "Detailed Key"
+    assert details.name == f"Detailed Key {unique_suffix}"
     assert details.groups == []
     assert details.entity_id is not None
     assert details.meta == {"purpose": "testing"}
@@ -152,8 +155,9 @@ async def test_get_api_key_details_orphaned_record(db_session: AsyncSession, moc
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Orphaned Key",
+        name=f"Orphaned Key {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
@@ -199,8 +203,9 @@ async def test_delete_api_key_from_cluster_auth(db_session: AsyncSession, mock_c
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Key to Delete",
+        name=f"Key to Delete {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
@@ -226,8 +231,9 @@ async def test_renew_api_key_in_cluster_auth(db_session: AsyncSession, mock_clus
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Renewable Key",
+        name=f"Renewable Key {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
@@ -251,15 +257,16 @@ async def test_bind_api_key_to_group_in_cluster_auth(db_session: AsyncSession, m
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Group Key",
+        name=f"Group Key {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
         meta={},
     )
 
-    group = await mock_cluster_auth_client.create_group("test-group")
+    group = await mock_cluster_auth_client.create_group(f"test-group-{unique_suffix}")
     created = await create_api_key_with_cluster_auth(
         db_session, env.organization, env.project, api_key_in, user, mock_cluster_auth_client
     )
@@ -277,15 +284,16 @@ async def test_unbind_api_key_from_group_in_cluster_auth(db_session: AsyncSessio
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Unbind Key",
+        name=f"Unbind Key {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
         meta={},
     )
 
-    group = await mock_cluster_auth_client.create_group("test-group")
+    group = await mock_cluster_auth_client.create_group(f"test-group-{unique_suffix}")
     created = await create_api_key_with_cluster_auth(
         db_session, env.organization, env.project, api_key_in, user, mock_cluster_auth_client
     )
@@ -310,8 +318,9 @@ async def test_create_api_key_db_insert_failure_revokes_cluster_auth_key(
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Duplicate Key",
+        name=f"Duplicate Key {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
@@ -358,8 +367,9 @@ async def test_create_api_key_cluster_auth_lookup_failure_revokes_key(
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Lookup Failure Key Unique",
+        name=f"Lookup Failure Key {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
@@ -411,7 +421,7 @@ async def test_create_api_key_cluster_auth_lookup_failure_revokes_key(
     # There might be other keys from previous tests, so we can't assert len == 0
     # Instead, verify our key name is not in the list
     key_names = [k.name for k in keys]
-    assert "Lookup Failure Key Unique" not in key_names
+    assert f"Lookup Failure Key {unique_suffix}" not in key_names
 
 
 @pytest.mark.asyncio
@@ -422,8 +432,9 @@ async def test_create_api_key_revocation_failure_still_propagates_error(
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    unique_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Revocation Failure Key",
+        name=f"Revocation Failure Key {unique_suffix}",
         ttl="1h",
         renewable=True,
         num_uses=0,
@@ -454,16 +465,17 @@ async def test_create_group_in_cluster_auth(db_session: AsyncSession, mock_clust
     """Test creating a group in Cluster Auth."""
     env = await factory.create_basic_test_environment(db_session)
 
+    unique_suffix = str(uuid4())[:8]
     result = await create_group_in_cluster_auth(
         session=db_session,
         organization=env.organization,
         project=env.project,
         cluster_auth_client=mock_cluster_auth_client,
-        name="Test Group",
+        name=f"Test Group {unique_suffix}",
         group_id=None,
     )
 
-    assert result.name == "Test Group"
+    assert result.name == f"Test Group {unique_suffix}"
     assert result.id is not None
 
 
@@ -472,17 +484,19 @@ async def test_create_group_with_custom_id(db_session: AsyncSession, mock_cluste
     """Test creating a group with a custom ID."""
     env = await factory.create_basic_test_environment(db_session)
 
+    custom_group_id = str(uuid4())
+    unique_suffix = str(uuid4())[:8]
     result = await create_group_in_cluster_auth(
         session=db_session,
         organization=env.organization,
         project=env.project,
         cluster_auth_client=mock_cluster_auth_client,
-        name="Custom ID Group",
-        group_id="custom-group-id-123",
+        name=f"Custom ID Group {unique_suffix}",
+        group_id=custom_group_id,
     )
 
-    assert result.name == "Custom ID Group"
-    assert result.id == "custom-group-id-123"
+    assert result.name == f"Custom ID Group {unique_suffix}"
+    assert result.id == custom_group_id
 
 
 @pytest.mark.asyncio
@@ -490,12 +504,13 @@ async def test_delete_group_from_cluster_auth(db_session: AsyncSession, mock_clu
     """Test deleting a group from Cluster Auth."""
     env = await factory.create_basic_test_environment(db_session)
 
+    unique_suffix = str(uuid4())[:8]
     group = await create_group_in_cluster_auth(
         session=db_session,
         organization=env.organization,
         project=env.project,
         cluster_auth_client=mock_cluster_auth_client,
-        name="Group to Delete",
+        name=f"Group to Delete {unique_suffix}",
         group_id=None,
     )
 
@@ -523,12 +538,13 @@ async def test_delete_group_not_found(db_session: AsyncSession, mock_cluster_aut
     """Test deleting a non-existent group raises NotFoundException."""
     env = await factory.create_basic_test_environment(db_session)
 
+    non_existent_group_id = str(uuid4())
     with pytest.raises(NotFoundException) as exc_info:
         await delete_group_from_cluster_auth(
             session=db_session,
             organization=env.organization,
             project=env.project,
-            group_id="non-existent-group",
+            group_id=non_existent_group_id,
             cluster_auth_client=mock_cluster_auth_client,
         )
 
@@ -540,8 +556,12 @@ async def test_bind_api_key_to_aim_groups_success(db_session: AsyncSession, mock
     """Test successfully binding API key to AIM groups."""
     env = await factory.create_basic_test_environment(db_session)
     # Create AIMs and workloads with cluster-auth groups
-    aim1 = await create_aim(db_session, image_name="llama", image_tag="v1")
-    aim2 = await create_aim(db_session, image_name="gpt", image_tag="v2")
+    aim1 = await create_aim(db_session, resource_name="llama-v1", image_reference="docker.io/test/llama:v1")
+    aim2 = await create_aim(db_session, resource_name="gpt-v2", image_reference="docker.io/test/gpt:v2")
+
+    # Use UUIDs for group IDs to avoid collisions in parallel tests
+    group_id_1 = str(uuid4())
+    group_id_2 = str(uuid4())
 
     # Create workloads for the AIMs
     workload1 = await create_aim_workload(
@@ -550,7 +570,7 @@ async def test_bind_api_key_to_aim_groups_success(db_session: AsyncSession, mock
         aim=aim1,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="group-1",
+        cluster_auth_group_id=group_id_1,
     )
     workload2 = await create_aim_workload(
         db_session,
@@ -558,11 +578,12 @@ async def test_bind_api_key_to_aim_groups_success(db_session: AsyncSession, mock
         aim=aim2,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="group-2",
+        cluster_auth_group_id=group_id_2,
     )
 
-    await mock_cluster_auth_client.create_group(name="test-group-1", group_id="group-1")
-    await mock_cluster_auth_client.create_group(name="test-group-2", group_id="group-2")
+    unique_suffix = str(uuid4())[:8]
+    await mock_cluster_auth_client.create_group(name=f"test-group-1-{unique_suffix}", group_id=group_id_1)
+    await mock_cluster_auth_client.create_group(name=f"test-group-2-{unique_suffix}", group_id=group_id_2)
 
     # Create an API key
     key_response = await mock_cluster_auth_client.create_api_key(ttl="1h")
@@ -579,8 +600,8 @@ async def test_bind_api_key_to_aim_groups_success(db_session: AsyncSession, mock
 
     # Verify the bindings
     key_details = await mock_cluster_auth_client.lookup_api_key(cluster_auth_key_id)
-    assert "group-1" in key_details["groups"]
-    assert "group-2" in key_details["groups"]
+    assert group_id_1 in key_details["groups"]
+    assert group_id_2 in key_details["groups"]
 
 
 @pytest.mark.asyncio
@@ -592,6 +613,10 @@ async def test_bind_api_key_to_aim_groups_partial_failure(db_session: AsyncSessi
     from tests.factory import create_aim, create_aim_workload
 
     env = await factory.create_basic_test_environment(db_session)
+
+    # Use UUIDs for group IDs to avoid collisions in parallel tests
+    group_id_success = str(uuid4())
+    group_id_fail = str(uuid4())
 
     # Custom wrapper that fails on specific group bindings
     class PartialFailureClient:
@@ -608,15 +633,15 @@ async def test_bind_api_key_to_aim_groups_partial_failure(db_session: AsyncSessi
             return await self._client.create_group(*args, **kwargs)
 
         async def bind_api_key_to_group(self, key_id: str, group_id: str) -> dict:
-            if group_id == "group-fail":
+            if group_id == group_id_fail:
                 raise Exception("Simulated binding failure")
             return await self._client.bind_api_key_to_group(key_id, group_id)
 
     failing_client = PartialFailureClient(mock_cluster_auth_client)
 
     # Create AIMs and workloads
-    aim1 = await create_aim(db_session, image_name="llama", image_tag="v1")
-    aim2 = await create_aim(db_session, image_name="gpt", image_tag="v2")
+    aim1 = await create_aim(db_session, resource_name="llama-v1", image_reference="docker.io/test/llama:v1")
+    aim2 = await create_aim(db_session, resource_name="gpt-v2", image_reference="docker.io/test/gpt:v2")
 
     workload1 = await create_aim_workload(
         db_session,
@@ -624,7 +649,7 @@ async def test_bind_api_key_to_aim_groups_partial_failure(db_session: AsyncSessi
         aim=aim1,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="group-success",
+        cluster_auth_group_id=group_id_success,
     )
     workload2 = await create_aim_workload(
         db_session,
@@ -632,12 +657,13 @@ async def test_bind_api_key_to_aim_groups_partial_failure(db_session: AsyncSessi
         aim=aim2,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="group-fail",
+        cluster_auth_group_id=group_id_fail,
     )
 
     # Create groups
-    await failing_client.create_group(name="success-group", group_id="group-success")
-    await failing_client.create_group(name="fail-group", group_id="group-fail")
+    unique_suffix = str(uuid4())[:8]
+    await failing_client.create_group(name=f"success-group-{unique_suffix}", group_id=group_id_success)
+    await failing_client.create_group(name=f"fail-group-{unique_suffix}", group_id=group_id_fail)
 
     # Create API key
     key_response = await failing_client.create_api_key(ttl="1h")
@@ -654,9 +680,9 @@ async def test_bind_api_key_to_aim_groups_partial_failure(db_session: AsyncSessi
 
     # Verify successful binding
     key_details = await failing_client.lookup_api_key(cluster_auth_key_id)
-    assert "group-success" in key_details["groups"]
-    # group-fail should not be bound due to the simulated failure
-    assert "group-fail" not in key_details["groups"]
+    assert group_id_success in key_details["groups"]
+    # group_fail should not be bound due to the simulated failure
+    assert group_id_fail not in key_details["groups"]
 
 
 @pytest.mark.asyncio
@@ -664,7 +690,7 @@ async def test_bind_api_key_to_aim_groups_no_deployed_aims(db_session: AsyncSess
     """Test binding when no AIMs are deployed or have cluster-auth groups."""
     env = await factory.create_basic_test_environment(db_session)
     # Create AIM but no workload (not deployed)
-    aim = await create_aim(db_session, image_name="llama", image_tag="v1")
+    aim = await create_aim(db_session, resource_name="llama-v1", image_reference="docker.io/test/llama:v1")
 
     # Create API key
     key_response = await mock_cluster_auth_client.create_api_key(ttl="1h")
@@ -690,23 +716,28 @@ async def test_create_api_key_with_aim_binding(db_session: AsyncSession, mock_cl
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    # Use UUID for group ID to avoid collisions in parallel tests
+    aim_group_id = str(uuid4())
+
     # Create AIM and deployed workload
-    aim = await create_aim(db_session, image_name="llama", image_tag="v1")
+    aim = await create_aim(db_session, resource_name="llama-v1", image_reference="docker.io/test/llama:v1")
     workload = await create_aim_workload(
         db_session,
         env.project,
         aim=aim,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="aim-group-123",
+        cluster_auth_group_id=aim_group_id,
     )
 
     # Create group in mock client
-    await mock_cluster_auth_client.create_group(name="aim-group", group_id="aim-group-123")
+    unique_suffix = str(uuid4())[:8]
+    await mock_cluster_auth_client.create_group(name=f"aim-group-{unique_suffix}", group_id=aim_group_id)
 
     # Create API key with AIM binding
+    unique_key_suffix = str(uuid4())[:8]
     api_key_in = ApiKeyCreate(
-        name="Test Key with AIM Binding",
+        name=f"Test Key with AIM Binding {unique_key_suffix}",
         ttl="24h",
         renewable=True,
         num_uses=0,
@@ -724,7 +755,7 @@ async def test_create_api_key_with_aim_binding(db_session: AsyncSession, mock_cl
     )
 
     # Verify API key was created
-    assert result.name == "Test Key with AIM Binding"
+    assert result.name == f"Test Key with AIM Binding {unique_key_suffix}"
     assert result.project_id == env.project.id
     assert len(result.full_key) > 0
 
@@ -732,7 +763,7 @@ async def test_create_api_key_with_aim_binding(db_session: AsyncSession, mock_cl
     # We need to get the key_id from the result
     db_api_key = await get_api_key_by_id(db_session, result.id, env.project.id)
     key_details = await mock_cluster_auth_client.lookup_api_key(db_api_key.cluster_auth_key_id)
-    assert "aim-group-123" in key_details["groups"]
+    assert aim_group_id in key_details["groups"]
 
 
 @pytest.mark.asyncio
@@ -746,16 +777,21 @@ async def test_update_api_key_bindings_success(db_session: AsyncSession, mock_cl
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    # Use UUIDs for group IDs to avoid collisions in parallel tests
+    aim_group_id_1 = str(uuid4())
+    aim_group_id_2 = str(uuid4())
+
     # Create an API key
-    api_key_in = ApiKeyCreate(name="Test Key", ttl="1h")
+    unique_suffix = str(uuid4())[:8]
+    api_key_in = ApiKeyCreate(name=f"Test Key {unique_suffix}", ttl="1h")
 
     created_key = await create_api_key_with_cluster_auth(
         db_session, env.organization, env.project, api_key_in, user, mock_cluster_auth_client
     )
 
     # Create two AIMs with deployed workloads
-    aim_1 = await create_aim(db_session, image_name="model-1", image_tag="v1")
-    aim_2 = await create_aim(db_session, image_name="model-2", image_tag="v1")
+    aim_1 = await create_aim(db_session, resource_name="model-1-v1", image_reference="docker.io/test/model-1:v1")
+    aim_2 = await create_aim(db_session, resource_name="model-2-v1", image_reference="docker.io/test/model-2:v1")
 
     workload_1 = await create_aim_workload(
         db_session,
@@ -763,7 +799,7 @@ async def test_update_api_key_bindings_success(db_session: AsyncSession, mock_cl
         aim=aim_1,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="aim-group-1",
+        cluster_auth_group_id=aim_group_id_1,
     )
     workload_2 = await create_aim_workload(
         db_session,
@@ -771,12 +807,13 @@ async def test_update_api_key_bindings_success(db_session: AsyncSession, mock_cl
         aim=aim_2,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="aim-group-2",
+        cluster_auth_group_id=aim_group_id_2,
     )
 
     # Create groups in mock client
-    await mock_cluster_auth_client.create_group(name="aim-group-1", group_id="aim-group-1")
-    await mock_cluster_auth_client.create_group(name="aim-group-2", group_id="aim-group-2")
+    group_suffix = str(uuid4())[:8]
+    await mock_cluster_auth_client.create_group(name=f"aim-group-1-{group_suffix}", group_id=aim_group_id_1)
+    await mock_cluster_auth_client.create_group(name=f"aim-group-2-{group_suffix}", group_id=aim_group_id_2)
 
     # Update bindings to include both AIMs
     update_data = ApiKeyUpdate(aim_ids=[aim_1.id, aim_2.id])
@@ -786,8 +823,8 @@ async def test_update_api_key_bindings_success(db_session: AsyncSession, mock_cl
     )
 
     assert result.id == created_key.id
-    assert "aim-group-1" in result.groups
-    assert "aim-group-2" in result.groups
+    assert aim_group_id_1 in result.groups
+    assert aim_group_id_2 in result.groups
 
 
 @pytest.mark.asyncio
@@ -801,9 +838,13 @@ async def test_update_api_key_bindings_removes_old_groups(db_session: AsyncSessi
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    # Use UUIDs for group IDs to avoid collisions in parallel tests
+    aim_group_id_1 = str(uuid4())
+    aim_group_id_2 = str(uuid4())
+
     # Create two AIMs with deployed workloads
-    aim_1 = await create_aim(db_session, image_name="model-1", image_tag="v1")
-    aim_2 = await create_aim(db_session, image_name="model-2", image_tag="v1")
+    aim_1 = await create_aim(db_session, resource_name="model-1-v1", image_reference="docker.io/test/model-1:v1")
+    aim_2 = await create_aim(db_session, resource_name="model-2-v1", image_reference="docker.io/test/model-2:v1")
 
     workload_1 = await create_aim_workload(
         db_session,
@@ -811,7 +852,7 @@ async def test_update_api_key_bindings_removes_old_groups(db_session: AsyncSessi
         aim=aim_1,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="aim-group-1",
+        cluster_auth_group_id=aim_group_id_1,
     )
     workload_2 = await create_aim_workload(
         db_session,
@@ -819,15 +860,17 @@ async def test_update_api_key_bindings_removes_old_groups(db_session: AsyncSessi
         aim=aim_2,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="aim-group-2",
+        cluster_auth_group_id=aim_group_id_2,
     )
 
     # Create groups in mock client
-    await mock_cluster_auth_client.create_group(name="aim-group-1", group_id="aim-group-1")
-    await mock_cluster_auth_client.create_group(name="aim-group-2", group_id="aim-group-2")
+    group_suffix = str(uuid4())[:8]
+    await mock_cluster_auth_client.create_group(name=f"aim-group-1-{group_suffix}", group_id=aim_group_id_1)
+    await mock_cluster_auth_client.create_group(name=f"aim-group-2-{group_suffix}", group_id=aim_group_id_2)
 
     # Create API key with initial binding to aim_1
-    api_key_in = ApiKeyCreate(name="Test Key", ttl="1h", aim_ids=[aim_1.id])
+    unique_suffix = str(uuid4())[:8]
+    api_key_in = ApiKeyCreate(name=f"Test Key {unique_suffix}", ttl="1h", aim_ids=[aim_1.id])
 
     created_key = await create_api_key_with_cluster_auth(
         db_session, env.organization, env.project, api_key_in, user, mock_cluster_auth_client
@@ -837,7 +880,7 @@ async def test_update_api_key_bindings_removes_old_groups(db_session: AsyncSessi
     details = await get_api_key_details_from_cluster_auth(
         db_session, env.organization, env.project, created_key.id, mock_cluster_auth_client
     )
-    assert "aim-group-1" in details.groups
+    assert aim_group_id_1 in details.groups
 
     # Update to only bind to aim_2 (should remove aim-group-1)
     update_data = ApiKeyUpdate(aim_ids=[aim_2.id])
@@ -846,8 +889,8 @@ async def test_update_api_key_bindings_removes_old_groups(db_session: AsyncSessi
         db_session, env.organization, env.project, created_key.id, update_data, mock_cluster_auth_client
     )
 
-    assert "aim-group-1" not in result.groups
-    assert "aim-group-2" in result.groups
+    assert aim_group_id_1 not in result.groups
+    assert aim_group_id_2 in result.groups
 
 
 @pytest.mark.asyncio
@@ -861,22 +904,27 @@ async def test_update_api_key_bindings_empty_aim_ids(db_session: AsyncSession, m
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    # Use UUID for group ID to avoid collisions in parallel tests
+    aim_group_id = str(uuid4())
+
     # Create AIM with deployed workload
-    aim = await create_aim(db_session, image_name="model", image_tag="v1")
+    aim = await create_aim(db_session, resource_name="model-v1", image_reference="docker.io/test/model:v1")
     workload = await create_aim_workload(
         db_session,
         env.project,
         aim=aim,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="aim-group-1",
+        cluster_auth_group_id=aim_group_id,
     )
 
     # Create group in mock client
-    await mock_cluster_auth_client.create_group(name="aim-group-1", group_id="aim-group-1")
+    group_suffix = str(uuid4())[:8]
+    await mock_cluster_auth_client.create_group(name=f"aim-group-{group_suffix}", group_id=aim_group_id)
 
     # Create API key with initial binding
-    api_key_in = ApiKeyCreate(name="Test Key", ttl="1h", aim_ids=[aim.id])
+    unique_suffix = str(uuid4())[:8]
+    api_key_in = ApiKeyCreate(name=f"Test Key {unique_suffix}", ttl="1h", aim_ids=[aim.id])
 
     created_key = await create_api_key_with_cluster_auth(
         db_session, env.organization, env.project, api_key_in, user, mock_cluster_auth_client
@@ -922,10 +970,14 @@ async def test_update_api_key_bindings_fails_on_binding_error(
     env = await factory.create_basic_test_environment(db_session)
     user = "test-user@example.com"
 
+    # Use UUIDs for group IDs to avoid collisions in parallel tests
+    aim_group_id_1 = str(uuid4())
+    aim_group_id_2 = str(uuid4())
+
     # Custom client that fails on specific group bindings
     class FailingBindClient(ClusterAuthClient):
         async def bind_api_key_to_group(self, key_id: str, group_id: str) -> dict:
-            if group_id == "aim-group-2":
+            if group_id == aim_group_id_2:
                 raise Exception("Simulated binding failure")
             return await super().bind_api_key_to_group(key_id, group_id)
 
@@ -935,8 +987,8 @@ async def test_update_api_key_bindings_fails_on_binding_error(
     )
 
     # Create two AIMs with deployed workloads
-    aim_1 = await create_aim(db_session, image_name="model-1", image_tag="v1")
-    aim_2 = await create_aim(db_session, image_name="model-2", image_tag="v1")
+    aim_1 = await create_aim(db_session, resource_name="model-1-v1", image_reference="docker.io/test/model-1:v1")
+    aim_2 = await create_aim(db_session, resource_name="model-2-v1", image_reference="docker.io/test/model-2:v1")
 
     workload_1 = await create_aim_workload(
         db_session,
@@ -944,7 +996,7 @@ async def test_update_api_key_bindings_fails_on_binding_error(
         aim=aim_1,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="aim-group-1",
+        cluster_auth_group_id=aim_group_id_1,
     )
     workload_2 = await create_aim_workload(
         db_session,
@@ -952,15 +1004,17 @@ async def test_update_api_key_bindings_fails_on_binding_error(
         aim=aim_2,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING.value,
-        cluster_auth_group_id="aim-group-2",
+        cluster_auth_group_id=aim_group_id_2,
     )
 
     # Create groups using the real mock client first
-    await mock_cluster_auth_client.create_group(name="aim-group-1", group_id="aim-group-1")
-    await mock_cluster_auth_client.create_group(name="aim-group-2", group_id="aim-group-2")
+    group_suffix = str(uuid4())[:8]
+    await mock_cluster_auth_client.create_group(name=f"aim-group-1-{group_suffix}", group_id=aim_group_id_1)
+    await mock_cluster_auth_client.create_group(name=f"aim-group-2-{group_suffix}", group_id=aim_group_id_2)
 
     # Create API key with initial binding to aim_1 using real mock client
-    api_key_in = ApiKeyCreate(name="Test Key", ttl="1h", aim_ids=[aim_1.id])
+    unique_suffix = str(uuid4())[:8]
+    api_key_in = ApiKeyCreate(name=f"Test Key {unique_suffix}", ttl="1h", aim_ids=[aim_1.id])
     created_key = await create_api_key_with_cluster_auth(
         db_session, env.organization, env.project, api_key_in, user, mock_cluster_auth_client
     )

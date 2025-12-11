@@ -4,7 +4,7 @@
 
 """Managed workloads service tests."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -14,7 +14,7 @@ from app.charts.config import INFERENCE_CHART_NAME
 from app.managed_workloads.enums import WorkloadStatus
 from app.managed_workloads.schemas import AIMWorkloadResponse, ChartWorkloadResponse
 from app.managed_workloads.service import delete_workload, get_workload, submit_chart_workload
-from app.utilities.exceptions import NotFoundException, NotReadyException
+from app.utilities.exceptions import NotFoundException, PreconditionNotMetException
 from app.workloads.enums import WorkloadType
 from tests import factory
 
@@ -45,8 +45,8 @@ async def test_get_workload_success(db_session: AsyncSession):
 
     assert result is not None
     assert result.id == workload.id
-    assert result.model_id == env.model.id
     assert result.chart_id == env.chart.id
+    assert result.model_id == env.model.id
 
 
 @pytest.mark.asyncio
@@ -182,6 +182,7 @@ async def test_submit_workload_success(db_session: AsyncSession):
         mock_render.return_value = "apiVersion: v1\nkind: Service\nmetadata:\n  name: test-service\n"
         mock_validate.return_value = [{"apiVersion": "v1", "kind": "Service"}]
         mock_extract.return_value = None
+        mock_message_sender = AsyncMock()
 
         result = await submit_chart_workload(
             db_session,
@@ -190,6 +191,7 @@ async def test_submit_workload_success(db_session: AsyncSession):
             env.project,
             env.chart,
             overlays_values,
+            mock_message_sender,
             user_inputs,
             env.model,
             env.dataset,
@@ -214,14 +216,15 @@ async def test_submit_workload_success(db_session: AsyncSession):
 async def test_submit_workload_without_base_url_failure(db_session: AsyncSession):
     """Test workload submission without base URL fails real database operations."""
     env = await factory.create_full_test_environment(db_session, with_chart=True, with_model=True, with_dataset=True)
-    env.cluster.base_url = None
+    env.cluster.workloads_base_url = None
 
     creator = "test@example.com"
     token = "test-token"
     user_inputs = {"replicas": 1, "model_name": "test-model"}
     overlays_values = [{"cpu": "100m", "memory": "256Mi"}]
+    mock_message_sender = AsyncMock()
 
-    with pytest.raises(NotReadyException):
+    with pytest.raises(PreconditionNotMetException):
         await submit_chart_workload(
             db_session,
             creator,
@@ -229,6 +232,7 @@ async def test_submit_workload_without_base_url_failure(db_session: AsyncSession
             env.project,
             env.chart,
             overlays_values,
+            mock_message_sender,
             user_inputs,
             env.model,
             env.dataset,
@@ -254,6 +258,7 @@ async def test_submit_workload_without_optional_entities(db_session: AsyncSessio
         mock_render.return_value = "apiVersion: v1\nkind: Service\nmetadata:\n  name: test-service\n"
         mock_validate.return_value = [{"apiVersion": "v1", "kind": "Service"}]
         mock_extract.return_value = None
+        mock_message_sender = AsyncMock()
 
         result = await submit_chart_workload(
             db_session,
@@ -262,6 +267,7 @@ async def test_submit_workload_without_optional_entities(db_session: AsyncSessio
             env.project,
             env.chart,
             overlays_values,
+            mock_message_sender,
             user_inputs,
             model=None,
             dataset=None,
@@ -296,6 +302,7 @@ async def test_delete_workload_success(db_session: AsyncSession):
         ),
         patch("app.managed_workloads.service.extract_components_and_submit_workload"),
     ):
+        mock_message_sender = AsyncMock()
         workload = await submit_chart_workload(
             db_session,
             creator,
@@ -303,6 +310,7 @@ async def test_delete_workload_success(db_session: AsyncSession):
             env.project,
             env.chart,
             overlays_values,
+            mock_message_sender,
             {},
             env.model,
             None,
@@ -310,14 +318,13 @@ async def test_delete_workload_success(db_session: AsyncSession):
         )
 
     # Mock external deletion services only - keep database operations real
-    with patch("app.workloads.service.submit_message_to_cluster_queue") as mock_queue:
-        result = await delete_workload(db_session, workload.id, [env.project])
+    result = await delete_workload(db_session, workload.id, [env.project], mock_message_sender)
 
     # Verify deletion was successful
     assert result is True
 
     # Verify external service was called correctly
-    mock_queue.assert_called_once()
+    mock_message_sender.enqueue.assert_called_once()
 
     # Verify database status was updated to DELETING
     await db_session.refresh(workload)
@@ -328,9 +335,10 @@ async def test_delete_workload_success(db_session: AsyncSession):
 async def test_delete_workload_not_found(db_session: AsyncSession):
     """Test deleting non-existent workload."""
     env = await factory.create_basic_test_environment(db_session)
+    mock_message_sender = AsyncMock()
 
     with pytest.raises(NotFoundException):
-        await delete_workload(db_session, uuid4(), [env.project])
+        await delete_workload(db_session, uuid4(), [env.project], mock_message_sender)
 
 
 @pytest.mark.asyncio
@@ -360,6 +368,7 @@ async def test_submit_chart_workload_includes_canonical_name_from_model(db_sessi
         mock_render.return_value = "apiVersion: v1\nkind: Service\nmetadata:\n  name: test-service\n"
         mock_validate.return_value = [{"apiVersion": "v1", "kind": "Service"}]
         mock_extract.return_value = None
+        mock_message_sender = AsyncMock()
 
         result = await submit_chart_workload(
             db_session,
@@ -368,6 +377,7 @@ async def test_submit_chart_workload_includes_canonical_name_from_model(db_sessi
             env.project,
             env.chart,
             overlays_values,
+            mock_message_sender,
             user_inputs,
             env.model,
             None,
@@ -400,6 +410,7 @@ async def test_submit_chart_workload_canonical_name_none_when_model_is_none(db_s
         mock_render.return_value = "apiVersion: v1\nkind: Service\nmetadata:\n  name: test-service\n"
         mock_validate.return_value = [{"apiVersion": "v1", "kind": "Service"}]
         mock_extract.return_value = None
+        mock_message_sender = AsyncMock()
 
         result = await submit_chart_workload(
             db_session,
@@ -408,6 +419,7 @@ async def test_submit_chart_workload_canonical_name_none_when_model_is_none(db_s
             env.project,
             env.chart,
             overlays_values,
+            mock_message_sender,
             user_inputs,
             model=None,
             dataset=None,

@@ -99,7 +99,7 @@ export const BasicChatInput = ({
   };
 
   useEffect(() => {
-    if (textareaRef && textareaRef.current) {
+    if (textareaRef?.current) {
       textareaRef.current.style.height = 'inherit';
       textareaRef.current.style.height = `${textareaRef.current?.scrollHeight}px`;
       textareaRef.current.style.overflow = `${

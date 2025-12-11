@@ -68,7 +68,7 @@ export const CatalogItemCard = ({
 
   return (
     <Card
-      className="max-w-[420px] min-w-[380px] flex-1 dark:bg-default-100/50 p-1"
+      className="max-w-[450px] min-w-[380px] flex-1 dark:bg-default-100/50 p-1"
       key={item.id}
       shadow="sm"
       radius="md"
@@ -88,7 +88,7 @@ export const CatalogItemCard = ({
             <div className="text-md font-semibold">
               {item.displayName ?? item.name}
             </div>
-            <div className="mt-2 text-sm text-gray-500">{item.description}</div>
+            <p className="mt-2 text-sm">{item.description}</p>
           </div>
         </div>
         <div>

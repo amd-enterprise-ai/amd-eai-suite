@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 
 import useSystemToast from '@/hooks/useSystemToast';
 
@@ -62,11 +62,7 @@ export const DeleteStorageModal = ({
     <ConfirmationModal
       confirmationButtonColor="danger"
       confirmationButtonText={t(`form.${formKey}.actions.remove.label`)}
-      description={
-        <Trans parent="span">
-          {t(`form.${formKey}.description`, { name: storage?.name })}
-        </Trans>
-      }
+      description={t(`form.${formKey}.description`, { name: storage?.name })}
       title={t(`form.${formKey}.title`)}
       isOpen={isOpen}
       loading={isPending}

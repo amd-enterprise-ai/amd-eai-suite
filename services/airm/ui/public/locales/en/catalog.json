@@ -148,7 +148,7 @@
   },
   "notifications": {
     "deployWorkload": {
-      "success": "Workload deployment started",
+      "success": "Workload deployment started.",
       "error": "Error deploying workload"
     }
   }

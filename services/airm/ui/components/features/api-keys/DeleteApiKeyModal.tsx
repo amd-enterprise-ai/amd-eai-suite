@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 
 import { ApiKey } from '@/types/api-keys';
 
@@ -33,13 +33,9 @@ export default function DeleteApiKeyModal({
   return (
     <ConfirmationModal
       confirmationButtonColor="danger"
-      description={
-        <Trans parent="span">
-          {t('list.actions.delete.confirmation.description', {
-            name: apiKey.name || '',
-          })}
-        </Trans>
-      }
+      description={t('list.actions.delete.confirmation.description', {
+        name: apiKey.name || '',
+      })}
       title={t('list.actions.delete.confirmation.title')}
       isOpen={isOpen}
       loading={false}

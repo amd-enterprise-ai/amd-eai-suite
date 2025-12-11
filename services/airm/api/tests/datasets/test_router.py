@@ -130,10 +130,11 @@ def test_create_dataset(
         )
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.json()["name"] == dataset_response.name
-        assert response.json()["description"] == dataset_response.description
-        assert response.json()["path"] == dataset_response.path
-        assert response.json()["type"] == dataset_response.type
+        response_data = response.json()
+        assert response_data["name"] == dataset_response.name
+        assert response_data["description"] == dataset_response.description
+        assert response_data["path"] == dataset_response.path
+        assert response_data["type"] == dataset_response.type
 
 
 @patch("app.datasets.router.create_and_upload_dataset")
@@ -164,10 +165,11 @@ def test_upload_dataset(
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["name"] == dataset_response.name
-        assert response.json()["description"] == dataset_response.description
-        assert response.json()["path"] == dataset_response.path
-        assert response.json()["type"] == dataset_response.type
+        response_data = response.json()
+        assert response_data["name"] == dataset_response.name
+        assert response_data["description"] == dataset_response.description
+        assert response_data["path"] == dataset_response.path
+        assert response_data["type"] == dataset_response.type
 
 
 @patch("app.datasets.router.list_datasets")
@@ -178,11 +180,13 @@ def test_get_datasets(mock_list_datasets, project_id, dataset_response):
         response = client.get(f"/v1/datasets?project_id={project_id}")
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.json()) == 1
-        assert response.json()[0]["name"] == dataset_response.name
-        assert response.json()[0]["description"] == dataset_response.description
-        assert response.json()[0]["path"] == dataset_response.path
-        assert response.json()[0]["type"] == dataset_response.type
+        response_data = response.json()
+        assert "data" in response_data
+        assert len(response_data["data"]) == 1
+        assert response_data["data"][0]["name"] == dataset_response.name
+        assert response_data["data"][0]["description"] == dataset_response.description
+        assert response_data["data"][0]["path"] == dataset_response.path
+        assert response_data["data"][0]["type"] == dataset_response.type
 
 
 @patch("app.datasets.router.list_datasets")
@@ -195,11 +199,13 @@ def test_get_datasets_with_filters(mock_list_datasets, project_id, dataset_respo
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.json()) == 1
-        assert response.json()[0]["name"] == dataset_response.name
-        assert response.json()[0]["description"] == dataset_response.description
-        assert response.json()[0]["path"] == dataset_response.path
-        assert response.json()[0]["type"] == dataset_response.type
+        response_data = response.json()
+        assert "data" in response_data
+        assert len(response_data["data"]) == 1
+        assert response_data["data"][0]["name"] == dataset_response.name
+        assert response_data["data"][0]["description"] == dataset_response.description
+        assert response_data["data"][0]["path"] == dataset_response.path
+        assert response_data["data"][0]["type"] == dataset_response.type
 
 
 @patch("app.datasets.router.get_dataset_by_id")
@@ -215,10 +221,11 @@ def test_get_dataset(
         response = client.get(f"/v1/datasets/{dataset_id}?project_id={project_id}")
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["name"] == dataset_response.name
-        assert response.json()["description"] == dataset_response.description
-        assert response.json()["path"] == dataset_response.path
-        assert response.json()["type"] == dataset_response.type
+        response_data = response.json()
+        assert response_data["name"] == dataset_response.name
+        assert response_data["description"] == dataset_response.description
+        assert response_data["path"] == dataset_response.path
+        assert response_data["type"] == dataset_response.type
 
 
 @patch("app.datasets.router.get_dataset_by_id")
@@ -249,10 +256,11 @@ def test_modify_dataset(
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["name"] == dataset_response.name
-        assert response.json()["description"] == dataset_response.description
-        assert response.json()["path"] == dataset_response.path
-        assert response.json()["type"] == dataset_response.type
+        response_data = response.json()
+        assert response_data["name"] == dataset_response.name
+        assert response_data["description"] == dataset_response.description
+        assert response_data["path"] == dataset_response.path
+        assert response_data["type"] == dataset_response.type
 
 
 @patch("app.datasets.router.update_dataset_by_id", side_effect=NotFoundException("Dataset not found"))
@@ -348,8 +356,8 @@ def test_batch_delete_datasets(
         request_data = {"ids": [str(id) for id in dataset_ids]}
         response = client.post(f"/v1/datasets/delete?project_id={project_id}", json=request_data)
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert response.content == b""
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == [str(id) for id in dataset_ids]
 
 
 @patch("app.datasets.router.delete_datasets", return_value=[])

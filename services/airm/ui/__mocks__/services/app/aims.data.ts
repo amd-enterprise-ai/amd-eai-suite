@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
-import { Aim, AimWorkloadStatus } from '@/types/aims';
+import { Aim, AimWorkloadStatus, AIMStatus } from '@/types/aims';
+import { mockProject1 } from './projects.data';
 
 export const mockAims: Aim[] = [
   {
@@ -15,6 +16,7 @@ export const mockAims: Aim[] = [
     imageName: 'meta-llama/llama-2-7b',
     imageTag: 'v1.0',
     image: 'meta-llama/llama-2-7b:v1.0',
+    status: AIMStatus.READY,
     labels: {
       'app.kubernetes.io/name': 'llama-2-7b',
       'com.amd.aim.model.canonicalName': 'meta-llama/llama-2-7b',
@@ -30,6 +32,8 @@ export const mockAims: Aim[] = [
     workloadStatus: AimWorkloadStatus.DEPLOYED,
     isPreview: false,
     isHfTokenRequired: true,
+    recommendedDeployments: [],
+    availableMetrics: [],
     workload: {
       id: 'workload-1',
       status: WorkloadStatus.RUNNING,
@@ -39,14 +43,10 @@ export const mockAims: Aim[] = [
       createdAt: '2023-01-01T00:00:00Z',
       updatedAt: '2023-01-01T00:00:00Z',
       createdBy: 'test-user',
+      updatedBy: 'test-user',
       chartId: 'chart-1',
-      clusterId: 'cluster-1',
-      cluster: {
-        id: 'cluster-1',
-        name: 'Test Cluster',
-        lastHeartbeatAt: '2023-01-01T00:00:00Z',
-        status: 'HEALTHY' as any,
-      },
+      project: mockProject1,
+      userInputs: {},
       allocatedResources: {
         gpuCount: 1,
         vram: 8589934592,
@@ -62,6 +62,7 @@ export const mockAims: Aim[] = [
     imageName: 'stabilityai/stable-diffusion-xl',
     imageTag: 'v1.0',
     image: 'stabilityai/stable-diffusion-xl:v1.0',
+    status: AIMStatus.READY,
     labels: {
       'app.kubernetes.io/name': 'stable-diffusion-xl',
       'com.amd.aim.model.canonicalName': 'stable-diffusion-xl',
@@ -77,6 +78,8 @@ export const mockAims: Aim[] = [
     workloadStatus: AimWorkloadStatus.NOT_DEPLOYED,
     isPreview: false,
     isHfTokenRequired: false,
+    recommendedDeployments: [],
+    availableMetrics: [],
   },
   {
     id: 'aim-3',
@@ -87,6 +90,7 @@ export const mockAims: Aim[] = [
     imageName: 'vision/detection-model',
     imageTag: 'v1.0',
     image: 'vision/detection-model:v1.0',
+    status: AIMStatus.PENDING,
     labels: {
       'app.kubernetes.io/name': 'detection-model',
       'com.amd.aim.model.canonicalName': 'detection-model',
@@ -102,6 +106,8 @@ export const mockAims: Aim[] = [
     workloadStatus: AimWorkloadStatus.PENDING,
     isPreview: true,
     isHfTokenRequired: false,
+    recommendedDeployments: [],
+    availableMetrics: [],
     workload: {
       id: 'workload-3',
       status: WorkloadStatus.PENDING,
@@ -111,18 +117,42 @@ export const mockAims: Aim[] = [
       createdAt: '2023-01-03T00:00:00Z',
       updatedAt: '2023-01-03T00:00:00Z',
       createdBy: 'test-user',
+      updatedBy: 'test-user',
       chartId: 'chart-3',
-      clusterId: 'cluster-1',
-      cluster: {
-        id: 'cluster-1',
-        name: 'Test Cluster',
-        lastHeartbeatAt: '2023-01-03T00:00:00Z',
-        status: 'HEALTHY' as any,
-      },
+      project: mockProject1,
+      userInputs: {},
       allocatedResources: {
         gpuCount: 1,
         vram: 6442450944,
       },
     },
+  },
+  {
+    id: 'aim-4',
+    createdAt: '2023-01-04T00:00:00Z',
+    updatedAt: '2023-01-04T00:00:00Z',
+    createdBy: 'test-user',
+    updatedBy: 'test-user',
+    imageName: 'deleted/old-model',
+    imageTag: 'v0.9',
+    image: 'deleted/old-model:v0.9',
+    status: AIMStatus.DELETED,
+    labels: {
+      'app.kubernetes.io/name': 'old-model',
+      'com.amd.aim.model.canonicalName': 'deleted/old-model',
+    },
+    description: {
+      short: 'Deprecated model that has been deleted',
+      full: 'This model has been removed from the cluster.',
+    },
+    title: 'Deleted Old Model',
+    imageVersion: 'v0.9',
+    canonicalName: 'deleted/old-model',
+    tags: ['deprecated'],
+    workloadStatus: AimWorkloadStatus.NOT_DEPLOYED,
+    isPreview: false,
+    isHfTokenRequired: false,
+    recommendedDeployments: [],
+    availableMetrics: [],
   },
 ];

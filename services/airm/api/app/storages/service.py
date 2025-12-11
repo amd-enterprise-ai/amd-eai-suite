@@ -11,20 +11,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airm.messaging.schemas import (
     ConfigMapStatus,
     ProjectS3StorageCreateMessage,
-    ProjectSecretsCreateMessage,
     ProjectStorageDeleteMessage,
     ProjectStorageStatus,
     ProjectStorageUpdateMessage,
+    SecretScope,
 )
 
 from ..clusters.models import Cluster
-from ..messaging.publisher import submit_message_to_cluster_queue
+from ..messaging.sender import MessageSender
 from ..organizations.models import Organization
 from ..projects.models import Project
 from ..projects.schemas import ProjectResponse
-from ..secrets.repository import create_project_secret, get_project_secret
-from ..secrets.utils import map_secret_type_to_component_kind
-from ..utilities.exceptions import ConflictException, NotFoundException
+from ..secrets.enums import SecretUseCase
+from ..secrets.models import OrganizationSecretAssignment
+from ..secrets.repository import (
+    create_organization_secret_assignment,
+    get_organization_scoped_secret_in_organization,
+    get_organization_secret_assignment,
+    get_secret_in_organization,
+)
+from ..secrets.utils import publish_project_secret_creation_message
+from ..utilities.exceptions import ConflictException, NotFoundException, ValidationException
 from .enums import StorageStatus
 from .models import ProjectStorage as ProjectStorageModel
 from .models import Storage as StorageModel
@@ -127,7 +134,20 @@ async def create_storage_in_organization(
     organization_id: UUID,
     user_email: str,
     storage_in: StorageIn,
+    message_sender: MessageSender,
 ) -> StorageWithProjects:
+    # Validate that the secret exists and has the correct scope and use case
+    secret = await get_secret_in_organization(session, organization_id, storage_in.secret_id)
+    if not secret:
+        raise NotFoundException(f"Secret with ID {storage_in.secret_id} not found in organization")
+
+    # Validate that only organization-scoped secrets with S3 use case can be used for storage
+    if secret.scope != SecretScope.ORGANIZATION or secret.use_case != SecretUseCase.S3:
+        raise ValidationException(
+            "Only organization-scoped secrets with S3 use case can be used for storage. "
+            f"Current secret has scope '{secret.scope}' and use case '{secret.use_case}'."
+        )
+
     initial_status = StorageStatus.PENDING if storage_in.project_ids else StorageStatus.UNASSIGNED
     storage = await create_storage_in_db(session, organization_id, storage_in, initial_status, user_email)
 
@@ -136,10 +156,12 @@ async def create_storage_in_organization(
         await verify_projects_ready(session, organization_id, storage_in.project_ids)
 
         for pid in storage_in.project_ids:
-            # Ensure the project secret exists
-            project_secret = await ensure_project_secret_exists(session, storage_in.secret_id, pid, user_email)
+            # Ensure the organization scoped secret exists
+            organization_secret_assignment = await ensure_organization_scoped_secret_exists(
+                session, storage_in.secret_id, pid, organization_id, user_email, message_sender
+            )
             ps = await _assign_and_get_project_storage(session, storage.id, pid, user_email)
-            await _publish_storage_create(ps, storage, project_secret)
+            await _publish_storage_create(ps, storage, organization_secret_assignment, message_sender)
 
     await session.refresh(storage)
 
@@ -172,7 +194,9 @@ async def create_storage_in_organization(
     )
 
 
-async def submit_delete_storage(session: AsyncSession, storage: StorageModel, user: str):
+async def submit_delete_storage(
+    session: AsyncSession, storage: StorageModel, user: str, message_sender: MessageSender
+) -> None:
     if storage.status == StorageStatus.PENDING:
         raise ConflictException("Storage is in PENDING state and cannot be deleted")
     elif storage.status == StorageStatus.DELETING:
@@ -196,12 +220,16 @@ async def submit_delete_storage(session: AsyncSession, storage: StorageModel, us
                 project_name=project_storage.project.name,
             )
 
-            await submit_message_to_cluster_queue(project_storage.project.cluster_id, message)
+            await message_sender.enqueue(project_storage.project.cluster_id, message)
 
 
 async def submit_delete_project_storage(
-    session: AsyncSession, organization_id: UUID, project_storage: ProjectStorageModel, user: str
-):
+    session: AsyncSession,
+    organization_id: UUID,
+    project_storage: ProjectStorageModel,
+    user: str,
+    message_sender: MessageSender,
+) -> None:
     if project_storage.status == ProjectStorageStatus.DELETING:
         raise ConflictException("Project Storage is already marked for deletion")
 
@@ -222,11 +250,16 @@ async def submit_delete_project_storage(
         project_storage_id=project_storage.id,
         project_name=project_storage.project.name,
     )
-    await submit_message_to_cluster_queue(project_storage.project.cluster_id, message)
+    await message_sender.enqueue(project_storage.project.cluster_id, message)
 
 
 async def update_project_storage_assignments(
-    session: AsyncSession, user_email: str, organization_id: UUID, storage: StorageModel, project_ids: list[UUID]
+    session: AsyncSession,
+    user_email: str,
+    organization_id: UUID,
+    storage: StorageModel,
+    project_ids: list[UUID],
+    message_sender: MessageSender,
 ) -> None:
     current_project_ids = {ps.project_id for ps in storage.project_storages}
     new_project_ids = set(project_ids)
@@ -247,7 +280,7 @@ async def update_project_storage_assignments(
 
     # Send create messages for new project assignments
     if to_add:
-        await assign_projects_to_storage(session, organization_id, storage, list(to_add), user_email)
+        await assign_projects_to_storage(session, organization_id, storage, list(to_add), user_email, message_sender)
 
     # Send delete messages for removed project assignments
     for pid in to_remove:
@@ -264,32 +297,32 @@ async def update_project_storage_assignments(
             project_storage_id=project_storage.id,
             project_name=project_storage.project.name,
         )
-        await submit_message_to_cluster_queue(project_storage.project.cluster_id, delete_message)
+        await message_sender.enqueue(project_storage.project.cluster_id, delete_message)
 
 
-# Ensure the project secret exists, creating it if necessary and publishing a creation message to the cluster queue
-async def ensure_project_secret_exists(
+# Ensure the organization scoped secret exists, creating it if necessary and publishing a creation message to the cluster queue
+async def ensure_organization_scoped_secret_exists(
     session: AsyncSession,
     secret_id: UUID,
     project_id: UUID,
+    organization_id: UUID,
     user_email: str,
-):
-    project_secret = await get_project_secret(session, secret_id, project_id)
+    message_sender: MessageSender,
+) -> OrganizationSecretAssignment:
+    organization_secret_assignment = await get_organization_secret_assignment(session, secret_id, project_id)
 
-    if not project_secret:
-        project_secret = await create_project_secret(session, secret_id, project_id, user_email)
-
-        message = ProjectSecretsCreateMessage(
-            message_type="project_secrets_create",
-            project_name=project_secret.project.name,
-            project_secret_id=project_secret.id,
-            secret_name=project_secret.secret.name,
-            manifest=project_secret.secret.manifest,
-            secret_type=map_secret_type_to_component_kind(project_secret.secret.type),
+    if not organization_secret_assignment:
+        org_secret = await get_organization_scoped_secret_in_organization(session, organization_id, secret_id)
+        if not org_secret:
+            raise NotFoundException(f"Organization scoped secret with ID {secret_id} not found in organization")
+        organization_secret_assignment = await create_organization_secret_assignment(
+            session, secret_id, project_id, user_email
         )
-        await submit_message_to_cluster_queue(project_secret.project.cluster_id, message)
+        await publish_project_secret_creation_message(
+            organization_secret_assignment, org_secret.manifest, message_sender, parent_secret=org_secret
+        )
 
-    return project_secret
+    return organization_secret_assignment
 
 
 async def _assign_and_get_project_storage(
@@ -297,7 +330,7 @@ async def _assign_and_get_project_storage(
     storage_id: UUID,
     project_id: UUID,
     user_email: str,
-):
+) -> ProjectStorageModel:
     await assign_storage_to_projects(
         session=session,
         storage_id=storage_id,
@@ -318,27 +351,41 @@ async def _assign_and_get_project_storage(
     return ps
 
 
-async def assign_projects_to_storage(session, organization_id, storage, project_ids, user_email):
+async def assign_projects_to_storage(
+    session: AsyncSession,
+    organization_id: UUID,
+    storage: StorageModel,
+    project_ids: list[UUID],
+    user_email: str,
+    message_sender: MessageSender,
+) -> None:
     await verify_projects_ready(session, organization_id, project_ids)
 
     for pid in project_ids:
-        project_secret = await ensure_project_secret_exists(session, storage.secret_id, pid, user_email)
+        organization_secret_assignment = await ensure_organization_scoped_secret_exists(
+            session, storage.secret_id, pid, organization_id, user_email, message_sender
+        )
         ps = await _assign_and_get_project_storage(session, storage.id, pid, user_email)
-        await _publish_storage_create(ps, storage, project_secret)
+        await _publish_storage_create(ps, storage, organization_secret_assignment, message_sender)
 
 
-async def _publish_storage_create(project_storage, storage, project_secret):
+async def _publish_storage_create(
+    project_storage: ProjectStorageModel,
+    storage: StorageModel,
+    organization_secret_assignment: OrganizationSecretAssignment,
+    message_sender: MessageSender,
+) -> None:
     msg = ProjectS3StorageCreateMessage(
         message_type="project_s3_storage_create",
         project_storage_id=project_storage.id,
         project_name=project_storage.project.name,
         storage_name=storage.name,
-        secret_name=project_secret.secret.name,
+        secret_name=organization_secret_assignment.secret.name,
         bucket_url=storage.bucket_url,
         access_key_name=storage.access_key_name,
         secret_key_name=storage.secret_key_name,
     )
-    await submit_message_to_cluster_queue(project_storage.project.cluster_id, msg)
+    await message_sender.enqueue(project_storage.project.cluster_id, msg)
 
 
 async def update_configmap_status(
@@ -384,14 +431,16 @@ async def update_project_storage_composite_status(
     await session.refresh(project_storage, ["storage"])
     secret_id = project_storage.storage.secret_id
 
-    project_secret = await get_project_secret(session, secret_id, project_storage.project_id)
-    if not project_secret:
+    organization_secret_assignment = await get_organization_secret_assignment(
+        session, secret_id, project_storage.project_id
+    )
+    if not organization_secret_assignment:
         raise NotFoundException(
-            f"ProjectSecret for secret_id {secret_id} and project_id {project_storage.project_id} not found."
+            f"OrganizationSecretAssignment for secret_id {secret_id} and project_id {project_storage.project_id} not found."
         )
 
     composite_status, composite_reason = await resolve_project_storage_composite_status(
-        configmap, project_secret, project_storage
+        configmap, organization_secret_assignment
     )
 
     await update_project_storage_status(session, project_storage, composite_status, composite_reason, "system")

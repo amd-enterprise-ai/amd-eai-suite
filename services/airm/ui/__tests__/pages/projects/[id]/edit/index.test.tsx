@@ -71,6 +71,13 @@ vi.mock('next-auth/react', () => ({
     update: vi.fn(),
   }),
 }));
+const mockRouterPush = vi.fn();
+vi.mock('next/router', () => ({
+  useRouter: () => ({
+    query: { id: 'cluster-1' },
+    push: mockRouterPush,
+  }),
+}));
 
 const mockCluster: Cluster = {
   id: 'cluster-1',
@@ -98,22 +105,16 @@ const mockCluster: Cluster = {
   memoryAllocationPercentage: 50.0,
 };
 
-vi.mock('next/router', () => ({
-  useRouter: () => ({
-    query: { id: 'cluster-1' },
-    push: vi.fn(),
-  }),
-}));
-
 describe('projects/[id]', () => {
   const mockUpdateProject = updateProject as Mock;
+  const mockProject = generateMockProjectWithMembers(0, 0);
 
   const renderProjectEditPage = (
     props?: Partial<React.ComponentProps<typeof ProjectEditPage>>,
   ) => {
     return render(
       <ProjectEditPage
-        project={generateMockProjectWithMembers(0, 0)}
+        project={mockProject}
         cluster={props?.cluster ?? mockCluster}
         projectSecrets={props?.projectSecrets ?? []}
         projectStorages={props?.projectStorages ?? []}
@@ -225,5 +226,11 @@ describe('projects/[id]', () => {
     fireEvent.click(screen.getByText('tab.storages.title'));
 
     expect(fetchProjectStorages as Mock).toHaveBeenCalled();
+  });
+
+  it('back button pressed will go to dashboard page', () => {
+    const { container } = renderProjectEditPage({ cluster: mockCluster });
+    fireEvent.click(screen.getByLabelText('actions.back'));
+    expect(mockRouterPush).toHaveBeenCalledWith(`/projects/${mockProject.id}`);
   });
 });

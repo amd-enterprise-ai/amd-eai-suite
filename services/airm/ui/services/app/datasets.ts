@@ -8,7 +8,7 @@ import {
 } from '@/utils/app/api-helpers';
 import { APIRequestError } from '@/utils/app/errors';
 
-import { DatasetType } from '@/types/datasets';
+import { Dataset, DatasetType } from '@/types/datasets';
 
 export const getDatasets = async (
   projectId: string,
@@ -29,6 +29,41 @@ export const getDatasets = async (
   if (!response.ok) {
     throw new APIRequestError(
       `Failed to list datasets: ${await getErrorMessage(response)}`,
+      response.status,
+    );
+  }
+
+  const json = await response.json();
+  // Extract data from wrapped response
+  return json.data;
+};
+
+/**
+ * Retrieves a single dataset by ID.
+ *
+ * @param {string} id - The dataset ID
+ * @param {string} projectId - The active project ID
+ * @returns {Promise<Dataset>} A promise that resolves to a Dataset object.
+ * @throws {APIRequestError} If the API request fails.
+ */
+export const getDataset = async (
+  id: string,
+  projectId: string,
+): Promise<Dataset> => {
+  const queryParams = convertCamelToSnakeParams({
+    projectId,
+  });
+
+  const response = await fetch(`/api/datasets/${id}?${queryParams}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new APIRequestError(
+      `Failed to get dataset: ${await getErrorMessage(response)}`,
       response.status,
     );
   }
@@ -55,7 +90,9 @@ export const deleteDatasets = async (ids: string[], projectId: string) => {
     );
   }
 
-  return await response.json();
+  const json = await response.json();
+  // batch_delete_datasets returns unwrapped list of deleted IDs
+  return json;
 };
 
 export const downloadDatasetById = async (id: string, projectId: string) => {
@@ -122,5 +159,7 @@ export const uploadDataset = async (
       response.status,
     );
   }
-  return await response.json();
+  const json = await response.json();
+  // uploadDataset returns unwrapped DatasetResponse
+  return json;
 };

@@ -1,0 +1,76 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Robot Framework Arguments File for AIRM E2E Tests
+#
+# SAFE TO USE WITH ALL TESTS - the AimCatalogGenerator listener only activates
+# for aim_catalog.robot and has no effect on other test suites.
+#
+# Usage:
+#   uv run --project ../api robot --argumentfile arguments.txt .
+#   uv run --project ../api robot --argumentfile arguments.txt --include smoke .
+#   uv run --project ../api robot --argumentfile arguments.txt workbench/aims.robot
+#
+# Override any argument by specifying it AFTER --argumentfile:
+#   robot --argumentfile arguments.txt --loglevel TRACE .
+#   robot --argumentfile arguments.txt --outputdir /tmp/results .
+#   robot --argumentfile arguments.txt --test-timeout 30m .
+
+# Python path - required to find test libraries
+--pythonpath
+.
+
+# Dynamic test generator for aim_catalog.robot
+# Format: libraries.AimCatalogGenerator:<csv_file>:<mode>
+# Modes: full (default), smoke, quick
+--listener
+libraries.AimCatalogGenerator:config/aim_models.csv:full
+
+# Helper that prints guidance on using robot-extract after test execution
+--listener
+libraries.TestResultsHelper
+
+# Output directory for test results
+--outputdir
+results
+
+# Log level: INFO (default), DEBUG, TRACE
+--loglevel
+INFO
+
+# Console output width
+--consolewidth
+120
+
+# Exclude tests tagged with 'skip'
+--exclude
+skip
+
+# Report and log titles
+--reporttitle
+AIRM E2E Test Report
+
+--logtitle
+AIRM E2E Test Execution Log
+
+# ==============================================================================
+# Optional Configuration (uncomment as needed)
+# ==============================================================================
+
+# AIM catalog tag filtering - filter which models to test
+# Run only specific model:
+#--variable
+#INCLUDE_TAGS:model:aim-qwen-qwen2-5-0-5b-instruct
+
+# Exclude models requiring HuggingFace token:
+#--variable
+#EXCLUDE_TAGS:requires-hf-token
+
+# Run only 1-GPU models:
+#--variable
+#INCLUDE_TAGS:gpus:1
+
+# HuggingFace token secret name (if different from default)
+#--variable
+#HF_TOKEN_SECRET_NAME:huggingface-token

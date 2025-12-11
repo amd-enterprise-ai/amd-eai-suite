@@ -24,7 +24,8 @@ class Cluster(BaseEntity):
         PGUUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    base_url: Mapped[str] = mapped_column(String, nullable=True)
+    workloads_base_url: Mapped[str] = mapped_column(String, nullable=True)
+    kube_api_url: Mapped[str] = mapped_column(String, nullable=True)
 
     __table_args__ = (Index("clusters_name_organization_id_key", func.lower(name), organization_id, unique=True),)
 

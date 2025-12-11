@@ -66,7 +66,7 @@ export const ApiKeysTable: React.FC<Props> = ({ projectId, createButton }) => {
   const {
     isOpen: isDeleteApiKeyModalOpen,
     onOpen: onDeleteApiKeyModalOpen,
-    onOpenChange: onOpenChange,
+    onOpenChange,
   } = useDisclosure();
 
   const {
@@ -109,8 +109,8 @@ export const ApiKeysTable: React.FC<Props> = ({ projectId, createButton }) => {
   });
 
   const filteredApiKeys = useMemo(
-    () => getFilteredData(apiKeysData?.apiKeys ?? [], filters),
-    [apiKeysData?.apiKeys, filters],
+    () => getFilteredData(apiKeysData?.data ?? [], filters),
+    [apiKeysData?.data, filters],
   );
 
   const customRenderers: Partial<

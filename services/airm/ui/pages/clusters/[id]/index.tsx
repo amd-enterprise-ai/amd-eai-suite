@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Accordion, AccordionItem } from '@heroui/react';
+import {
+  Accordion,
+  AccordionItem,
+  Tooltip,
+  useDisclosure,
+} from '@heroui/react';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
@@ -53,6 +58,8 @@ import { ActionsToolbar } from '@/components/shared/Toolbar/ActionsToolbar';
 import { isEqual } from 'lodash';
 import { doesDataNeedToBeRefreshed } from '@/utils/app/projects';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@/utils/app/api-helpers';
+import ClusterKubeConfig from '@/components/features/clusters/ClusterKubeConfig';
+import { ActionButton } from '@/components/shared/Buttons';
 
 const translationKeySet = 'clusters';
 
@@ -240,6 +247,12 @@ const ClusterPage: React.FC<Props> = ({
     [setClusterNodesFilters, setProjectFilters],
   );
 
+  const {
+    isOpen: isClusterKubeConfigOpen,
+    onOpen: onClusterKubeConfigOpen,
+    onOpenChange: onClusterKubeConfigChange,
+  } = useDisclosure();
+
   const filterConfig = useMemo(
     () => ({
       search: {
@@ -259,6 +272,22 @@ const ClusterPage: React.FC<Props> = ({
         <ActionsToolbar
           filterConfig={filterConfig}
           onFilterChange={handleFilterChange}
+          endContent={
+            <Tooltip
+              content={t('config.disabled')}
+              isDisabled={!!cluster.kubeApiUrl}
+            >
+              <span>
+                <ActionButton
+                  aria-label={t('config.button') || ''}
+                  onPress={onClusterKubeConfigOpen}
+                  isDisabled={!cluster.kubeApiUrl}
+                >
+                  {t('config.button')}
+                </ActionButton>
+              </span>
+            </Tooltip>
+          }
         />
       </div>
       <ClusterStats
@@ -278,7 +307,7 @@ const ClusterPage: React.FC<Props> = ({
               : undefined
           }
         />
-        <div className=" border-1 rounded-sm p-4 dark:border-default-200">
+        <div className=" border-1 rounded-sm p-4 border-default-200">
           <h3 className="font-semibold mb-4">
             {t('allocationAndWorkloads.charts.gpuDeviceUtilization.title')}
           </h3>
@@ -307,6 +336,12 @@ const ClusterPage: React.FC<Props> = ({
           <ClusterNodesTable clusterNodes={filteredClusterData} />
         </AccordionItem>
       </Accordion>
+
+      <ClusterKubeConfig
+        isOpen={isClusterKubeConfigOpen}
+        onOpenChange={onClusterKubeConfigChange}
+        cluster={clusterData}
+      />
     </div>
   );
 };

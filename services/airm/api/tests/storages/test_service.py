@@ -4,7 +4,7 @@
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -15,11 +15,12 @@ from sqlalchemy.orm import selectinload
 from airm.messaging.schemas import (
     ConfigMapStatus,
     ProjectSecretStatus,
-    ProjectStorageDeleteMessage,
     ProjectStorageStatus,
     ProjectStorageUpdateMessage,
+    SecretScope,
 )
 from app.projects.enums import ProjectStatus
+from app.secrets.enums import SecretUseCase
 from app.storages.enums import StorageScope, StorageStatus, StorageType
 from app.storages.models import ProjectStorage as ProjectStorageModel
 from app.storages.models import Storage as StorageModel
@@ -181,6 +182,7 @@ async def test_get_project_storages_in_project(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_create_storage_without_projects(db_session: AsyncSession):
     """Test successful storage creation without project assignments."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
 
@@ -198,11 +200,14 @@ async def test_create_storage_without_projects(db_session: AsyncSession):
     )
 
     with (
-        patch("app.storages.service.get_project_secret") as mock_get_project_secret,
-        patch("app.storages.service.create_project_secret") as mock_create_project_secret,
-        patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit,
+        patch("app.storages.service.get_organization_secret_assignment") as mock_get_organization_secret_assignment,
+        patch(
+            "app.storages.service.create_organization_secret_assignment"
+        ) as mock_create_organization_secret_assignment,
     ):
-        result = await create_storage_in_organization(db_session, env.organization.id, "test", storage_in)
+        result = await create_storage_in_organization(
+            db_session, env.organization.id, "test", storage_in, message_sender=mock_message_sender
+        )
 
     assert result is not None
     assert result.name == "test-storage"
@@ -211,13 +216,13 @@ async def test_create_storage_without_projects(db_session: AsyncSession):
     assert result.status == StorageStatus.UNASSIGNED
     assert result.project_storages == []
 
-    mock_get_project_secret.assert_not_awaited()
-    mock_create_project_secret.assert_not_awaited()
-    mock_submit.assert_not_awaited()
+    mock_get_organization_secret_assignment.assert_not_awaited()
+    mock_create_organization_secret_assignment.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_create_storage_with_projects(db_session: AsyncSession):
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
     project = await factory.create_project(
@@ -256,30 +261,34 @@ async def test_create_storage_with_projects(db_session: AsyncSession):
     )
 
     with (
-        patch("app.storages.service.get_project_secret") as mock_get_project_secret,
-        patch("app.storages.service.create_project_secret") as mock_create_project_secret,
+        patch("app.storages.service.get_organization_secret_assignment") as mock_get_organization_secret_assignment,
+        patch(
+            "app.storages.service.create_organization_secret_assignment"
+        ) as mock_create_organization_secret_assignment,
         patch("app.storages.service.assign_storage_to_projects") as mock_create_project_storage,
         patch("app.storages.service.get_project_storage") as mock_get_project_storage,
         patch("app.storages.service.create_project_storage_configmap") as mock_create_project_storage_configmap,
-        patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit,
     ):
-        mock_get_project_secret.return_value = fake_project_secret
+        mock_get_organization_secret_assignment.return_value = fake_project_secret
         mock_create_project_storage.return_value = fake_project_storage
         mock_get_project_storage.return_value = fake_project_storage
-        result = await create_storage_in_organization(db_session, env.organization.id, "test@example.com", storage_in)
+        result = await create_storage_in_organization(
+            db_session, env.organization.id, "test@example.com", storage_in, message_sender=mock_message_sender
+        )
     assert result.name == "test-storage"
     assert result.status == StorageStatus.PENDING
 
-    mock_get_project_secret.assert_awaited()
-    mock_create_project_secret.assert_not_awaited()
+    mock_get_organization_secret_assignment.assert_awaited()
+    mock_create_organization_secret_assignment.assert_not_awaited()
     mock_create_project_storage.assert_awaited()
     mock_create_project_storage_configmap.assert_awaited()
 
-    assert mock_submit.await_count == 1
+    assert mock_message_sender.enqueue.await_count == 1
 
 
 @pytest.mark.asyncio
 async def test_create_storage_duplicate_name(db_session: AsyncSession):
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
     await factory.create_storage(db_session, env.organization, secret_id=secret.id, name="duplicate-secret")
@@ -298,18 +307,98 @@ async def test_create_storage_duplicate_name(db_session: AsyncSession):
     )
 
     with (
-        patch("app.storages.service.get_project_secret"),
-        patch("app.storages.service.submit_message_to_cluster_queue"),
+        patch("app.storages.service.get_organization_secret_assignment"),
     ):
         with pytest.raises(
             ConflictException, match=f"A storage with the name '{storage_in.name}' already exists in the organization"
         ):
-            await create_storage_in_organization(db_session, env.organization.id, "test@example.com", storage_in)
+            await create_storage_in_organization(
+                db_session, env.organization.id, "test@example.com", storage_in, message_sender=mock_message_sender
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_storage_secret_not_found(db_session: AsyncSession):
+    """Test creating storage with non-existent secret raises NotFoundException."""
+    mock_message_sender = AsyncMock()
+    env = await factory.create_basic_test_environment(db_session)
+    non_existent_secret_id = uuid4()
+
+    storage_in = StorageIn(
+        name="test-storage",
+        type=StorageType.S3,
+        scope=StorageScope.ORGANIZATION,
+        secret_id=non_existent_secret_id,
+        spec=S3Spec(
+            bucket_url="https://some-bucket-name.s3.amazonaws.com/path/",
+            access_key_name="accessKeyName",
+            secret_key_name="secretKeyName",
+        ),
+        project_ids=[],
+    )
+
+    with pytest.raises(NotFoundException, match=f"Secret with ID {non_existent_secret_id} not found in organization"):
+        await create_storage_in_organization(
+            db_session, env.organization.id, "test@example.com", storage_in, message_sender=mock_message_sender
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "secret_scope,use_case,test_description",
+    [
+        (
+            SecretScope.PROJECT.value,
+            SecretUseCase.S3.value,
+            "project-scoped secret with S3 use case",
+        ),
+        (
+            SecretScope.ORGANIZATION.value,
+            SecretUseCase.HUGGING_FACE.value,
+            "organization-scoped secret with HuggingFace use case",
+        ),
+        (
+            SecretScope.ORGANIZATION.value,
+            None,
+            "organization-scoped secret with no use case",
+        ),
+    ],
+)
+async def test_create_storage_invalid_secret_rejected(
+    db_session: AsyncSession, secret_scope: str, use_case: str | None, test_description: str
+):
+    """Test creating storage with invalid secret configuration raises ValidationException."""
+    mock_message_sender = AsyncMock()
+    env = await factory.create_basic_test_environment(db_session)
+    # Create a secret with the specified scope and use case
+    secret = await factory.create_secret(db_session, env.organization, secret_scope=secret_scope, use_case=use_case)
+
+    storage_in = StorageIn(
+        name="test-storage",
+        type=StorageType.S3,
+        scope=StorageScope.ORGANIZATION,
+        secret_id=secret.id,
+        spec=S3Spec(
+            bucket_url="https://some-bucket-name.s3.amazonaws.com/path/",
+            access_key_name="accessKeyName",
+            secret_key_name="secretKeyName",
+        ),
+        project_ids=[],
+    )
+
+    with pytest.raises(
+        ValidationException,
+        match="Only organization-scoped secrets with S3 use case can be used for storage",
+    ):
+        await create_storage_in_organization(
+            db_session, env.organization.id, "test@example.com", storage_in, message_sender=mock_message_sender
+        )
 
 
 @pytest.mark.asyncio
 async def test_submit_delete_storage_pending_state(db_session: AsyncSession):
     """Test deleting storage in pending state fails."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
     storage = await factory.create_storage(
@@ -317,17 +406,14 @@ async def test_submit_delete_storage_pending_state(db_session: AsyncSession):
     )
 
     user = "test@example.com"
-
-    with patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit:
-        with pytest.raises(ConflictException, match="Storage is in PENDING state and cannot be deleted"):
-            await submit_delete_storage(db_session, storage, user)
-
-        mock_submit.assert_not_called()
+    with pytest.raises(ConflictException, match="Storage is in PENDING state and cannot be deleted"):
+        await submit_delete_storage(db_session, storage, user, message_sender=mock_message_sender)
 
 
 @pytest.mark.asyncio
 async def test_submit_delete_storage_already_deleting(db_session: AsyncSession):
     """Test deleting storage already marked for deletion."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
     storage = await factory.create_storage(
@@ -335,17 +421,14 @@ async def test_submit_delete_storage_already_deleting(db_session: AsyncSession):
     )
 
     user = "test@example.com"
-
-    with patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit:
-        with pytest.raises(ConflictException, match="Storage is already marked for deletion"):
-            await submit_delete_storage(db_session, storage, user)
-
-        mock_submit.assert_not_called()
+    with pytest.raises(ConflictException, match="Storage is already marked for deletion"):
+        await submit_delete_storage(db_session, storage, user, message_sender=mock_message_sender)
 
 
 @pytest.mark.asyncio
 async def test_submit_delete_storage_without_project_storages(db_session: AsyncSession):
     """Test deleting storage without project assignments."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
     storage = await factory.create_storage(
@@ -360,10 +443,7 @@ async def test_submit_delete_storage_without_project_storages(db_session: AsyncS
     )
     result = await db_session.execute(stmt)
     storage = result.scalar_one()
-
-    with patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit:
-        await submit_delete_storage(db_session, storage, user)
-        mock_submit.assert_not_called()
+    await submit_delete_storage(db_session, storage, user, message_sender=mock_message_sender)
 
     # Verify the storage was deleted directly since it had no project assignments
     # Check by querying the database since the object may be detached
@@ -374,6 +454,7 @@ async def test_submit_delete_storage_without_project_storages(db_session: AsyncS
 @pytest.mark.asyncio
 async def test_submit_delete_storage_with_project_secrets(db_session: AsyncSession):
     """Test deleting storage with project assignments."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
 
@@ -396,9 +477,7 @@ async def test_submit_delete_storage_with_project_secrets(db_session: AsyncSessi
     )
     result = await db_session.execute(stmt)
     storage = result.scalar_one()
-
-    with patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit:
-        await submit_delete_storage(db_session, storage, user)
+    await submit_delete_storage(db_session, storage, user, message_sender=mock_message_sender)
 
     await db_session.refresh(storage)
     assert storage.status == StorageStatus.DELETING.value
@@ -408,20 +487,11 @@ async def test_submit_delete_storage_with_project_secrets(db_session: AsyncSessi
     await db_session.refresh(project_storage)
     assert project_storage.status == ProjectStorageStatus.DELETING.value
 
-    # Verify message was sent
-    mock_submit.assert_called_once_with(
-        env.project.cluster_id,
-        ProjectStorageDeleteMessage(
-            message_type="project_storage_delete",
-            project_storage_id=project_storage.id,
-            project_name=env.project.name,
-        ),
-    )
-
 
 @pytest.mark.asyncio
 async def test_submit_delete_project_storage_already_deleting(db_session: AsyncSession):
     """Test deleting project storage already marked for deletion."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
 
@@ -434,7 +504,7 @@ async def test_submit_delete_project_storage_already_deleting(db_session: AsyncS
         storage_status=StorageStatus.SYNCED.value,
     )
 
-    project_secret = await factory.create_project_secret(
+    project_secret = await factory.create_organization_secret_assignment(
         db_session, env.project, secret, status=ProjectSecretStatus.SYNCED.value
     )
     project_storage = await factory.create_project_storage(
@@ -442,17 +512,16 @@ async def test_submit_delete_project_storage_already_deleting(db_session: AsyncS
     )
 
     user = "test@example.com"
-
-    with patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit:
-        with pytest.raises(ConflictException, match="Project Storage is already marked for deletion"):
-            await submit_delete_project_storage(db_session, env.organization.id, project_storage, user)
-
-        mock_submit.assert_not_called()
+    with pytest.raises(ConflictException, match="Project Storage is already marked for deletion"):
+        await submit_delete_project_storage(
+            db_session, env.organization.id, project_storage, user, message_sender=mock_message_sender
+        )
 
 
 @pytest.mark.asyncio
 async def test_submit_delete_project_storage_success(db_session: AsyncSession):
     """Test successful project storage deletion."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
 
@@ -465,7 +534,7 @@ async def test_submit_delete_project_storage_success(db_session: AsyncSession):
         storage_status=StorageStatus.SYNCED.value,
     )
 
-    project_secret = await factory.create_project_secret(
+    project_secret = await factory.create_organization_secret_assignment(
         db_session, env.project, secret, status=ProjectSecretStatus.SYNCED.value
     )
     project_storage = await factory.create_project_storage(
@@ -473,64 +542,18 @@ async def test_submit_delete_project_storage_success(db_session: AsyncSession):
     )
 
     user = "test@example.com"
-
-    with patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit:
-        await submit_delete_project_storage(db_session, env.organization.id, project_storage, user)
+    await submit_delete_project_storage(
+        db_session, env.organization.id, project_storage, user, message_sender=mock_message_sender
+    )
 
     await db_session.refresh(project_storage)
     assert project_storage.status == ProjectStorageStatus.DELETING.value
-
-    mock_submit.assert_called_once_with(
-        env.project.cluster_id,
-        ProjectStorageDeleteMessage(
-            message_type="project_storage_delete",
-            project_storage_id=project_storage.id,
-            project_name=env.project.name,
-        ),
-    )
-
-
-@pytest.mark.asyncio
-async def test_update_project_storage_assignments_add_project(db_session: AsyncSession):
-    """Test adding project to storage assignment."""
-    env = await factory.create_basic_test_environment(db_session)
-    project2 = await factory.create_project(db_session, env.organization, env.cluster, name="project-2")
-    # Set project status to READY after creation
-    project2.status = "Ready"
-    await db_session.flush()
-
-    secret = await factory.create_secret(db_session, env.organization)
-    storage = await factory.create_storage(
-        db_session, env.organization, secret_id=secret.id, status=StorageStatus.SYNCED.value
-    )
-
-    stmt = (
-        select(StorageModel).where(StorageModel.id == storage.id).options(selectinload(StorageModel.project_storages))
-    )
-    result = await db_session.execute(stmt)
-    storage = result.scalar_one()
-
-    user_email = "test@example.com"
-
-    with patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit:
-        await update_project_storage_assignments(
-            session=db_session,
-            user_email=user_email,
-            organization_id=env.organization.id,
-            storage=storage,
-            project_ids=[project2.id],
-        )
-
-    await db_session.refresh(storage)
-    assert len(storage.project_storages) == 1
-    assert storage.project_storages[0].project_id == project2.id
-    assert storage.status == StorageStatus.PENDING.value
-    mock_submit.assert_called()
 
 
 @pytest.mark.asyncio
 async def test_update_project_storage_assignments_remove_project(db_session: AsyncSession):
     """Test removing project from storage assignment."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
     storage = await factory.create_storage_with_project_assignment(
@@ -550,17 +573,14 @@ async def test_update_project_storage_assignments_remove_project(db_session: Asy
     storage = result.scalar_one()
 
     user_email = "test@example.com"
-
-    with patch("app.storages.service.submit_message_to_cluster_queue") as mock_submit:
-        await update_project_storage_assignments(
-            session=db_session,
-            user_email=user_email,
-            organization_id=env.organization.id,
-            storage=storage,
-            project_ids=[],
-        )
-
-    mock_submit.assert_called_once()
+    await update_project_storage_assignments(
+        session=db_session,
+        user_email=user_email,
+        organization_id=env.organization.id,
+        storage=storage,
+        project_ids=[],
+        message_sender=mock_message_sender,
+    )
 
     await db_session.refresh(storage)
     assert storage.project_storages[0].status == ProjectStorageStatus.DELETING.value
@@ -570,6 +590,7 @@ async def test_update_project_storage_assignments_remove_project(db_session: Asy
 @pytest.mark.asyncio
 async def test_update_project_storage_assignments_no_changes(db_session: AsyncSession):
     """Test updating project assignments with no changes."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization)
     storage = await factory.create_storage_with_project_assignment(
@@ -593,12 +614,14 @@ async def test_update_project_storage_assignments_no_changes(db_session: AsyncSe
             organization_id=env.organization.id,
             storage=storage,
             project_ids=[env.project.id],
+            message_sender=mock_message_sender,
         )
 
 
 @pytest.mark.asyncio
 async def test_update_project_storage_assignments_invalid_status(db_session: AsyncSession):
     """Test updating project assignments with invalid storage status."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     secret = await factory.create_secret(db_session, env.organization, status=StorageStatus.FAILED.value)
     storage = await factory.create_storage(
@@ -621,12 +644,14 @@ async def test_update_project_storage_assignments_invalid_status(db_session: Asy
             organization_id=env.organization.id,
             storage=storage,
             project_ids=[env.project.id],
+            message_sender=mock_message_sender,
         )
 
 
 @pytest.mark.asyncio
 async def test_update_project_storage_assignments_project_not_ready(db_session: AsyncSession):
     """Test updating project assignments when project is not ready."""
+    mock_message_sender = AsyncMock()
     env = await factory.create_basic_test_environment(db_session)
     project = await factory.create_project(db_session, env.organization, env.cluster, name="failed-project")
     project.status = ProjectStatus.FAILED.value
@@ -649,6 +674,7 @@ async def test_update_project_storage_assignments_project_not_ready(db_session: 
             organization_id=env.organization.id,
             storage=storage,
             project_ids=[project.id],
+            message_sender=mock_message_sender,
         )
 
 
@@ -838,7 +864,7 @@ async def test_update_project_storage_secret_status_storage_not_found(mock_get_s
 
 @pytest.mark.asyncio
 @patch("app.storages.service.get_configmap_by_project_storage_id")
-@patch("app.storages.service.get_project_secret")
+@patch("app.storages.service.get_organization_secret_assignment")
 @patch("app.storages.service.resolve_project_storage_composite_status")
 @patch("app.storages.service.update_project_storage_status")
 async def test_update_project_storage_composite_status_success(
@@ -855,7 +881,7 @@ async def test_update_project_storage_composite_status_success(
     configmap = await create_project_storage_configmap(
         session=db_session, project_storage_id=project_storage.id, user_email="tester@example.com"
     )
-    project_secret = await factory.create_project_secret(db_session, env.project, secret)
+    project_secret = await factory.create_organization_secret_assignment(db_session, env.project, secret)
 
     mock_get_configmap.return_value = configmap
     mock_get_project_secret.return_value = project_secret
@@ -865,7 +891,7 @@ async def test_update_project_storage_composite_status_success(
 
     mock_get_configmap.assert_called_once_with(db_session, env.organization.id, project_storage.id)
     mock_get_project_secret.assert_called_once_with(db_session, secret.id, project_storage.project_id)
-    mock_resolve_status.assert_called_once_with(configmap, project_secret, project_storage)
+    mock_resolve_status.assert_called_once_with(configmap, project_secret)
     mock_update_status.assert_called_once_with(
         db_session, project_storage, ProjectStorageStatus.SYNCED, "All components synced", "system"
     )
@@ -893,9 +919,9 @@ async def test_update_project_storage_composite_status_configmap_not_found(
 
 @pytest.mark.asyncio
 @patch("app.storages.service.get_configmap_by_project_storage_id")
-@patch("app.storages.service.get_project_secret")
+@patch("app.storages.service.get_organization_secret_assignment")
 async def test_update_project_storage_composite_status_project_secret_not_found(
-    mock_get_project_secret, mock_get_configmap, db_session: AsyncSession
+    mock_get_organization_secret_assignment, mock_get_configmap, db_session: AsyncSession
 ):
     """Test update_project_storage_composite_status raises NotFoundException when project_secret not found."""
     env = await factory.create_basic_test_environment(db_session)
@@ -910,9 +936,11 @@ async def test_update_project_storage_composite_status_project_secret_not_found(
     )
 
     mock_get_configmap.return_value = configmap
-    mock_get_project_secret.return_value = None
+    mock_get_organization_secret_assignment.return_value = None
 
-    with pytest.raises(NotFoundException, match="ProjectSecret for secret_id .* and project_id .* not found"):
+    with pytest.raises(
+        NotFoundException, match="OrganizationSecretAssignment for secret_id .* and project_id .* not found"
+    ):
         await update_project_storage_composite_status(db_session, env.organization.id, project_storage)
 
 

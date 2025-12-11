@@ -21,8 +21,11 @@ class ClusterStatus(StrEnum):
 
 
 class ClusterIn(BaseModel):
-    base_url: str | None = Field(
+    workloads_base_url: str | None = Field(
         min_length=1, max_length=1024, description="The base URL of the cluster.", default=None
+    )
+    kube_api_url: str | None = Field(
+        min_length=1, max_length=1024, description="The kube-api URL of the cluster", default=None
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -140,3 +143,7 @@ class ClusterWithResources(ClusterResponse):
 
 class Clusters(BaseModel):
     clusters: list[ClusterWithResources]
+
+
+class ClusterKubeConfig(BaseModel):
+    kube_config: str = Field(description="Kubeconfig in YAML format")

@@ -1,0 +1,34 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stable-test-workload
+  labels:
+    app: stable-test-workload
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stable-test-workload
+  template:
+    metadata:
+      labels:
+        app: stable-test-workload
+    spec:
+      containers:
+        - name: stable-container
+          # Use Redis Alpine image which is small and already available in cluster
+          image: redis:7.2.8-alpine
+          # Override command to just sleep, keeping pod alive indefinitely
+          command: ["sleep"]
+          args: ["infinity"]
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "100m"
+            limits:
+              memory: "64Mi"
+              cpu: "200m"

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 PROJECT_SECRET_ID_LABEL = "airm.silogen.ai/project-secret-id"
+PROJECT_SECRET_SCOPE_LABEL = "airm.silogen.ai/secret-scope"
 
 EXTERNAL_SECRETS_API_GROUP = "external-secrets.io"
 EXTERNAL_SECRETS_KIND = "ExternalSecret"

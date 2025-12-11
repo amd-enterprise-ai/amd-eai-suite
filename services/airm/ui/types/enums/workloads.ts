@@ -33,3 +33,8 @@ export enum LogLevel {
   ERROR = 'error',
   CRITICAL = 'critical',
 }
+
+export enum LogType {
+  WORKLOAD = 'workload',
+  EVENT = 'event',
+}

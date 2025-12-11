@@ -7,6 +7,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+from airm.messaging.schemas import SecretKind
+
 from .constants import (
     EXTERNAL_SECRETS_API_GROUP,
     EXTERNAL_SECRETS_KIND,
@@ -157,3 +159,55 @@ def validate_kubernetes_secret_manifest(manifest_yaml: str) -> dict:
         return manifest_model.model_dump(by_alias=True, exclude_none=True)
     except Exception as e:
         raise Exception(f"Invalid Kubernetes Secret manifest: {e}")
+
+
+def validate_secret_manifest(manifest_yaml: str, component_kind: SecretKind) -> dict:
+    """
+    Universal validator for secret manifests.
+
+    Routes to the appropriate validator based on the component kind.
+    This is the package-level validator that should be used by both API and dispatcher.
+
+    Args:
+        manifest_yaml: YAML string containing the manifest
+        component_kind: The SecretKind enum value
+
+    Returns:
+        dict: Validated manifest as dictionary for Kubernetes client
+
+    Raises:
+        Exception: if YAML is invalid or validation fails
+        ValueError: if component_kind is unsupported
+    """
+    match component_kind:
+        case SecretKind.EXTERNAL_SECRET:
+            return validate_external_secret_manifest(manifest_yaml)
+        case SecretKind.KUBERNETES_SECRET:
+            return validate_kubernetes_secret_manifest(manifest_yaml)
+        case _:
+            raise ValueError(f"Unsupported component kind: {component_kind}")
+
+
+def get_kubernetes_kind(component_kind: SecretKind) -> str:
+    """
+    Maps SecretKind enum values to actual Kubernetes resource kinds.
+
+    This is needed because the enum uses "KubernetesSecret" but the Kubernetes API
+    expects "Secret" for native Kubernetes secrets.
+
+    Args:
+        component_kind: The SecretKind enum value
+
+    Returns:
+        str: The actual Kubernetes resource kind string
+
+    Raises:
+        ValueError: if component_kind is unsupported
+    """
+    match component_kind:
+        case SecretKind.EXTERNAL_SECRET:
+            return EXTERNAL_SECRETS_KIND
+        case SecretKind.KUBERNETES_SECRET:
+            return KUBERNETES_SECRET_KIND
+        case _:
+            raise ValueError(f"Unsupported component kind: {component_kind}")

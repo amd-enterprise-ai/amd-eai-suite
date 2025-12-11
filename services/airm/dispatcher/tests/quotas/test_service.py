@@ -11,7 +11,7 @@ from app.quotas.service import __process_kaiwo_queue_config_event
 
 
 @pytest.mark.asyncio
-async def test_processes_kaiwo_queue_config_event_deleted():
+async def test_processes_kaiwo_queue_config_event_deleted() -> None:
     resource = {"status": {"status": "DELETED"}}
     event_type = "DELETED"
     with patch("app.quotas.service.__publish_quotas_allocations_status_message") as mock_publish:
@@ -23,7 +23,7 @@ async def test_processes_kaiwo_queue_config_event_deleted():
 
 
 @pytest.mark.asyncio
-async def test_processes_kaiwo_queue_config_event_ready():
+async def test_processes_kaiwo_queue_config_event_ready() -> None:
     resource = {
         "apiVersion": "kaiwo.silogen.ai/v1alpha1",
         "kind": "KaiwoQueueConfig",
@@ -160,7 +160,7 @@ async def test_processes_kaiwo_queue_config_event_ready():
 
 
 @pytest.mark.asyncio
-async def test_processes_kaiwo_queue_config_event_other_status():
+async def test_processes_kaiwo_queue_config_event_other_status() -> None:
     resource = {"status": {"status": "PENDING"}}
     event_type = "MODIFIED"
     with patch("app.quotas.service.__publish_quotas_allocations_status_message") as mock_publish:

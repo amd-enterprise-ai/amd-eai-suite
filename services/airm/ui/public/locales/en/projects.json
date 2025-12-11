@@ -84,15 +84,33 @@
         "description": "No workloads in this project."
       },
       "headers": {
-        "displayName": { "title": "Name" },
-        "type": { "title": "Type" },
-        "status": { "title": "Status" },
-        "gpuCount": { "title": "GPUs" },
-        "vram": { "title": "VRAM" },
-        "runTime": { "title": "Run Time" },
-        "createdAt": { "title": "Created At" },
-        "createdBy": { "title": "Created By" },
-        "actions": { "title": "" }
+        "displayName": {
+          "title": "Name"
+        },
+        "type": {
+          "title": "Type"
+        },
+        "status": {
+          "title": "Status"
+        },
+        "gpuCount": {
+          "title": "GPUs"
+        },
+        "vram": {
+          "title": "VRAM"
+        },
+        "runTime": {
+          "title": "Run Time"
+        },
+        "createdAt": {
+          "title": "Created At"
+        },
+        "createdBy": {
+          "title": "Created By"
+        },
+        "actions": {
+          "title": ""
+        }
       },
       "actions": {
         "delete": {
@@ -117,11 +135,21 @@
         "description": "No users in this project."
       },
       "headers": {
-        "name": { "title": "Name" },
-        "email": { "title": "Email" },
-        "role": { "title": "Role" },
-        "lastActive": { "title": "Last Active" },
-        "actions": { "title": "Actions" }
+        "name": {
+          "title": "Name"
+        },
+        "email": {
+          "title": "Email"
+        },
+        "role": {
+          "title": "Role"
+        },
+        "lastActive": {
+          "title": "Last Active"
+        },
+        "actions": {
+          "title": "Actions"
+        }
       },
       "pagination": {
         "showing": "Showing {{from}} to {{to}} of {{total}} users",
@@ -202,10 +230,6 @@
     "Deleting": "Deleting",
     "Pending": "Syncing",
     "PartiallyReady": "Partially Ready"
-  },
-  "statusReason": {
-    "messageTrigger": "more info",
-    "messageHeader": "There was an error processing the project. The system returned the following error message:"
   },
   "modal": {
     "create": {
@@ -392,7 +416,7 @@
     "overview": {
       "title": "Overview",
       "workloadStates": {
-        "title": "Project work on cluster",
+        "title": "Workloads in project",
         "total": "total workloads",
         "subtitle": "Workload states",
         "states": {

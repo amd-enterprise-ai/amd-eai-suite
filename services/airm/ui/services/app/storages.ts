@@ -87,6 +87,28 @@ export const updateStorageAssignment = async (
   return response.json();
 };
 
+export const assignStorageToProject = async (
+  projectId: string,
+  storageId: string,
+) => {
+  const response = await fetch(
+    `/api/projects/${projectId}/storages/${storageId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+  if (!response.ok) {
+    throw new APIRequestError(
+      `Failed to assign storage to project: ${await getErrorMessage(response)}`,
+      response.status,
+    );
+  }
+  return response.json();
+};
+
 export const deleteStorage = async (storageId: string) => {
   const response = await fetch(`/api/storages/${storageId}`, {
     method: 'DELETE',

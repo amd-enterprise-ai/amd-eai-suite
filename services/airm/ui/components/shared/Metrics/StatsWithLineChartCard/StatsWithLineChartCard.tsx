@@ -43,7 +43,7 @@ export const StatsWithLineChart: React.FC<Props> = ({
     data.length ? (data[data.length - 1].value ?? 0) : 0,
   );
   const [upperLimit, setUpperLimit] = useState<number>(
-    upperLimitData && upperLimitData.length
+    upperLimitData?.length
       ? (upperLimitData[upperLimitData.length - 1].value ?? 0)
       : 0,
   );
@@ -71,7 +71,7 @@ export const StatsWithLineChart: React.FC<Props> = ({
       lastValidIndex !== -1 ? (data[lastValidIndex].value ?? 0) : 0,
     );
     setUpperLimit(
-      upperLimitData && upperLimitData.length && lastValidIndex !== -1
+      upperLimitData?.length && lastValidIndex !== -1
         ? (upperLimitData[lastValidIndex]?.value ?? 0)
         : 0,
     );
@@ -110,9 +110,7 @@ export const StatsWithLineChart: React.FC<Props> = ({
         const index = timestampIndexMap[props.label];
         setCurrentValue(data[index]?.value ?? 0);
         setUpperLimit(
-          upperLimitData && upperLimitData.length
-            ? (upperLimitData[index]?.value ?? 0)
-            : 0,
+          upperLimitData?.length ? (upperLimitData[index]?.value ?? 0) : 0,
         );
         setCurrentTimestamp(props.label);
       } else {
@@ -120,7 +118,7 @@ export const StatsWithLineChart: React.FC<Props> = ({
           lastValidIndex !== -1 ? (data[lastValidIndex].value ?? 0) : 0,
         );
         setUpperLimit(
-          upperLimitData && upperLimitData.length && lastValidIndex !== -1
+          upperLimitData?.length && lastValidIndex !== -1
             ? (upperLimitData[lastValidIndex]?.value ?? 0)
             : 0,
         );

@@ -108,11 +108,9 @@ const SearchInput = forwardRef<{ clear: () => void }, SearchInputProps>(
         startContent={<IconSearch size={16} />}
         isClearable={false}
         endContent={
-          <>
-            {internalValue.length ? (
-              <ClearSingleFilterButton onPress={() => handleValueChange('')} />
-            ) : null}
-          </>
+          internalValue.length ? (
+            <ClearSingleFilterButton onPress={() => handleValueChange('')} />
+          ) : null
         }
         {...other}
       />

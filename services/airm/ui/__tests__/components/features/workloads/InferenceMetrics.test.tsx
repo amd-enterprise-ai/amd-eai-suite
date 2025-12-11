@@ -11,6 +11,7 @@ import { Workload } from '@/types/workloads';
 import { WorkloadStatus, WorkloadType } from '@/types/enums/workloads';
 import { TimeRangePeriod } from '@/types/enums/metrics';
 import { TimeRange } from '@/types/metrics';
+import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 
@@ -155,24 +156,7 @@ vi.mock('@tanstack/react-query', async () => {
 });
 
 describe('InferenceMetrics', () => {
-  const mockWorkload: Workload = {
-    id: 'test-workload-id',
-    type: WorkloadType.INFERENCE,
-    name: 'test-workload',
-    displayName: 'Test Inference Workload',
-    createdBy: 'test-user',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    status: WorkloadStatus.RUNNING,
-    chartId: 'test-chart-id',
-    clusterId: 'test-cluster-id',
-    cluster: {
-      id: 'test-cluster-id',
-      name: 'Test Cluster',
-      lastHeartbeatAt: '2024-01-01T00:00:00Z',
-      status: 'online' as any,
-    },
-  };
+  const mockWorkload = mockWorkloads[0]; // Use first workload from shared mocks
 
   const defaultTimeRange: TimeRange = {
     start: new Date('2024-01-01T00:00:00Z'),
@@ -221,7 +205,7 @@ describe('InferenceMetrics', () => {
     // Check workload ID is passed to all cards
     const workloadIdElements = screen.getAllByTestId('workload-id');
     workloadIdElements.forEach((element) => {
-      expect(element).toHaveTextContent('test-workload-id');
+      expect(element).toHaveTextContent('workload-1');
     });
 
     // Check time range is passed to all cards
@@ -278,7 +262,7 @@ describe('InferenceMetrics', () => {
         'project',
         'test-project-id',
         'workload',
-        'test-workload-id',
+        'workload-1',
         'metrics',
       ],
     });
@@ -327,7 +311,7 @@ describe('InferenceMetrics', () => {
         'project',
         'test-project-id',
         'workload',
-        'test-workload-id',
+        'workload-1',
         'metrics',
       ],
     });

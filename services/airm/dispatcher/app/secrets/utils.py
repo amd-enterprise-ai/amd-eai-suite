@@ -4,11 +4,13 @@
 
 from copy import deepcopy
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
-from airm.messaging.schemas import ProjectSecretStatus, ProjectSecretsUpdateMessage
+from airm.messaging.schemas import ProjectSecretStatus, ProjectSecretsUpdateMessage, SecretScope
 from airm.secrets.constants import (
     PROJECT_SECRET_ID_LABEL,
+    PROJECT_SECRET_SCOPE_LABEL,
 )
 
 from ..utilities.attribute_utils import get_attr_or_key
@@ -36,7 +38,7 @@ def patch_external_secret_manifest(
     secret_name: str,
     manifest: dict,
     project_secret_id: str,
-):
+) -> dict:
     patched_manifest = deepcopy(manifest)
     existing_metadata = get_attr_or_key(patched_manifest, "metadata", {})
     patched_manifest["metadata"] = _build_metadata(
@@ -53,7 +55,7 @@ def patch_kubernetes_secret_manifest(
     secret_name: str,
     manifest: dict,
     project_secret_id: str,
-):
+) -> dict:
     patched_manifest = deepcopy(manifest)
     existing_metadata = get_attr_or_key(patched_manifest, "metadata", {})
     patched_manifest["metadata"] = _build_metadata(
@@ -72,21 +74,36 @@ def extract_project_secret_id(item: dict) -> UUID | None:
     return UUID(project_secret_id_str) if project_secret_id_str else None
 
 
+def extract_secret_scope(item: dict) -> SecretScope | None:
+    metadata = get_attr_or_key(item, "metadata", {})
+    labels = get_attr_or_key(metadata, "labels", {})
+    project_secret_scope_str = get_attr_or_key(labels, PROJECT_SECRET_SCOPE_LABEL, None)
+
+    if project_secret_scope_str:
+        try:
+            return SecretScope(project_secret_scope_str.capitalize())
+        except ValueError:
+            return None
+    return None
+
+
 def create_project_secret_status_message(
     project_secret_id: UUID,
+    secret_scope: SecretScope | None,
     status: ProjectSecretStatus,
     status_reason: str | None = None,
 ) -> ProjectSecretsUpdateMessage:
     return ProjectSecretsUpdateMessage(
         message_type="project_secrets_update",
         project_secret_id=project_secret_id,
+        secret_scope=secret_scope,
         status=status,
         status_reason=status_reason,
         updated_at=datetime.now(UTC),
     )
 
 
-def get_status_for_external_secret(resource, event_type) -> tuple[ProjectSecretStatus | None, str]:
+def get_status_for_external_secret(resource: Any, event_type: str) -> tuple[ProjectSecretStatus | None, str]:
     if event_type == "DELETED":
         return ProjectSecretStatus.DELETED, "Resource has been removed from the cluster."
 
@@ -115,7 +132,7 @@ def get_status_for_external_secret(resource, event_type) -> tuple[ProjectSecretS
     return None, "Secret status could not be determined."
 
 
-def get_status_for_kubernetes_secret(resource, event_type) -> tuple[ProjectSecretStatus | None, str]:
+def get_status_for_kubernetes_secret(resource: Any, event_type: str) -> tuple[ProjectSecretStatus | None, str]:
     if event_type == "DELETED":
         return ProjectSecretStatus.DELETED, "Secret has been deleted from the cluster."
 

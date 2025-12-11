@@ -131,7 +131,7 @@ export const authOptions: NextAuthOptions = {
       const canLogin = signInLogic(
         account?.provider,
         profile?.email,
-        // @ts-ignore todo email_verified is not in the type
+        // @ts-expect-error todo email_verified is not in the type
         profile?.email_verified,
       );
 

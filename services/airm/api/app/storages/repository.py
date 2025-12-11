@@ -8,11 +8,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload, with_loader_criteria
+from sqlalchemy.orm import with_loader_criteria
 
 from airm.messaging.schemas import ConfigMapStatus, ProjectStorageStatus
 
-from ..secrets.repository import ProjectSecret
 from ..utilities.exceptions import ConflictException
 from ..utilities.models import set_updated_fields
 from .enums import StorageStatus
@@ -37,12 +36,9 @@ async def get_storages_in_organization(
             query.join(ProjectStorage, Storage.id == ProjectStorage.storage_id)
             .where(ProjectStorage.project_id == project_id)
             .options(
-                selectinload(Storage.project_storages).selectinload(ProjectStorage.project),
                 with_loader_criteria(ProjectStorage, ProjectStorage.project_id == project_id),
             )
         )
-    else:
-        query = query.options(selectinload(Storage.project_storages).selectinload(ProjectStorage.project))
 
     result = await session.execute(query)
     return result.unique().scalars().all()
@@ -53,7 +49,7 @@ async def assign_storage_to_projects(
     storage_id: UUID,
     project_ids: list[UUID],
     user_email: str,
-):
+) -> None:
     for project_id in project_ids:
         project_storage = ProjectStorage(
             project_id=project_id,
@@ -100,7 +96,7 @@ async def get_project_storage(session: AsyncSession, storage_id: UUID, project_i
     result = await session.execute(
         select(ProjectStorage).where(ProjectStorage.storage_id == storage_id, ProjectStorage.project_id == project_id)
     )
-    return result.scalar_one_or_none()
+    return result.unique().scalar_one_or_none()
 
 
 async def create_project_storage(
@@ -119,16 +115,9 @@ async def create_project_storage(
     session.add(project_storage)
     await session.flush()
 
-    # Re-select with eager loading to avoid async lazy-load problems later
-    result = await session.execute(
-        select(ProjectStorage)
-        .options(
-            selectinload(ProjectStorage.project),
-            selectinload(ProjectStorage.storage),
-        )
-        .where(ProjectStorage.id == project_storage.id)
-    )
-    return result.scalar_one()
+    # Re-select to ensure relationships are loaded
+    result = await session.execute(select(ProjectStorage).where(ProjectStorage.id == project_storage.id))
+    return result.unique().scalar_one()
 
 
 async def create_project_storage_configmap(
@@ -154,7 +143,7 @@ async def update_storage_status(
     status_reason: str | None,
     updated_by: str,
     updated_at: datetime | None = None,
-):
+) -> None:
     storage.status = status
     storage.status_reason = status_reason
     set_updated_fields(storage, updated_by, updated_at)
@@ -195,19 +184,19 @@ async def update_project_storage_status(
     status_reason: str | None,
     updated_by: str,
     updated_at: datetime | None = None,
-):
+) -> None:
     project_storage.status = status
     project_storage.status_reason = status_reason
     set_updated_fields(project_storage, updated_by, updated_at)
     await session.flush()
 
 
-async def delete_storage(session: AsyncSession, storage: Storage):
+async def delete_storage(session: AsyncSession, storage: Storage) -> None:
     await session.delete(storage)
     await session.flush()
 
 
-async def delete_project_storage(session: AsyncSession, project_storage: ProjectStorage):
+async def delete_project_storage(session: AsyncSession, project_storage: ProjectStorage) -> None:
     storage = project_storage.storage
 
     await session.delete(project_storage)
@@ -226,23 +215,19 @@ async def get_storage_by_secret_id(session: AsyncSession, secret_id: UUID) -> St
 
 
 async def get_project_storage_by_id(session: AsyncSession, project_storage_id: UUID) -> ProjectStorage | None:
-    result = await session.execute(
-        select(ProjectStorage)
-        .options(selectinload(ProjectStorage.storage))
-        .where(ProjectStorage.id == project_storage_id)
-    )
-    return result.scalar_one_or_none()
+    result = await session.execute(select(ProjectStorage).where(ProjectStorage.id == project_storage_id))
+    return result.unique().scalar_one_or_none()
 
 
 async def get_project_storages_by_project_secret(
-    session: AsyncSession, project_secret: ProjectSecret
+    session: AsyncSession, secret_id: UUID, project_id: UUID
 ) -> list[ProjectStorage]:
     result = await session.execute(
         select(ProjectStorage)
         .join(Storage, ProjectStorage.storage_id == Storage.id)
-        .where(Storage.secret_id == project_secret.secret_id, ProjectStorage.project_id == project_secret.project_id)
+        .where(Storage.secret_id == secret_id, ProjectStorage.project_id == project_id)
     )
-    return result.scalars().all()
+    return result.unique().scalars().all()
 
 
 # Retrieve all ProjectStorage entries for a list of project IDs, including their associated Storage details
@@ -255,11 +240,10 @@ async def get_project_storages_by_project_ids_secret(
     result = await session.execute(
         select(ProjectStorage)
         .join(Storage, ProjectStorage.storage_id == Storage.id)
-        .options(selectinload(ProjectStorage.storage))
         .where(
             ProjectStorage.project_id.in_(project_ids),
             Storage.secret_id == secret_id,
         )
         .order_by(ProjectStorage.project_id)
     )
-    return result.scalars().all()
+    return result.unique().scalars().all()

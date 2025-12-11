@@ -93,10 +93,10 @@ export const ActiveUsersTab = ({
     });
 
   const filteredUsersData = useMemo(() => {
-    if (data?.users) {
-      return getFilteredData(data.users, filter);
+    if (data?.data) {
+      return getFilteredData(data.data, filter);
     }
-  }, [filter, data?.users]);
+  }, [filter, data?.data]);
 
   const customRenderers: Partial<
     Record<UserTableField, (item: User) => React.ReactNode | string>
@@ -109,7 +109,7 @@ export const ActiveUsersTab = ({
     [UserTableField.ROLES]: (item) => item.role,
   };
 
-  const handleRowPressed = (id: string) => {
+  const navigateToUserDetails = (id: string) => {
     router.push(`/users/${id}`);
   };
 
@@ -134,7 +134,7 @@ export const ActiveUsersTab = ({
           isInviteEnabled ? (
             <InviteUserButton
               onClick={onInviteUserClick}
-              label={t('actions.addUser')}
+              label={t('actions.addUser.label')}
             />
           ) : undefined
         }
@@ -150,7 +150,14 @@ export const ActiveUsersTab = ({
           translation={t}
           idKey="id"
           isFetching={isFetching || isRefetching}
-          onRowPressed={handleRowPressed}
+          onRowPressed={navigateToUserDetails}
+          rowActions={[
+            {
+              key: 'edit',
+              onPress: (item) => navigateToUserDetails(item.id),
+              label: t('actions.editUser.label'),
+            },
+          ]}
         />
       )}
     </div>

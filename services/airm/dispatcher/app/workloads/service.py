@@ -64,7 +64,7 @@ from .utils import (
 )
 
 
-async def process_workload(message: WorkloadMessage):
+async def process_workload(message: WorkloadMessage) -> None:
     logger.info("Workload handler received message")
     logger.debug(f"Processing WorkloadMessage: {message}")
     manifests = list(yaml.safe_load_all(message.manifest))
@@ -72,7 +72,7 @@ async def process_workload(message: WorkloadMessage):
 
     for manifest in manifests:
         try:
-            # create_from_dict does not work when apply=False for custom objects
+            # create_from_dict does not work when apply=False for custom objects: https://github.com/silogen/core/pull/1806
             api_version = manifest.get("apiVersion")
             kind = manifest.get("kind")
             namespace = manifest.get("metadata").get("namespace")
@@ -88,7 +88,7 @@ async def process_workload(message: WorkloadMessage):
             await __publish_workload_component_status_update(message)
 
 
-async def __publish_workload_status(workload_id: UUID, status: str, reason: str):
+async def __publish_workload_status(workload_id: UUID, status: str, reason: str) -> None:
     connection, channel = await get_common_vhost_connection_and_channel()
     await publish_to_common_feedback_queue(
         WorkloadStatusMessage(
@@ -103,21 +103,21 @@ async def __publish_workload_status(workload_id: UUID, status: str, reason: str)
     )
 
 
-async def __publish_workload_component_status_update(message: WorkloadComponentStatusMessage):
+async def __publish_workload_component_status_update(message: WorkloadComponentStatusMessage) -> None:
     connection, channel = await get_common_vhost_connection_and_channel()
 
     await publish_to_common_feedback_queue(message=message, connection=connection, channel=channel)
     logger.info(f"Published to queue, message={message.model_dump_json()}")
 
 
-async def __publish_auto_discovered_workload_component(workload_component_data: WorkloadComponentData):
+async def __publish_auto_discovered_workload_component(workload_component_data: WorkloadComponentData) -> None:
     connection, channel = await get_common_vhost_connection_and_channel()
     message = create_auto_discovered_workload_component_message(workload_component_data)
     await publish_to_common_feedback_queue(message=message, connection=connection, channel=channel)
     logger.info(f"Published auto-discovered component to queue, message={message.model_dump_json()}")
 
 
-async def __process_workload_component_event(resource, event_type, status_function: Callable):
+async def __process_workload_component_event(resource: Any, event_type: str, status_function: Callable) -> None:
     try:
         workload_component_data = extract_workload_component_data(resource)
         if workload_component_data.auto_discovered:
@@ -242,7 +242,7 @@ def start_watching_workload_components() -> asyncio.Task:
     return asyncio.create_task(__start_watching_workload_components())
 
 
-async def process_workload_delete_error(api_resource: Any, delete_err: ApiException, item):
+async def process_workload_delete_error(api_resource: Any, delete_err: ApiException, item: Any) -> None:
     workload_component_data = extract_workload_component_data(item)
 
     status_reason = f"Deletion failed for resource {api_resource.kind} workload_id={workload_component_data.workload_id} component_id={workload_component_data.component_id}: {delete_err}"
@@ -254,7 +254,7 @@ async def process_workload_delete_error(api_resource: Any, delete_err: ApiExcept
     await __publish_workload_component_status_update(message)
 
 
-async def process_delete_workload(message: DeleteWorkloadMessage):
+async def process_delete_workload(message: DeleteWorkloadMessage) -> None:
     logger.info("Delete workload handler received message")
     logger.debug(f"Processing DeleteWorkloadMessage: {message}")
     label_selector = f"{WORKLOAD_ID_LABEL}={message.workload_id}"

@@ -1,7 +1,7 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Chip, Tooltip } from '@heroui/react';
+import { Tooltip } from '@heroui/react';
 import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -14,10 +14,12 @@ import { ClientSideDataTable } from '@/components/shared/DataTable';
 import {
   DateDisplay,
   NoDataDisplay,
+  StatusDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
 
-import { StorageStatus } from './StorageStatus';
-
+import { getStorageStatusVariants } from '@/utils/app/storages-status-variants';
+import { StatusError } from '@/components/shared/StatusError';
+import { StorageStatus } from '@/types/enums/storages';
 interface Props {
   actions?: ActionItem<Storage>[];
   storages: Storage[];
@@ -69,7 +71,7 @@ export const StoragesTable: React.FC<Props> = ({
         return <span>{item.name}</span>;
       },
       [StoragesTableField.TYPE]: (item: Storage) => {
-        return <Chip>{t(`storageType.${item.type}`)}</Chip>;
+        return <span>{t(`storageType.${item.type}`)}</span>;
       },
       [StoragesTableField.STATUS]: (item: Storage) => {
         const secondaryStatusReasons = item.projectStorages
@@ -79,13 +81,30 @@ export const StoragesTable: React.FC<Props> = ({
             description: s.statusReason ?? '',
           }));
 
-        return (
-          <StorageStatus
-            status={item.status}
-            statusReason={item.statusReason}
-            secondaryStatusReason={
+        const hasError =
+          item.status === StorageStatus.FAILED ||
+          item.status === StorageStatus.DELETE_FAILED ||
+          item.status === StorageStatus.SYNCED_ERROR;
+
+        return item.status === StorageStatus.UNASSIGNED ? (
+          <NoDataDisplay />
+        ) : (
+          <StatusDisplay
+            type={item.status}
+            variants={getStorageStatusVariants(t)}
+            bypassProps={
+              hasError &&
+              !!item.statusReason &&
               secondaryStatusReasons.length > 0
-                ? secondaryStatusReasons
+                ? {
+                    isClickable: true,
+                    helpContent: (
+                      <StatusError
+                        statusReason={item.statusReason}
+                        secondaryStatusReasons={secondaryStatusReasons}
+                      />
+                    ),
+                  }
                 : undefined
             }
           />

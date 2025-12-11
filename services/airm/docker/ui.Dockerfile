@@ -5,9 +5,9 @@
 # ---- Dependencies ----
 FROM node:22-alpine AS dependencies
 WORKDIR /app
-RUN corepack enable
-COPY package*.json pnpm-lock.yaml .env.local.dummy .npmrc ./
-RUN mv .env.local.dummy .env.local
+COPY package*.json pnpm-lock.yaml .env.local.example .npmrc ./
+RUN mv .env.local.example .env.local
+RUN corepack enable && corepack install
 RUN pnpm install --frozen-lockfile
 
 # ---- Build ----
@@ -21,7 +21,6 @@ RUN export NEXT_PUBLIC_BUILD_VERSION="$(date +"%y%m%d")-$GITHUB_SHA_SHORT"; \
 # ---- Production ----
 FROM node:22-alpine AS production
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm --activate
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/package*.json ./
@@ -29,6 +28,7 @@ COPY --from=build /app/pnpm-lock.yaml ./
 COPY --from=build /app/next.config.js ./next.config.js
 COPY --from=build /app/next-i18next.config.js ./next-i18next.config.js
 COPY --from=build /app/public ./public
+RUN corepack enable && corepack install
 RUN chown -R node:node /app
 
 # Expose the port the app will run on

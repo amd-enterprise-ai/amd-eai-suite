@@ -279,4 +279,32 @@ describe('Catalog Page', () => {
       status: [WorkloadStatus.RUNNING, WorkloadStatus.PENDING],
     });
   });
+
+  it('displays pending label on catalog item card when workload is pending', async () => {
+    (getCatalogItems as Mock).mockResolvedValue([mockCatalogItems[0]]);
+
+    (listWorkloads as Mock).mockResolvedValue(
+      generateMockWorkspaceWorkloads(
+        1,
+        mockCatalogItems[0].name,
+        WorkloadStatus.PENDING,
+        WorkloadType.WORKSPACE,
+      ),
+    );
+
+    await act(async () => {
+      render(
+        <SessionProvider session={mockSession}>
+          <WorkspacesPage />
+        </SessionProvider>,
+        { wrapper },
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Test workload 1')).toBeInTheDocument();
+      expect(screen.getByText('list.actions.pending')).toBeInTheDocument();
+      expect(screen.queryByText('list.actions.launch')).not.toBeInTheDocument();
+    });
+  });
 });

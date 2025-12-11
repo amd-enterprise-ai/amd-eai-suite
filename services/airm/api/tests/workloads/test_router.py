@@ -14,8 +14,8 @@ from fastapi.testclient import TestClient
 from airm.messaging.schemas import QuotaStatus, WorkloadStatus
 from app import app  # type: ignore
 from app.clusters.models import Cluster
-from app.logs.schemas import LogEntry, LogLevel
-from app.logs.service import get_loki_client, get_websocket_factory
+from app.logs.schemas import LogEntry, LogLevel, PaginationMetadata, WorkloadLogsResponse
+from app.logs.service import get_loki_client
 from app.organizations.models import Organization
 from app.projects.models import Project
 from app.quotas.models import Quota
@@ -130,7 +130,7 @@ async def test_submit_workload_success(mock_submit_workload):
         cluster=Cluster(
             id=cluster_id,
             name="TestCluster",
-            base_url="http://test-cluster.example.com",
+            workloads_base_url="http://test-cluster.example.com",
             last_heartbeat_at=datetime.now(UTC),
             created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
             updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -233,7 +233,7 @@ async def test_submit_workload_w_type(mock_submit_workload_to_cluster):
         cluster=Cluster(
             id=cluster_id,
             name="TestCluster",
-            base_url="http://test-cluster.example.com",
+            workloads_base_url="http://test-cluster.example.com",
             last_heartbeat_at=datetime.now(UTC),
             created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
             updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -335,7 +335,7 @@ async def test_submit_workload_display_name(mock_submit_workload_to_cluster):
         cluster=Cluster(
             id=cluster_id,
             name="TestCluster",
-            base_url="http://test-cluster.example.com",
+            workloads_base_url="http://test-cluster.example.com",
             last_heartbeat_at=datetime.now(UTC),
             created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
             updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -735,7 +735,7 @@ async def test_create_workload_file_too_large():
         cluster=Cluster(
             id=cluster_id,
             name="TestCluster",
-            base_url="http://test-cluster.example.com",
+            workloads_base_url="http://test-cluster.example.com",
             last_heartbeat_at=datetime.now(UTC),
             created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
             updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -783,7 +783,7 @@ async def test_get_workloads_no_project_success(get_workloads_accessible_to_user
         created_by="test@example.com",
         updated_by="test@example.com",
     )
-    get_workloads_accessible_to_user.return_value = Workloads(workloads=[mock_workload])
+    get_workloads_accessible_to_user.return_value = Workloads(data=[mock_workload])
 
     with TestClient(app) as client:
         response = client.get("/v1/workloads")
@@ -792,7 +792,7 @@ async def test_get_workloads_no_project_success(get_workloads_accessible_to_user
 
 
 @pytest.mark.asyncio
-@patch("app.workloads.router.get_workloads_accessible_to_user", return_value=Workloads(workloads=[]))
+@patch("app.workloads.router.get_workloads_accessible_to_user", return_value=Workloads(data=[]))
 async def test_get_workloads_no_project_empty_list(mock_get_workloads_accessible_to_user):
     mock_get_user = MagicMock()
     mock_get_user.return_value = "test_user"
@@ -811,7 +811,7 @@ async def test_get_workloads_no_project_empty_list(mock_get_workloads_accessible
         response = client.get("/v1/workloads")
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == {"workloads": []}
+    assert response.json() == {"data": []}
     mock_get_workloads_accessible_to_user.assert_called_once()
 
 
@@ -858,7 +858,7 @@ async def test_get_workloads_with_project_success(validate_project, get_workload
         created_by="test@example.com",
         updated_by="test@example.com",
     )
-    get_workloads_by_project.return_value = Workloads(workloads=[mock_workload])
+    get_workloads_by_project.return_value = Workloads(data=[mock_workload])
 
     with TestClient(app) as client:
         response = client.get("/v1/workloads?project_id=99a3f8c2-a23d-4ac6-b2a9-502305925ff3")
@@ -970,23 +970,29 @@ async def test_get_workload_logs_success(mock_get_logs, mock_get_workload, mock_
     mock_workload_with_components.components = [mock_component]
     mock_get_workload_with_components.return_value = mock_workload_with_components
 
-    # Create mock flat list of LogEntry objects
-    mock_get_logs.return_value = [
-        LogEntry(
-            timestamp="2025-01-01T00:00:00Z",
-            level="info",
-            message="Test log message 1",
-        ),
-        LogEntry(
-            timestamp="2025-01-01T00:01:00Z",
-            level=LogLevel.debug,
-            message="Test log message 2",
-        ),
-    ]
+    # Create mock WorkloadLogsResponse
+    mock_get_logs.return_value = WorkloadLogsResponse(
+        logs=[
+            LogEntry(
+                timestamp="2025-01-01T00:00:00Z",
+                level="info",
+                message="Test log message 1",
+            ),
+            LogEntry(
+                timestamp="2025-01-01T00:01:00Z",
+                level=LogLevel.debug,
+                message="Test log message 2",
+            ),
+        ],
+        pagination=PaginationMetadata(has_more=False, page_token=None, total_returned=2),
+    )
 
     # Setup app dependencies
+    mock_project = MagicMock(spec=Project)
+    mock_project.id = uuid4()
     app.dependency_overrides[get_session] = lambda: AsyncMock()
     app.dependency_overrides[get_user] = lambda: MagicMock(id=uuid4(), email="test@example.com")
+    app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
 
     with TestClient(app) as client:
         response = client.get(
@@ -995,9 +1001,11 @@ async def test_get_workload_logs_success(mock_get_logs, mock_get_workload, mock_
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 2
-    assert data[0]["message"] == "Test log message 1"
+    assert isinstance(data, dict)
+    assert "logs" in data
+    assert "pagination" in data
+    assert len(data["logs"]) == 2
+    assert data["logs"][0]["message"] == "Test log message 1"
 
     # Verify service calls
     mock_get_workload.assert_called_once()
@@ -1054,36 +1062,44 @@ async def test_get_workload_logs_with_level_filter(mock_get_logs, mock_get_workl
     mock_get_workload_with_components.return_value = mock_workload_with_components
 
     # Create mock filtered logs (only warning and above)
-    mock_get_logs.return_value = [
-        LogEntry(
-            timestamp="2025-01-01T00:00:00Z",
-            level=LogLevel.warning,
-            message="Warning message",
-        ),
-        LogEntry(
-            timestamp="2025-01-01T00:01:00Z",
-            level=LogLevel.error,
-            message="Error message",
-        ),
-    ]
+    mock_get_logs.return_value = WorkloadLogsResponse(
+        logs=[
+            LogEntry(
+                timestamp="2025-01-01T00:00:00Z",
+                level=LogLevel.warning,
+                message="Warning message",
+            ),
+            LogEntry(
+                timestamp="2025-01-01T00:01:00Z",
+                level=LogLevel.error,
+                message="Error message",
+            ),
+        ],
+        pagination=PaginationMetadata(has_more=False, page_token=None, total_returned=2),
+    )
 
     # Setup app dependencies
+    mock_project = MagicMock(spec=Project)
+    mock_project.id = uuid4()
     app.dependency_overrides[get_session] = lambda: AsyncMock()
     app.dependency_overrides[get_user] = lambda: MagicMock(id=uuid4(), email="test@example.com")
+    app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
 
     with TestClient(app) as client:
         response = client.get(f"/v1/workloads/{workload_id}/logs?level=warning&limit=100")
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 2
+    assert isinstance(data, dict)
+    assert "logs" in data
+    assert "pagination" in data
+    assert len(data["logs"]) == 2
 
     # Verify levels are serialized as strings
-    assert data[0]["level"] == "warning"
-    assert data[1]["level"] == "error"
-    assert data[0]["message"] == "Warning message"
-    assert data[1]["message"] == "Error message"
+    assert data["logs"][0]["level"] == "warning"
+    assert data["logs"][1]["level"] == "error"
+    assert data["logs"][0]["message"] == "Warning message"
+    assert data["logs"][1]["message"] == "Error message"
 
     # Verify service was called with level filter
     mock_get_logs.assert_called_once()
@@ -1115,17 +1131,23 @@ async def test_get_workload_logs_with_warning_synonym(
     mock_get_workload_with_components.return_value = mock_workload_with_components
 
     # Create mock filtered logs
-    mock_get_logs.return_value = [
-        LogEntry(
-            timestamp="2025-01-01T00:00:00Z",
-            level=LogLevel.warning,
-            message="Warning message",
-        ),
-    ]
+    mock_get_logs.return_value = WorkloadLogsResponse(
+        logs=[
+            LogEntry(
+                timestamp="2025-01-01T00:00:00Z",
+                level=LogLevel.warning,
+                message="Warning message",
+            ),
+        ],
+        pagination=PaginationMetadata(has_more=False, page_token=None, total_returned=1),
+    )
 
     # Setup app dependencies
+    mock_project = MagicMock(spec=Project)
+    mock_project.id = uuid4()
     app.dependency_overrides[get_session] = lambda: AsyncMock()
     app.dependency_overrides[get_user] = lambda: MagicMock(id=uuid4(), email="test@example.com")
+    app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
 
     with TestClient(app) as client:
         # Test with 'warning' synonym
@@ -1133,9 +1155,11 @@ async def test_get_workload_logs_with_warning_synonym(
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 1
-    assert data[0]["level"] == "warning"  # Should be serialized as enum name
+    assert isinstance(data, dict)
+    assert "logs" in data
+    assert "pagination" in data
+    assert len(data["logs"]) == 1
+    assert data["logs"][0]["level"] == "warning"  # Should be serialized as enum name
 
     # Verify service was called with LogLevel.warning (converted from 'warning')
     mock_get_logs.assert_called_once()
@@ -1164,18 +1188,24 @@ async def test_get_workload_logs_custom_parameters(mock_get_logs, mock_get_workl
     mock_workload_with_components.components = [mock_component]
     mock_get_workload_with_components.return_value = mock_workload_with_components
 
-    # Create mock flat list
-    mock_get_logs.return_value = [
-        LogEntry(
-            timestamp="2025-01-01T00:00:00Z",
-            level="info",
-            message="Test log message",
-        ),
-    ]
+    # Create mock WorkloadLogsResponse
+    mock_get_logs.return_value = WorkloadLogsResponse(
+        logs=[
+            LogEntry(
+                timestamp="2025-01-01T00:00:00Z",
+                level="info",
+                message="Test log message",
+            ),
+        ],
+        pagination=PaginationMetadata(has_more=False, page_token=None, total_returned=1),
+    )
 
     # Setup app dependencies
+    mock_project = MagicMock(spec=Project)
+    mock_project.id = uuid4()
     app.dependency_overrides[get_session] = lambda: AsyncMock()
     app.dependency_overrides[get_user] = lambda: MagicMock(id=uuid4(), email="test@example.com")
+    app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
 
     with TestClient(app) as client:
         response = client.get(
@@ -1184,9 +1214,11 @@ async def test_get_workload_logs_custom_parameters(mock_get_logs, mock_get_workl
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 1
-    assert data[0]["message"] == "Test log message"
+    assert isinstance(data, dict)
+    assert "logs" in data
+    assert "pagination" in data
+    assert len(data["logs"]) == 1
+    assert data["logs"][0]["message"] == "Test log message"
 
     # Verify service calls
     mock_get_workload.assert_called_once()
@@ -1241,7 +1273,6 @@ async def test_workload_logs_stream_success(mock_stream_logs, mock_get_workload,
     # Create mock dependencies with consistent instances
     mock_session = AsyncMock()
     mock_loki_client = AsyncMock()
-    mock_websocket_factory = AsyncMock()
 
     # Create mock project for accessible_projects
     mock_project = Project(id=uuid4(), name="test-project", organization_id=mock_user.organization_id)
@@ -1250,7 +1281,6 @@ async def test_workload_logs_stream_success(mock_stream_logs, mock_get_workload,
     app.dependency_overrides[get_session] = lambda: mock_session
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
     app.dependency_overrides[get_loki_client] = lambda: mock_loki_client
-    app.dependency_overrides[get_websocket_factory] = lambda: mock_websocket_factory
 
     try:
         client = TestClient(app)
@@ -1307,7 +1337,6 @@ async def test_workload_logs_stream_not_found(mock_get_workload):
     app.dependency_overrides[get_session] = lambda: AsyncMock()
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
     app.dependency_overrides[get_loki_client] = lambda: AsyncMock()
-    app.dependency_overrides[get_websocket_factory] = lambda: AsyncMock()
 
     try:
         client = TestClient(app)
@@ -1365,7 +1394,6 @@ async def test_workload_logs_stream_with_default_parameters(
     app.dependency_overrides[get_session] = lambda: AsyncMock()
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
     app.dependency_overrides[get_loki_client] = lambda: AsyncMock()
-    app.dependency_overrides[get_websocket_factory] = lambda: AsyncMock()
 
     try:
         client = TestClient(app)
@@ -1409,7 +1437,6 @@ async def test_workload_logs_stream_invalid_delay(
     app.dependency_overrides[get_session] = lambda: AsyncMock()
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
     app.dependency_overrides[get_loki_client] = lambda: AsyncMock()
-    app.dependency_overrides[get_websocket_factory] = lambda: AsyncMock()
 
     try:
         client = TestClient(app)
@@ -1471,7 +1498,6 @@ async def test_workload_logs_stream_exception_handling(
     app.dependency_overrides[get_session] = lambda: AsyncMock()
     app.dependency_overrides[get_projects_accessible_to_user] = lambda: [mock_project]
     app.dependency_overrides[get_loki_client] = lambda: AsyncMock()
-    app.dependency_overrides[get_websocket_factory] = lambda: AsyncMock()
 
     try:
         client = TestClient(app)

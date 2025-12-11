@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd
+                   http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <!--
+        Update aims table to match new AIMClusterModel schema from dispatcher.
+
+        Old schema: image_name, image_tag, labels (flat key-value pairs)
+        New schema: resource_name, image_reference, labels (flat key-value pairs), status
+
+        The columns have completely different semantics:
+        - image_name was just the image name, resource_name is the K8s CRD name (includes version)
+        - image_tag was just the tag, image_reference is the full OCI reference
+        - labels remains flat key-value pairs but populated from originalLabels or converted imageMetadata
+
+        Since the data will be re-synced from the cluster, we drop old columns and add new ones.
+        Any existing AIM workloads will need their aim_id references handled appropriately.
+    -->
+
+    <changeSet id="drop-aims-old-index" author="copilot">
+        <preConditions onFail="MARK_RAN">
+            <indexExists tableName="aims" indexName="aims_image_name_image_tag_key"/>
+        </preConditions>
+        <dropIndex tableName="aims" indexName="aims_image_name_image_tag_key"/>
+    </changeSet>
+
+    <changeSet id="update-aims-table-schema" author="copilot">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <columnExists tableName="aims" columnName="image_name"/>
+                <columnExists tableName="aims" columnName="image_tag"/>
+            </and>
+        </preConditions>
+
+        <!-- Add new columns first -->
+        <addColumn tableName="aims">
+            <column name="resource_name" type="varchar(255)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <addColumn tableName="aims">
+            <column name="image_reference" type="varchar(512)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <addColumn tableName="aims">
+            <column name="status" type="varchar(50)" defaultValue="Pending">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <!-- Populate new columns from existing data (labels column stays as-is) -->
+        <sql>
+            UPDATE aims SET
+                resource_name = image_name || '-' || REPLACE(image_tag, '.', '-'),
+                image_reference = 'docker.io/amdenterpriseai/' || image_name || ':' || image_tag
+            WHERE image_name IS NOT NULL AND image_tag IS NOT NULL;
+        </sql>
+
+        <!-- Now make resource_name and image_reference non-nullable -->
+        <addNotNullConstraint tableName="aims" columnName="resource_name"/>
+        <addNotNullConstraint tableName="aims" columnName="image_reference"/>
+
+        <!-- Drop old columns (keep labels column) -->
+        <dropColumn tableName="aims" columnName="image_name"/>
+        <dropColumn tableName="aims" columnName="image_tag"/>
+
+        <!-- Create new unique constraint on resource_name -->
+        <createIndex tableName="aims" indexName="aims_resource_name_key" unique="true">
+            <column name="resource_name"/>
+        </createIndex>
+
+        <!-- Create unique constraint on image_reference -->
+        <createIndex tableName="aims" indexName="aims_image_reference_key" unique="true">
+            <column name="image_reference"/>
+        </createIndex>
+
+        <!-- Add index on status for filtering -->
+        <createIndex tableName="aims" indexName="ix_aims_status">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

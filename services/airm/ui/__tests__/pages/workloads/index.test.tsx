@@ -2,22 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  render,
-  screen,
-  waitFor,
-  within, // Added within
-} from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import { deleteWorkload, listWorkloads } from '@/services/app/workloads';
 import { getAims } from '@/services/app/aims';
-import { getModels } from '@/services/app/models';
 import WorkloadsPage from '@/pages/workloads';
 import wrapper from '@/__tests__/ProviderWrapper';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
-import { mockAims } from '@/__mocks__/services/app/aims.data';
+import userEvent from '@testing-library/user-event';
+import { mockAims } from '@/__mocks__/utils/aims-mock';
 
-// Mock the next router
 vi.mock('next/router', () => ({
   useRouter: vi.fn(() => ({
     push: vi.fn(),
@@ -26,7 +20,6 @@ vi.mock('next/router', () => ({
   })),
 }));
 
-// Mock the API services
 vi.mock('@/services/app/workloads', () => ({
   listWorkloads: vi.fn(),
   deleteWorkload: vi.fn(),
@@ -40,7 +33,6 @@ vi.mock('@/services/app/models', () => ({
   getModels: vi.fn(),
 }));
 
-// Mock useSystemToast for testing
 vi.mock('@/hooks/useSystemToast', () => ({
   __esModule: true,
   default: () => ({
@@ -51,7 +43,6 @@ vi.mock('@/hooks/useSystemToast', () => ({
   }),
 }));
 
-// Mock the next-auth session
 vi.mock('next-auth', () => ({
   getServerSession: vi.fn(() => ({
     user: { email: 'test@example.com' },
@@ -59,7 +50,6 @@ vi.mock('next-auth', () => ({
   })),
 }));
 
-// Mock translations
 vi.mock('next-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -68,6 +58,14 @@ vi.mock('next-i18next', () => ({
 
 vi.mock('next-i18next/serverSideTranslations', () => ({
   serverSideTranslations: vi.fn(() => Promise.resolve({ _nextI18Next: {} })),
+}));
+
+// Mock ProjectContext to provide an active project
+vi.mock('@/contexts/ProjectContext', () => ({
+  useProject: () => ({
+    activeProject: 'test-project-123',
+    setActiveProject: vi.fn(),
+  }),
 }));
 
 describe('Workloads Page', () => {
@@ -81,13 +79,6 @@ describe('Workloads Page', () => {
     );
     (getAims as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
       mockAims,
-    );
-    // Mock getModels to return models from mockWorkloads
-    const mockModels = mockWorkloads
-      .filter((w) => w.model)
-      .map((w) => w.model!);
-    (getModels as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      mockModels,
     );
   });
 
@@ -168,7 +159,7 @@ describe('Workloads Page', () => {
     });
   });
 
-  it('displays model canonical names in the table', async () => {
+  it('displays created-by column in the table', async () => {
     render(<WorkloadsPage />, { wrapper });
 
     // Wait for the workloads to load
@@ -176,19 +167,98 @@ describe('Workloads Page', () => {
       expect(listWorkloads).toHaveBeenCalledTimes(1);
     });
 
-    // Verify that canonical names are displayed in the table
+    // Verify that created-by values are displayed in the table
     await waitFor(() => {
-      // Check that canonical names from the mock data are displayed
-      const llamaElements = screen.getAllByText('meta/llama-7b');
-      expect(llamaElements.length).toBeGreaterThan(0);
+      // Check that created-by values from the mock data are displayed
+      const testUserElements = screen.getAllByText('test-user');
+      expect(testUserElements.length).toBeGreaterThan(0);
 
-      const sdxlElements = screen.getAllByText(
-        'stabilityai/stable-diffusion-xl',
-      );
-      expect(sdxlElements.length).toBeGreaterThan(0);
+      const user2Elements = screen.getAllByText('user-2');
+      expect(user2Elements.length).toBeGreaterThan(0);
 
-      const gptElements = screen.getAllByText('openai/gpt-4-base');
-      expect(gptElements.length).toBeGreaterThan(0);
+      const user3Elements = screen.getAllByText('user-3');
+      expect(user3Elements.length).toBeGreaterThan(0);
     });
+  });
+
+  it('correctly sets isDisabled for openWorkspace action based on workload status', async () => {
+    render(<WorkloadsPage />, { wrapper });
+
+    // Wait for the workloads to load and render in the table
+    await waitFor(() => {
+      expect(listWorkloads).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Jupyter Workspace')).toBeInTheDocument();
+    });
+
+    // Find workload-3 (Jupyter Workspace) - status: RUNNING
+    const runningWorkspaceRow = screen
+      .getByText('Jupyter Workspace')
+      .closest('tr');
+    expect(runningWorkspaceRow).toBeInTheDocument();
+
+    // Find action button for RUNNING workspace
+    const runningActionButton = within(runningWorkspaceRow!).getByRole(
+      'button',
+      {
+        name: /list\.actions\.label/i,
+      },
+    );
+    runningActionButton.click();
+
+    // Wait for menu and check openWorkspace action is NOT disabled
+    await waitFor(() => {
+      const openWorkspaceAction = screen.getByText(
+        'list.actions.openWorkspace.label',
+      );
+      expect(openWorkspaceAction).toBeInTheDocument();
+
+      // The action should be enabled (not have aria-disabled="true")
+      const menuItem = openWorkspaceAction.closest('[role="menuitem"]');
+      expect(menuItem).not.toHaveAttribute('aria-disabled', 'true');
+    });
+
+    // Close the menu by clicking outside or pressing Escape
+    await userEvent.keyboard('{Escape}');
+
+    // Wait for the menu to close - check that the menu itself is gone
+    await waitFor(() => {
+      const menuItems = screen.queryAllByRole('menuitem');
+      expect(menuItems.length).toBe(0);
+    });
+
+    // Find workload-7 (Production Workspace) - status: DELETING
+    const deletingWorkspaceRow = screen
+      .getByText('Production Workspace')
+      .closest('tr');
+    expect(deletingWorkspaceRow).toBeInTheDocument();
+
+    // Find action button for DELETING workspace
+    const deletingActionButton = within(deletingWorkspaceRow!).getByRole(
+      'button',
+      {
+        name: /list\.actions\.label/i,
+      },
+    );
+    deletingActionButton.click();
+
+    // Wait for menu and check openWorkspace action IS disabled
+    await waitFor(() => {
+      const openWorkspaceAction = screen.getByText(
+        'list.actions.openWorkspace.label',
+      );
+      expect(openWorkspaceAction).toBeInTheDocument();
+
+      // The action should be disabled (have aria-disabled="true")
+      const menuItem = openWorkspaceAction.closest('[role="menuitem"]');
+      expect(menuItem).toHaveAttribute('aria-disabled', 'true');
+    });
+    // Verify that the workloads list API was called with the workloads
+    expect(listWorkloads).toHaveBeenCalled();
+
+    // Check that the table/grid is rendered
+    const table = screen.queryByRole('grid') || screen.queryByRole('table');
+    if (table) {
+      expect(table).toBeInTheDocument();
+    }
   });
 });

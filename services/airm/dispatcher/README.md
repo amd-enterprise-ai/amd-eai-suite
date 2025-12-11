@@ -19,18 +19,16 @@ You need to have setup the AIRM API at minimum and optionally the UI. Follow the
 
 Dependencies are handled with `uv` which must be installed first. `uv` will create virtual environment and in order to utilize the environment, commands should be with `uv run`. There is _no_ need to manually install packages or activate environments.
 
-More details about `uv` can be read from our [dependency management guidelines](../../../docs/guidelines/dependency-management.md).
-
 ### Running dispatcher locally
 
 #### Pre-requisites
 
 - Make sure the AMD Resource Manager API and corresponding docker compose are running
 - Onboard a cluster via AMD Resource Manager and copy the values of the Auth ID and Connection Token that are provided as part of the cluster onboarding.
-- Set up environment variables by first copying the .env.local file and replace the RABBITMQ_USER and RABBITMQ_PASSWORD in the `.env` file of the dispatcher directory with the values for Auth ID and Connection Token respectively.
+- Set up environment variables by first copying the `.env.example` file and replace the RABBITMQ_USER and RABBITMQ_PASSWORD in the `.env` file of the dispatcher directory with the values for Auth ID and Connection Token respectively.
 
 ```bash
-cp .env.local .env
+cp .env.example .env
 ```
 
 #### Running dispatcher on a local kubernetes cluster

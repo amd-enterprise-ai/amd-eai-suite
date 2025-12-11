@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="rename-base-url-to-workloads-base-url" author="akshay">
+        <comment>Rename base_url column to workloads_base_url</comment>
+        <renameColumn tableName="clusters"
+                      oldColumnName="base_url"
+                      newColumnName="workloads_base_url"
+                      columnDataType="character varying"/>
+    </changeSet>
+
+    <changeSet id="add-kube-api-url-column" author="akshay">
+        <comment>Add kube_api_url column to clusters table</comment>
+        <addColumn tableName="clusters">
+            <column name="kube_api_url" type="character varying">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="populate-kube-api-url-from-workloads-base-url" author="akshay">
+        <comment>Populate kube_api_url by replacing 'workloads.' with 'k8s.' in workloads_base_url</comment>
+        <sql>
+            UPDATE clusters
+            SET kube_api_url = CASE
+                WHEN workloads_base_url IS NOT NULL AND workloads_base_url LIKE '%workloads.%' THEN
+                    REPLACE(workloads_base_url, 'workloads.', 'k8s.')
+                ELSE
+                    NULL
+            END
+            WHERE workloads_base_url IS NOT NULL;
+        </sql>
+    </changeSet>
+</databaseChangeLog>

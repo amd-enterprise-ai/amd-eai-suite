@@ -6,17 +6,19 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import Response
 
+from ..projects.models import Project
 from ..utilities.checks import ensure_cluster_healthy
 from ..utilities.config import MAX_FILE_SIZE_MB
 from ..utilities.database import get_session
 from ..utilities.exceptions import NotFoundException
-from ..utilities.minio import get_minio_client
+from ..utilities.minio import MinioClient, get_minio_client
 from ..utilities.schema import DeleteOverlaysBatchRequest
 from ..utilities.security import get_user_email, validate_and_get_project_from_query
 from .models import DatasetType
 from .repository import list_datasets
-from .schemas import DatasetCreate, DatasetEdit, DatasetResponse
+from .schemas import DatasetCreate, DatasetEdit, DatasetResponse, DatasetsResponse
 from .service import (
     create_and_upload_dataset,
     delete_datasets,
@@ -45,8 +47,8 @@ router = APIRouter(prefix="/datasets", tags=["Datasets"])
 )
 async def create_dataset(
     dataset: DatasetCreate,
-    project=Depends(validate_and_get_project_from_query),
-    creator=Depends(get_user_email),
+    project: Project = Depends(validate_and_get_project_from_query),
+    creator: str = Depends(get_user_email),
     session: AsyncSession = Depends(get_session),
 ) -> DatasetResponse:
     created_dataset = await insert_dataset(
@@ -77,10 +79,10 @@ async def upload_dataset(
     description: str | None = Form(..., description="The description of the dataset"),
     type: DatasetType = Form(..., description="The type of the dataset"),
     jsonl: UploadFile = File(..., description="The JSONL file to upload"),
-    project=Depends(validate_and_get_project_from_query),
-    author=Depends(get_user_email),
+    project: Project = Depends(validate_and_get_project_from_query),
+    author: str = Depends(get_user_email),
     session: AsyncSession = Depends(get_session),
-    minio_client=Depends(get_minio_client),
+    minio_client: MinioClient = Depends(get_minio_client),
 ) -> DatasetResponse:
     ensure_cluster_healthy(project)
 
@@ -99,7 +101,7 @@ async def upload_dataset(
 
 @router.get(
     "",
-    response_model=list[DatasetResponse],
+    response_model=DatasetsResponse,
     status_code=status.HTTP_200_OK,
     summary="List datasets in project",
     description="""
@@ -111,16 +113,16 @@ async def upload_dataset(
 async def get_datasets(
     type: DatasetType | None = Query(None, description="Filter datasets by type (exact match)"),
     name: str | None = Query(None, description="Filter datasets by name (exact match)"),
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
-) -> list[DatasetResponse]:
+) -> DatasetsResponse:
     datasets = await list_datasets(
         session=session,
         type=type,
         name=name,
         project_id=project.id,
     )
-    return [DatasetResponse.model_validate(dataset) for dataset in datasets]
+    return DatasetsResponse(data=[DatasetResponse.model_validate(dataset) for dataset in datasets])
 
 
 @router.get(
@@ -136,7 +138,7 @@ async def get_datasets(
 )
 async def get_dataset(
     dataset_id: UUID,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
 ) -> DatasetResponse:
     dataset = await get_dataset_by_id(session, dataset_id, project.id)
@@ -157,8 +159,8 @@ async def get_dataset(
 async def modify_dataset(
     dataset_id: UUID,
     dataset: DatasetEdit,
-    project=Depends(validate_and_get_project_from_query),
-    updater=Depends(get_user_email),
+    project: Project = Depends(validate_and_get_project_from_query),
+    updater: str = Depends(get_user_email),
     session: AsyncSession = Depends(get_session),
 ) -> DatasetResponse:
     updated_dataset = await update_dataset_by_id(session, dataset_id, project.id, dataset, updater)
@@ -177,10 +179,10 @@ async def modify_dataset(
 )
 async def download_dataset(
     dataset_id: UUID,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
-    minio_client=Depends(get_minio_client),
-):
+    minio_client: MinioClient = Depends(get_minio_client),
+) -> Response:
     ensure_cluster_healthy(project)
 
     return await download_dataset_file(dataset_id, project.id, session, minio_client)
@@ -198,9 +200,9 @@ async def download_dataset(
 )
 async def delete_dataset(
     dataset_id: UUID,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
-    minio_client=Depends(get_minio_client),
+    minio_client: MinioClient = Depends(get_minio_client),
 ) -> None:
     ensure_cluster_healthy(project)
     await delete_datasets(session, [dataset_id], project.id, minio_client)
@@ -208,7 +210,7 @@ async def delete_dataset(
 
 @router.post(
     "/delete",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Bulk delete datasets",
     description="""
         Atomic bulk deletion of multiple datasets from project. Requires project
@@ -218,10 +220,10 @@ async def delete_dataset(
 )
 async def batch_delete_datasets(
     data: DeleteOverlaysBatchRequest,
-    project=Depends(validate_and_get_project_from_query),
+    project: Project = Depends(validate_and_get_project_from_query),
     session: AsyncSession = Depends(get_session),
-    minio_client=Depends(get_minio_client),
-):
+    minio_client: MinioClient = Depends(get_minio_client),
+) -> list[UUID]:
     ensure_cluster_healthy(project)
     deleted_ids = await delete_datasets(
         session=session, dataset_ids=data.ids, project_id=project.id, minio_client=minio_client

@@ -14,6 +14,6 @@ RUN uv pip install --system .
 
 COPY app/ ./app/
 
-EXPOSE 8081
+EXPOSE 48012
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8081"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "48012"]

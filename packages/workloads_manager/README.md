@@ -36,7 +36,7 @@ A package for managing and registering AI workloads using `uv`.
 
 2. Or copy the template and edit it:
    ```bash
-   cp packages/workloads_manager/.env.template packages/workloads_manager/.env
+   cp packages/workloads_manager/.env.example packages/workloads_manager/.env
    # Edit the .env file with your credentials
    ```
 
@@ -135,4 +135,4 @@ uv run wm --debug register
 - `TOKEN`: API token for authentication (required)
 - `WM_API_URL`: API server URL (default: http://127.0.0.1:8001/v1)
 
-See `.env.template` for all available options.
+See `.env.example` for all available options.

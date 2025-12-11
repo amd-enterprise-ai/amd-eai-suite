@@ -14,14 +14,18 @@ import { SecretsTableField } from '@/types/enums/secrets-table-field';
 import { ClientSideDataFilter } from '@/types/filters';
 import { Secret } from '@/types/secrets';
 
+import { SecretStatus } from '@/types/enums/secrets';
+
 import { ClientSideDataTable } from '@/components/shared/DataTable';
 import {
+  StatusDisplay,
   DateDisplay,
   NoDataDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
 
-import { SecretStatus } from './SecretStatus';
+import { StatusError } from '@/components/shared/StatusError';
 import SecretProjectAssignedTo from './SecretProjectAssignedTo';
+import getSecretStatusVariants from '@/utils/app/secrets-status-variants';
 
 interface Props {
   filters?: ClientSideDataFilter<Secret>[];
@@ -108,6 +112,7 @@ export const SecretsTable: React.FC<Props> = ({
         );
       },
       [SecretsTableField.STATUS]: (item: Secret) => {
+        const { status, statusReason } = item;
         const secondaryStatusReasons = item.projectSecrets
           .filter((s) => s.statusReason !== null)
           .map((s) => ({
@@ -115,16 +120,46 @@ export const SecretsTable: React.FC<Props> = ({
             description: s.statusReason ?? '',
           }));
 
+        const hasError =
+          (status === SecretStatus.FAILED ||
+            status === SecretStatus.DELETE_FAILED ||
+            status === SecretStatus.SYNCED_ERROR) &&
+          (!!statusReason || secondaryStatusReasons.length > 0);
+
         return (
-          <SecretStatus
-            status={item.status}
-            statusReason={item.statusReason}
-            secondaryStatusReason={
-              secondaryStatusReasons.length > 0
-                ? secondaryStatusReasons
-                : undefined
-            }
-          />
+          <>
+            {status === SecretStatus.UNASSIGNED ? (
+              <NoDataDisplay />
+            ) : (
+              <StatusDisplay
+                type={status}
+                variants={getSecretStatusVariants(t)}
+                bypassProps={
+                  hasError
+                    ? {
+                        isClickable: true,
+                        helpContent: (
+                          <StatusError
+                            statusReason={statusReason}
+                            secondaryStatusReasons={secondaryStatusReasons}
+                          />
+                        ),
+                      }
+                    : undefined
+                }
+              />
+            )}
+
+            {/* <SecretStatus
+              status={item.status}
+              statusReason={item.statusReason}
+              secondaryStatusReason={
+                secondaryStatusReasons.length > 0
+                  ? secondaryStatusReasons
+                  : undefined
+              }
+            /> */}
+          </>
         );
       },
       [SecretsTableField.SCOPE]: (item: Secret) => {

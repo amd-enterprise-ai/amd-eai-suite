@@ -294,33 +294,31 @@ const Legend = React.forwardRef<HTMLOListElement, LegendProps>((props, ref) => {
         ))}
       </div>
       {enableLegendSlider && (hasScroll?.right || hasScroll?.left) ? (
-        <>
-          <div
-            className={cn(
-              // base
-              'absolute bottom-0 right-0 top-0 flex h-full items-center justify-center pr-1',
-              // background color
-              'bg-white dark:bg-gray-950',
-            )}
-          >
-            <ScrollButton
-              icon={IconChevronLeft}
-              onClick={() => {
-                setIsKeyDowned(null);
-                scrollToTest('left');
-              }}
-              disabled={!hasScroll?.left}
-            />
-            <ScrollButton
-              icon={IconChevronRight}
-              onClick={() => {
-                setIsKeyDowned(null);
-                scrollToTest('right');
-              }}
-              disabled={!hasScroll?.right}
-            />
-          </div>
-        </>
+        <div
+          className={cn(
+            // base
+            'absolute bottom-0 right-0 top-0 flex h-full items-center justify-center pr-1',
+            // background color
+            'bg-white dark:bg-gray-950',
+          )}
+        >
+          <ScrollButton
+            icon={IconChevronLeft}
+            onClick={() => {
+              setIsKeyDowned(null);
+              scrollToTest('left');
+            }}
+            disabled={!hasScroll?.left}
+          />
+          <ScrollButton
+            icon={IconChevronRight}
+            onClick={() => {
+              setIsKeyDowned(null);
+              scrollToTest('right');
+            }}
+            disabled={!hasScroll?.right}
+          />
+        </div>
       ) : null}
     </ol>
   );

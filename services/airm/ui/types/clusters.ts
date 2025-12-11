@@ -11,7 +11,8 @@ export type ClusterBasicInfo = {
   id: string;
   lastHeartbeatAt: string;
   status: ClusterStatus;
-  baseUrl?: string;
+  workloadsBaseUrl?: string;
+  kubeApiUrl?: string;
 };
 
 export type Cluster = ClusterBasicInfo & {
@@ -57,13 +58,6 @@ export type ClusterIdentifierFormData = {
   name: string;
 };
 
-export type CheckClusterStatusResult = {
-  isSuccess: boolean;
-  data?: {
-    status: ClusterStatus;
-  };
-};
-
 export type ClusterStatsResponse = {
   totalClusterCount: number;
   totalNodeCount: number;
@@ -75,9 +69,15 @@ export type ClusterStatsResponse = {
 };
 
 export type EditClusterFormData = {
-  baseUrl: string;
+  workloadsBaseUrl: string;
+  kubeApiUrl: string;
 };
 
 export type EditClusterRequest = {
-  base_url: string;
+  workloads_base_url: string;
+  kube_api_url: string;
+};
+
+export type ClusterKubeConfig = {
+  kubeConfig: string;
 };

@@ -9,7 +9,7 @@ asyncio_mode = "auto"
 
 [project]
 name = "mock-cluster-auth"
-version = "0.2.3"
+version = "0.3.0"
 requires-python = ">=3.13"
 
 dependencies = [

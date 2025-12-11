@@ -2,7 +2,15 @@
 //
 // SPDX-License-Identifier: MIT
 
-import type { FilterItem } from '@/components/shared/Filters/FilterDropdown/FilterDropdown';
+/**
+ * Represents a single filter item in the dropdown
+ */
+export interface FilterItem {
+  key: string;
+  label: string;
+  description?: string;
+  showDivider?: boolean;
+}
 
 export interface FilterStateConfig {
   selectedKeys?: string[];
@@ -12,10 +20,8 @@ export interface FilterStateConfig {
 }
 
 export interface FilterStateResult {
-  internalSelectedKeys: string[];
   hasUserInteracted: boolean;
   currentSelectedSet: Set<string>;
   handleSelectionChange: (keys: Set<string> | string[]) => void;
   handleReset: () => void;
-  onUserInteraction: () => void;
 }

@@ -7,23 +7,22 @@ import {
   DropdownItem,
   DropdownMenu,
   DropdownSection,
+  Selection,
 } from '@heroui/react';
-import { forwardRef, useImperativeHandle, useMemo, ReactNode } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  ReactNode,
+} from 'react';
 
 import FilterButtonTrigger from './FilterButtonTrigger';
-import { DROPDOWN_ITEM_STYLES, FILTER_CONSTANTS } from './constants';
-import { useDragSelection } from '@/hooks/useDragSelection';
+import { FILTER_CONSTANTS } from './constants';
 import { useFilterState } from '@/hooks/useFilterState';
+import type { FilterItem } from '@/types/filter-dropdown/use-filter-state';
 
-/**
- * Represents a single filter item in the dropdown
- */
-export interface FilterItem {
-  key: string;
-  label: string;
-  description?: string;
-  showDivider?: boolean;
-}
+export type { FilterItem };
 
 /**
  * Ref interface for FilterDropdown component
@@ -50,16 +49,11 @@ export interface FilterDropdownProps {
 /**
  * FilterDropdown Component
  *
- * A sophisticated multi-select dropdown with advanced features including:
- * - Drag selection for efficient multi-item selection
+ * A multi-select dropdown with advanced features including:
  * - External state synchronization with debouncing
  * - First-selection behavior (clear all, select one)
  * - Reset functionality
  * - Accessible keyboard navigation
- *
- * The component is architected using the separation of concerns principle:
- * - useFilterState: Manages internal state and external synchronization
- * - useDragSelection: Handles drag interaction logic
  *
  * @example
  * ```tsx
@@ -87,44 +81,65 @@ const FilterDropdown = forwardRef<FilterDropdownRef, FilterDropdownProps>(
     },
     ref,
   ) => {
-    // Extract state management logic
-    const filterStateProps = useFilterState({
+    const {
+      currentSelectedSet,
+      hasUserInteracted,
+      handleSelectionChange,
+      handleReset,
+    } = useFilterState({
       selectedKeys,
       defaultSelectedKeys,
       items,
       onSelectionChange,
     });
 
-    // Extract drag selection logic
-    const dragProps = useDragSelection({
-      selectedKeys: filterStateProps.currentSelectedSet,
-      onSelectionChange: (keys) =>
-        filterStateProps.handleSelectionChange(new Set(keys)),
-      hasUserInteracted: filterStateProps.hasUserInteracted,
-      onUserInteraction: filterStateProps.onUserInteraction,
-    });
+    useImperativeHandle(ref, () => ({ clear: handleReset }), [handleReset]);
 
-    // Expose clear function via ref for external control
-    useImperativeHandle(
-      ref,
-      () => ({
-        clear: filterStateProps.handleReset,
-      }),
-      [filterStateProps.handleReset],
-    );
-
-    /**
-     * Generate tooltip text based on selected items or custom text.
-     * Memoized for performance to avoid recalculation on every render.
-     */
     const tooltip = useMemo(() => {
       if (tooltipText) return tooltipText;
-
       return items
-        .filter((item) => filterStateProps.currentSelectedSet.has(item.key))
+        .filter((item) => currentSelectedSet.has(item.key))
         .map((item) => item.label)
         .join(', ');
-    }, [items, filterStateProps.currentSelectedSet, tooltipText]);
+    }, [items, currentSelectedSet, tooltipText]);
+
+    const handleDropdownSelectionChange = useCallback(
+      (keys: Selection) => {
+        handleSelectionChange(new Set(Array.from(keys).map(String)));
+      },
+      [handleSelectionChange],
+    );
+
+    const itemClassNames = useMemo(
+      () => ({
+        selectedIcon: !hasUserInteracted ? 'opacity-30' : '',
+      }),
+      [hasUserInteracted],
+    );
+
+    const dropdownItems = useMemo(
+      () =>
+        items.map(
+          ({
+            key,
+            label: itemLabel,
+            description = '',
+            showDivider = false,
+          }) => (
+            <DropdownItem
+              key={key}
+              className="capitalize"
+              aria-label={itemLabel}
+              description={showDescription ? description : undefined}
+              showDivider={showDivider}
+              classNames={itemClassNames}
+            >
+              {itemLabel}
+            </DropdownItem>
+          ),
+        ),
+      [items, showDescription, itemClassNames],
+    );
 
     return (
       <Dropdown className={FILTER_CONSTANTS.MIN_DROPDOWN_WIDTH}>
@@ -133,55 +148,18 @@ const FilterDropdown = forwardRef<FilterDropdownRef, FilterDropdownProps>(
           startContent={icon}
           className={className}
           tooltipText={tooltip}
-          numberOfSelectedKeys={filterStateProps.currentSelectedSet.size}
-          isActive={filterStateProps.hasUserInteracted}
-          onReset={filterStateProps.handleReset}
+          numberOfSelectedKeys={currentSelectedSet.size}
+          isActive={hasUserInteracted}
+          onReset={handleReset}
         />
         <DropdownMenu
           aria-label={label}
           closeOnSelect={false}
-          selectedKeys={
-            filterStateProps.internalSelectedKeys as Iterable<string>
-          }
+          selectedKeys={currentSelectedSet}
           selectionMode="multiple"
-          onSelectionChange={
-            dragProps.isDragging
-              ? undefined
-              : (keys) =>
-                  filterStateProps.handleSelectionChange(
-                    Array.from(keys).map(String),
-                  )
-          }
+          onSelectionChange={handleDropdownSelectionChange}
         >
-          <DropdownSection>
-            {items.map(
-              ({
-                key,
-                label: itemLabel,
-                description = '',
-                showDivider = false,
-              }) => (
-                <DropdownItem
-                  key={key}
-                  className="capitalize"
-                  aria-label={itemLabel}
-                  description={showDescription ? description : undefined}
-                  showDivider={showDivider}
-                  classNames={{
-                    selectedIcon: !filterStateProps.hasUserInteracted
-                      ? 'opacity-30'
-                      : '',
-                  }}
-                  onMouseDown={(event) => dragProps.handleMouseDown(key, event)}
-                  onMouseEnter={() => dragProps.handleMouseEnter(key)}
-                  onMouseUp={dragProps.handleMouseUp}
-                  style={DROPDOWN_ITEM_STYLES}
-                >
-                  {itemLabel}
-                </DropdownItem>
-              ),
-            )}
-          </DropdownSection>
+          <DropdownSection>{dropdownItems}</DropdownSection>
         </DropdownMenu>
       </Dropdown>
     );

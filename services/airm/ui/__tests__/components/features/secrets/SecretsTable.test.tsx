@@ -19,7 +19,6 @@ vi.mock('@/hooks/useSystemToast', () => ({
 }));
 
 const mockFetchProjectSecrets = vi.fn();
-const mockFetchSecrets = vi.fn();
 vi.mock('@/services/app/secrets', () => ({
   fetchProjectSecrets: (...args: any[]) => mockFetchProjectSecrets(...args),
 }));

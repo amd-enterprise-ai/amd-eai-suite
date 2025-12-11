@@ -62,9 +62,12 @@ export const KeyCreatedDrawer: React.FC<KeyCreatedDrawerProps> = ({
             </p>
 
             {/* Warning Section */}
-            <Alert color="danger" variant="solid" className="text-sm">
-              {t('form.keyCreated.warning')}
-            </Alert>
+            <Alert
+              color="danger"
+              variant="solid"
+              className="text-sm"
+              description={t('form.keyCreated.warning')}
+            />
 
             {/* Name Field */}
             <div className="flex flex-col gap-2">

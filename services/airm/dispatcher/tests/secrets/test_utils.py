@@ -18,6 +18,7 @@ DUMMY_API_GROUP = "external-secrets.io"
 DUMMY_KIND = "ExternalSecret"
 DUMMY_VERSION = "v1beta1"
 DUMMY_SECRET_ID = uuid4()
+DUMMY_SECRET_SCOPE = "project"
 
 
 def test_patch_external_secret_manifest_sets_fields():
@@ -40,7 +41,7 @@ def test_create_project_secret_status_message_sets_fields():
     with patch("app.secrets.utils.ProjectSecretsUpdateMessage", DummyMsg):
         status = MagicMock()
         reason = "Test reason"
-        msg = utils.create_project_secret_status_message(DUMMY_SECRET_ID, status, reason)
+        msg = utils.create_project_secret_status_message(DUMMY_SECRET_ID, DUMMY_SECRET_SCOPE, status, reason)
         assert msg.message_type == "project_secrets_update"
 
         assert msg.status == status
@@ -48,6 +49,7 @@ def test_create_project_secret_status_message_sets_fields():
         assert isinstance(msg.updated_at, datetime)
         assert msg.updated_at.tzinfo == UTC
         assert msg.project_secret_id == DUMMY_SECRET_ID
+        assert msg.secret_scope == DUMMY_SECRET_SCOPE
 
 
 @pytest.mark.parametrize(

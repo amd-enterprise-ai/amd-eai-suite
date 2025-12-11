@@ -7,8 +7,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { useTranslation } from 'next-i18next';
 
-import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
-
 import FormInput from '@/components/shared/ManagedForm/FormInput';
 import FormSelect from '@/components/shared/ManagedForm/FormSelect';
 
@@ -41,10 +39,6 @@ export const HuggingFaceTokenSelector = ({
   const selectedTokenField = fieldNames.selectedToken || 'selectedToken';
   const nameField = fieldNames.name || 'name';
   const tokenField = fieldNames.token || 'token';
-
-  const debouncedTriggerValidation = useDebouncedCallback((form: any) => {
-    form.trigger([nameField, tokenField]);
-  }, 300);
 
   const watchSelectedToken = form.watch(selectedTokenField);
   const watchName = form.watch(nameField);
@@ -151,9 +145,6 @@ export const HuggingFaceTokenSelector = ({
             isRequired={isNameRequired}
             autoComplete="off"
             data-form-type="other"
-            onChange={() => {
-              debouncedTriggerValidation(form);
-            }}
           />
 
           <FormInput
@@ -165,9 +156,6 @@ export const HuggingFaceTokenSelector = ({
             isRequired={isTokenRequired}
             autoComplete="new-password"
             data-form-type="other"
-            onChange={() => {
-              debouncedTriggerValidation(form);
-            }}
           />
         </>
       )}

@@ -12,11 +12,15 @@ RUN apt-get update -qq && apt-get install -y -qq \
     git \
     python3 \
     python3-pip \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y -qq nodejs
+RUN curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz -o node.tar.xz \
+    && tar -xJf node.tar.xz -C /usr/local --strip-components=1 \
+    && rm node.tar.xz \
+    && node --version \
+    && npm --version
 
 # Set working directory
 WORKDIR /workspace

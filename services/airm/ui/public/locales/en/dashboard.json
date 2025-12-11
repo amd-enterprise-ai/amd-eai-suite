@@ -37,6 +37,14 @@
       },
       "pending": {
         "title": "Pending Workloads"
+      },
+      "actions": {
+        "title": ""
+      }
+    },
+    "actions": {
+      "open": {
+        "label": "Open project"
       }
     },
     "empty": {

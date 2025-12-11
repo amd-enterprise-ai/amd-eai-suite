@@ -12,7 +12,7 @@ from app import app  # type: ignore
 
 
 @pytest.mark.asyncio
-async def test_healthcheck_healthy():
+async def test_healthcheck_healthy() -> None:
     with patch("app.health.router.all_watchers_healthy", new=AsyncMock(return_value=True)):
         with TestClient(app) as client:
             response = client.get("/v1/health")
@@ -22,7 +22,7 @@ async def test_healthcheck_healthy():
 
 
 @pytest.mark.asyncio
-async def test_healthcheck_unhealthy():
+async def test_healthcheck_unhealthy() -> None:
     with patch("app.health.router.all_watchers_healthy", new=AsyncMock(return_value=False)):
         with TestClient(app) as client:
             response = client.get("/v1/health")

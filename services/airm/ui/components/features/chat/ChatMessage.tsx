@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Code } from '@heroui/react';
+import { Code, Skeleton } from '@heroui/react';
 import {
   IconBug,
   IconCheck,
@@ -37,6 +37,7 @@ export interface Props {
   onEdit?: (editedMessage: Message) => void;
   onDelete?: () => void;
   messageIsStreaming?: boolean;
+  isLoading?: boolean;
 }
 
 export const ChatMessage: FC<Props> = memo(
@@ -49,6 +50,7 @@ export const ChatMessage: FC<Props> = memo(
     debugInfo,
     showCursorOnMessage,
     messageIsStreaming,
+    isLoading = false,
   }) => {
     const { t } = useTranslation('chat');
 
@@ -80,13 +82,13 @@ export const ChatMessage: FC<Props> = memo(
 
     const handleEditMessage = () => {
       if (message.content != messageContent) {
-        onEdit && onEdit({ ...message, content: messageContent });
+        onEdit?.({ ...message, content: messageContent });
       }
       setIsEditing(false);
     };
 
     const handleDeleteMessage = () => {
-      onDelete && onDelete();
+      onDelete?.();
     };
 
     const handlePressEnter = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -261,97 +263,105 @@ export const ChatMessage: FC<Props> = memo(
               </div>
             ) : (
               <div className="flex flex-row">
-                <div className="flex-1 overflow-x-scroll">
-                  <MemoizedReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkMath]}
-                    rehypePlugins={[rehypeMathjax]}
-                    components={{
-                      code({ className, children, ...props }) {
-                        if (
-                          children &&
-                          typeof children === 'string' &&
-                          children.length
-                        ) {
-                          if (children[0] == '▍') {
-                            return (
-                              <span className="animate-pulse cursor-slate mt-1">
-                                ▍
-                              </span>
-                            );
+                <div className="flex-1 overflow-x-auto">
+                  {isLoading ? (
+                    <>
+                      <Skeleton className="mb-2 rounded-lg w-3/4 h-4"></Skeleton>
+                      <Skeleton className="mb-2 rounded-lg w-5/6 h-4"></Skeleton>
+                      <Skeleton className="rounded-lg w-1/2 h-4"></Skeleton>
+                    </>
+                  ) : (
+                    <MemoizedReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeMathjax]}
+                      components={{
+                        code({ className, children, ...props }) {
+                          if (
+                            children &&
+                            typeof children === 'string' &&
+                            children.length
+                          ) {
+                            if (children[0] == '▍') {
+                              return (
+                                <span className="animate-pulse cursor-slate mt-1">
+                                  ▍
+                                </span>
+                              );
+                            }
+                            if (children && typeof children === 'string') {
+                              children = children.replace('▍', '`▍`');
+                            }
                           }
-                          if (children && typeof children === 'string') {
-                            children = children.replace('▍', '`▍`');
-                          }
-                        }
 
-                        const match = /language-(\w+)/.exec(className || '');
+                          const match = /language-(\w+)/.exec(className || '');
 
-                        return className ? (
-                          <CodeBlock
-                            key={Math.random()}
-                            language={(match && match[1]) || ''}
-                            value={String(children).replace(/\n$/, '')}
-                            {...props}
-                          />
-                        ) : (
-                          <span {...props}>
-                            <Code size="sm" className="px-1 py-0.5">
+                          return className ? (
+                            <CodeBlock
+                              key={Math.random()}
+                              language={match?.[1] || ''}
+                              value={String(children).replace(/\n$/, '')}
+                              {...props}
+                            />
+                          ) : (
+                            <span {...props}>
+                              <Code size="sm" className="px-1 py-0.5">
+                                {children}
+                              </Code>
+                            </span>
+                          );
+                        },
+                        table({ children }) {
+                          return (
+                            <table className="border-collapse border border-black px-3 py-1 dark:border-white ">
                               {children}
-                            </Code>
-                          </span>
-                        );
-                      },
-                      table({ children }) {
-                        return (
-                          <table className="border-collapse border border-black px-3 py-1 dark:border-white ">
-                            {children}
-                          </table>
-                        );
-                      },
-                      a({ children, href }) {
-                        return (
-                          <a
-                            href={href}
-                            className="text-primary dark:text-primary font-semibold"
-                          >
-                            {children}
-                          </a>
-                        );
-                      },
-                      th({ children }) {
-                        return (
-                          <th className="break-words border border-black bg-gray-500 px-3 py-1 text-white dark:border-white">
-                            {children}
-                          </th>
-                        );
-                      },
-                      td({ children }) {
-                        return (
-                          <td className="break-words border border-black px-3 py-1 dark:border-white ">
-                            {children}
-                          </td>
-                        );
-                      },
-                      p({ children }) {
-                        return (
-                          <div className="text-default-700 mb-4 leading-8">
-                            {children}
-                          </div>
-                        );
-                      },
-                      li({ children }) {
-                        return (
-                          <li className="text-default-700 mb-4 leading-8">
-                            {children}
-                          </li>
-                        );
-                      },
-                    }}
-                  >
-                    {`${message.content}${
-                      messageIsStreaming && showCursorOnMessage ? '▍' : ''
-                    }`}
-                  </MemoizedReactMarkdown>
+                            </table>
+                          );
+                        },
+                        a({ children, href }) {
+                          return (
+                            <a
+                              href={href}
+                              className="text-primary dark:text-primary font-semibold"
+                            >
+                              {children}
+                            </a>
+                          );
+                        },
+                        th({ children }) {
+                          return (
+                            <th className="break-words border border-black bg-gray-500 px-3 py-1 text-white dark:border-white">
+                              {children}
+                            </th>
+                          );
+                        },
+                        td({ children }) {
+                          return (
+                            <td className="break-words border border-black px-3 py-1 dark:border-white ">
+                              {children}
+                            </td>
+                          );
+                        },
+                        p({ children }) {
+                          return (
+                            <div className="text-default-700 mb-4 leading-8">
+                              {children}
+                            </div>
+                          );
+                        },
+                        li({ children }) {
+                          return (
+                            <li className="text-default-700 mb-4 leading-8">
+                              {children}
+                            </li>
+                          );
+                        },
+                      }}
+                    >
+                      {`${message.content}${
+                        messageIsStreaming && showCursorOnMessage ? '▍' : ''
+                      }`}
+                    </MemoizedReactMarkdown>
+                  )}
                 </div>
               </div>
             )}

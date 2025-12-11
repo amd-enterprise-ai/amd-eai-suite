@@ -73,6 +73,9 @@
     },
     "apiKeys": {
       "title": "API Keys"
+    },
+    "error": {
+      "title": "Error"
     }
   },
   "menu": {
@@ -123,6 +126,9 @@
     "save": {
       "title": "Save"
     },
+    "showDetails": {
+      "title": "Show details"
+    },
     "start": {
       "title": "Start"
     },
@@ -165,7 +171,6 @@
       "title": "Something went wrong",
       "description": "We're having trouble connecting to our services. Please try again in a few moments."
     },
-    "showDetailsActionLabel": "Show details",
     "refreshActionLabel": "Try again",
     "misc": {
       "unknownEntity": "Unknown entity"
@@ -204,6 +209,7 @@
     "refreshing": "Refreshing ..."
   },
   "status": {
+    "description": "The system returned the following error message:",
     "errorDetail": {
       "title": "Error details",
       "action": {
@@ -211,5 +217,9 @@
         "prev": "Previous error"
       }
     }
+  },
+  "password": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   }
 }

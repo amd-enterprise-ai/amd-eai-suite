@@ -16,6 +16,7 @@ import { convertSnakeToCamel, getErrorMessage } from '@/utils/app/api-helpers';
 import { proxyRequest } from '@/utils/server/route';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { User } from '@/types/users';
 
 vi.mock('@/utils/app/api-helpers', () => ({
   convertSnakeToCamel: vi.fn((x) => x),
@@ -114,7 +115,7 @@ describe('users service', () => {
         'http://test-api/v1/users',
         'token',
       );
-      let responseBody;
+      let responseBody: User;
       if (result instanceof NextResponse) {
         responseBody = await result.json();
       } else {
@@ -148,7 +149,7 @@ describe('users service', () => {
       });
       const result = await getInvitedUsers('token');
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://test-api/v1/invited_users',
+        'http://test-api/v1/invited-users',
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: 'Bearer token',

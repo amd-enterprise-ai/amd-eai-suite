@@ -12,16 +12,16 @@ from airm.messaging.constants import (
 )
 
 
-async def configure_queues(channel: abc.AbstractChannel, queue_name: str):
+async def configure_queues(channel: abc.AbstractChannel, queue_name: str) -> None:
     await __configure_dead_letter_queue(channel)
     await __configure_message_queue(channel, queue_name)
 
 
-async def __configure_dead_letter_queue(channel):
+async def __configure_dead_letter_queue(channel: abc.AbstractChannel) -> None:
     dl_exchange = await channel.declare_exchange(DEAD_LETTER_EXCHANGE, "direct")
     dl_queue = await channel.declare_queue(DEAD_LETTER_QUEUE_NAME, durable=True, auto_delete=False)
     await dl_queue.bind(dl_exchange, DEAD_LETTER_ROUTING_KEY)
 
 
-async def __configure_message_queue(channel: abc.AbstractChannel, queue_name: str):
+async def __configure_message_queue(channel: abc.AbstractChannel, queue_name: str) -> None:
     await channel.declare_queue(queue_name, durable=True, auto_delete=False, arguments=DEFAULT_QUEUE_ARGUMENTS)

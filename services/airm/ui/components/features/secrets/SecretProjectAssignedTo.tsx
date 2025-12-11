@@ -5,7 +5,6 @@
 import { NoDataDisplay } from '@/components/shared/DataTable';
 import { ProjectSecret, Secret } from '@/types/secrets';
 import { Tooltip } from '@heroui/react';
-import React from 'react';
 
 interface Props {
   secret?: Secret;

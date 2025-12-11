@@ -7,40 +7,6 @@ import { convertSnakeToCamel, getErrorMessage } from '@/utils/app/api-helpers';
 import { Workload } from '@/types/workloads';
 import { WorkloadsStats } from '@/types/workloads';
 
-export const getWorkloads = async (params: {
-  type?: string;
-  status?: string;
-  withResources: boolean;
-  accessToken: string;
-  projectId?: string;
-}): Promise<Workload[]> => {
-  const urlParams = new URLSearchParams({
-    ...(params.type && { type: params.type }),
-    ...(params.status && { status: params.status }),
-    ...(params.withResources && {
-      with_resources: params.withResources.toString(),
-    }),
-    ...(params.projectId && { project_id: params.projectId }),
-  });
-
-  const url = `${process.env.AIRM_API_SERVICE_URL}/v1/managed-workloads?${urlParams.toString()}`;
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${params.accessToken}`,
-    },
-    method: 'GET',
-  });
-
-  if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
-  } else {
-    const errorJson = JSON.parse(await response.text());
-    throw new Error(JSON.stringify(errorJson));
-  }
-};
-
 export const getWorkload = async (params: {
   accessToken: string;
   workloadId: string;

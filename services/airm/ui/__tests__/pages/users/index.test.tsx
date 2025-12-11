@@ -42,6 +42,8 @@ vi.mock('@/hooks/useAccessControl', () => ({
     isRoleManagementEnabled: true,
     isInviteEnabled: true,
     isAdministrator: true,
+    smtpEnabled: true,
+    isTempPasswordRequired: false,
   })),
 }));
 
@@ -49,7 +51,7 @@ vi.mock('@/hooks/useAccessControl', () => ({
 vi.mock('@/components/features/users', () => ({
   ActiveUsersTab: ({ initialData, onInviteUserClick }: any) => (
     <div data-testid="active-users-tab">
-      {initialData.users.map((user: any) => (
+      {initialData.data.map((user: any) => (
         <div key={user.id} onClick={() => router.push(`/users/${user.id}`)}>
           <span>{`${user.firstName} ${user.lastName}`}</span>
           <span>{user.email}</span>
@@ -63,7 +65,7 @@ vi.mock('@/components/features/users', () => ({
   ),
   InvitedUsersTab: ({ initialData, onInviteUserClick }: any) => (
     <div data-testid="invited-users-tab">
-      {initialData.invitedUsers.map((user: any) => (
+      {initialData.data.map((user: any) => (
         <div key={user.id}>
           <span>{user.email}</span>
           <button aria-label="list.actions.label">Actions</button>
@@ -76,11 +78,11 @@ vi.mock('@/components/features/users', () => ({
 }));
 
 const mockUsersEmptyResponse: UsersResponse = {
-  users: [],
+  data: [],
 };
 
 const mockInvitedUsersEmptyResponse: InvitedUsersResponse = {
-  invitedUsers: [],
+  data: [],
 };
 
 vi.mock('@/services/app/users', async (importOriginal) => {
@@ -121,7 +123,7 @@ describe('users', () => {
     // Check that the active users tab is rendered with users
     expect(screen.getByTestId('active-users-tab')).toBeInTheDocument();
 
-    mockUsersResponse.users.forEach((user) => {
+    mockUsersResponse.data.forEach((user) => {
       expect(
         screen.getByText(`${user.firstName} ${user.lastName}`),
       ).toBeInTheDocument();
@@ -222,7 +224,7 @@ describe('users', () => {
       isLoading: false,
       isError: false,
     } as unknown as ReactQuery.UseQueryResult<
-      typeof mockUsersResponse.users,
+      typeof mockUsersResponse.data,
       unknown
     >);
 
@@ -241,7 +243,7 @@ describe('users', () => {
     await screen.findByText('FirstName 2 LastName 2');
     await screen.findByText('FirstName 3 LastName 3');
 
-    mockUsersResponse?.users?.forEach((user) => {
+    mockUsersResponse?.data?.forEach((user) => {
       expect(
         screen.getByText(`${user.firstName} ${user.lastName}`),
       ).toBeInTheDocument();
@@ -321,7 +323,7 @@ describe('users', () => {
       // Check that invited users tab is displayed
       await waitFor(() => {
         expect(screen.getByTestId('invited-users-tab')).toBeInTheDocument();
-        mockInvitedUsersResponse.invitedUsers.forEach((user) => {
+        mockInvitedUsersResponse.data.forEach((user) => {
           expect(screen.getByText(user.email)).toBeInTheDocument();
         });
       });
@@ -417,12 +419,13 @@ describe('users', () => {
 
   describe('Invite functionality disabled', () => {
     beforeEach(async () => {
-      // Mock useAccessControl to disable invite functionality
       const { useAccessControl } = await import('@/hooks/useAccessControl');
       vi.mocked(useAccessControl).mockReturnValue({
         isRoleManagementEnabled: true,
         isInviteEnabled: false,
         isAdministrator: true,
+        smtpEnabled: false,
+        isTempPasswordRequired: false,
       });
     });
 
@@ -433,6 +436,8 @@ describe('users', () => {
         isRoleManagementEnabled: true,
         isInviteEnabled: true,
         isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: false,
       });
     });
 
@@ -474,7 +479,7 @@ describe('users', () => {
 
       // Should show active users
       expect(screen.getByTestId('active-users-tab')).toBeInTheDocument();
-      mockUsersResponse.users.forEach((user) => {
+      mockUsersResponse.data.forEach((user) => {
         expect(
           screen.getByText(`${user.firstName} ${user.lastName}`),
         ).toBeInTheDocument();
@@ -494,6 +499,8 @@ describe('users', () => {
         isRoleManagementEnabled: true,
         isInviteEnabled: true,
         isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: false,
       });
     });
 

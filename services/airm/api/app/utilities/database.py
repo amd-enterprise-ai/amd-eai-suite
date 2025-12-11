@@ -3,10 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from fastapi import Depends
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+
+from app.messaging.sender import MessageSender, get_message_sender
 
 engine: AsyncEngine | None = None
 session_maker: AsyncSession | None = None
@@ -50,7 +54,9 @@ DATABASE_POOL_TIMEOUT = os.environ.get("DATABASE_POOL_TIMEOUT")
 DATABASE_POOL_RECYCLE = os.environ.get("DATABASE_POOL_RECYCLE")
 
 
-def create_engine(database_connection_string: str | None = None):
+def create_engine(
+    database_connection_string: str | None = None,
+) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
     """
     Create and configure the database engine with connection pooling.
 
@@ -143,16 +149,19 @@ async def session_scope() -> AsyncSession:
         await session.close()
 
 
-async def get_session():
+async def get_session(
+    _: MessageSender = Depends(get_message_sender),
+) -> AsyncGenerator[AsyncSession]:
     """
     FastAPI dependency that provides a database session with transaction management.
 
+    Depends on message_sender to enforce correct transactional ordering:
+    - FastAPI resolves dependencies first: message_sender → session
+    - Cleanup happens in reverse: session (commit) → message_sender (flush)
+    - This ensures DB commits BEFORE messages are sent
+
     Yields:
         AsyncSession: Database session with automatic commit/rollback handling
-
-    Note:
-        This is the standard dependency used in FastAPI route handlers.
-        The session automatically handles transactions via session_scope().
     """
     async with session_scope() as session:
         yield session

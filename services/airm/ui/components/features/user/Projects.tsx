@@ -6,7 +6,7 @@ import { Select, SelectItem, useDisclosure } from '@heroui/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 
 import useSystemToast from '@/hooks/useSystemToast';
 
@@ -24,7 +24,7 @@ import {
 } from '@/types/users';
 
 import { ConfirmationModal } from '@/components/shared/Confirmation/ConfirmationModal';
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import FormFieldComponent from '@/components/shared/ManagedForm/FormFieldComponent';
 import { ActionButton } from '@/components/shared/Buttons';
 import ProjectAndRoleEntry from './ProjectAndRoleEntry';
@@ -118,7 +118,7 @@ export const Projects: React.FC<Props> = ({ user, projects }) => {
     (data: { [x: string]: unknown }) => {
       addUserToProject({
         userIds: [user.id],
-        projectId: data?.['project'] as string,
+        projectId: data?.project as string,
       });
     },
     [addUserToProject, user],
@@ -210,13 +210,12 @@ export const Projects: React.FC<Props> = ({ user, projects }) => {
       />
 
       <ConfirmationModal
-        description={
-          <Trans parent="span">
-            {t('detail.projectsAndRoles.projects.actions.delete.description', {
-              project: selectedProject?.name,
-            })}
-          </Trans>
-        }
+        description={t(
+          'detail.projectsAndRoles.projects.actions.delete.description',
+          {
+            project: selectedProject?.name,
+          },
+        )}
         title={t('detail.projectsAndRoles.projects.actions.delete.title')}
         isOpen={isDeleteConfirmOpen}
         loading={isDeletingUserFromProject}

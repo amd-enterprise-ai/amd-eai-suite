@@ -80,7 +80,7 @@ describe('ApiKeysTable', () => {
   it('loads and displays API keys data', async () => {
     const mockApiKeys = generateMockApiKeys(2);
     mockFetchProjectApiKeys.mockResolvedValue({
-      apiKeys: mockApiKeys,
+      data: mockApiKeys,
     });
 
     await act(async () => {
@@ -100,7 +100,7 @@ describe('ApiKeysTable', () => {
   it('handles search filter', async () => {
     const mockApiKeys = generateMockApiKeys(3);
     mockFetchProjectApiKeys.mockResolvedValue({
-      apiKeys: mockApiKeys,
+      data: mockApiKeys,
     });
 
     await act(async () => {
@@ -157,7 +157,7 @@ describe('ApiKeysTable', () => {
   it('handles delete action', async () => {
     const mockApiKeys = generateMockApiKeys(1);
     mockFetchProjectApiKeys.mockResolvedValue({
-      apiKeys: mockApiKeys,
+      data: mockApiKeys,
     });
 
     await act(async () => {
@@ -197,7 +197,7 @@ describe('ApiKeysTable', () => {
   it('handles sorting', async () => {
     const mockApiKeys = generateMockApiKeys(3);
     mockFetchProjectApiKeys.mockResolvedValue({
-      apiKeys: mockApiKeys,
+      data: mockApiKeys,
     });
 
     await act(async () => {
@@ -243,7 +243,7 @@ describe('ApiKeysTable', () => {
 
   it('handles empty state', async () => {
     mockFetchProjectApiKeys.mockResolvedValue({
-      apiKeys: [],
+      data: [],
     });
 
     await act(async () => {

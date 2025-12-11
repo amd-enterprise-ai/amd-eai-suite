@@ -4,30 +4,21 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getWorkloads } from '@/services/server/workloads';
-
-import { authenticateRoute, handleError } from '@/utils/server/route';
+import {
+  authenticateRoute,
+  handleError,
+  proxyRequest,
+} from '@/utils/server/route';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const { accessToken } = await authenticateRoute();
-    const searchParams = req.nextUrl.searchParams;
-    const type = (searchParams.get('type') as string) || '';
-    const withResources = searchParams.get('withResources') === 'true';
-    const status = (searchParams.get('status') as string) || '';
-    const projectId = (searchParams.get('projectId') as string) || '';
+    const baseUrl = `${process.env.AIRM_API_SERVICE_URL}/v1/managed-workloads`;
+    const res = await proxyRequest(req, baseUrl, accessToken as string);
 
-    const workloads = await getWorkloads({
-      type,
-      status,
-      withResources,
-      accessToken: accessToken as string,
-      projectId,
-    });
-
-    return NextResponse.json(workloads);
+    return NextResponse.json(res);
   } catch (error) {
     return handleError(error);
   }

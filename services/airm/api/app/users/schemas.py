@@ -38,11 +38,11 @@ class InvitedUserWithProjects(InvitedUser):
 
 
 class Users(BaseModel):
-    users: list[UserResponse]
+    data: list[UserResponse]
 
 
 class InvitedUsers(BaseModel):
-    invited_users: list[InvitedUserWithProjects]
+    data: list[InvitedUserWithProjects]
 
 
 class UserRoleEnum(StrEnum):
@@ -60,6 +60,9 @@ class InviteUser(BaseModel):
     roles: list[UserRoleEnum] = Field(description="The roles to be assigned to the user", min_items=0)
     project_ids: list[UUID] | None = Field(
         default=None, description="The IDs of the project to be assigned to the user."
+    )
+    temporary_password: str | None = Field(
+        default=None, description="The temporary password to be set for the user", min_length=8, max_length=256
     )
 
 

@@ -15,8 +15,8 @@ Finetune endpoint
     ${finetune_endpoint}=                           Catalog endpoint        models/${model_id}/finetune
     RETURN                  ${finetune_endpoint}
 
-Send Finetune Request
-    [Documentation]    Send a finetune request using the provided model ID and data.
+Finetune model
+    [Documentation]    Finetune a model using the provided model ID and data.
     [Arguments]             ${model_id}             ${finetune_data}        ${expected_status}=any                          ${params}=${None}
     Create api session
 

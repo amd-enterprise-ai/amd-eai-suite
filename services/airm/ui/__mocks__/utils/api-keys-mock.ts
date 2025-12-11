@@ -28,7 +28,7 @@ export const generateMockApiKey = (overrides?: Partial<ApiKey>): ApiKey => ({
 });
 
 export const generateMockApiKeyResponse = () => ({
-  apiKeys: generateMockApiKeys(3),
+  data: generateMockApiKeys(3),
 });
 
 export const generateMockCreateApiKeyData = () => ({

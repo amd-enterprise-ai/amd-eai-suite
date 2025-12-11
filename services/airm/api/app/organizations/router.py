@@ -6,7 +6,9 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Path, Query, status
+from prometheus_api_client import PrometheusConnect
 from pydantic import AwareDatetime
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..metrics.schemas import CurrentUtilization, MetricsTimeseries
 from ..metrics.service import get_current_utilization as get_current_utilization_from_ds
@@ -20,13 +22,14 @@ from ..users.schemas import InviteUser
 from ..users.service import create_user_in_organization
 from ..utilities.database import get_session
 from ..utilities.exceptions import NotFoundException
-from ..utilities.keycloak_admin import get_kc_admin
+from ..utilities.keycloak_admin import KeycloakAdmin, get_kc_admin
 from ..utilities.security import (
     ensure_platform_administrator,
     ensure_super_administrator,
     get_user_email,
     get_user_organization,
 )
+from .models import Organization
 from .repository import get_organization_by_id
 from .schemas import OrganizationCreate, OrganizationResponse, Organizations
 from .service import create_organization as create_organization_in_system
@@ -48,9 +51,9 @@ router = APIRouter(tags=["Organizations"])
     response_model=Organizations,
 )
 async def get_organizations(
-    _=Depends(ensure_super_administrator),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_super_administrator),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
 ) -> Organizations:
     organizations = await get_all_organizations(kc_admin, session)
     return Organizations(organizations=organizations)
@@ -70,10 +73,10 @@ async def get_organizations(
 )
 async def create_organization(
     organization: OrganizationCreate,
-    _=Depends(ensure_super_administrator),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
-):
+    _: None = Depends(ensure_super_administrator),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
+) -> OrganizationResponse:
     return await create_organization_in_system(kc_admin, session, organization)
 
 
@@ -89,13 +92,13 @@ async def create_organization(
     status_code=status.HTTP_201_CREATED,
 )
 async def invite_user_to_organization(
-    _=Depends(ensure_super_administrator),
-    user=Depends(get_user_email),
-    session=Depends(get_session),
-    kc_admin=Depends(get_kc_admin),
+    _: None = Depends(ensure_super_administrator),
+    user: str = Depends(get_user_email),
+    session: AsyncSession = Depends(get_session),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
     organization_id: UUID = Path(description="The ID of the organization to be retrieved"),
     invite_user: InviteUser = Body(description="The user to be invited in the organization"),
-):
+) -> None:
     organization = await get_organization_by_id(session, organization_id)
 
     if not organization:
@@ -117,10 +120,10 @@ async def invite_user_to_organization(
     response_model=OrganizationResponse,
 )
 async def get_current_user_organization(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    kc_admin=Depends(get_kc_admin),
-):
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    kc_admin: KeycloakAdmin = Depends(get_kc_admin),
+) -> OrganizationResponse:
     if not organization:
         raise NotFoundException("Organization not found for user")
 
@@ -140,12 +143,12 @@ async def get_current_user_organization(
     response_model=MetricsTimeseries,
 )
 async def get_gpu_memory_utilization_timeseries(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
     start: AwareDatetime = Query(..., description="The start timestamp for the timeseries"),
     end: AwareDatetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsTimeseries:
     validate_datetime_range(start, end)
 
@@ -167,12 +170,12 @@ async def get_gpu_memory_utilization_timeseries(
     response_model=MetricsTimeseries,
 )
 async def get_gpu_device_utilization_timeseries(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
     start: datetime = Query(..., description="The start timestamp for the timeseries"),
     end: datetime = Query(..., description="The end timestamp for the timeseries"),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> MetricsTimeseries:
     validate_datetime_range(start, end)
 
@@ -194,10 +197,10 @@ async def get_gpu_device_utilization_timeseries(
     response_model=CurrentUtilization,
 )
 async def get_current_utilization(
-    _=Depends(ensure_platform_administrator),
-    organization=Depends(get_user_organization),
-    session=Depends(get_session),
-    prometheus_client=Depends(get_prometheus_client),
+    _: None = Depends(ensure_platform_administrator),
+    organization: Organization = Depends(get_user_organization),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
 ) -> CurrentUtilization:
     return await get_current_utilization_from_ds(
         session=session, organization=organization, prometheus_client=prometheus_client

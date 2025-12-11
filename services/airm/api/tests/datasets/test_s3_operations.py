@@ -178,8 +178,8 @@ class TestValidateJsonl:
         file_content = b'{"text": "test"}\n{"text": "test2"}'
         file = UploadFile(filename="test.jsonl", file=io.BytesIO(file_content))
 
-        result = validate_jsonl(file)
-        assert result is True
+        # Should not raise an exception
+        validate_jsonl(file)
 
     def test_invalid_extension(self):
         """Test validation of a file with an invalid extension."""

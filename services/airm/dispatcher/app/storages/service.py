@@ -28,7 +28,7 @@ from .constants import PROJECT_STORAGE_ID_LABEL
 from .utils import build_configmap_manifest
 
 
-async def process_project_s3_storage_create(message: ProjectS3StorageCreateMessage):
+async def process_project_s3_storage_create(message: ProjectS3StorageCreateMessage) -> None:
     logger.info("Project S3 storage create handler received message")
     logger.debug(f"Processing ProjectS3StorageCreateMessage: {message}")
     try:
@@ -51,7 +51,7 @@ async def process_project_s3_storage_create(message: ProjectS3StorageCreateMessa
         return
 
 
-async def process_storage_delete_error(api_resource: Any, delete_err: ApiException, item):
+async def process_storage_delete_error(api_resource: Any, delete_err: ApiException, item: dict) -> None:
     project_storage_id = extract_label_id(item, PROJECT_STORAGE_ID_LABEL)
 
     status_reason = f"Deletion failed for resource {getattr(api_resource, 'kind', str(api_resource))} project_storage_id={project_storage_id}: {delete_err}"
@@ -65,7 +65,7 @@ async def process_storage_delete_error(api_resource: Any, delete_err: ApiExcepti
         )
 
 
-async def process_project_storage_delete(message: ProjectStorageDeleteMessage):
+async def process_project_storage_delete(message: ProjectStorageDeleteMessage) -> None:
     logger.info("Project storage delete handler received message")
     logger.debug(f"Processing ProjectStorageDeleteMessage: {message}")
     label_selector = f"{PROJECT_STORAGE_ID_LABEL}={message.project_storage_id}"
@@ -100,7 +100,7 @@ async def process_project_storage_delete(message: ProjectStorageDeleteMessage):
         logger.exception(f"Error deleting ConfigMap with label '{label_selector}' : {ex}")
 
 
-async def _publish_s3_storage_status(project_storage_id: UUID, status: ConfigMapStatus, reason: str):
+async def _publish_s3_storage_status(project_storage_id: UUID, status: ConfigMapStatus, reason: str) -> None:
     connection, channel = await get_common_vhost_connection_and_channel()
     await publish_to_common_feedback_queue(
         ProjectStorageUpdateMessage(

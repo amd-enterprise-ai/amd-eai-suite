@@ -49,7 +49,7 @@ A cluster-side component that receives instructions from the API and interacts w
 ### Prerequisites
 
 - Python 3.13
-- Pre-commit (`pip install pre-commit`)
+- Pre-commit (`uv tool pip install pre-commit`)
 - Docker & Docker Compose
 - Node.js & `pnpm` for frontend
 - `uv` for Python dependency management
@@ -63,7 +63,7 @@ git clone <this-repo>
 cd <repo>
 
 # Install pre-commit hooks (both pre-commit and pre-push)
-pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
+uv tool run pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
 ```
 
 > **Note**: The pre-push hooks will automatically run tests with coverage for any changed components, and it would exit at the first failed test:

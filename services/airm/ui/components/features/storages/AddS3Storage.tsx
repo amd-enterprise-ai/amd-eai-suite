@@ -13,7 +13,7 @@ import { createStorage } from '@/services/app/storages';
 
 import { APIRequestError } from '@/utils/app/errors';
 
-import { SecretStatus } from '@/types/enums/secrets';
+import { SecretStatus, SecretUseCase } from '@/types/enums/secrets';
 import { StorageScope, StorageType } from '@/types/enums/storages';
 import { FormField } from '@/types/forms/forms';
 import { Project } from '@/types/projects';
@@ -24,7 +24,7 @@ import {
   Storage,
 } from '@/types/storages';
 
-import { DrawerForm } from '@/components/shared/DrawerForm';
+import { DrawerForm } from '@/components/shared/Drawer';
 import { FormFieldComponent } from '@/components/shared/ManagedForm/FormFieldComponent';
 
 import { ZodType, z } from 'zod';
@@ -73,6 +73,14 @@ export const AddS3Storage: React.FC<Props> = ({
       secrets,
     },
   });
+
+  const filteredSecrets = useMemo(
+    () =>
+      secretsData.secrets.filter(
+        (secret) => secret.useCase === SecretUseCase.S3,
+      ),
+    [secretsData.secrets],
+  );
 
   const { mutate: addStorage, isPending } = useMutation({
     mutationFn: async (data: CreateStorageRequest) => {
@@ -192,7 +200,7 @@ export const AddS3Storage: React.FC<Props> = ({
           {...formElemProps}
           disabledKeys={disabledSecretIds}
         >
-          {secretsData.secrets.map((secret) => (
+          {filteredSecrets.map((secret) => (
             <SelectItem key={secret.id}>{secret.name}</SelectItem>
           ))}
         </Select>

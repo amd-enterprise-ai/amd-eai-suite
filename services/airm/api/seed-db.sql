@@ -32,7 +32,8 @@ INSERT INTO clusters(
     created_by,
     updated_by,
     last_heartbeat_at,
-    base_url
+    workloads_base_url,
+    kube_api_url
 ) VALUES (
     'Cluster_1',
     '08ccd4e0-3bef-480c-8e08-a21f47f51421',
@@ -42,7 +43,8 @@ INSERT INTO clusters(
     'system',
     'system',
     now() + interval '5 years',
-    'http://localhost'
+    'http://workloads.localhost',
+    'http://k8s.localhost'
 ) ON CONFLICT DO NOTHING;
 
 INSERT INTO projects(
@@ -318,4 +320,212 @@ INSERT INTO namespaces (
     TIMESTAMP '2025-01-19 10:23:54+02',
     'system',
     'system'
+) ON CONFLICT DO NOTHING;
+
+-- Insert AIMs (AMD Inference Microservices)
+INSERT INTO aims (
+    id,
+    resource_name,
+    image_reference,
+    labels,
+    status,
+    created_at,
+    updated_at,
+    created_by,
+    updated_by
+) VALUES (
+    'a1b2c3d4-5678-90ab-cdef-111111111111',
+    'aim-meta-llama-llama-3-1-8b-instruct-0-8-4',
+    'docker.io/amdenterpriseai/aim-meta-llama-llama-3-1-8b-instruct:0.8.4',
+    '{
+        "com.amd.aim.description.full": "The Meta Llama 3.1 collection, released by Meta on July 23, 2024, is a set of multilingual large language models available in 8B, 70B, and 405B parameter sizes. The models are offered in both pretrained and instruction-tuned versions, with the latter being optimized for dialogue use cases. Built on an auto-regressive transformer architecture with Grouped-Query Attention (GQA), the tuned models are refined using Supervised Fine-Tuning (SFT) and Reinforcement Learning with Human Feedback (RLHF). Llama 3.1 is intended for commercial and research applications. The instruction-tuned models are designed for assistant-like chat, while the pretrained models can be adapted for various natural language generation tasks. The custom commercial license also allows for using the model''s output for synthetic data generation and distillation to improve other models.",
+        "com.amd.aim.hfToken.required": "True",
+        "com.amd.aim.model.canonicalName": "meta-llama/Llama-3.1-8B-Instruct",
+        "com.amd.aim.model.recommendedDeployments": "{''gpuModel'': ''MI300X'', ''gpuCount'': 1, ''precision'': ''fp8'', ''metric'': ''latency'', ''description'': ''Optimized for latency on MI300X using fp8 precision''}, {''gpuModel'': ''MI300X'', ''gpuCount'': 1, ''precision'': ''fp8'', ''metric'': ''throughput'', ''description'': ''Optimized for throughput on MI300X using fp8 precision''}",
+        "com.amd.aim.model.source": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct",
+        "com.amd.aim.model.tags": "text-generation, chat, instruction",
+        "com.amd.aim.model.variants": "amd/Llama-3.1-8B-Instruct-FP8-KV, meta-llama/Llama-3.1-8B-Instruct",
+        "com.amd.aim.release.notes": "",
+        "com.amd.aim.title": "meta-llama/Llama-3.1-8B-Instruct",
+        "org.opencontainers.image.authors": "",
+        "org.opencontainers.image.created": "2025-11-11T10:45:11Z",
+        "org.opencontainers.image.description": "Instruction-tuned version of Llama 3.1 8B optimized for chat and instruction following.",
+        "org.opencontainers.image.documentation": "",
+        "org.opencontainers.image.licenses": "llama3.1, MIT",
+        "org.opencontainers.image.ref.name": "ubuntu",
+        "org.opencontainers.image.revision": "bdba5c8c0a6be5962f098fa4bbe0ecbce9fdc07a",
+        "org.opencontainers.image.source": "https://github.com/silogen/aim-build",
+        "org.opencontainers.image.title": "meta-llama/Llama-3.1-8B-Instruct",
+        "org.opencontainers.image.vendor": "AMD",
+        "org.opencontainers.image.version": ""
+    }',
+    'Ready',
+    TIMESTAMP '2025-11-11 00:00:00+00',
+    TIMESTAMP '2025-11-11 00:00:00+00',
+    'system',
+    'system'
+) ON CONFLICT DO NOTHING;
+
+INSERT INTO aims (
+    id,
+    resource_name,
+    image_reference,
+    labels,
+    status,
+    created_at,
+    updated_at,
+    created_by,
+    updated_by
+) VALUES (
+    'a1b2c3d4-5678-90ab-cdef-222222222222',
+    'aim-qwen-qwen3-32b-0-8-4',
+    'docker.io/amdenterpriseai/aim-qwen-qwen3-32b:0.8.4',
+    '{
+        "com.amd.aim.description.full": "",
+        "com.amd.aim.hfToken.required": "False",
+        "com.amd.aim.model.canonicalName": "Qwen/Qwen3-32B",
+        "com.amd.aim.model.recommendedDeployments": "{''gpuModel'': ''MI300X'', ''gpuCount'': 1, ''precision'': ''fp16'', ''metric'': ''latency'', ''description'': ''Optimized for latency on MI300X using fp16 precision''}, {''gpuModel'': ''MI300X'', ''gpuCount'': 1, ''precision'': ''fp16'', ''metric'': ''throughput'', ''description'': ''Optimized for throughput on MI300X using fp16 precision''}",
+        "com.amd.aim.model.source": "https://huggingface.co/Qwen/Qwen3-32B",
+        "com.amd.aim.model.tags": "text-generation, chat",
+        "com.amd.aim.model.variants": "Qwen/Qwen3-32B, Qwen/Qwen3-32B-FP8",
+        "com.amd.aim.release.notes": "",
+        "com.amd.aim.title": "Qwen/Qwen3-32B",
+        "org.opencontainers.image.authors": "",
+        "org.opencontainers.image.created": "2025-11-11T10:45:11Z",
+        "org.opencontainers.image.description": "Qwen is the large language model and large multimodal model series of the Qwen Team, Alibaba Group.",
+        "org.opencontainers.image.documentation": "",
+        "org.opencontainers.image.licenses": "Apache-2.0, MIT",
+        "org.opencontainers.image.ref.name": "ubuntu",
+        "org.opencontainers.image.revision": "bdba5c8c0a6be5962f098fa4bbe0ecbce9fdc07a",
+        "org.opencontainers.image.source": "https://github.com/silogen/aim-build",
+        "org.opencontainers.image.title": "Qwen/Qwen3-32B",
+        "org.opencontainers.image.vendor": "AMD",
+        "org.opencontainers.image.version": ""
+    }',
+    'Ready',
+    TIMESTAMP '2025-11-11 00:00:00+00',
+    TIMESTAMP '2025-11-11 00:00:00+00',
+    'system',
+    'system'
+) ON CONFLICT DO NOTHING;
+
+INSERT INTO aims (
+    id,
+    resource_name,
+    image_reference,
+    labels,
+    status,
+    created_at,
+    updated_at,
+    created_by,
+    updated_by
+) VALUES (
+    'a1b2c3d4-5678-90ab-cdef-333333333333',
+    'aim-mistralai-mistral-small-3-2-24b-instruct-2506-0-8-4',
+    'docker.io/amdenterpriseai/aim-mistralai-mistral-small-3-2-24b-instruct-2506:0.8.4',
+    '{
+        "com.amd.aim.description.full": "",
+        "com.amd.aim.hfToken.required": "False",
+        "com.amd.aim.model.canonicalName": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+        "com.amd.aim.model.recommendedDeployments": "{''gpuModel'': ''MI300X'', ''gpuCount'': 1, ''precision'': ''fp16'', ''metric'': ''latency'', ''description'': ''Optimized for latency on MI300X using fp16 precision''}, {''gpuModel'': ''MI300X'', ''gpuCount'': 1, ''precision'': ''fp16'', ''metric'': ''throughput'', ''description'': ''Optimized for throughput on MI300X using fp16 precision''}",
+        "com.amd.aim.model.source": "https://huggingface.co/mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+        "com.amd.aim.model.tags": "text-generation, chat",
+        "com.amd.aim.model.variants": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+        "com.amd.aim.release.notes": "",
+        "com.amd.aim.title": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+        "org.opencontainers.image.authors": "",
+        "org.opencontainers.image.created": "2025-11-11T10:45:11Z",
+        "org.opencontainers.image.description": "Mistral-Small-3.2-24B-Instruct-2506 is a minor update of Mistral-Small-3.1-24B-Instruct-2503. Small-3.2 improves in the following categories: - Instruction following: Small-3.2 is better at following precise instructions - Repetition errors: Small-3.2 produces less infinite generations or repetitive answers - Function calling: Small-3.2''s function calling template is more robust",
+        "org.opencontainers.image.documentation": "",
+        "org.opencontainers.image.licenses": "Apache-2.0, MIT",
+        "org.opencontainers.image.ref.name": "ubuntu",
+        "org.opencontainers.image.revision": "bdba5c8c0a6be5962f098fa4bbe0ecbce9fdc07a",
+        "org.opencontainers.image.source": "https://github.com/silogen/aim-build",
+        "org.opencontainers.image.title": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+        "org.opencontainers.image.vendor": "AMD",
+        "org.opencontainers.image.version": ""
+    }',
+    'Degraded',
+    TIMESTAMP '2025-11-11 00:00:00+00',
+    TIMESTAMP '2025-11-11 00:00:00+00',
+    'system',
+    'system'
+) ON CONFLICT DO NOTHING;
+
+
+-- Insert managed workloads for AIM inference
+INSERT INTO workloads (
+    id,
+    status,
+    cluster_id,
+    project_id,
+    created_at,
+    updated_at,
+    created_by,
+    updated_by,
+    display_name,
+    type,
+    kind,
+    name,
+    aim_id,
+    chart_id,
+    user_inputs,
+    output,
+    cluster_auth_group_id
+) VALUES (
+    '4bc350da-5031-410d-aca1-0a34cc21d085',
+    'Pending',
+    '99a3f8c2-a23d-4ac6-b2a9-502305925ff3',
+    '79ae32ed-bb33-4e01-a30a-808201183905',
+    TIMESTAMP '2025-11-17 08:41:08.018571+00',
+    TIMESTAMP '2025-11-17 08:44:28.584381+00',
+    'devuser@amd.com',
+    'system',
+    'aim-meta-llama-llama-3-1-8b-instruct-0.8.4-4bc350da',
+    'INFERENCE',
+    'managed',
+    'mw-42d5e9e8',
+    'a1b2c3d4-5678-90ab-cdef-111111111111',
+    'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    '{"canonicalName": "meta-llama/Llama-3.1-8B-Instruct"}',
+    '{"externalHost": "https://workloads.example.com/research-and-development/4bc350da-5031-410d-aca1-0a34cc21d085", "internalHost": "mw-42d5e9e8-predictor.research-and-development.svc.cluster.local"}',
+    '891dfa25-f52b-c7f3-3e8b-69be9ad74e44'
+) ON CONFLICT DO NOTHING;
+
+INSERT INTO workloads (
+    id,
+    status,
+    cluster_id,
+    project_id,
+    created_at,
+    updated_at,
+    created_by,
+    updated_by,
+    display_name,
+    type,
+    kind,
+    name,
+    aim_id,
+    chart_id,
+    user_inputs,
+    output,
+    cluster_auth_group_id
+) VALUES (
+    '0a4b3a17-9bd4-47cf-8ca3-47c3b0419185',
+    'Running',
+    '99a3f8c2-a23d-4ac6-b2a9-502305925ff3',
+    '79ae32ed-bb33-4e01-a30a-808201183905',
+    TIMESTAMP '2025-11-17 09:18:43.281242+00',
+    TIMESTAMP '2025-11-17 09:21:07.569857+00',
+    'devuser@amd.com',
+    'system',
+    'aim-mistralai-mistral-small-3-2-24b-instruct-2506-0.8.4-0a4b3a17',
+    'INFERENCE',
+    'managed',
+    'mw-6797e6e7',
+    'a1b2c3d4-5678-90ab-cdef-333333333333',
+    'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    '{"canonicalName": "mistralai/Mistral-Small-3.2-24B-Instruct-2506"}',
+    '{"externalHost": "https://workloads.example.com/research-and-development/0a4b3a17-9bd4-47cf-8ca3-47c3b0419185", "internalHost": "mw-6797e6e7-predictor.research-and-development.svc.cluster.local"}',
+    'e9dfca34-314b-dd46-693d-b7b2cd656de2'
 ) ON CONFLICT DO NOTHING;

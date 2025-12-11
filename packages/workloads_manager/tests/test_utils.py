@@ -13,7 +13,7 @@ from workloads_manager.core.api import make_api_request
 from workloads_manager.core.utils import camel_to_snake, normalize_metadata_keys
 
 
-def test_make_api_request_files_format(tmp_path: Path):
+def test_make_api_request_files_format(tmp_path: Path) -> None:
     """Test that make_api_request handles the new files format correctly."""
     # Create test files
     file1 = tmp_path / "test1.txt"

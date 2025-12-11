@@ -81,7 +81,7 @@ async def test_get_workload_logs_filter_warning(sample_workload):
                     "values": [["1640995200000000000", "Info message"]],
                 },
                 {
-                    "stream": {"detected_level": "warning"},
+                    "stream": {"detected_level": "warn"},
                     "values": [["1640995300000000000", "Warn message"]],
                 },
                 {
@@ -105,4 +105,4 @@ async def test_get_workload_logs_filter_warning(sample_workload):
     called_params = mock_client.get.call_args[1]["params"]
     query = called_params["query"]
 
-    assert 'level=~"warning|error|critical"' in query
+    assert 'detected_level="warn" or detected_level="error" or detected_level="fatal"' in query

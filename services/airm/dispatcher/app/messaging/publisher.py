@@ -22,7 +22,7 @@ from .config import (
 
 async def publish_to_common_feedback_queue(
     message: Message, connection: abc.AbstractConnection, channel: abc.AbstractChannel | None = None
-):
+) -> None:
     await publish_message_to_queue(connection, RABBITMQ_AIRM_COMMON_QUEUE, message.json(), RABBITMQ_USER, channel)
 
 

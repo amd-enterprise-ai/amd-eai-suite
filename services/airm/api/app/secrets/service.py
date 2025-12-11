@@ -10,15 +10,14 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airm.messaging.schemas import (
-    ProjectSecretsCreateMessage,
-    ProjectSecretsDeleteMessage,
     ProjectSecretStatus,
     ProjectSecretsUpdateMessage,
+    SecretKind,
+    SecretScope,
 )
-from airm.secrets.utils import validate_external_secret_manifest, validate_kubernetes_secret_manifest
 
 from ..clusters.models import Cluster
-from ..messaging.publisher import submit_message_to_cluster_queue
+from ..messaging.sender import MessageSender
 from ..organizations.models import Organization
 from ..projects.enums import ProjectStatus
 from ..projects.models import Project
@@ -26,148 +25,75 @@ from ..projects.repository import get_project_in_organization
 from ..storages.repository import get_project_storages_by_project_ids_secret, get_project_storages_by_project_secret
 from ..storages.service import update_project_storage_secret_status
 from ..utilities.exceptions import ConflictException, NotFoundException, ValidationException
-from .enums import SecretScope, SecretStatus, SecretType, SecretUseCase
-from .models import ProjectSecret as ProjectSecretModel
+from .enums import SecretStatus, SecretUseCase
+from .models import OrganizationScopedSecret, OrganizationSecretAssignment, ProjectScopedSecret
 from .models import Secret as SecretModel
 from .repository import (
-    assign_secret_to_projects,
-    get_project_scoped_secret_by_id,
-    get_project_secret,
-    get_project_secret_by_id,
+    assign_organization_secret_to_projects,
+    create_organization_scoped_secret,
+    create_project_scoped_secret,
+    delete_secret_assignment,
+    get_organization_secret_assignment,
+    get_secret_assignment_by_id,
     get_secret_in_organization,
+    get_secrets_for_project,
     get_secrets_in_organization,
-)
-from .repository import (
-    create_secret as create_secret_in_db,
-)
-from .repository import (
-    delete_project_secret as delete_project_secret_in_db,
+    update_secret_status,
 )
 from .repository import (
     delete_secret as delete_secret_in_db,
 )
-from .repository import (
-    update_project_secret_status as update_project_secret_status_in_db,
-)
+from .repository import update_org_assignment_status as update_org_assignment_status_in_db
 from .repository import (
     update_secret_status as update_secret_status_in_db,
 )
-from .schemas import ProjectSecret as ProjectSecretSchema
 from .schemas import (
+    OrganizationSecretIn,
+    ProjectSecretIn,
     ProjectSecretsWithParentSecret,
-    ProjectSecretWithParentSecret,
-    SecretIn,
-    SecretResponse,
     Secrets,
     SecretWithProjects,
 )
 from .utils import (
-    add_use_case_label_to_manifest,
-    map_secret_type_to_component_kind,
+    build_project_secret_response,
+    build_secret_response,
+    calculate_assignment_changes,
+    publish_project_secret_creation_message,
+    publish_project_secret_deletion_message,
+    publish_secret_deletion_message,
     resolve_secret_status,
     sanitize_external_secret_manifest,
+    validate_and_patch_secret_manifest,
 )
-
-
-def _add_huggingface_labels_to_manifest(manifest_str: str, use_case: str) -> str:
-    """
-    Validates a Kubernetes Secret manifest and adds use-case labels for Hugging Face tokens.
-
-    Args:
-        manifest_str: YAML string containing the Kubernetes Secret manifest
-        use_case: The use case value (e.g., "HUGGING_FACE")
-
-    Returns:
-        YAML string with validated manifest and added labels
-
-    Raises:
-        ValidationException: If manifest validation fails
-    """
-    try:
-        # Validate the Kubernetes Secret manifest structure
-        manifest = validate_kubernetes_secret_manifest(manifest_str)
-    except Exception as exc:
-        raise ValidationException(f"Invalid Kubernetes Secret manifest: {exc}") from exc
-
-    # Add use-case label
-    manifest = add_use_case_label_to_manifest(manifest, use_case)
-
-    return yaml.safe_dump(manifest, sort_keys=False)
-
-
-def _prepare_secret_input(secret_in: SecretIn) -> tuple[str, str]:
-    """Validate secret payload and return (cluster_manifest, sanitized_manifest)."""
-    if not secret_in.manifest:
-        raise ValidationException("Manifest must be provided for secret creation.")
-    if secret_in.use_case == SecretUseCase.HUGGING_FACE and secret_in.type == SecretType.KUBERNETES_SECRET:
-        labeled_manifest = _add_huggingface_labels_to_manifest(secret_in.manifest, secret_in.use_case)
-        return labeled_manifest, ""
-    try:
-        parsed_manifest = validate_external_secret_manifest(secret_in.manifest)
-    except Exception as e:
-        raise ValidationException(f"Invalid YAML manifest: {str(e)}")
-
-    sanitized_manifest = sanitize_external_secret_manifest(parsed_manifest)
-    return "", sanitized_manifest
 
 
 async def get_secrets_with_assigned_project_secrets(
     session: AsyncSession,
     organization: Organization,
-    project: Project | None = None,
-    secret_type: SecretType | None = None,
+    secret_type: SecretKind | None = None,
     use_case: SecretUseCase | None = None,
 ) -> Secrets:
+    """
+    Get all organization-scoped secrets with their project assignments.
+    """
     secrets = await get_secrets_in_organization(
         session,
         organization.id,
-        project.id if project is not None else None,
         secret_type=secret_type,
         use_case=use_case,
     )
 
-    return Secrets(
-        secrets=[
-            SecretWithProjects(
-                id=secret.id,
-                created_at=secret.created_at,
-                updated_at=secret.updated_at,
-                created_by=secret.created_by,
-                updated_by=secret.updated_by,
-                name=secret.name,
-                type=secret.type,
-                scope=secret.scope,
-                status=secret.status,
-                status_reason=secret.status_reason,
-                use_case=secret.use_case,
-                project_secrets=[
-                    ProjectSecretSchema(
-                        id=ps.id,
-                        created_at=ps.created_at,
-                        updated_at=ps.updated_at,
-                        created_by=ps.created_by,
-                        updated_by=ps.updated_by,
-                        project_id=ps.project_id,
-                        project_name=ps.project.name if ps.project else None,
-                        status=ps.status,
-                        status_reason=ps.status_reason,
-                    )
-                    for ps in secret.project_secrets
-                ],
-            )
-            for secret in secrets
-        ]
-    )
+    return Secrets(secrets=[build_secret_response(secret) for secret in secrets])
 
 
 async def get_project_secrets_in_project(
     session: AsyncSession,
     organization: Organization,
     project: Project,
-    secret_type: SecretType | None = None,
+    secret_type: SecretKind | None = None,
     use_case: SecretUseCase | None = None,
 ) -> ProjectSecretsWithParentSecret:
-    secrets = await get_secrets_in_organization(
+    secrets = await get_secrets_for_project(
         session,
         organization.id,
         project.id,
@@ -175,265 +101,214 @@ async def get_project_secrets_in_project(
         use_case=use_case,
     )
 
-    project_secrets = []
-    for secret in secrets:
-        for ps in secret.project_secrets:
-            if ps:  # Only include if ps in secret.project_secrets is satisfied
-                project_secrets.append(
-                    ProjectSecretWithParentSecret(
-                        id=ps.id,
-                        created_at=ps.created_at,
-                        updated_at=ps.updated_at,
-                        created_by=ps.created_by,
-                        updated_by=ps.updated_by,
-                        project_id=ps.project.id if ps.project else None,
-                        project_name=ps.project.name if ps.project else None,
-                        status=ps.status,
-                        status_reason=ps.status_reason,
-                        secret=SecretResponse(
-                            id=secret.id,
-                            created_at=secret.created_at,
-                            updated_at=secret.updated_at,
-                            created_by=secret.created_by,
-                            updated_by=secret.updated_by,
-                            name=secret.name,
-                            type=secret.type,
-                            scope=secret.scope,
-                            status=secret.status,
-                            status_reason=secret.status_reason,
-                            use_case=secret.use_case,
-                        ),
-                    )
-                )
-    return ProjectSecretsWithParentSecret(project_secrets=project_secrets)
+    return build_project_secret_response(secrets, project)
 
 
-async def create_secret_in_organization(
-    session: AsyncSession,
-    organization_id: UUID,
-    user_email: str,
-    secret_in: SecretIn,
-) -> SecretWithProjects:
-    cluster_manifest: str | None = None
+async def submit_delete_secret(
+    session: AsyncSession, secret: SecretModel, user: str, message_sender: MessageSender
+) -> None:
+    """
+    Delete a secret (either project-scoped or organization-scoped).
 
-    cluster_manifest, sanitized_manifest = _prepare_secret_input(secret_in)
-    secret_in.manifest = sanitized_manifest
-
-    # Persist the secret in the database
-    if secret_in.project_ids:
-        secret = await create_secret_in_db(session, organization_id, secret_in, SecretStatus.PENDING, user_email)
+    This is a convenience wrapper that delegates to the appropriate deletion method
+    based on the secret type.
+    """
+    if isinstance(secret, ProjectScopedSecret):
+        await delete_project_scoped_secret(session, secret, user, message_sender)
+    elif isinstance(secret, OrganizationScopedSecret):
+        await delete_organization_scoped_secret(session, secret, user, message_sender)
     else:
-        secret = await create_secret_in_db(session, organization_id, secret_in, SecretStatus.UNASSIGNED, user_email)
+        raise ValidationException("Unknown secret type for deletion")
 
-    if secret_in.project_ids:
-        # Assign to projects and fetch secret with relationships
-        secret = await assign_secret_to_projects(
-            session=session,
-            secret_id=secret.id,
-            project_ids=secret_in.project_ids,
-            user_email=user_email,
-        )
 
-        # Send create messages to each cluster
-        for project_secret in secret.project_secrets:
-            message = ProjectSecretsCreateMessage(
-                message_type="project_secrets_create",
-                project_name=project_secret.project.name,
-                project_secret_id=project_secret.id,
-                secret_name=secret.name,
-                manifest=cluster_manifest or secret.manifest,
-                secret_type=map_secret_type_to_component_kind(secret.type),
-            )
-            await submit_message_to_cluster_queue(project_secret.project.cluster_id, message)
+async def delete_project_scoped_secret(
+    session: AsyncSession, secret: ProjectScopedSecret, user: str, message_sender: MessageSender
+) -> None:
+    """Delete a project-scoped secret."""
+    now = datetime.now(UTC)
+    await update_secret_status_in_db(session, secret, SecretStatus.DELETING, None, now, user)
 
-    else:
-        await session.refresh(secret)
-
-    return SecretWithProjects(
-        id=secret.id,
-        name=secret.name,
-        type=secret.type,
-        scope=secret.scope,
-        status=secret.status,
-        status_reason=secret.status_reason,
-        use_case=secret.use_case,
-        created_at=secret.created_at,
-        updated_at=secret.updated_at,
-        created_by=secret.created_by,
-        updated_by=secret.updated_by,
-        project_secrets=[
-            ProjectSecretSchema(
-                id=ps.id,
-                project_id=ps.project_id,
-                project_name=ps.project.name if ps.project else None,
-                status=ps.status,
-                status_reason=ps.status_reason,
-                created_at=ps.created_at,
-                updated_at=ps.updated_at,
-                created_by=ps.created_by,
-                updated_by=ps.updated_by,
-            )
-            for ps in secret.project_secrets
-        ],
+    await publish_secret_deletion_message(
+        secret.project.cluster_id, secret.id, secret.project.name, secret.type, SecretScope.PROJECT, message_sender
     )
 
 
-async def submit_delete_secret(session: AsyncSession, secret: SecretModel, user: str):
-    if secret.status == SecretStatus.PENDING:
-        raise ConflictException("Secret is in PENDING state and cannot be deleted")
-    elif secret.status == SecretStatus.DELETING:
-        raise ConflictException("Secret is already marked for deletion")
+async def delete_organization_scoped_secret(
+    session: AsyncSession, secret: OrganizationScopedSecret, user: str, message_sender: MessageSender
+) -> None:
+    """Delete an organization-scoped secret from all assigned projects."""
+    now = datetime.now(UTC)
+    await update_secret_status_in_db(session, secret, SecretStatus.DELETING, None, now, user)
 
-    await update_secret_status_in_db(session, secret, SecretStatus.DELETING, None, datetime.now(UTC), user)
-
-    if not secret.project_secrets:
+    if not secret.organization_secret_assignments:
         await delete_secret_in_db(session, secret)
     else:
-        for project_secret in secret.project_secrets:
-            # Set the status to DELETING for each project secret
-            await update_project_secret_status_in_db(
-                session, project_secret, ProjectSecretStatus.DELETING, None, datetime.now(UTC), user
+        # delete the secret from all projects
+        for org_assignment in secret.organization_secret_assignments:
+            # Set the status to DELETING for each organization assignment
+            await update_org_assignment_status_in_db(
+                session, org_assignment, ProjectSecretStatus.DELETING, None, now, user
             )
-
             # Submit a message to the cluster queue to handle deletion
-            message = ProjectSecretsDeleteMessage(
-                message_type="project_secrets_delete",
-                project_secret_id=project_secret.id,
-                project_name=project_secret.project.name,
-                secret_type=map_secret_type_to_component_kind(secret.type),
+            await publish_secret_deletion_message(
+                org_assignment.project.cluster_id,
+                org_assignment.id,
+                org_assignment.project.name,
+                secret.type,
+                SecretScope.ORGANIZATION,
+                message_sender,
             )
-            await submit_message_to_cluster_queue(project_secret.project.cluster_id, message)
-
-
-async def submit_delete_project_secret(
-    session: AsyncSession, organization_id: UUID, project_secret: ProjectSecretModel, user: str
-):
-    if project_secret.status == ProjectSecretStatus.DELETING:
-        raise ConflictException("Project Secret is already marked for deletion")
-
-    parent_secret = await get_secret_in_organization(session, organization_id, project_secret.secret_id)
-    if not parent_secret:
-        raise NotFoundException("Secret not found")
-
-    # update the project secret status to PENDING state to indcate project unassignment is in progress
-    await update_secret_status_in_db(session, parent_secret, SecretStatus.PENDING, None, datetime.now(UTC), user)
-
-    await update_project_secret_status_in_db(
-        session, project_secret, ProjectSecretStatus.DELETING, None, datetime.now(UTC), user
-    )
-
-    # Submit a message to the cluster queue to handle deletion
-    message = ProjectSecretsDeleteMessage(
-        message_type="project_secrets_delete",
-        project_secret_id=project_secret.id,
-        project_name=project_secret.project.name,
-        secret_type=map_secret_type_to_component_kind(parent_secret.type),
-    )
-    await submit_message_to_cluster_queue(project_secret.project.cluster_id, message)
 
 
 async def update_project_secret_assignments(
-    session: AsyncSession, user_email: str, organization_id: UUID, secret: SecretModel, project_ids: list[UUID]
+    session: AsyncSession,
+    user_email: str,
+    organization_id: UUID,
+    org_secret: OrganizationScopedSecret,
+    project_ids: list[UUID],
+    message_sender: MessageSender,
 ) -> None:
-    current_project_ids = {ps.project_id for ps in secret.project_secrets}
+    current_project_ids = {assignment.project_id for assignment in org_secret.organization_secret_assignments}
     new_project_ids = set(project_ids)
 
-    to_add = new_project_ids - current_project_ids
-    to_remove = current_project_ids - new_project_ids
+    to_add, to_remove = calculate_assignment_changes(current_project_ids, new_project_ids)
 
     if not to_add and not to_remove:
         raise ValueError("No changes in project assignments")
 
-    # validate that all project IDs to be removed are not currently assigned storages
     if to_remove:
-        await ensure_can_remove_secret_from_projects(session, list(to_remove), secret.id)
+        await ensure_can_remove_secret_from_projects(session, list(to_remove), org_secret.id)
 
-    await update_secret_status_in_db(
+    await update_secret_status(
         session,
-        secret,
+        org_secret,
         SecretStatus.PENDING,
         None,
         datetime.now(UTC),
         user_email,
     )
 
-    # Send create messages for new project assignments
     if to_add:
-        await assign_projects_to_secret(session, organization_id, secret, list(to_add), user_email)
-
-    # Send delete messages for removed project assignments
-    for project_id in to_remove:
-        project_secret = await get_project_secret(session, secret.id, project_id)
-
-        if not project_secret or not project_secret.project:
-            raise ValueError(f"Project ID {project_id} is not assigned to the secret")
-
-        delete_message = ProjectSecretsDeleteMessage(
-            message_type="project_secrets_delete",
-            project_secret_id=project_secret.id,
-            project_name=project_secret.project.name,
-            secret_type=map_secret_type_to_component_kind(secret.type),
+        await add_organization_secret_assignments(
+            session, organization_id, org_secret, list[UUID](to_add), user_email, message_sender
         )
-        await update_project_secret_status_in_db(
-            session, project_secret, ProjectSecretStatus.DELETING, None, datetime.now(UTC), "system"
-        )
-        await submit_message_to_cluster_queue(project_secret.project.cluster_id, delete_message)
+
+    if to_remove:
+        await remove_organization_secret_assignments(session, org_secret, list[UUID](to_remove), message_sender)
 
 
-async def update_project_secret_status(session: AsyncSession, cluster: Cluster, message: ProjectSecretsUpdateMessage):
-    project_secret = await get_project_secret_by_id(session, message.project_secret_id)
+async def update_project_secret_status(
+    session: AsyncSession, cluster: Cluster, message: ProjectSecretsUpdateMessage
+) -> None:
+    if message.secret_scope == SecretScope.PROJECT:
+        await _update_project_scoped_secret_status(session, cluster.organization_id, message)
+    # If the secret scope is not provided due to legacy reasons, we assume it is an organization-scoped secret
+    elif message.secret_scope == SecretScope.ORGANIZATION or message.secret_scope is None:
+        await _update_organization_scoped_secret_status(session, cluster.organization_id, message)
+    else:
+        logger.error(f"Unknown secret scope: {message.secret_scope}")
 
-    if project_secret is None:
-        logger.error(f"Project Secret {message.project_secret_id} not found")
+
+async def _update_project_scoped_secret_status(
+    session: AsyncSession, organization_id: UUID, message: ProjectSecretsUpdateMessage
+) -> None:
+    """Handle status update for project-scoped secrets."""
+    project_scoped_secret = await get_secret_in_organization(session, organization_id, message.project_secret_id)
+
+    if not project_scoped_secret:
+        logger.error(f"Project-scoped secret {message.project_secret_id} not found in organization {organization_id}")
         return
 
-    secret = await get_secret_in_organization(session, cluster.organization_id, project_secret.secret_id)
+    if message.status == SecretStatus.DELETED:
+        logger.info(
+            f"Deleting secret {project_scoped_secret.name} since it was marked for deletion and criteria was met"
+        )
+        await delete_secret_in_db(session, project_scoped_secret)
+    elif project_scoped_secret.status != message.status:
+        await update_secret_status_in_db(
+            session,
+            project_scoped_secret,
+            message.status,
+            message.status_reason,
+            message.updated_at,
+            "system",
+        )
 
-    if secret is None:
-        logger.error(f"Secret {project_secret.secret_id} not found")
+
+async def _update_organization_scoped_secret_status(
+    session: AsyncSession, organization_id: UUID, message: ProjectSecretsUpdateMessage
+) -> None:
+    secret_assignment = await get_secret_assignment_by_id(session, message.project_secret_id)
+
+    if secret_assignment is None:
+        logger.error(f"Project Secret assignment {message.project_secret_id} not found")
         return
 
-    if message.status == ProjectSecretStatus.DELETED and project_secret.status == ProjectSecretStatus.DELETING:
-        await delete_project_secret_in_db(session, project_secret)
-    elif project_secret.status == ProjectSecretStatus.DELETING and message.status not in (
+    parent_secret = await get_secret_in_organization(session, organization_id, secret_assignment.organization_secret_id)
+
+    if parent_secret is None:
+        logger.error(f"Secret {secret_assignment.organization_secret_id} not found")
+        return
+
+    await _update_secret_assignment_status(session, secret_assignment, message)
+
+    # Refresh secret to get updated assignments
+    await session.refresh(parent_secret)
+
+    # Update related project storages
+    await _update_related_project_storages(
+        session, secret_assignment.organization_secret_id, secret_assignment.project_id
+    )
+
+    # Resolve and update the overall secret status
+    await _resolve_and_update_organization_secret_status(session, parent_secret, message)
+
+
+async def _update_secret_assignment_status(
+    session: AsyncSession, secret_assignment: OrganizationSecretAssignment, message: ProjectSecretsUpdateMessage
+) -> None:
+    if message.status == ProjectSecretStatus.DELETED and secret_assignment.status == ProjectSecretStatus.DELETING:
+        await delete_secret_assignment(session, secret_assignment)
+    elif secret_assignment.status == ProjectSecretStatus.DELETING and message.status not in (
         ProjectSecretStatus.DELETED,
         ProjectSecretStatus.DELETE_FAILED,
     ):
         # Don't update status if it's DELETING and message is not a terminal delete state
         logger.info(
-            f"Skipping status update for project_secret {project_secret.id} "
+            f"Skipping status update for secret_assignment {secret_assignment.id} "
             f"(current: DELETING, message: {message.status})"
         )
     else:
-        await update_project_secret_status_in_db(
-            session, project_secret, message.status, message.status_reason, datetime.now(UTC), "system"
+        await update_org_assignment_status_in_db(
+            session, secret_assignment, message.status, message.status_reason, datetime.now(UTC), "system"
         )
 
-    await session.refresh(secret)
 
-    # PROJECT-scoped secrets cannot exist without project assignments
-    # Delete the parent secret if it's PROJECT-scoped and has no assignments
-    if secret.scope == SecretScope.PROJECT and not secret.project_secrets:
-        logger.info(f"Deleting PROJECT-scoped secret {secret.name} since it has no project assignments")
-        await delete_secret_in_db(session, secret)
+async def _update_related_project_storages(session: AsyncSession, secret_id: UUID, project_id: UUID) -> None:
+    """Update all project storages that depend on this secret."""
+    project_storages = await get_project_storages_by_project_secret(session, secret_id, project_id)
+
+    if not project_storages:
+        logger.info(f"No ProjectStorages found for secret_id: {secret_id} project_id: {project_id}")
         return
 
-    project_storages = await get_project_storages_by_project_secret(session, project_secret)
-    if not project_storages:
-        logger.info(f"No ProjectStorages found for ProjectSecret {project_secret.id}")
-    else:
-        for project_storage in project_storages:
-            await update_project_storage_secret_status(session, project_secret.secret_id, project_storage)
+    for project_storage in project_storages:
+        await update_project_storage_secret_status(session, secret_id, project_storage)
 
-    secret_status, status_reason = resolve_secret_status(secret.status, secret.project_secrets)
+
+async def _resolve_and_update_organization_secret_status(
+    session: AsyncSession, secret: SecretModel, message: ProjectSecretsUpdateMessage
+) -> None:
+    """Resolve the overall status of an organization secret and update or delete it."""
+    secret_status, status_reason = resolve_secret_status(secret.status, secret.organization_secret_assignments)
+
     if secret_status == SecretStatus.DELETED:
         logger.info(f"Deleting secret {secret.name} since it was marked for deletion and criteria was met")
         await delete_secret_in_db(session, secret)
-        return
     elif secret.status != secret_status:
         await update_secret_status_in_db(
             session,
-            project_secret.secret,
+            secret,
             secret_status,
             status_reason,
             message.updated_at,
@@ -455,26 +330,71 @@ async def ensure_can_remove_secret_from_projects(
         )
 
 
-async def resolve_hf_token_reference(
+async def create_project_scoped_secret_in_organization(
     session: AsyncSession,
-    project: Project,
-    token_secret_id: UUID,
-) -> SecretModel:
-    secret = await get_project_scoped_secret_by_id(
-        session,
-        project_id=project.id,
-        secret_id=token_secret_id,
-        use_case=SecretUseCase.HUGGING_FACE,
+    organization_id: UUID,
+    project_id: UUID,
+    user_email: str,
+    secret_in: ProjectSecretIn,
+    message_sender: MessageSender,
+) -> SecretWithProjects:
+    project = await get_project_in_organization(session, organization_id, project_id)
+    if not project:
+        raise NotFoundException(f"Project with ID {project_id} not found in your organization")
+
+    manifest_dict = validate_and_patch_secret_manifest(secret_in)
+
+    manifest_yaml = yaml.safe_dump(manifest_dict, sort_keys=False)
+
+    secret = await create_project_scoped_secret(
+        session, organization_id, project_id, secret_in, SecretStatus.PENDING, user_email
     )
 
-    if secret is None:
-        raise NotFoundException("Hugging Face token reference not found for this project.")
+    await publish_project_secret_creation_message(secret, manifest_yaml, message_sender)
 
-    return secret
+    return build_secret_response(secret)
 
 
-async def assign_projects_to_secret(session, organization_id, secret, project_ids, user_email):
-    # Validate all projects first before making any database changes
+async def create_organization_scoped_secret_in_organization(
+    session: AsyncSession,
+    organization_id: UUID,
+    user_email: str,
+    secret_in: OrganizationSecretIn,
+    message_sender: MessageSender,
+) -> SecretWithProjects:
+    manifest_dict = validate_and_patch_secret_manifest(secret_in)
+
+    sanitized_manifest = sanitize_external_secret_manifest(manifest_dict)
+
+    secret_in.manifest = sanitized_manifest
+
+    status = SecretStatus.PENDING if secret_in.project_ids else SecretStatus.UNASSIGNED
+    org_secret = await create_organization_scoped_secret(session, organization_id, secret_in, status, user_email)
+
+    if secret_in.project_ids:
+        org_secret = await assign_organization_secret_to_projects(
+            session=session,
+            secret_id=org_secret.id,
+            project_ids=secret_in.project_ids,
+            user_email=user_email,
+        )
+
+        for assignment in org_secret.organization_secret_assignments:
+            await publish_project_secret_creation_message(
+                assignment, sanitized_manifest, message_sender, parent_secret=org_secret
+            )
+
+    return build_secret_response(org_secret)
+
+
+async def add_organization_secret_assignments(
+    session: AsyncSession,
+    organization_id: UUID,
+    org_secret: OrganizationScopedSecret,
+    project_ids: list[UUID],
+    user_email: str,
+    message_sender: MessageSender,
+) -> None:
     projects = []
     for project_id in project_ids:
         project = await get_project_in_organization(session, organization_id, project_id)
@@ -484,28 +404,48 @@ async def assign_projects_to_secret(session, organization_id, secret, project_id
             raise ConflictException(f"Project {project.name} is not in a READY state")
         projects.append(project)
 
-    # Assign all projects to the secret in a single operation
-    await assign_secret_to_projects(
+    await assign_organization_secret_to_projects(
         session=session,
-        secret_id=secret.id,
+        secret_id=org_secret.id,
         project_ids=project_ids,
         user_email=user_email,
     )
 
-    # Send create messages for each project assignment
     for project in projects:
-        project_secret = await get_project_secret(session, secret.id, project.id)
+        assignment = await get_organization_secret_assignment(session, org_secret.id, project.id)
 
-        if not project_secret:
+        if not assignment:
+            logger.warning(f"Assignment not found for secret {org_secret.id} and project {project.id}")
             continue
 
-        create_message = ProjectSecretsCreateMessage(
-            message_type="project_secrets_create",
-            project_secret_id=project_secret.id,
-            secret_name=secret.name,
-            project_name=project.name,
-            manifest=secret.manifest,
-            secret_type=map_secret_type_to_component_kind(secret.type),
+        await publish_project_secret_creation_message(
+            assignment, org_secret.manifest, message_sender, parent_secret=org_secret
         )
 
-        await submit_message_to_cluster_queue(project.cluster_id, create_message)
+
+async def remove_organization_secret_assignments(
+    session: AsyncSession,
+    org_secret: OrganizationScopedSecret,
+    project_ids: list[UUID],
+    message_sender: MessageSender,
+) -> None:
+    for project_id in project_ids:
+        assignment = await get_organization_secret_assignment(session, org_secret.id, project_id)
+
+        if not assignment:
+            raise ValueError(f"Project ID {project_id} is not assigned to the secret")
+
+        if not assignment.project:
+            logger.error(f"Assignment {assignment.id} has no project loaded")
+            raise ValueError(f"Project ID {project_id} data could not be loaded")
+
+        await update_org_assignment_status_in_db(
+            session,
+            assignment,
+            ProjectSecretStatus.DELETING,
+            None,
+            datetime.now(UTC),
+            "system",
+        )
+
+        await publish_project_secret_deletion_message(assignment, org_secret, message_sender)

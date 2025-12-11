@@ -303,7 +303,7 @@ const DashboardPage = ({ clusterStats }: Props) => {
       </h2>
 
       <div className="flex items-start gap-4 w-full">
-        <div className="border-1 p-8 pb-12 rounded-sm grow h-full dark:border-default-200">
+        <div className="border-1 p-8 pb-12 rounded-sm grow h-full border-default-200">
           <h3 className="mb-8">
             {t('allocationAndWorkloads.consumptionByProject.title')}
           </h3>
@@ -318,6 +318,13 @@ const DashboardPage = ({ clusterStats }: Props) => {
             translation={t}
             idKey={'id'}
             isLoading={isUtilizationDataLoading}
+            rowActions={[
+              {
+                key: 'open',
+                onPress: (item) => router.push(getProjectDashboardUrl(item.id)),
+                label: t('list.actions.open.label'),
+              },
+            ]}
           />
         </div>
         <div className="flex flex-col gap-4 min-w-[300px]">
@@ -353,13 +360,13 @@ const DashboardPage = ({ clusterStats }: Props) => {
             latestMetricsUpdatedAt ? latestMetricsUpdatedAt : undefined
           }
         />
-        <div className=" border-1 rounded-sm p-4 dark:border-default-200">
+        <div className=" border-1 rounded-sm p-4 border-default-200">
           <h3 className="font-semibold mb-4">
             {t('allocationAndWorkloads.charts.gpuMemoryUtilization.title')}
           </h3>
           {memoryUtilizationChart}
         </div>
-        <div className=" border-1 rounded-sm p-4 dark:border-default-200">
+        <div className=" border-1 rounded-sm p-4 border-default-200">
           <h3 className="font-semibold mb-4">
             {t('allocationAndWorkloads.charts.gpuDeviceUtilization.title')}
           </h3>
@@ -377,8 +384,7 @@ export async function getServerSideProps(context: any) {
 
   const session = await getServerSession(context.req, context.res, authOptions);
   const isAdministrator =
-    session?.user?.roles &&
-    session.user.roles.includes(UserRole.PLATFORM_ADMIN);
+    session?.user?.roles?.includes(UserRole.PLATFORM_ADMIN) ?? false;
 
   if (
     !session ||

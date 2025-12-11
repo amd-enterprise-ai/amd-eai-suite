@@ -29,5 +29,5 @@ export type ApiKeyDetails = ApiKey & {
 };
 
 export type ApiKeysResponse = {
-  apiKeys: ApiKey[];
+  data: ApiKey[];
 };

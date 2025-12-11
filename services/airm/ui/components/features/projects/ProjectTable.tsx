@@ -7,7 +7,7 @@ import { IconAlertTriangle } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
-import { Trans, useTranslation } from 'next-i18next';
+import { useTranslation } from 'next-i18next';
 import router from 'next/router';
 
 import useSystemToast from '@/hooks/useSystemToast';
@@ -28,8 +28,12 @@ import { ProjectWithResourceAllocation } from '@/types/projects';
 
 import { ConfirmationModal } from '@/components/shared/Confirmation/ConfirmationModal';
 import ClientSideDataTable from '@/components/shared/DataTable/ClientSideDataTable';
+import { StatusDisplay } from '@/components/shared/DataTable/CustomRenderers';
 
-import { ProjectStatusField } from './ProjectStatusField';
+import { ProjectStatus } from '@/types/enums/projects';
+import { getProjectStatusVariants } from '@/utils/app/projects-status-variants';
+
+import StatusError from '@/components/shared/StatusError/StatusError';
 
 interface Props {
   projects: ProjectWithResourceAllocation[];
@@ -99,9 +103,17 @@ export const ProjectTable: React.FC<Props> = ({ projects }) => {
     >
   > = {
     [ProjectTableField.STATUS]: (item) => (
-      <ProjectStatusField
-        status={item.status}
-        statusReason={item.statusReason}
+      <StatusDisplay
+        type={item.status}
+        variants={getProjectStatusVariants(t)}
+        bypassProps={
+          item.status === ProjectStatus.FAILED && !!item.statusReason
+            ? {
+                isClickable: true,
+                helpContent: <StatusError statusReason={item.statusReason} />,
+              }
+            : undefined
+        }
       />
     ),
     [ProjectTableField.NAME]: (item) => item.name,
@@ -223,13 +235,9 @@ export const ProjectTable: React.FC<Props> = ({ projects }) => {
       />
       <ConfirmationModal
         confirmationButtonColor="danger"
-        description={
-          <Trans parent="span">
-            {t('settings.delete.confirmation.description', {
-              project: targetProject?.name,
-            })}
-          </Trans>
-        }
+        description={t('settings.delete.confirmation.description', {
+          project: targetProject?.name,
+        })}
         title={t('settings.delete.confirmation.title')}
         isOpen={isDeleteModalOpen}
         loading={isDeletePending}

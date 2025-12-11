@@ -2,7 +2,14 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Card, CardBody, CardHeader, Button, Input } from '@heroui/react';
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  Button,
+  Input,
+  Skeleton,
+} from '@heroui/react';
 import {
   IconArrowLeft,
   IconExternalLink,
@@ -30,6 +37,10 @@ import useSystemToast from '@/hooks/useSystemToast';
 import { getWorkload, deleteWorkload } from '@/services/app/workloads';
 import { getWorkload as getWorkloadServer } from '@/services/server/workloads';
 import { getCluster } from '@/services/app/clusters';
+import { getModel } from '@/services/app/models';
+import { getDataset } from '@/services/app/datasets';
+import { getChart } from '@/services/app/charts';
+import { getAimById } from '@/services/app/aims';
 
 import getWorkloadStatusVariants from '@/utils/app/workloads-status-variants';
 import getWorkloadTypeVariants from '@/utils/app/workloads-type-variants';
@@ -41,12 +52,11 @@ import { Workload } from '@/types/workloads';
 import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
 import WorkloadLogsModal from '@/components/features/workloads/WorkloadLogsModal';
 import {
-  StatusBadgeDisplay,
+  StatusDisplay,
   ChipDisplay,
   DateDisplay,
   NoDataDisplay,
 } from '@/components/shared/DataTable/CustomRenderers';
-import StatusHeaderDisplay from '@/components/shared/ChipsAndStatus/StatusHeaderDisplay';
 import { displayMegabytesInGigabytes } from '@/utils/app/memory';
 
 import InferenceMetrics from '@/components/features/workloads/InferenceMetrics';
@@ -76,8 +86,33 @@ const WorkloadDetailsPage: React.FC<WorkloadDetailsPageProps> = ({
 
   const { data: cluster } = useQuery({
     queryKey: ['cluster', workload?.project?.clusterId],
-    queryFn: () => getCluster(workload!.project!.clusterId),
+    queryFn: () => getCluster(workload!.project.clusterId),
     enabled: !!workload?.project?.clusterId,
+  });
+
+  const { data: model, isLoading: isLoadingModel } = useQuery({
+    queryKey: ['model', workload?.modelId],
+    queryFn: () => getModel(workload!.modelId!, workload!.project.id),
+    enabled: !!workload?.modelId && !!workload?.project?.id,
+  });
+
+  const { data: dataset, isLoading: isLoadingDataset } = useQuery({
+    queryKey: ['dataset', workload?.datasetId],
+    queryFn: () => getDataset(workload!.datasetId!, workload!.project.id),
+    enabled: !!workload?.datasetId && !!workload?.project?.id,
+    retry: false,
+  });
+
+  const { data: chart, isLoading: isLoadingChart } = useQuery({
+    queryKey: ['chart', workload?.chartId],
+    queryFn: () => getChart(workload!.chartId!),
+    enabled: !!workload?.chartId,
+  });
+
+  const { data: aim, isLoading: isLoadingAim } = useQuery({
+    queryKey: ['aim', workload?.aimId],
+    queryFn: () => getAimById(workload!.aimId!, workload!.project.id),
+    enabled: !!workload?.aimId && !!workload?.project?.id,
   });
 
   const canOpenWorkspace =
@@ -172,11 +207,12 @@ const WorkloadDetailsPage: React.FC<WorkloadDetailsPageProps> = ({
             startContent={<IconArrowLeft size={16} />}
           ></Button>
           <div className="flex items-center space-x-3">
-            <StatusHeaderDisplay
+            <h2>{workload.displayName || workload.name}</h2>
+            <StatusDisplay
               type={workload.status}
               variants={statusVariants}
+              bypassProps={{ isShowBackground: true, isTextColored: true }}
             />
-            <h2>{workload.displayName || workload.name}</h2>
           </div>
         </div>
 
@@ -273,15 +309,6 @@ const WorkloadDetailsPage: React.FC<WorkloadDetailsPageProps> = ({
               <div className="flex items-center">
                 <div>
                   <h5 className="text-sm text-default-700">
-                    {t('list.headers.chartId.title')}
-                  </h5>
-                  <p className="font-mono text-sm">{workload.chartId}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center">
-                <div>
-                  <h5 className="text-sm text-default-700">
                     {t('list.headers.type.title')}
                   </h5>
                   <ChipDisplay type={workload.type} variants={typeVariants} />
@@ -293,7 +320,7 @@ const WorkloadDetailsPage: React.FC<WorkloadDetailsPageProps> = ({
                   <h5 className="text-sm text-default-700">
                     {t('list.headers.status.title')}
                   </h5>
-                  <StatusBadgeDisplay
+                  <StatusDisplay
                     type={workload.status}
                     variants={statusVariants}
                   />
@@ -303,41 +330,16 @@ const WorkloadDetailsPage: React.FC<WorkloadDetailsPageProps> = ({
           </CardBody>
         </Card>
 
-        {/* Cluster and Resource Information */}
+        {/* Resource Information */}
         <Card className="break-inside-avoid mb-6 border-1 border-default-200 shadow-sm">
           <CardHeader className="py-4 px-6 flex items-center">
             <h3 className="text-base font-semibold flex items-center space-x-2">
               <IconServer size={16} className="text-default-500" />
-              <span>{t('details.sections.clusterAndResources')}</span>
+              <span>{t('details.sections.resources')}</span>
             </h3>
           </CardHeader>
           <CardBody className="space-y-4 px-6 pb-6 pt-0">
             <div className="flex flex-col space-y-4">
-              <div className="flex items-center space-x-3">
-                <div>
-                  <h5 className="text-sm text-default-700">
-                    {t('list.headers.clusterName.title')}
-                  </h5>
-                  {cluster?.name ? (
-                    <p className="text-sm">{cluster.name}</p>
-                  ) : (
-                    <NoDataDisplay />
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <div>
-                  <h5 className="text-sm text-default-700">
-                    {t('list.headers.clusterId.title')}
-                  </h5>
-                  {cluster?.id ? (
-                    <p className="font-mono text-sm">{cluster.id}</p>
-                  ) : (
-                    <NoDataDisplay />
-                  )}
-                </div>
-              </div>
               <div className="flex items-center space-x-3">
                 <div>
                   <h5 className="text-sm text-default-700">
@@ -367,6 +369,47 @@ const WorkloadDetailsPage: React.FC<WorkloadDetailsPageProps> = ({
                           workload.allocatedResources.vram,
                         ),
                       })}
+                    </p>
+                  ) : (
+                    <NoDataDisplay />
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* Cluster Information */}
+        <Card className="break-inside-avoid mb-6 border-1 border-default-200 shadow-sm">
+          <CardHeader className="py-4 px-6 flex items-center">
+            <h3 className="text-base font-semibold flex items-center space-x-2">
+              <IconServer size={16} className="text-default-500" />
+              <span>{t('list.headers.cluster.title')}</span>
+            </h3>
+          </CardHeader>
+          <CardBody className="space-y-4 px-6 pb-6 pt-0">
+            <div className="flex flex-col space-y-4">
+              <div className="flex items-center space-x-3">
+                <div>
+                  <h5 className="text-sm text-default-700">
+                    {t('list.headers.cluster.name')}
+                  </h5>
+                  {cluster?.name ? (
+                    <p className="text-sm">{cluster.name}</p>
+                  ) : (
+                    <NoDataDisplay />
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <div>
+                  <h5 className="text-sm text-default-700">
+                    {t('list.headers.cluster.id')}
+                  </h5>
+                  {workload.project?.clusterId ? (
+                    <p className="font-mono text-sm">
+                      {workload.project.clusterId}
                     </p>
                   ) : (
                     <NoDataDisplay />
@@ -417,63 +460,239 @@ const WorkloadDetailsPage: React.FC<WorkloadDetailsPageProps> = ({
           </CardBody>
         </Card>
 
-        {/* Model and Dataset Information */}
-        {(workload.model || workload.dataset) && (
+        {/* Model Information */}
+        {(model || (isLoadingModel && workload?.modelId)) && (
           <Card className="break-inside-avoid mb-6 border-1 border-default-200 shadow-sm">
             <CardHeader className="py-4 px-6 flex items-center">
               <h3 className="text-base font-semibold flex items-center space-x-2">
                 <IconDatabase size={16} className="text-default-500" />
-                <span>{t('details.sections.modelAndDataset')}</span>
+                <span>{t('list.headers.model.title')}</span>
               </h3>
             </CardHeader>
             <CardBody className="space-y-4 px-6 pb-6 pt-0">
-              <div className="flex flex-col space-y-4">
-                {workload.model && (
-                  <>
-                    <div className="flex items-center space-x-3">
-                      <div>
-                        <h5 className="text-sm text-default-700">
-                          {t('list.headers.modelName.title')}
-                        </h5>
-                        <p className="text-sm">{workload.model.name}</p>
-                      </div>
+              {isLoadingModel ? (
+                <div className="flex flex-col space-y-4">
+                  <Skeleton className="w-full h-6 rounded-lg" />
+                  <Skeleton className="w-3/4 h-6 rounded-lg" />
+                  <Skeleton className="w-1/2 h-6 rounded-lg" />
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <h5 className="text-sm text-default-700">
+                        {t('list.headers.model.name')}
+                      </h5>
+                      <p className="text-sm">{model!.name}</p>
                     </div>
+                  </div>
 
+                  {model!.canonicalName && (
                     <div className="flex items-center space-x-3">
                       <div>
                         <h5 className="text-sm text-default-700">
-                          {t('list.headers.modelId.title')}
-                        </h5>
-                        <p className="font-mono text-sm">{workload.modelId}</p>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {workload.dataset && (
-                  <>
-                    <div className="flex items-center space-x-3">
-                      <div>
-                        <h5 className="text-sm text-default-700">
-                          {t('list.headers.datasetName.title')}
-                        </h5>
-                        <p className="text-sm">{workload.dataset.name}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      <div>
-                        <h5 className="text-sm text-default-700">
-                          {t('list.headers.datasetId.title')}
+                          {t('list.headers.model.canonicalName')}
                         </h5>
                         <p className="font-mono text-sm">
-                          {workload.datasetId}
+                          {model!.canonicalName}
                         </p>
                       </div>
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <h5 className="text-sm text-default-700">
+                        {t('list.headers.model.id')}
+                      </h5>
+                      <p className="font-mono text-sm">{model!.id}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Dataset Information */}
+        {(dataset || (isLoadingDataset && workload?.datasetId)) && (
+          <Card className="break-inside-avoid mb-6 border-1 border-default-200 shadow-sm">
+            <CardHeader className="py-4 px-6 flex items-center">
+              <h3 className="text-base font-semibold flex items-center space-x-2">
+                <IconDatabase size={16} className="text-default-500" />
+                <span>{t('list.headers.dataset.title')}</span>
+              </h3>
+            </CardHeader>
+            <CardBody className="space-y-4 px-6 pb-6 pt-0">
+              {isLoadingDataset ? (
+                <div className="flex flex-col space-y-4">
+                  <Skeleton className="w-full h-6 rounded-lg" />
+                  <Skeleton className="w-3/4 h-6 rounded-lg" />
+                  <Skeleton className="w-1/2 h-6 rounded-lg" />
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <h5 className="text-sm text-default-700">
+                        {t('list.headers.dataset.name')}
+                      </h5>
+                      <p className="text-sm">{dataset!.name}</p>
+                    </div>
+                  </div>
+
+                  {dataset!.description && (
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <h5 className="text-sm text-default-700">
+                          {t('list.headers.dataset.description')}
+                        </h5>
+                        <p className="text-sm">{dataset!.description}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <h5 className="text-sm text-default-700">
+                        {t('list.headers.dataset.id')}
+                      </h5>
+                      <p className="font-mono text-sm">{dataset!.id}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Chart Information */}
+        {(chart || (isLoadingChart && workload?.chartId)) && (
+          <Card className="break-inside-avoid mb-6 border-1 border-default-200 shadow-sm">
+            <CardHeader className="py-4 px-6 flex items-center">
+              <h3 className="text-base font-semibold flex items-center space-x-2">
+                <IconDatabase size={16} className="text-default-500" />
+                <span>{t('list.headers.chart.title')}</span>
+              </h3>
+            </CardHeader>
+            <CardBody className="space-y-4 px-6 pb-6 pt-0">
+              {isLoadingChart ? (
+                <div className="flex flex-col space-y-4">
+                  <Skeleton className="w-full h-6 rounded-lg" />
+                  <Skeleton className="w-3/4 h-6 rounded-lg" />
+                  <Skeleton className="w-1/2 h-6 rounded-lg" />
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <h5 className="text-sm text-default-700">
+                        {t('list.headers.chart.name')}
+                      </h5>
+                      <p className="text-sm">{chart!.name}</p>
+                    </div>
+                  </div>
+
+                  {chart!.description && (
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <h5 className="text-sm text-default-700">
+                          {t('list.headers.chart.description')}
+                        </h5>
+                        <p className="text-sm">{chart!.description}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <h5 className="text-sm text-default-700">
+                        {t('list.headers.chart.id')}
+                      </h5>
+                      <p className="font-mono text-sm">{chart!.id}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )}
+
+        {/* AIM Information */}
+        {(aim || (isLoadingAim && workload?.aimId)) && (
+          <Card className="break-inside-avoid mb-6 border-1 border-default-200 shadow-sm">
+            <CardHeader className="py-4 px-6 flex items-center">
+              <h3 className="text-base font-semibold flex items-center space-x-2">
+                <IconDatabase size={16} className="text-default-500" />
+                <span>{t('list.headers.aim.title')}</span>
+              </h3>
+            </CardHeader>
+            <CardBody className="space-y-4 px-6 pb-6 pt-0">
+              {isLoadingAim ? (
+                <div className="flex flex-col space-y-4">
+                  <Skeleton className="w-full h-6 rounded-lg" />
+                  <Skeleton className="w-3/4 h-6 rounded-lg" />
+                  <Skeleton className="w-2/3 h-6 rounded-lg" />
+                  <Skeleton className="w-1/2 h-6 rounded-lg" />
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-4">
+                  {aim!.imageName && (
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <h5 className="text-sm text-default-700">
+                          {t('list.headers.aim.image')}
+                        </h5>
+                        <p className="font-mono text-sm">{aim!.imageName}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {aim!.imageTag && (
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <h5 className="text-sm text-default-700">
+                          {t('list.headers.aim.imageTag')}
+                        </h5>
+                        <p className="font-mono text-sm">{aim!.imageTag}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {aim!.canonicalName && (
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <h5 className="text-sm text-default-700">
+                          {t('list.headers.aim.canonicalName')}
+                        </h5>
+                        <p className="font-mono text-sm">
+                          {aim!.canonicalName}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {aim!.description?.short && (
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <h5 className="text-sm text-default-700">
+                          {t('list.headers.aim.description')}
+                        </h5>
+                        <p className="text-sm">{aim!.description.short}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <h5 className="text-sm text-default-700">
+                        {t('list.headers.aim.id')}
+                      </h5>
+                      <p className="font-mono text-sm">{aim!.id}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardBody>
           </Card>
         )}

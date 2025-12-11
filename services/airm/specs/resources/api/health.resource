@@ -25,7 +25,7 @@ Get health status
     Create api session
     ${endpoint}=            Catalog endpoint        health
     TRY
-        ${response}=            Get on session          ${API_SESSION}          ${endpoint}             expected_status=${expected_status}
+        ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}
         ${error_msg}=           Set Variable            Health check failed for catalog service: ${error}

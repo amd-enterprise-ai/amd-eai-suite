@@ -96,7 +96,7 @@ async def register_workloads() -> None:
             raise e
 
 
-def normalize_api_files(files) -> dict[str, str]:
+def normalize_api_files(files: dict) -> dict[str, str]:
     """Normalize files for API upload."""
     signature = files.get("signature")
     if isinstance(signature, list) and signature:

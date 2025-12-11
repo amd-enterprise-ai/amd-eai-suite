@@ -2,13 +2,15 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ClusterBasicInfo } from './clusters';
-import { ProjectBasicInfo } from './projects';
 import { ServerCollectionMetadata } from './data-table/server-collection';
-import { Dataset } from './datasets';
-import { LogLevel, WorkloadStatus, WorkloadType } from './enums/workloads';
+import {
+  LogLevel,
+  LogType,
+  WorkloadStatus,
+  WorkloadType,
+} from './enums/workloads';
 import { SnakeCaseKeys } from './misc';
-import { Model } from './models';
+import { ProjectBasicInfo } from './projects';
 
 export type ProjectUtilization = {
   date: string;
@@ -53,18 +55,15 @@ export interface Workload {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  updatedBy?: string | null;
   status: WorkloadStatus;
+  project: ProjectBasicInfo;
   userInputs?: any;
   output?: WorkloadOutput;
   capabilities?: string[];
-  chartId: string;
-  clusterId: string;
-  cluster: ClusterBasicInfo;
-  project?: ProjectBasicInfo;
+  chartId?: string | null;
   modelId?: string | null;
-  model?: Model | null;
   datasetId?: string | null;
-  dataset?: Dataset | null;
   aimId?: string | null;
   clusterAuthGroupId?: string | null;
   allocatedResources?: AllocatedResources;
@@ -94,6 +93,7 @@ export type WorkloadLogParams = {
   limit?: number;
   level?: LogLevel;
   direction?: 'forward' | 'backward';
+  logType?: LogType;
 };
 
 export interface WorkloadOutput {

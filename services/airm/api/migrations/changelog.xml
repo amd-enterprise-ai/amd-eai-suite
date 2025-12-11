@@ -80,4 +80,13 @@
     <include file="074_create_api_keys_table.xml" relativeToChangelogFile="true"/>
     <include file="075_add_cluster_auth_group_id_to_workloads.xml" relativeToChangelogFile="true"/>
     <include file="076_drop_model_metadata_table.xml" relativeToChangelogFile="true"/>
+    <include file="077_drop_hf_token_secret_from_models.xml" relativeToChangelogFile="true"/>
+    <include file="078_add_project_id_update_constraints_secrets.xml" relativeToChangelogFile="true"/>
+    <include file="079_add_organization_secret_assignment_table.xml" relativeToChangelogFile="true"/>
+    <include file="080_add_secret_constraint_org_proj_name_type.xml" relativeToChangelogFile="true"/>
+    <include file="081_update_secret_type_to_secrets_component_kind.xml" relativeToChangelogFile="true"/>
+    <include file="082_migrate_project_secrets_to_organization_secret_assignments.xml" relativeToChangelogFile="true"/>
+    <include file="083_rename_base_url_and_add_kube_api_url.xml" relativeToChangelogFile="true"/>
+    <include file="084_update_hugging_face_tokens_to_org_scope.xml" relativeToChangelogFile="true"/>
+    <include file="085_update_aims_table_schema.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

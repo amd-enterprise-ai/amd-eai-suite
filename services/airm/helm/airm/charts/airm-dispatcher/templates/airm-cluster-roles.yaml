@@ -39,7 +39,7 @@ rules:
     resources: ["aimservices", "aimmodels", "aimmodelcaches", "aimservicetemplates", "aimruntimeconfigs", "aimtemplatecaches"]
     verbs: ["get", "list", "watch", "delete"]
   - apiGroups: ["gateway.networking.k8s.io"]
-    resources: ["httproutes"]
+    resources: ["httproutes", "gateways"]
     verbs: ["get", "list", "watch", "delete"]
   - apiGroups: ["config.kaiwo.silogen.ai"]
     resources: ["kaiwoconfigs"]
@@ -93,8 +93,12 @@ roleRef:
   name: airm-platform-admin
 subjects:
   - kind: Group
-    # The kubernetes cluster apply an OIDC prefix of 'oidc', so we adjust the group to expect that
+    # Add this in for backwards compatibility
     name: "oidcairm-role:Platform Administrator"
+    apiGroup: rbac.authorization.k8s.io
+  - kind: Group
+    # The kubernetes cluster apply an OIDC prefix of 'oidc':, so we adjust the group to expect that
+    name: "oidc:airm-role:Platform Administrator"
     apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -133,7 +137,7 @@ rules:
     resources: ["aimservices", "aimmodels", "aimmodelcaches", "aimservicetemplates", "aimruntimeconfigs", "aimtemplatecaches"]
     verbs: ["*"]
   - apiGroups: ["gateway.networking.k8s.io"]
-    resources: ["httproutes"]
+    resources: ["httproutes", "gateways"]
     verbs: ["*"]
   - apiGroups: [""]
     resources: ["secrets"]

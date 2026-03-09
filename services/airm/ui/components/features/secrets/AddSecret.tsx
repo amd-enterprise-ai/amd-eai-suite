@@ -222,9 +222,14 @@ export const AddSecret: React.FC<Props> = ({
               : isValidKubernetesSecret(data.manifest);
 
           if (isValid !== true) {
+            const expectedKind =
+              data.type === SecretType.EXTERNAL_SECRET
+                ? EXTERNAL_SECRETS_KIND
+                : KUBERNETES_SECRETS_KIND;
+
             const message =
               typeof isValid === 'string'
-                ? t(isValid, { resource: t(resourceKey) })
+                ? t(isValid, { resource: t(resourceKey), kind: expectedKind })
                 : t('form.add.field.manifest.error.yaml.malformed', {
                     resource: t(resourceKey),
                   });

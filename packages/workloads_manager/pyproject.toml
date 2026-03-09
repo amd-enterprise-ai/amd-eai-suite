@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "workloads_manager"
-version = "0.3.0"
+version = "0.3.5"
 description = "A package to manage AI workloads, patches, and registering"
 readme = "README.md"
 authors = [

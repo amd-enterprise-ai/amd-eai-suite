@@ -36,8 +36,12 @@ spec:
             name: airm-project-member
           subjects:
             - kind: Group
-              # The kubernetes cluster apply an OIDC prefix of 'oidc', so we adjust the groups to expect that
+              # Add this in for backwards compatibility
               name: "oidc{{`{{request.object.metadata.name}}`}}"
+              apiGroup: rbac.authorization.k8s.io
+            - kind: Group
+              # The kubernetes cluster apply an OIDC prefix of 'oidc:', so we adjust the groups to expect that
+              name: "oidc:{{`{{request.object.metadata.name}}`}}"
               apiGroup: rbac.authorization.k8s.io
 ---
 # Kyverno policy that enforces that workloads submitted to a namespace managed by AIRMan have the

@@ -144,7 +144,7 @@ async def sync_dataset_to_s3(dataset: Dataset, file: UploadFile, client: MinioCl
     with handle_s3_operation("uploading dataset", f"s3://{MINIO_BUCKET}/{object_key}", dataset.id):
         # Upload file
         content = await file.read()
-        client.upload_object(bucket_name=MINIO_BUCKET, object_name=object_key, data=content)
+        await asyncio.to_thread(client.upload_object, bucket_name=MINIO_BUCKET, object_name=object_key, data=content)
 
         # Verify upload - will raise S3Error or S3SyncError on failure
         await verify_s3_sync(client, MINIO_BUCKET, object_key, content)

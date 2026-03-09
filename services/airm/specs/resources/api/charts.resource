@@ -84,6 +84,7 @@ Create chart request
     ${schema_content}=      Get Binary File         ${values_schema_file}
     ${signature_content}=   Get Binary File         ${signature_file}
 
+    # Following the example from StackOverflow for multipart/form-data with files
     # Format: {'field_name': ('filename', filedata, 'content-type')}
     ${data}=                Create dictionary       name=${name}            type=INFERENCE          project_id=${TEST_PROJECT_ID}
     @{template}=            Create list             template.yaml           ${template_content}

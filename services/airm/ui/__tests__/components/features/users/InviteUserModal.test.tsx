@@ -397,6 +397,306 @@ describe('InviteUserModal', () => {
     });
   });
 
+  describe('Pre-selected Projects', () => {
+    it('includes pre-selected projects when selectedProjectIds is provided', async () => {
+      (inviteUser as Mock).mockResolvedValueOnce({});
+      (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
+
+      await act(async () => {
+        render(
+          <InviteUserModal
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            selectedProjectIds={['project-1', 'project-2']}
+          />,
+          { wrapper },
+        );
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await waitFor(() => {
+        expect(vi.mocked(fetchProjects)).toBeCalled();
+      });
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [UserRole.PLATFORM_ADMIN],
+          project_ids: ['project-1', 'project-2'],
+        });
+        expect(toastSuccessMock).toHaveBeenCalledWith(
+          'modal.addUser.notification.success',
+        );
+      });
+    });
+
+    it('includes pre-selected project when single selectedProjectId is provided', async () => {
+      (inviteUser as Mock).mockResolvedValueOnce({});
+      (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
+
+      await act(async () => {
+        render(
+          <InviteUserModal
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            selectedProjectIds={['project-1']}
+          />,
+          { wrapper },
+        );
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await waitFor(() => {
+        expect(vi.mocked(fetchProjects)).toBeCalled();
+      });
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [UserRole.PLATFORM_ADMIN],
+          project_ids: ['project-1'],
+        });
+      });
+    });
+
+    it('includes pre-selected projects with Team Member role', async () => {
+      (inviteUser as Mock).mockResolvedValueOnce({});
+      (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
+
+      await act(async () => {
+        render(
+          <InviteUserModal
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            selectedProjectIds={['project-1']}
+          />,
+          { wrapper },
+        );
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await waitFor(() => {
+        expect(vi.mocked(fetchProjects)).toBeCalled();
+      });
+
+      const selectTrigger = screen.getAllByLabelText(
+        'modal.addUser.form.roles.label',
+      );
+      await fireEvent.click(selectTrigger[1]);
+
+      const selectOption = screen.getAllByText(
+        'modal.addUser.form.roles.options.teamMember',
+      );
+      await fireEvent.click(selectOption[1]);
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [],
+          project_ids: ['project-1'],
+        });
+      });
+    });
+
+    it('allows user to add more projects to pre-selected ones', async () => {
+      (inviteUser as Mock).mockResolvedValueOnce({});
+      (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
+
+      await act(async () => {
+        render(
+          <InviteUserModal
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            selectedProjectIds={['project-1']}
+          />,
+          { wrapper },
+        );
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await waitFor(() => {
+        expect(vi.mocked(fetchProjects)).toBeCalled();
+      });
+
+      await fireEvent.click(screen.getByTestId('project-select'));
+      await fireEvent.click(screen.getByTestId('project-project-2'));
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [UserRole.PLATFORM_ADMIN],
+          project_ids: expect.arrayContaining(['project-1', 'project-2']),
+        });
+      });
+    });
+
+    it('calls onSuccess callback when invite with pre-selected projects succeeds', async () => {
+      const onSuccess = vi.fn();
+      (inviteUser as Mock).mockResolvedValueOnce({});
+      (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
+
+      await act(async () => {
+        render(
+          <InviteUserModal
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            selectedProjectIds={['project-1']}
+            onSuccess={onSuccess}
+          />,
+          { wrapper },
+        );
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await waitFor(() => {
+        expect(vi.mocked(fetchProjects)).toBeCalled();
+      });
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [UserRole.PLATFORM_ADMIN],
+          project_ids: ['project-1'],
+        });
+        expect(onSuccess).toHaveBeenCalled();
+      });
+    });
+
+    it('handles empty selectedProjectIds array', async () => {
+      (inviteUser as Mock).mockResolvedValueOnce({});
+      (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
+
+      await act(async () => {
+        render(
+          <InviteUserModal
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            selectedProjectIds={[]}
+          />,
+          { wrapper },
+        );
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [UserRole.PLATFORM_ADMIN],
+          project_ids: [],
+        });
+      });
+    });
+
+    it('includes pre-selected projects with temporary password', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      (inviteUser as Mock).mockResolvedValueOnce({});
+      (fetchProjects as Mock).mockResolvedValueOnce(mockProjectsResponse);
+
+      await act(async () => {
+        render(
+          <InviteUserModal
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            selectedProjectIds={['project-1', 'project-2']}
+          />,
+          { wrapper },
+        );
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: 'TempPassword123' },
+        },
+      );
+
+      await waitFor(() => {
+        expect(vi.mocked(fetchProjects)).toBeCalled();
+      });
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [UserRole.PLATFORM_ADMIN],
+          project_ids: ['project-1', 'project-2'],
+          temporary_password: 'TempPassword123',
+        });
+      });
+    });
+  });
+
   describe('Temporary Password', () => {
     it('does not show temporary password field when not required', async () => {
       const { useAccessControl } = await import('@/hooks/useAccessControl');
@@ -667,6 +967,174 @@ describe('InviteUserModal', () => {
           project_ids: [],
           temporary_password: 'TempPassword123',
         });
+      });
+    });
+
+    it('rejects temporary password with leading space', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: ' ValidPass123' }, // Leading space
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      const errorMessage = await screen.findByText(
+        'modal.addUser.form.tempPassword.validation.noLeadingTrailingSpaces',
+      );
+      expect(errorMessage).toBeInTheDocument();
+      expect(inviteUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects temporary password with trailing space', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: 'ValidPass123 ' }, // Trailing space
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      const errorMessage = await screen.findByText(
+        'modal.addUser.form.tempPassword.validation.noLeadingTrailingSpaces',
+      );
+      expect(errorMessage).toBeInTheDocument();
+      expect(inviteUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects temporary password with both leading and trailing spaces', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: '  ValidPass123  ' }, // Both leading and trailing spaces
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      const errorMessage = await screen.findByText(
+        'modal.addUser.form.tempPassword.validation.noLeadingTrailingSpaces',
+      );
+      expect(errorMessage).toBeInTheDocument();
+      expect(inviteUser).not.toHaveBeenCalled();
+    });
+
+    it('accepts temporary password with spaces in the middle', async () => {
+      const { useAccessControl } = await import('@/hooks/useAccessControl');
+      vi.mocked(useAccessControl).mockReturnValue({
+        isRoleManagementEnabled: true,
+        isInviteEnabled: true,
+        isAdministrator: true,
+        smtpEnabled: true,
+        isTempPasswordRequired: true,
+      });
+
+      (inviteUser as Mock).mockResolvedValueOnce({});
+
+      await act(async () => {
+        render(<InviteUserModal isOpen={true} onOpenChange={onOpenChange} />, {
+          wrapper,
+        });
+      });
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.email.label'),
+        {
+          target: { value: 'newuser@example.com' },
+        },
+      );
+
+      await fireEvent.change(
+        screen.getByLabelText('modal.addUser.form.tempPassword.label'),
+        {
+          target: { value: 'Valid Pass 123' }, // Spaces in the middle are OK
+        },
+      );
+
+      const actionButton = screen.getByText('modal.addUser.actions.confirm');
+      await fireEvent.click(actionButton);
+
+      await waitFor(() => {
+        expect(inviteUser).toHaveBeenCalledWith({
+          email: 'newuser@example.com',
+          roles: [UserRole.PLATFORM_ADMIN],
+          project_ids: [],
+          temporary_password: 'Valid Pass 123',
+        });
+        expect(toastSuccessMock).toHaveBeenCalledWith(
+          'modal.addUser.notification.success',
+        );
       });
     });
   });

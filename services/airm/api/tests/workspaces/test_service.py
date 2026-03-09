@@ -13,7 +13,7 @@ from airm.messaging.schemas import WorkloadStatus
 from app.charts.config import VSCODE_CHART_NAME
 from app.utilities.exceptions import ConflictException
 from app.workloads.enums import WorkloadType
-from app.workspaces.enums import WorkspaceType
+from app.workspaces.enums import WorkspaceType, workspace_type_chart_name_mapping
 from app.workspaces.schemas import DevelopmentWorkspaceRequest
 from app.workspaces.service import (
     check_workspace_availability_per_project,
@@ -24,15 +24,11 @@ from tests import factory
 
 
 @pytest.mark.asyncio
-async def test_get_chart_by_workspace_type_success(db_session: AsyncSession):
+async def test_get_chart_by_workspace_type_success(db_session: AsyncSession) -> None:
     """Test getting chart by workspace type"""
     env = await factory.create_full_test_environment(db_session)
 
-    workspace_chart = await factory.create_chart(
-        db_session,
-        name="vscode-workspace",
-        chart_type=WorkloadType.WORKSPACE,
-    )
+    workspace_chart = await factory.create_chart(db_session, name="vscode-workspace", chart_type=WorkloadType.WORKSPACE)
 
     with patch("app.workspaces.service.get_chart") as mock_get_chart:
         mock_get_chart.return_value = workspace_chart
@@ -47,17 +43,13 @@ async def test_get_chart_by_workspace_type_success(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_create_development_workspace_success(db_session: AsyncSession):
+async def test_create_development_workspace_success(db_session: AsyncSession) -> None:
     """Test successful workspace creation with mocked external dependencies."""
     env = await factory.create_full_test_environment(db_session)
     chart = await factory.create_chart(db_session, name=VSCODE_CHART_NAME)
 
     request = DevelopmentWorkspaceRequest(
-        image="test/image:latest",
-        gpus=1,
-        memory_per_gpu=8.0,
-        cpu_per_gpu=2.0,
-        imagePullSecrets=["secret"],
+        image="test/image:latest", gpus=1, memory_per_gpu=8.0, cpu_per_gpu=2.0, imagePullSecrets=["secret"]
     )
 
     with (
@@ -75,13 +67,7 @@ async def test_create_development_workspace_success(db_session: AsyncSession):
         mock_message_sender = AsyncMock()
 
         result = await create_development_workspace(
-            db_session,
-            env.user,
-            request,
-            "token",
-            env.project,
-            WorkspaceType.VSCODE,
-            mock_message_sender,
+            db_session, env.user, request, "token", env.project, WorkspaceType.VSCODE, mock_message_sender
         )
 
         # Verify workspace was created successfully (would fail with AttributeError if chart not loaded)
@@ -99,41 +85,120 @@ async def test_create_development_workspace_success(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_create_development_workspace_mlflow_conflict(db_session: AsyncSession):
+async def test_create_development_workspace_with_image_pull_secrets(db_session: AsyncSession) -> None:
+    """Test that image_pull_secrets are properly included in user_inputs and passed to Helm."""
+    env = await factory.create_full_test_environment(db_session)
+    chart = await factory.create_chart(db_session, name=VSCODE_CHART_NAME)
+
+    request = DevelopmentWorkspaceRequest(
+        image_pull_secrets=["minio-credentials-fetcher", "docker-registry-secret"],
+        gpus=1,
+        memory_per_gpu=8.0,
+        cpu_per_gpu=2.0,
+    )
+
+    with (
+        patch("app.workspaces.service.render_helm_template") as mock_render,
+        patch("app.workspaces.service.get_workload_host_from_HTTPRoute_manifest") as mock_external_host,
+        patch("app.workspaces.service.get_workload_internal_host") as mock_internal_host,
+        patch("app.workspaces.service.validate_and_parse_workload_manifest") as mock_validate,
+        patch("app.workspaces.service.extract_components_and_submit_workload") as mock_extract,
+    ):
+        mock_render.return_value = "manifest"
+        mock_external_host.return_value = "host.example.com"
+        mock_internal_host.return_value = "internal.svc.cluster.local"
+        mock_validate.return_value = {"key": "value"}
+        mock_message_sender = AsyncMock()
+
+        result = await create_development_workspace(
+            db_session, env.user, request, "token", env.project, WorkspaceType.VSCODE, mock_message_sender
+        )
+
+        # Verify workspace was created
+        assert result.id is not None
+
+        # Verify imagePullSecrets are in user_inputs (camelCase for Helm compatibility)
+        assert result.user_inputs is not None
+        assert "imagePullSecrets" in result.user_inputs
+        assert result.user_inputs["imagePullSecrets"] == ["minio-credentials-fetcher", "docker-registry-secret"]
+
+        # Verify render_helm_template was called with user_inputs containing imagePullSecrets
+        mock_render.assert_called_once()
+        call_args = mock_render.call_args
+        overlays_values = call_args.kwargs["overlays_values"]
+        assert len(overlays_values) > 0
+        assert overlays_values[0]["imagePullSecrets"] == ["minio-credentials-fetcher", "docker-registry-secret"]
+
+
+@pytest.mark.asyncio
+async def test_create_development_workspace_without_image_pull_secrets(db_session: AsyncSession) -> None:
+    """Test that workspaces can be created without image_pull_secrets (empty list by default)."""
+    env = await factory.create_full_test_environment(db_session)
+    chart = await factory.create_chart(db_session, name=VSCODE_CHART_NAME)
+
+    request = DevelopmentWorkspaceRequest(gpus=1, memory_per_gpu=8.0, cpu_per_gpu=2.0)
+
+    with (
+        patch("app.workspaces.service.render_helm_template") as mock_render,
+        patch("app.workspaces.service.get_workload_host_from_HTTPRoute_manifest") as mock_external_host,
+        patch("app.workspaces.service.get_workload_internal_host") as mock_internal_host,
+        patch("app.workspaces.service.validate_and_parse_workload_manifest") as mock_validate,
+        patch("app.workspaces.service.extract_components_and_submit_workload") as mock_extract,
+    ):
+        mock_render.return_value = "manifest"
+        mock_external_host.return_value = "host.example.com"
+        mock_internal_host.return_value = "internal.svc.cluster.local"
+        mock_validate.return_value = {"key": "value"}
+        mock_message_sender = AsyncMock()
+
+        result = await create_development_workspace(
+            db_session, env.user, request, "token", env.project, WorkspaceType.VSCODE, mock_message_sender
+        )
+
+        # Verify workspace was created
+        assert result.id is not None
+
+        # Verify imagePullSecrets is empty list (default, camelCase for Helm compatibility)
+        assert result.user_inputs is not None
+        assert "imagePullSecrets" in result.user_inputs
+        assert result.user_inputs["imagePullSecrets"] == []
+
+
+@pytest.mark.asyncio
+async def test_create_development_workspace_mlflow_conflict(db_session: AsyncSession) -> None:
     """Test MLFlow workspace creation blocked by existing running workspace."""
     env = await factory.create_full_test_environment(db_session)
     chart = await factory.create_chart(db_session, name="dev-tracking-mlflow")
 
     # Create existing running MLFlow workspace
     await factory.create_chart_workload(
-        db_session,
-        env.project,
-        chart,
-        workload_type=WorkloadType.WORKSPACE,
-        status=WorkloadStatus.RUNNING.value,
+        db_session, env.project, chart, workload_type=WorkloadType.WORKSPACE, status=WorkloadStatus.RUNNING.value
     )
 
     request = DevelopmentWorkspaceRequest()
     mock_message_sender = AsyncMock()
 
-    with pytest.raises(ConflictException, match="Mlflow workspace already running in this project"):
+    with pytest.raises(ConflictException) as exc_info:
         await create_development_workspace(
-            db_session,
-            env.user,
-            request,
-            "token",
-            env.project,
-            WorkspaceType.MLFLOW,
-            mock_message_sender,
+            db_session, env.user, request, "token", env.project, WorkspaceType.MLFLOW, mock_message_sender
         )
 
+    assert "already running" in str(exc_info.value.message).lower()
 
+
+@pytest.mark.parametrize(
+    "workspace_type,expected_suffix",
+    [
+        (WorkspaceType.VSCODE, "/?folder=/workload"),
+        (WorkspaceType.JUPYTERLAB, "/lab"),
+        (WorkspaceType.COMFYUI, "/"),
+    ],
+)
 @pytest.mark.asyncio
-@pytest.mark.parametrize("workspace_type", [WorkspaceType.JUPYTERLAB, WorkspaceType.COMFYUI])
-async def test_create_development_workspace_url_suffixes(db_session: AsyncSession, workspace_type: WorkspaceType):
-    """Test workspace creation URL suffix logic for different workspace types."""
-    from app.workspaces.enums import workspace_type_chart_name_mapping
-
+async def test_create_development_workspace_url_suffixes(
+    db_session: AsyncSession, workspace_type: WorkspaceType, expected_suffix: str
+) -> None:
+    """Test that different workspace types get correct URL suffixes."""
     env = await factory.create_full_test_environment(db_session)
     chart_name = workspace_type_chart_name_mapping[workspace_type]
     chart = await factory.create_chart(db_session, name=chart_name)
@@ -141,124 +206,85 @@ async def test_create_development_workspace_url_suffixes(db_session: AsyncSessio
     request = DevelopmentWorkspaceRequest()
 
     with (
-        patch("app.workspaces.service.insert_workload") as mock_insert,
         patch("app.workspaces.service.render_helm_template") as mock_render,
         patch("app.workspaces.service.get_workload_host_from_HTTPRoute_manifest") as mock_external_host,
         patch("app.workspaces.service.get_workload_internal_host") as mock_internal_host,
         patch("app.workspaces.service.validate_and_parse_workload_manifest") as mock_validate,
         patch("app.workspaces.service.extract_components_and_submit_workload") as mock_extract,
     ):
-        mock_workload = await factory.create_chart_workload(
-            db_session,
-            env.project,
-            chart,
-            workload_type=WorkloadType.WORKSPACE,
-            user_inputs={"metadata": {"project_id": str(env.project.id)}},  # Add metadata
-        )
-        mock_insert.return_value = mock_workload
-
         mock_render.return_value = "manifest"
-        mock_external_host.return_value = "host.example.com"
-        mock_internal_host.return_value = "internal.svc.cluster.local"
+        mock_external_host.return_value = "https://cluster.example.com/path"
+        mock_internal_host.return_value = "service.namespace.svc.cluster.local"
         mock_validate.return_value = {"key": "value"}
         mock_message_sender = AsyncMock()
 
         result = await create_development_workspace(
-            db_session,
-            env.user,
-            request,
-            "token",
-            env.project,
-            workspace_type,
-            mock_message_sender,
+            db_session, env.user, request, "token", env.project, workspace_type, mock_message_sender
         )
 
-        # Just verify the function completes successfully
-        assert result.id == mock_workload.id
+        assert result.output is not None
+        assert "external_host" in result.output
+        assert result.output["external_host"].endswith(expected_suffix)
+        assert "internal_host" in result.output
+        assert result.output["internal_host"].endswith(expected_suffix)
 
 
 @pytest.mark.asyncio
-async def test_create_development_workspace_mlflow_success(db_session: AsyncSession):
-    """Test successful MLFlow workspace creation without conflicts."""
+async def test_create_development_workspace_mlflow_success(db_session: AsyncSession) -> None:
+    """Test successful MLFlow workspace creation when no existing workspace."""
     env = await factory.create_full_test_environment(db_session)
     chart = await factory.create_chart(db_session, name="dev-tracking-mlflow")
 
     request = DevelopmentWorkspaceRequest()
 
     with (
-        patch("app.workspaces.service.check_workspace_availability_per_project", return_value=True),
-        patch("app.workspaces.service.insert_workload") as mock_insert,
         patch("app.workspaces.service.render_helm_template") as mock_render,
         patch("app.workspaces.service.get_workload_host_from_HTTPRoute_manifest") as mock_external_host,
         patch("app.workspaces.service.get_workload_internal_host") as mock_internal_host,
         patch("app.workspaces.service.validate_and_parse_workload_manifest") as mock_validate,
         patch("app.workspaces.service.extract_components_and_submit_workload") as mock_extract,
     ):
-        mock_workload = await factory.create_chart_workload(
-            db_session,
-            env.project,
-            chart,
-            workload_type=WorkloadType.WORKSPACE,
-            user_inputs={"metadata": {"project_id": str(env.project.id)}},
-        )
-        mock_insert.return_value = mock_workload
-
         mock_render.return_value = "manifest"
-        mock_external_host.return_value = "host.example.com"
-        mock_internal_host.return_value = "internal.svc.cluster.local"
+        mock_external_host.return_value = "https://cluster.example.com/path"
+        mock_internal_host.return_value = "service.namespace.svc.cluster.local"
         mock_validate.return_value = {"key": "value"}
         mock_message_sender = AsyncMock()
 
         result = await create_development_workspace(
-            db_session,
-            env.user,
-            request,
-            "token",
-            env.project,
-            WorkspaceType.MLFLOW,
-            mock_message_sender,
+            db_session, env.user, request, "token", env.project, WorkspaceType.MLFLOW, mock_message_sender
         )
 
-        assert result.id == mock_workload.id
+        assert result.id is not None
+        assert result.type == WorkloadType.WORKSPACE
 
 
 @pytest.mark.asyncio
-async def test_check_workspace_availability_project_scoped_running_blocks(db_session: AsyncSession):
-    """Test that running MLFlow workspace blocks new MLFlow creation."""
-    env = await factory.create_basic_test_environment(db_session)
+async def test_check_workspace_availability_project_scoped_running_blocks(db_session: AsyncSession) -> None:
+    """Test that running project-scoped workspace blocks new creation."""
+    env = await factory.create_full_test_environment(db_session)
+    chart = await factory.create_chart(db_session, name="dev-tracking-mlflow")
 
-    # Create MLFlow chart
-    mlflow_chart = await factory.create_chart(db_session, name="dev-tracking-mlflow")
-
-    # Create running MLFlow workspace
+    # Create running workspace
     await factory.create_chart_workload(
-        db_session,
-        env.project,
-        mlflow_chart,
-        workload_type=WorkloadType.WORKSPACE,
-        status=WorkloadStatus.RUNNING.value,
+        db_session, env.project, chart, workload_type=WorkloadType.WORKSPACE, status=WorkloadStatus.RUNNING.value
     )
 
-    # MLFlow should not be available now
-    assert not await check_workspace_availability_per_project(db_session, env.project.id, WorkspaceType.MLFLOW)
+    result = await check_workspace_availability_per_project(db_session, env.project.id, WorkspaceType.MLFLOW)
+
+    assert result is False
 
 
 @pytest.mark.asyncio
-async def test_check_workspace_availability_project_scoped_failed_allows(db_session: AsyncSession):
-    """Test that failed MLFlow workspace allows new MLFlow creation."""
-    env = await factory.create_basic_test_environment(db_session)
+async def test_check_workspace_availability_project_scoped_failed_allows(db_session: AsyncSession) -> None:
+    """Test that failed project-scoped workspace allows new creation."""
+    env = await factory.create_full_test_environment(db_session)
+    chart = await factory.create_chart(db_session, name="dev-tracking-mlflow")
 
-    # Create MLFlow chart
-    mlflow_chart = await factory.create_chart(db_session, name="dev-tracking-mlflow")
-
-    # Create failed MLFlow workspace
+    # Create failed workspace
     await factory.create_chart_workload(
-        db_session,
-        env.project,
-        mlflow_chart,
-        workload_type=WorkloadType.WORKSPACE,
-        status=WorkloadStatus.FAILED.value,
+        db_session, env.project, chart, workload_type=WorkloadType.WORKSPACE, status=WorkloadStatus.FAILED.value
     )
 
-    # MLFlow should be available since previous one failed
-    assert await check_workspace_availability_per_project(db_session, env.project.id, WorkspaceType.MLFLOW)
+    result = await check_workspace_availability_per_project(db_session, env.project.id, WorkspaceType.MLFLOW)
+
+    assert result is True

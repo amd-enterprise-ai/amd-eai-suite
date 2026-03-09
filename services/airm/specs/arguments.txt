@@ -27,10 +27,6 @@
 --listener
 libraries.AimCatalogGenerator:config/aim_models.csv:full
 
-# Helper that prints guidance on using robot-extract after test execution
---listener
-libraries.TestResultsHelper
-
 # Output directory for test results
 --outputdir
 results

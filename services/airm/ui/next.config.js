@@ -65,6 +65,9 @@ const nextConfig = {
 
     return config;
   },
+  experimental: {
+    middlewareClientMaxBodySize: '100mb',
+  },
 };
 
 module.exports = nextConfig;

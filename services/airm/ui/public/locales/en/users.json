@@ -99,11 +99,13 @@
           "validation": {
             "required": "Please enter a temporary password for this user.",
             "minLength": "The temporary password must be at least 8 characters long.",
-            "maxLength": "The temporary password must be less than 256 characters long."
+            "maxLength": "The temporary password must be less than 256 characters long.",
+            "noLeadingTrailingSpaces": "Password cannot have leading or trailing spaces."
           }
         }
       },
       "instruction": "We will send an email with first time login and account activation details to the new user.",
+      "instructionTempPassword": "You need to securely share the login credentials with the invited user. They need to change their temporary password when they first log in.",
       "actions": {
         "confirm": "Send invite",
         "cancel": "Cancel"

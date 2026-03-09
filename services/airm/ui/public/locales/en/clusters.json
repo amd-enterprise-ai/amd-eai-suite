@@ -5,8 +5,7 @@
     "start": {
       "title": "Start",
       "content": {
-        "description": "Triggering this process connects a cluster to the AMD Resource Manager. The subsequent steps will provide an installation script that must be run on the compute cluster, requiring kubectl access.",
-        "confirmation": "Do you want to continue?"
+        "description": "Connecting a new cluster to AMD Resource Manager is currently an alpha-stage feature. Please contact AMD support for detailed information on how to proceed. You will be provided secrets in subsequent steps that will be used to securely connect your cluster to AMD Resource Manager."
       },
       "actions": {
         "cancel": "Cancel",
@@ -16,9 +15,9 @@
     "script": {
       "title": "Install Dispatcher",
       "content": {
-        "description": "Install AMD Resource Manager Dispatcher on the compute cluster by copying and executing the following script.",
-        "note": "Note that this script will only be displayed once with the connection secret!",
-        "confirmation": "I have copied to execute the installation script on the target cluster."
+        "description": "Once you have received detailed instructions from AMD Support, please use these secrets to connect your cluster to AMD Resource Manager.",
+        "note": "Note that these secrets will only be displayed once for security!",
+        "confirmation": "I have copied the secrets to connect my cluster to AMD Resource Manager."
       },
       "actions": {
         "next": "Next"
@@ -27,9 +26,7 @@
     "final": {
       "title": "Finalize",
       "content": {
-        "description": "After the script has been executed and the dispatcher has been successfully installed, the cluster will attempt to establish a connection with the AMD Resource Manager. You should see the cluster become active in the list of connected clusters. The process might take some time to complete.",
-        "instruction": "If you face any errors during the installation process, please refer to",
-        "helppage": "this help page"
+        "description": "After the installation has been completed successfully, the cluster will attempt to establish a connection with the AMD Resource Manager. You should see the cluster become active in the list of connected clusters. The process might take some time to complete."
       },
       "actions": {
         "complete": "Done"

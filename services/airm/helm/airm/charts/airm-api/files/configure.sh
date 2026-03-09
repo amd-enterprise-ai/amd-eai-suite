@@ -53,9 +53,10 @@ check_env_variable "KEYCLOAK_CLIENT_SECRET"
 check_env_variable "KEYCLOAK_CLIENT_ID"
 check_env_variable "KEYCLOAK_ADMIN_CLIENT_ID"
 check_env_variable "KEYCLOAK_ADMIN_CLIENT_SECRET"
+check_env_variable "USER_PASSWORD"
 
 function refresh_token() {
-    TOKEN=$(curl -s -d "client_id=${KEYCLOAK_CLIENT_ID}" -d "username=${USER_EMAIL}" -d 'password=password' -d 'grant_type=password' -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" | jq -r '.access_token')
+    TOKEN=$(curl -s -d "client_id=${KEYCLOAK_CLIENT_ID}" -d "username=${USER_EMAIL}" -d "password=${USER_PASSWORD}" -d 'grant_type=password' -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" | jq -r '.access_token')
     if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
         echo "ERROR: Failed to obtain access token from Keycloak."
         exit 1
@@ -338,34 +339,6 @@ function create_secret_and_start_dispatcher() {
     fi
 }
 
-function request_password_reset() {
-    ADMIN_TOKEN=$(curl -X POST "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "client_id=${KEYCLOAK_ADMIN_CLIENT_ID}" \
-        -d "client_secret=${KEYCLOAK_ADMIN_CLIENT_SECRET}" \
-        -d 'grant_type=client_credentials' | jq -r '.access_token')
-
-    echo "Retrieved admin token.."
-
-    USER=$(curl -X GET "${KEYCLOAK_URL}/admin/realms/${KEYCLOAK_REALM}/users?email=${USER_EMAIL}&exact=true" \
-        -H "Authorization: Bearer ${ADMIN_TOKEN}" | jq '.[0]'
-    )
-    USER_ID=$(echo "$USER" | jq -r '.id')
-    echo "Fetched user ID: $USER_ID"
-
-    UPDATED_USER=$(echo "$USER" | jq '.requiredActions = ["UPDATE_PASSWORD"]')
-
-    UPDATE_USER_RESP=$(curl -w "%{http_code}" -o /dev/null -s -X PUT \
-        "${KEYCLOAK_URL}/admin/realms/${KEYCLOAK_REALM}/users/${USER_ID}" \
-        -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-        -H "Content-Type: application/json" \
-        -d "${UPDATED_USER}")
-
-    echo "$UPDATE_USER_RESP"
-
-    check_success "$([[ "$UPDATE_USER_RESP" == "200" || "$UPDATE_USER_RESP" == "204" ]] && echo 0 || echo 1)" "Failed to update requiredActions for user ${USER_EMAIL}"
-}
-
 function main() {
     refresh_token
     echo "create_org..."
@@ -396,9 +369,6 @@ function main() {
 
     echo "add_minio_secret_and_storage_to_project..."
     add_minio_secret_and_storage_to_project
-
-    echo "request_password_reset..."
-    request_password_reset
 }
 
 main

@@ -59,7 +59,6 @@ from app.workloads.models import Workload
 
 
 @patch("app.metrics.service.get_step_for_range_query", return_value=300)
-@patch("app.metrics.service.get_aggregation_lookback_for_metrics", return_value="5m")
 @patch(
     "app.metrics.service.get_projects_in_organization",
     return_value=[
@@ -87,9 +86,7 @@ from app.workloads.models import Workload
 )
 @patch("app.metrics.service.a_custom_query_range", return_value=AsyncMock())
 @patch("app.metrics.service.map_timeseries_split_by_project", return_value=AsyncMock())
-async def test_get_gpu_memory_utilization_timeseries(
-    mock_map_timeseries, mock_query, mock_get_projects, mock_get_lookback, mock_get_step
-):
+async def test_get_gpu_memory_utilization_timeseries(mock_map_timeseries, mock_query, mock_get_projects, mock_get_step):
     prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
     await get_gpu_memory_utilization_timeseries(
         session=AsyncMock(spec=AsyncSession),
@@ -107,9 +104,7 @@ async def test_get_gpu_memory_utilization_timeseries(
         == """
 (
 sum by(project_id) (
-    avg_over_time(
-        gpu_used_vram{org_name="ORG1"}[5m]
-    )
+    gpu_used_vram{org_name="ORG1"}
 ) * 100
  /
 scalar(
@@ -135,7 +130,6 @@ scalar(
 
 
 @patch("app.metrics.service.get_step_for_range_query", return_value=300)
-@patch("app.metrics.service.get_aggregation_lookback_for_metrics", return_value="5m")
 @patch(
     "app.metrics.service.get_projects_in_organization",
     return_value=[
@@ -163,9 +157,7 @@ scalar(
 )
 @patch("app.metrics.service.a_custom_query_range", return_value=AsyncMock())
 @patch("app.metrics.service.map_timeseries_split_by_project", return_value=AsyncMock())
-async def test_get_gpu_device_utilization_timeseries(
-    mock_map_timeseries, mock_query, mock_get_projects, mock_get_lookback, mock_get_step
-):
+async def test_get_gpu_device_utilization_timeseries(mock_map_timeseries, mock_query, mock_get_projects, mock_get_step):
     prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
     await get_gpu_device_utilization_timeseries(
         session=AsyncMock(spec=AsyncSession),
@@ -182,11 +174,8 @@ async def test_get_gpu_device_utilization_timeseries(
         mock_query.call_args[1]["query"]
         == """
 (
-avg_over_time(
-    count by (project_id) (
-        gpu_gfx_activity{org_name="ORG1"}
-    )
-    [5m:]
+count by (project_id) (
+    gpu_gfx_activity{org_name="ORG1"}
 ) * 100
  /
 scalar(
@@ -212,7 +201,6 @@ scalar(
 
 
 @patch("app.metrics.service.get_step_for_range_query", return_value=300)
-@patch("app.metrics.service.get_aggregation_lookback_for_metrics", return_value="5m")
 @patch(
     "app.metrics.service.get_projects_in_organization",
     return_value=[
@@ -241,7 +229,7 @@ scalar(
 @patch("app.metrics.service.a_custom_query_range", return_value=AsyncMock())
 @patch("app.metrics.service.map_timeseries_split_by_project", return_value=AsyncMock())
 async def test_get_gpu_device_utilization_timeseries_for_cluster(
-    mock_map_timeseries, mock_query, mock_get_projects, mock_get_lookback, mock_get_step
+    mock_map_timeseries, mock_query, mock_get_projects, mock_get_step
 ):
     prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
     await get_gpu_device_utilization_timeseries_for_cluster(
@@ -258,11 +246,8 @@ async def test_get_gpu_device_utilization_timeseries_for_cluster(
         mock_query.call_args[1]["query"]
         == """
 (
-avg_over_time(
-    count by (project_id) (
-        gpu_gfx_activity{kube_cluster_name="CLUSTER1"}
-    )
-    [5m:]
+count by (project_id) (
+    gpu_gfx_activity{kube_cluster_name="CLUSTER1"}
 ) * 100
  /
 scalar(
@@ -422,7 +407,6 @@ async def test_get_current_utilization(
     assert utilization.utilization_by_project[1].running_workloads_count == 3
 
 
-@patch("app.metrics.service.get_aggregation_lookback_for_metrics", return_value="1m")
 @patch(
     "app.metrics.service.a_custom_query",
     return_value=[
@@ -441,7 +425,7 @@ async def test_get_current_utilization(
         {"metric": {}, "value": [1672531199, "5"]},
     ],
 )
-async def test__get_utilized_gpu_count_by_project(mock_query, mock_get_lookback):
+async def test__get_utilized_gpu_count_by_project(mock_query):
     prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
     org_name = "ORG1"
     results = await __get_utilized_gpu_count_by_project(org_name, prometheus_client=prometheus_client_mock)
@@ -451,7 +435,7 @@ async def test__get_utilized_gpu_count_by_project(mock_query, mock_get_lookback)
         mock_query.call_args[1]["query"]
         == """
 count by (project_id) (
-  max_over_time(gpu_gfx_activity{org_name="ORG1"}[1m])
+    gpu_gfx_activity{org_name="ORG1"}
 )
 """
     )
@@ -628,11 +612,8 @@ async def test_get_gpu_device_utilization_timeseries_for_project(mock_map_timese
     assert (
         mock_custom_query.call_args_list[0][1]["query"]
         == f"""
-avg_over_time(
-    count(
-        gpu_gfx_activity{{project_id="{project.id}"}}
-    )
-    [1m:]
+count(
+    gpu_gfx_activity{{project_id="{project.id}"}}
 )
 OR (0 * max(gpu_total_vram{{kube_cluster_name="Test Cluster"}}))
 """
@@ -640,11 +621,8 @@ OR (0 * max(gpu_total_vram{{kube_cluster_name="Test Cluster"}}))
     assert (
         mock_custom_query.call_args_list[1][1]["query"]
         == f"""
-avg_over_time(
-    max(
-        allocated_gpus{{project_id="{project.id}"}}
-    )
-    [1m:]
+max(
+    allocated_gpus{{project_id="{project.id}"}}
 )
 """
     )
@@ -716,11 +694,8 @@ async def test_get_gpu_memory_utilization_timeseries_for_project(mock_map_timese
     assert (
         mock_custom_query.call_args_list[0][1]["query"]
         == f"""
-avg_over_time(
-    sum(
-        gpu_used_vram{{project_id="{project.id}"}}
-    )
-    [1m:]
+sum(
+    gpu_used_vram{{project_id="{project.id}"}}
 )
 OR (0 * max(gpu_total_vram{{kube_cluster_name="Test Cluster"}}))
 """
@@ -728,11 +703,8 @@ OR (0 * max(gpu_total_vram{{kube_cluster_name="Test Cluster"}}))
     assert (
         mock_custom_query.call_args_list[1][1]["query"]
         == f"""
-avg_over_time(
-    max(
-        allocated_gpu_vram{{project_id="{project.id}"}}
-    )
-    [1m:]
+max(
+    allocated_gpu_vram{{project_id="{project.id}"}}
 )
 """
     )

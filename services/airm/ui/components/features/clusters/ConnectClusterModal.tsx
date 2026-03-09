@@ -70,9 +70,8 @@ const ConnectClusterModal: React.FC<Props> = ({ onOpenChange, isOpen }) => {
     }
   };
 
-  const installationCMD = `bash cluster-onboarding.sh \
-  \n\t--cluster-id "${connectionParameters?.id}" \
-  \n\t--cluster-secret "${connectionParameters?.userSecret}"
+  const installationCMD = `cluster-id="${connectionParameters?.id}" \
+  \ncluster-secret="${connectionParameters?.userSecret}"
   `;
 
   return (
@@ -88,10 +87,11 @@ const ConnectClusterModal: React.FC<Props> = ({ onOpenChange, isOpen }) => {
         {
           label: t('connectCluster.start.title'),
           content: (
-            <div className="py-4 flex flex-col gap-4">
-              <p>{t('connectCluster.start.content.description')}</p>
-              <p>{t('connectCluster.start.content.confirmation')}</p>
-            </div>
+            <Alert
+              color="warning"
+              className="bg-primary/10!"
+              description={t('connectCluster.start.content.description')}
+            />
           ),
           customActions: (
             <>
@@ -119,15 +119,12 @@ const ConnectClusterModal: React.FC<Props> = ({ onOpenChange, isOpen }) => {
             <div>
               <p>{t('connectCluster.script.content.description')} </p>
               <Snippet
+                hideSymbol={true}
                 classNames={{
                   base: 'mt-8 w-full',
                   pre: 'whitespace-pre-wrap',
                 }}
               >
-                <span>
-                  wget https://download.amd.com/airm/cluster-onboarding.sh
-                </span>
-                <span>chmod +x cluster-onbording.sh</span>
                 <span>{installationCMD}</span>
               </Snippet>
 
@@ -165,12 +162,6 @@ const ConnectClusterModal: React.FC<Props> = ({ onOpenChange, isOpen }) => {
           content: (
             <div>
               <p>{t('connectCluster.final.content.description')}</p>
-              <p className="mt-8">
-                {t('connectCluster.final.content.instruction')}{' '}
-                <Link href="#">
-                  {t('connectCluster.final.content.helppage')}
-                </Link>
-              </p>
             </div>
           ),
           customActions: (

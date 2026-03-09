@@ -101,7 +101,7 @@ async def create_development_workspace(
         "gpus": request.gpus,
         "memory_per_gpu": request.memory_per_gpu,
         "cpu_per_gpu": request.cpu_per_gpu,
-        "imagePullSecrets": request.imagePullSecrets or [],
+        "imagePullSecrets": request.image_pull_secrets,
         "metadata": {
             **chart.signature.get("metadata", {}),
             "project_id": str(project.id),

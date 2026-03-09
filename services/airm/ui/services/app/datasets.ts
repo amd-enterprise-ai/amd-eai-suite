@@ -145,7 +145,7 @@ export const uploadDataset = async (
 
   formData.append('name', name);
   formData.append('description', description);
-  formData.append('file', dataset);
+  formData.append('jsonl', dataset);
   formData.append('type', type);
 
   const response = await fetch(`/api/datasets?${queryParams}`, {

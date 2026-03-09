@@ -4,7 +4,7 @@
 
 import React, { useMemo } from 'react';
 
-import { Select, SelectItem } from '@heroui/react';
+import { Alert, Select, SelectItem } from '@heroui/react';
 import { IconAt } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -129,7 +129,13 @@ const InviteUserModal: React.FC<Props> = ({
               .max(
                 256,
                 t('modal.addUser.form.tempPassword.validation.maxLength') || '',
-              ),
+              )
+              .refine((val) => val === val.trim(), {
+                message:
+                  t(
+                    'modal.addUser.form.tempPassword.validation.noLeadingTrailingSpaces',
+                  ) || '',
+              }),
             z.literal(''), // allow empty string = "no temp password"
           ])
           .optional(),
@@ -244,6 +250,7 @@ const InviteUserModal: React.FC<Props> = ({
       defaultValues={{
         email: '',
         roles: UserRole.PLATFORM_ADMIN,
+        projectIds: selectedProjectIds?.join(',') || '',
       }}
       validationSchema={formSchema}
       renderFields={(form) => (
@@ -256,16 +263,24 @@ const InviteUserModal: React.FC<Props> = ({
               register={form.register}
             />
           ))}
-          {isTempPasswordRequired && (
-            <FormPasswordInput
-              form={form}
-              name="tempPassword"
-              label={t('modal.addUser.form.tempPassword.label')}
-              placeholder={t('modal.addUser.form.tempPassword.placeholder')}
-              isRequired
-            />
+          {isTempPasswordRequired ? (
+            <>
+              <FormPasswordInput
+                form={form}
+                name="tempPassword"
+                label={t('modal.addUser.form.tempPassword.label')}
+                placeholder={t('modal.addUser.form.tempPassword.placeholder')}
+                isRequired
+              />
+              <Alert
+                color="warning"
+                className="bg-primary/10!"
+                description={t('modal.addUser.instructionTempPassword')}
+              />
+            </>
+          ) : (
+            <p className="text-small">{t('modal.addUser.instruction')}</p>
           )}
-          <p className="text-small">{t('modal.addUser.instruction')}</p>
         </div>
       )}
       onCancel={onOpenChange}

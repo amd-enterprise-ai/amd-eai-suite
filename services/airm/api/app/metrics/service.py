@@ -104,13 +104,9 @@ async def get_gpu_memory_utilization_timeseries(
     projects = await get_projects_in_organization(session, organization.id)
 
     step = get_step_for_range_query(start, end)
-    lookback = get_aggregation_lookback_for_metrics(step)
-
     numerator = f"""
 sum by({PROJECT_ID}) (
-    avg_over_time(
-        gpu_used_vram{{{ORGANIZATION_NAME}="{organization.name}"}}[{lookback}]
-    )
+    gpu_used_vram{{{ORGANIZATION_NAME}="{organization.name}"}}
 ) * 100
 """
     denominator = f"""
@@ -151,14 +147,10 @@ async def get_gpu_device_utilization_timeseries(
     projects = await get_projects_in_organization(session, organization.id)
 
     step = get_step_for_range_query(start, end)
-    lookback = get_aggregation_lookback_for_metrics(step)
 
     numerator = f"""
-avg_over_time(
-    count by ({PROJECT_ID}) (
-        gpu_gfx_activity{{{ORGANIZATION_NAME}="{organization.name}"}}
-    )
-    [{lookback}:]
+count by ({PROJECT_ID}) (
+    gpu_gfx_activity{{{ORGANIZATION_NAME}="{organization.name}"}}
 ) * 100
 """
     denominator = f"""
@@ -198,13 +190,9 @@ async def get_gpu_device_utilization_timeseries_for_cluster(
     """
     projects = await get_projects_in_organization(session, organization_id)
     step = get_step_for_range_query(start, end)
-    lookback = get_aggregation_lookback_for_metrics(step)
     numerator = f"""
-avg_over_time(
-    count by ({PROJECT_ID}) (
-        gpu_gfx_activity{{{CLUSTER_NAME}="{cluster_name}"}}
-    )
-    [{lookback}:]
+count by ({PROJECT_ID}) (
+    gpu_gfx_activity{{{CLUSTER_NAME}="{cluster_name}"}}
 ) * 100
 """
     denominator = f"""
@@ -275,12 +263,11 @@ async def get_current_utilization(
 async def __get_utilized_gpu_count_by_project(
     organization_name: str, prometheus_client: PrometheusConnect
 ) -> dict[str, int]:
-    lookback = get_aggregation_lookback_for_metrics()
     results = await a_custom_query(
         client=prometheus_client,
         query=f"""
 count by ({PROJECT_ID}) (
-  max_over_time(gpu_gfx_activity{{{ORGANIZATION_NAME}="{organization_name}"}}[{lookback}])
+    gpu_gfx_activity{{{ORGANIZATION_NAME}="{organization_name}"}}
 )
 """,
     )
@@ -308,22 +295,15 @@ async def get_gpu_device_utilization_timeseries_for_project(
     is the same as that of gpu_gfx_activity
     """
     step = get_step_for_range_query(start, end)
-    lookback = get_aggregation_lookback_for_metrics(step)
     utilized_gpus = f"""
-avg_over_time(
-    count(
-        gpu_gfx_activity{{{PROJECT_ID}="{project.id}"}}
-    )
-    [{lookback}:]
+count(
+    gpu_gfx_activity{{{PROJECT_ID}="{project.id}"}}
 )
 OR (0 * max(gpu_total_vram{{{CLUSTER_NAME}="{project.cluster.name}"}}))
 """
     allocated_gpus = f"""
-avg_over_time(
-    max(
-        {ALLOCATED_GPUS_METRIC_LABEL}{{{PROJECT_ID}="{project.id}"}}
-    )
-    [{lookback}:]
+max(
+    {ALLOCATED_GPUS_METRIC_LABEL}{{{PROJECT_ID}="{project.id}"}}
 )
 """
     utilized_gpus_res, allocated_gpus_res = await asyncio.gather(
@@ -373,22 +353,15 @@ async def get_gpu_memory_utilization_timeseries_for_project(
 
     """
     step = get_step_for_range_query(start, end)
-    lookback = get_aggregation_lookback_for_metrics(step)
     utilized_vram = f"""
-avg_over_time(
-    sum(
-        gpu_used_vram{{{PROJECT_ID}="{project.id}"}}
-    )
-    [{lookback}:]
+sum(
+    gpu_used_vram{{{PROJECT_ID}="{project.id}"}}
 )
 OR (0 * max(gpu_total_vram{{{CLUSTER_NAME}="{project.cluster.name}"}}))
 """
     allocated_vram = f"""
-avg_over_time(
-    max(
-        {ALLOCATED_GPU_VRAM_METRIC_LABEL}{{{PROJECT_ID}="{project.id}"}}
-    )
-    [{lookback}:]
+max(
+    {ALLOCATED_GPU_VRAM_METRIC_LABEL}{{{PROJECT_ID}="{project.id}"}}
 )
 """
     utilized_vram_res, allocated_vram_res = await asyncio.gather(

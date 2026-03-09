@@ -206,6 +206,7 @@ export const DatasetUpload = ({ onClose, isOpen, refresh }: Props) => {
           </FormSelect>
           <FormInput
             form={form}
+            isDisabled={isUploading}
             name="description"
             label={t('modals.upload.form.description.label')}
             placeholder={t('modals.upload.form.description.placeholder')}

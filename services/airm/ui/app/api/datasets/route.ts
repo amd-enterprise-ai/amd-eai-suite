@@ -11,7 +11,7 @@ import {
   proxyRequest,
 } from '@/utils/server/route';
 
-import { DatasetType } from '@/types/datasets';
+export const maxDuration = 3600; // 1 hour for large file uploads
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,29 +28,20 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { accessToken } = await authenticateRoute();
-    const formData = await req.formData();
-
-    const name = formData.get('name') as string;
-    const description = formData.get('description') as string;
-    const file = formData.get('file') as File;
-    const type = formData.get('type') as DatasetType;
-
     const projectId = req.nextUrl.searchParams.get('project_id') || '';
-
     const url = `${process.env.AIRM_API_SERVICE_URL}/v1/datasets/upload?project_id=${projectId}`;
-
-    const body = new FormData();
-    body.append('name', name);
-    body.append('description', description);
-    body.append('jsonl', file);
-    body.append('type', type);
 
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        // Forward the content-type header with boundary from the original request
+        'Content-Type': req.headers.get('content-type') || '',
       },
       method: 'POST',
-      body,
+      // Use duplex mode to enable request body streaming
+      // @ts-expect-error - duplex  is not yet in TypeScript types but is required for streaming
+      duplex: 'half',
+      body: req.body,
     });
 
     return NextResponse.json(await response.json());

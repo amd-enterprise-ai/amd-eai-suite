@@ -12,11 +12,12 @@ import {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { accessToken } = await authenticateRoute();
-    const baseUrl = `${process.env.AIRM_API_SERVICE_URL}/v1/aims/${params.id}`;
+    const { id } = await params;
+    const baseUrl = `${process.env.AIRM_API_SERVICE_URL}/v1/aims/${id}`;
     const json = await proxyRequest(req, baseUrl, accessToken as string);
 
     return NextResponse.json(json);
@@ -27,11 +28,12 @@ export async function GET(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { accessToken } = await authenticateRoute();
-    const baseUrl = `${process.env.AIRM_API_SERVICE_URL}/v1/aims/${params.id}`;
+    const { id } = await params;
+    const baseUrl = `${process.env.AIRM_API_SERVICE_URL}/v1/aims/${id}`;
     const json = await proxyRequest(req, baseUrl, accessToken as string);
 
     return NextResponse.json(json);

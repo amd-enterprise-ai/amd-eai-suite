@@ -51,6 +51,17 @@ spec:
         key: test
         property: secret2
  `;
+
+const mockValidKubernetesSecretYAML = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubernetes-secret
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: MWYyZDFlMmU2N2Rm
+`;
 const mockToast = {
   success: vi.fn(),
   error: vi.fn(),
@@ -235,6 +246,70 @@ describe('AddSecret', () => {
         'kind: OtherResourceKind',
       ),
     );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /form\.add\.field\.manifest\.error\.yaml\.incorrectKind/,
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('checks for invalid Kubernetes Secret wrong resource kind', async () => {
+    const onClose = vi.fn();
+    const project = projects[0];
+    act(() => {
+      render(
+        <AddSecret
+          secrets={[]}
+          isOpen
+          projects={projects}
+          project={project}
+          onClose={onClose}
+        />,
+        {
+          wrapper,
+        },
+      );
+    });
+
+    // Change to Kubernetes Secret type
+    const typeButton = screen.getByRole('button', {
+      name: /form.add.field.type.label/i,
+    });
+    await fireEvent.click(typeButton);
+
+    const kubernetesOption = screen.getAllByText(
+      /secretType\.KubernetesSecret/i,
+    )[1];
+    await fireEvent.click(kubernetesOption);
+
+    // Wait for the manifest field to update
+    await waitFor(() => {
+      expect(
+        screen.getByRole('textbox', {
+          name: /form.add.field.manifest.secret.label/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    // Fill with Kubernetes secret that has wrong kind
+    await fireEvent.change(
+      screen.getByRole('textbox', {
+        name: /form.add.field.manifest.secret.label/i,
+      }),
+      {
+        target: {
+          value: mockValidKubernetesSecretYAML.replace(
+            'kind: Secret',
+            'kind: ConfigMap',
+          ),
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByText('form.add.action.add'));
 
     await waitFor(() => {
       expect(

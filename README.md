@@ -6,6 +6,9 @@ SPDX-License-Identifier: MIT
 
 # AMD Enterprise AI Suite
 
+> [!CAUTION]
+> If you are looking to just install the AMD Enterprise AI Suite, the instructions for most users are here https://enterprise-ai.docs.amd.com/en/latest/platform-infrastructure/on-premises-installation.html The instructions in this GitHub are targeted for more advanced usage/development.
+
 This repository contains the main services and common Python packages that power the AMD Enterprise AI platform. The suite is composed of **AI Workbench** (an interface for developers to manage the lifecycle of their AI workloads, including features like AI workspaces, AIMs catalog and fine-tuning) and **AI Resource Manager** (the infrastructure layer for authentication, access control, and cluster coordination). The two components currently share API and UI, and are located together in `services/airm`.
 
 The main components include:

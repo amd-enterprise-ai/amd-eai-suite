@@ -1,0 +1,13 @@
+diff --git a/workloads/dev-workspace-jupyterlab/helm/overrides/dev-center/signature.yaml b/workloads/dev-workspace-jupyterlab/helm/overrides/dev-center/signature.yaml
+index ef37b43..d7bd97f 100644
+--- a/workloads/dev-workspace-jupyterlab/helm/overrides/dev-center/signature.yaml
++++ b/workloads/dev-workspace-jupyterlab/helm/overrides/dev-center/signature.yaml
+@@ -17,7 +17,7 @@ ingress:
+   enabled: true
+ 
+ kaiwo:
+-  enabled: true
++  enabled: false
+ 
+ persistent_storage:
+   enabled: true

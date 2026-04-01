@@ -1,0 +1,29 @@
+{
+  "name": "@amdenterpriseai/tailwind-config",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./shared-styles.css",
+    "./postcss": "./postcss.config.js"
+  },
+  "dependencies": {
+    "@amdenterpriseai/utils": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-dom": "*",
+    "@heroui/react": "*",
+    "next": "*",
+    "next-auth": "*",
+    "next-i18next": "*",
+    "next-themes": "*"
+  },
+  "devDependencies": {
+    "@types/react": "*",
+    "@tailwindcss/postcss": "*",
+    "@tailwindcss/typography": "*",
+    "postcss": "*",
+    "tailwindcss": "*"
+  }
+}

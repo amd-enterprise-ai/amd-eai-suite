@@ -44,5 +44,4 @@
 # Exclude other services when building specific ones
 # (This will be overridden by specific COPY commands)
 tooling/
-!tooling/codeql/
 docker/

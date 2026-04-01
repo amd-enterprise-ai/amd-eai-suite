@@ -15,22 +15,6 @@ scripts_are_modules = true
 check_untyped_defs = false
 disallow_incomplete_defs = true
 
-# Override disallow_incomplete_defs for modules not yet fixed
-# As we fix modules, remove them from this list
-#
-# Strategy: Enable disallow_incomplete_defs globally, but disable it for modules
-# we haven't fixed yet. As we fix modules in each PR, we remove them from here.
-
-[[tool.mypy.overrides]]
-# Test files - will be fixed in PR 2-3
-# Note: Keep test files excluded until all are fixed
-# Some test files have been fixed but still have incomplete function definitions
-module = [
-  "tests.*",
-  "services.airm.api.tests.*",
-]
-disallow_incomplete_defs = false
-
 [tool.robocop]
 
 [tool.robocop.lint]
@@ -71,7 +55,7 @@ line-length = 120
 ignore = [
   "F841",  # Local variable assigned but never used
 ]
-extend-select = ["F401", "I", "UP"]
+extend-select = ["F401", "I", "UP", "PLC0415"]
 extend-safe-fixes = [
   "UP006", # https://docs.astral.sh/ruff/rules/non-pep585-annotation/#fix-safety; we are using Python 3.13 and no libraries that rely on runtime type annotations
   "UP007", # https://docs.astral.sh/ruff/rules/non-pep604-annotation-union/#fix-safety; we are using Python 3.13 and no libraries that rely on runtime type annotations, there are no types that do not support `|` operator either
@@ -80,4 +64,4 @@ extend-safe-fixes = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "airm", "workloads_manager"]
+known-first-party = ["app", "api_common", "workloads_manager"]

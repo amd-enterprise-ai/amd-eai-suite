@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+  <changeSet id="make-namespace-project-id-nullable-and-add-unique-index" author="eugenek">
+    <!-- Make project_id nullable to support unmanaged namespaces -->
+    <dropNotNullConstraint
+      tableName="namespaces"
+      columnName="project_id"
+      columnDataType="uuid"/>
+
+    <!-- Add unique constraint on (name, cluster_id) to prevent duplicate namespace records -->
+    <createIndex
+      tableName="namespaces"
+      indexName="ix_namespaces_name_cluster"
+      unique="true">
+      <column name="name"/>
+      <column name="cluster_id"/>
+    </createIndex>
+  </changeSet>
+</databaseChangeLog>

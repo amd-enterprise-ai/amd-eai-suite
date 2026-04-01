@@ -1,0 +1,14 @@
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+
+<!-- Polyfill process for next-auth and other Node-style deps in the browser (Ladle/Vite) -->
+<script>
+  (function(){
+    var p = { env: { NODE_ENV: 'development' } };
+    if (typeof globalThis !== 'undefined') globalThis.process = p;
+    if (typeof window !== 'undefined') window.process = p;
+  })();
+</script>

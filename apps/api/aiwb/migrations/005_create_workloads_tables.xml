@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="005-create-workloads-tables" author="system">
+        <comment>Create tables for workloads</comment>
+
+        <!-- Workloads table -->
+        <createTable tableName="workloads">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="display_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="namespace" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="type" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="chart_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="model_id" type="UUID"/>
+            <column name="dataset_id" type="UUID"/>
+            <column name="manifest" type="TEXT" defaultValue="">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="workloads" indexName="idx_workloads_namespace">
+            <column name="namespace"/>
+        </createIndex>
+
+        <createIndex tableName="workloads" indexName="idx_workloads_type">
+            <column name="type"/>
+        </createIndex>
+
+        <createIndex tableName="workloads" indexName="idx_workloads_status">
+            <column name="status"/>
+        </createIndex>
+
+        <createIndex tableName="workloads" indexName="idx_workloads_chart_id">
+            <column name="chart_id"/>
+        </createIndex>
+
+        <createIndex tableName="workloads" indexName="idx_workloads_model_id">
+            <column name="model_id"/>
+        </createIndex>
+
+        <createIndex tableName="workloads" indexName="idx_workloads_dataset_id">
+            <column name="dataset_id"/>
+        </createIndex>
+
+        <createIndex tableName="workloads" indexName="idx_workloads_created_by">
+            <column name="created_by"/>
+        </createIndex>
+
+
+        <!-- Foreign key constraints -->
+        <addForeignKeyConstraint
+            baseTableName="workloads"
+            baseColumnNames="chart_id"
+            constraintName="fk_workloads_chart"
+            referencedTableName="charts"
+            referencedColumnNames="id"
+            onDelete="CASCADE"/>
+
+        <addForeignKeyConstraint
+            baseTableName="workloads"
+            baseColumnNames="model_id"
+            constraintName="fk_workloads_model"
+            referencedTableName="inference_models"
+            referencedColumnNames="id"
+            onDelete="SET NULL"/>
+
+        <addForeignKeyConstraint
+            baseTableName="workloads"
+            baseColumnNames="dataset_id"
+            constraintName="fk_workloads_dataset"
+            referencedTableName="datasets"
+            referencedColumnNames="id"
+            onDelete="SET NULL"/>
+
+    </changeSet>
+
+</databaseChangeLog>

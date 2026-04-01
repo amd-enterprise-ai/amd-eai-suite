@@ -1,0 +1,19 @@
+/*
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+*/
+
+/* Import the shared Tailwind base styles */
+@import "../../tailwind-config/shared-styles.css";
+
+/*
+ * Tell Tailwind v4 to scan workspace packages for class name usage.
+ * Without these, classes like fill-blue-500 and stroke-emerald-500
+ * (referenced as strings in chart-colors-keys.ts) won't be generated.
+ */
+@source "../../types/src";
+@source "../../utils/src";
+@source "../src";
+@source "../__stories__";
+@source "../../../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}";

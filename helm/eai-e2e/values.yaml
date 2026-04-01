@@ -1,0 +1,17 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+appDomain: PUBLIC-IP
+
+keycloak:
+  internalUrl: http://keycloak.keycloak.svc.cluster.local:8080
+  realm: airm
+
+kgateway:
+  keycloak:
+    prefixValue: kc
+
+secretStore:
+  name: openbao-secret-store
+  kind: ClusterSecretStore

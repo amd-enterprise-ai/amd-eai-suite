@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="drop-workbench-entities" author="akshayv">
+        <comment>
+            Remove all workbench entities from the system.
+        </comment>
+
+        <dropColumn tableName="workloads" columnName="name"/>
+        <dropColumn tableName="workloads" columnName="chart_id"/>
+        <dropColumn tableName="workloads" columnName="model_id"/>
+        <dropColumn tableName="workloads" columnName="dataset_id"/>
+        <dropColumn tableName="workloads" columnName="aim_id"/>
+        <dropColumn tableName="workloads" columnName="user_inputs"/>
+        <dropColumn tableName="workloads" columnName="manifest"/>
+        <dropColumn tableName="workloads" columnName="output"/>
+        <dropColumn tableName="workloads" columnName="cluster_auth_group_id"/>
+        <dropColumn tableName="workloads" columnName="kind"/>
+
+        <dropTable tableName="aims" cascadeConstraints="true"/>
+        <dropTable tableName="api_keys" cascadeConstraints="true"/>
+        <dropTable tableName="overlays" cascadeConstraints="true"/>
+        <dropTable tableName="chart_files" cascadeConstraints="true"/>
+        <dropTable tableName="charts" cascadeConstraints="true"/>
+        <dropTable tableName="datasets" cascadeConstraints="true"/>
+        <dropTable tableName="inference_models" cascadeConstraints="true"/>
+    </changeSet>
+</databaseChangeLog>

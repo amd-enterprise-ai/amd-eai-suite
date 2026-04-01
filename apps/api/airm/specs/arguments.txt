@@ -1,0 +1,50 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Robot Framework Arguments File for AIRM E2E Tests
+#
+# Usage:
+#   uv run --project .. robot --argumentfile arguments.txt .
+#   uv run --project .. robot --argumentfile arguments.txt --include smoke .
+#   uv run --project .. robot --argumentfile arguments.txt airm/workloads_api.robot
+#
+# Override any argument by specifying it AFTER --argumentfile:
+#   robot --argumentfile arguments.txt --loglevel TRACE .
+#   robot --argumentfile arguments.txt --outputdir /tmp/results .
+#   robot --argumentfile arguments.txt --test-timeout 30m .
+
+# Python path - required to find test libraries
+--pythonpath
+.
+--pythonpath
+../../../../testing
+--pythonpath
+../../../../testing/libraries
+
+# Helper that prints guidance on using robot-extract after test execution
+--listener
+TestResultsHelper
+
+# Output directory for test results
+--outputdir
+results
+
+# Log level: INFO (default), DEBUG, TRACE
+--loglevel
+INFO
+
+# Console output width
+--consolewidth
+120
+
+# Exclude tests tagged with 'skip'
+--exclude
+skip
+
+# Report and log titles
+--reporttitle
+AIRM E2E Test Report
+
+--logtitle
+AIRM E2E Test Execution Log

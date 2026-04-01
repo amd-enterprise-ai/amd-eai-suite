@@ -1,0 +1,107 @@
+{
+  "title": "Workloads",
+  "details": {
+    "title": "Workload Details",
+    "sections": {
+      "inferenceMetrics": "Inference metrics",
+      "workloadInformation": "Information",
+      "basicInformation": "Basic information",
+      "projectInformation": "Project information",
+      "resources": "Resources",
+      "timeline": "Timeline",
+      "output": "Output",
+      "resourceUtilization": "Resource utilization",
+      "clusterAndResources": "Cluster and resources"
+    },
+    "fields": {
+      "updatedAt": "Updated at",
+      "createdAt": "Created at",
+      "name": "Name",
+      "workloadId": "Workload ID",
+      "createdBy": "Created by",
+      "cluster": "Cluster",
+      "id": "ID",
+      "nodesInUse": "Nodes in use",
+      "gpuDevicesInUse": "GPU devices in use",
+      "queueTime": "Queue time",
+      "runningTime": "Running time",
+      "viewAllMetrics": "View all metrics",
+      "memoryUtilization": "Memory utilization",
+      "memoryUtilizationTooltip": "Percentage of GPU video memory (VRAM) currently in use by the workload. High utilization may indicate the workload is memory-bound.",
+      "junctionTemperature": "Junction temperature",
+      "junctionTemperatureTooltip": "Temperature at the GPU die (junction). Shown in °C. Sustained high temperatures may trigger throttling.",
+      "gpuPowerUsage": "GPU power usage",
+      "gpuPowerUsageTooltip": "Current power draw of the GPU in watts. Reflects workload activity and can vary with utilization and temperature.",
+      "noGpuMetrics": "No GPU device metrics available.",
+      "unavailable": "Unavailable",
+      "host": "Host"
+    },
+    "actions": {
+      "delete": "Delete",
+      "back": "Back"
+    },
+    "breadcrumb": "Workload details",
+    "details": {
+      "modal": {
+        "workloadNotFound": "Workload is not found"
+      }
+    }
+  },
+  "status": {
+    "Added": "Added",
+    "Complete": "Complete",
+    "Failed": "Failed",
+    "Deleting": "Deleting",
+    "DeleteFailed": "Delete failed",
+    "Deleted": "Deleted",
+    "Pending": "Pending",
+    "Running": "Running",
+    "Terminated": "Terminated",
+    "Unknown": "Unknown"
+  },
+  "type": {
+    "MODEL_DOWNLOAD": "Model download",
+    "INFERENCE": "Inference",
+    "FINE_TUNING": "Fine-tuning",
+    "EVALUATION": "Evaluation",
+    "WORKSPACE": "Workspace",
+    "UNKNOWN": "Unknown",
+    "CUSTOM": "Custom"
+  },
+  "list": {
+    "filters": {
+      "type": {
+        "label": "Types"
+      },
+      "status": {
+        "label": "Statuses"
+      },
+      "search": {
+        "placeholder": "Search by name..."
+      }
+    },
+    "actions": {
+      "delete": {
+        "label": "Delete",
+        "confirmation": {
+          "title": "Confirm workload deletion",
+          "description": "Are you sure you want to delete <strong>{{name}}</strong> workload? This action is irreversible."
+        },
+        "notification": {
+          "success": "Workload deletion started",
+          "error": "Failed to delete workload. Please try again."
+        }
+      }
+    },
+    "pagination": {
+      "showing": "Showing {{from}} to {{to}} of {{total}} workloads",
+      "pageSize": {
+        "label": "Show",
+        "entities": "workloads"
+      }
+    },
+    "empty": {
+      "description": "List of workloads is empty."
+    }
+  }
+}

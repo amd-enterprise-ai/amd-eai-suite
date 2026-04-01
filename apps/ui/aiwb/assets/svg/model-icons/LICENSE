@@ -1,0 +1,29 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+./deepseek.svg
+- SPDX-License-Identifier: MIT
+- File source: https://github.com/deepseek-ai/DeepSeek-Coder-V2/blob/main/figures/logo.svg
+- License source: https://github.com/deepseek-ai/DeepSeek-Coder-V2/blob/main/LICENSE-CODE
+
+./gemma.svg
+- SPDX-License-Identifier: Apache-2.0
+- File source:
+https://github.com/google-deepmind/gemma/blob/main/docs/images/icon.svg
+- License source: https://github.com/google-deepmind/gemma/blob/main/LICENSE
+
+./mistral.svg
+- SPDX-License-Identifier: Apache-2.0
+- File source: https://github.com/mistralai/platform-docs-public/blob/main/static/img/logo.svg
+- License source: https://github.com/mistralai/platform-docs-public/blob/main/LICENSE
+
+./mixtral.svg
+- SPDX-License-Identifier: Apache-2.0
+- File source: https://github.com/mistralai/platform-docs-public/blob/main/static/img/logo.svg
+- License source: https://github.com/mistralai/platform-docs-public/blob/main/LICENSE
+
+./qwen.svg
+- SPDX-License-Identifier: Apache-2.0
+- File source: https://github.com/QwenLM/Qwen/blob/main/assets
+- License source: https://github.com/QwenLM/Qwen/blob/main/LICENSE

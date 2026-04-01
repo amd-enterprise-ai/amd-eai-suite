@@ -6,44 +6,67 @@ SPDX-License-Identifier: MIT
 
 # AMD Enterprise AI Suite
 
-> [!CAUTION]
-> If you are looking to just install the AMD Enterprise AI Suite, the instructions for most users are here https://enterprise-ai.docs.amd.com/en/latest/platform-infrastructure/on-premises-installation.html The instructions in this GitHub are targeted for more advanced usage/development.
+This repository contains the main services and common Python packages that power the AMD Enterprise AI platform. The suite is composed of **AI Workbench** (an interface for developers to manage the lifecycle of their AI workloads, including features like AI workspaces, AIMs catalog and fine-tuning) and **AI Resource Manager** (the infrastructure layer for authentication, access control, and cluster coordination). The components are organized under the `apps/` directory.
 
-This repository contains the main services and common Python packages that power the AMD Enterprise AI platform. The suite is composed of **AI Workbench** (an interface for developers to manage the lifecycle of their AI workloads, including features like AI workspaces, AIMs catalog and fine-tuning) and **AI Resource Manager** (the infrastructure layer for authentication, access control, and cluster coordination). The two components currently share API and UI, and are located together in `services/airm`.
+## Architecture and Deployment Modes
+
+The platform supports three deployment modes to accommodate different use cases:
+
+- **Standalone AIWB**: Deploy only AI Workbench features (AIMs, workloads, workspaces, fine-tuning) without resource management capabilities. Located in `apps/api/aiwb/`.
+- **Standalone AIRM**: Deploy only AI Resource Manager features (cluster management, authentication, quota management) without AI development tools. Located in `apps/api/airm/`.
+- **Combined AIWB + AIRM**: Deploy both services together for a full-featured platform with AI development tools and resource management.
 
 The main components include:
 
-- **API** – The central API layer for AMD Resource Manager, handling authentication, access control, and cluster coordination.
-- **UI** – The frontend interface to interact with resource management features, integrated with the AIRM API and authentication services.
-- **Dispatcher** – The agent responsible for dispatching compute workloads to registered Kubernetes clusters and managing their lifecycle.
+- **AIWB API**: AI Workbench API for managing AIMs, workloads, workspaces, and fine-tuning jobs. Can run standalone or integrated with AIRM.
+- **AIRM API**: AI Resource Manager API handling authentication, access control, cluster coordination, and quota management. Can run standalone or integrated with AIWB.
+- **AIWB UI**: Frontend interface for AI Workbench features (AIMs catalog, workspaces, fine-tuning, chat). Located in `apps/ui/aiwb/`.
+- **AIRM UI**: Frontend interface for Resource Manager features (cluster management, quota allocation, project management). Located in `apps/ui/airm/`.
+- **Agent**: A Kubernetes cluster agent that handles resource management, messaging, and heartbeats for the AIRM system.
 
 ---
 
 ## Components Overview
 
-### API
+### AIWB API
 
-The API layer handles both AI Resource Manager and AI Workbench functionality, coordinating organizations, projects, quotas, and clusters across environments. It also provides AI Workbench features including AIMs (AMD Inference Microservices) deployment, model fine-tuning, dataset management, AI workspaces, and API keys for programmatic access. The API exposes a Swagger UI and supports OAuth2 authentication.
+The AI Workbench API provides features for AI development and deployment, including AIMs (AMD Inference Microservices) deployment, model fine-tuning, dataset management, AI workspaces, and API keys for programmatic access. This service can run standalone or be integrated with AIRM for combined deployment.
 
-- **Docs**: [`services/airm/api/README.md`](services/airm/api/README.md)
-- **Tech**: FastAPI, PostgreSQL, Keycloak, RabbitMQ, MinIO
+- **Docs**: [`apps/api/aiwb/README.md`](apps/api/aiwb/README.md)
+- **Tech**: FastAPI, PostgreSQL, Kubernetes API, MinIO
 - **Testing**: `uv run pytest`
 
-### UI
+### AIRM API
 
-The UI allows users to onboard clusters, allocate resources, and monitor jobs visually. It also provides AI Workbench features including interactive chat, model comparison, AI workspaces management, model catalog browsing, and fine-tuning job configuration. Built with Next.js and uses Keycloak-based SSO.
+The AI Resource Manager API handles authentication, access control, cluster coordination, and quota management across organizations, projects, and environments. This service can run standalone or be integrated with AIWB for combined deployment.
 
-- **Docs**: [`services/airm/ui/README.md`](services/airm/ui/README.md)
+- **Docs**: [`apps/api/airm/README.md`](apps/api/airm/README.md)
+- **Tech**: FastAPI, PostgreSQL, Keycloak, RabbitMQ, Vault
+- **Testing**: `uv run pytest`
+
+### AIWB UI
+
+The AI Workbench UI provides the frontend interface for AI development features including interactive chat, AI workspaces management, AIMs catalog browsing and deployment, and fine-tuning job configuration.
+
+- **Docs**: [`apps/ui/aiwb/README.md`](apps/ui/aiwb/README.md)
 - **Tech**: Next.js, Hero UI, Keycloak SSO
 - **Testing**: `pnpm test`
 
-### Dispatcher
+### AIRM UI
 
-A cluster-side component that receives instructions from the API and interacts with Kubernetes via KubeAPI. Intended to run directly on Kubernetes clusters.
+The AI Resource Manager UI provides the frontend interface for resource management features including cluster onboarding, quota allocation, project management, and job monitoring.
 
-- **Docs**: [`services/airm/dispatcher/README.md`](services/airm/dispatcher/README.md)
-- **Tech**: Python, FastAI
-- **Testing**: `uv run pytest`
+- **Docs**: [`apps/ui/airm/README.md`](apps/ui/airm/README.md)
+- **Tech**: Next.js, Hero UI, Keycloak SSO
+- **Testing**: `pnpm test`
+
+### Agent
+
+A Kubernetes cluster agent that handles resource management, messaging, and heartbeats for the AIRM system. Written in Go for efficient resource monitoring and cluster communication.
+
+- **Docs**: [`apps/agent/README.md`](apps/agent/README.md)
+- **Tech**: Go, Kubernetes, RabbitMQ
+- **Testing**: `make test`
 
 ---
 
@@ -52,12 +75,13 @@ A cluster-side component that receives instructions from the API and interacts w
 ### Prerequisites
 
 - Python 3.13
+- Go 1.24 for agent development
 - Pre-commit (`uv tool pip install pre-commit`)
 - Docker & Docker Compose
 - Node.js & `pnpm` for frontend
 - `uv` for Python dependency management
 
-> 💡 Windows users should use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) for full compatibility.
+> Windows users should use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) for full compatibility.
 
 ### Repository Setup
 
@@ -71,8 +95,8 @@ uv tool run pre-commit install --install-hooks --hook-type pre-commit --hook-typ
 
 > **Note**: The pre-push hooks will automatically run tests with coverage for any changed components, and it would exit at the first failed test:
 >
-> - **UI changes**: Runs tests in `services/airm/ui`
-> - **API changes**: Runs tests in `services/airm/api`
-> - **Dispatcher changes**: Runs tests in `services/airm/dispatcher`
+> - **UI changes**: Runs tests in `apps/ui/airm`
+> - **API changes**: Runs tests in `apps/api/airm`
+> - **Agent changes**: Runs tests in `apps/agent`
 >
 > These hooks help catch issues before pushing to remote and ensure code quality standards are met.

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet author="ncondro" id="086-fix-dataset-fk-ondelete">
+        <preConditions onFail="MARK_RAN">
+            <foreignKeyConstraintExists foreignKeyName="workloads_dataset_id_fkey"/>
+        </preConditions>
+        <comment>Change dataset_id foreign key constraint from CASCADE to SET NULL to preserve workloads when datasets are deleted</comment>
+
+        <!-- Drop the existing foreign key constraint -->
+        <dropForeignKeyConstraint baseTableName="workloads" constraintName="workloads_dataset_id_fkey"/>
+
+        <!-- Recreate the foreign key constraint with SET NULL behavior -->
+        <addForeignKeyConstraint
+            baseTableName="workloads"
+            baseColumnNames="dataset_id"
+            constraintName="workloads_dataset_id_fkey"
+            referencedTableName="datasets"
+            referencedColumnNames="id"
+            onDelete="SET NULL"/>
+    </changeSet>
+
+</databaseChangeLog>

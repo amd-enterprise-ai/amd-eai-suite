@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="006-create-api-keys-table" author="migration">
+        <createTable tableName="api_keys">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="truncated_key" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cluster_auth_key_id" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="namespace" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="api_keys" indexName="idx_api_keys_cluster_auth_key_id">
+            <column name="cluster_auth_key_id"/>
+        </createIndex>
+
+        <createIndex tableName="api_keys" indexName="idx_api_keys_namespace">
+            <column name="namespace"/>
+        </createIndex>
+
+        <addUniqueConstraint
+            tableName="api_keys"
+            columnNames="cluster_auth_key_id"
+            constraintName="uq_api_keys_cluster_auth_key_id"/>
+
+        <addUniqueConstraint
+            tableName="api_keys"
+            columnNames="name, namespace"
+            constraintName="uq_api_keys_name_namespace"/>
+    </changeSet>
+
+</databaseChangeLog>

@@ -5,6 +5,13 @@
 repos:
   - repo: local
     hooks:
+      - id: ai-rules-sync
+        name: AI Rules Sync
+        description: Ensure CLAUDE.md symlinks and generated files are up to date
+        entry: make ai-rules
+        language: system
+        files: ^(.*AI_RULES\.md|.*CLAUDE\.md)$
+        pass_filenames: false
       - id: copyright-check
         name: AMD Copyright Check
         description: Check that all files have the required AMD copyright
@@ -16,14 +23,14 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^packages/workloads_manager/workloads_manager/data/patches
+        exclude: ^(apps/api/workloads_manager/workloads_manager/data/patches|packages/workloads_manager/workloads_manager/data/patches)
       - id: end-of-file-fixer
   - repo: https://github.com/rbubley/mirrors-prettier
     rev: v3.6.2
     hooks:
       - id: prettier
         args: ["--write", "--config", ".prettierrc"]
-        exclude: ^(services/airm/ui|docs|services/airm/helm|.github/workflows/.*.yml)
+        exclude: ^(apps/ui|docs|helm/.*.yaml|.github/workflows/.*.yml|apps/api/.*/specs/test_workloads)
   - repo: https://github.com/biomejs/pre-commit
     rev: v2.2.6
     hooks:
@@ -56,16 +63,34 @@ repos:
     hooks:
       - id: airm-ui-typecheck
         name: AIRM UI typecheck
-        entry: pnpm --dir services/airm/ui typecheck
+        entry: >
+          bash -c 'pnpm --dir apps/ui/airm typecheck &&
+          pnpm --dir apps/ui/aiwb typecheck'
         language: system
         pass_filenames: false
-        files: ^services/airm/ui/.*$
+        files: ^apps/ui/airm/.*$|^apps/ui/aiwb/.*$
       - id: airm-ui-lint
         name: AIRM UI lint
-        entry: pnpm --dir services/airm/ui lint
+        entry: >
+          bash -c 'pnpm --dir apps/ui/airm lint &&
+          pnpm --dir apps/ui/aiwb lint'
         language: system
         pass_filenames: false
-        files: ^services/airm/ui/.*$
+        files: ^apps/ui/airm/.*$|^apps/ui/aiwb/.*$
+      - id: airm-agent-format
+        name: AIRM Agent format
+        entry: apps/agent/.pre-commit-gofmt.sh
+        language: script
+        pass_filenames: false
+        files: ^apps/agent/.*\.go$
+        stages: [pre-commit, pre-push]
+      - id: airm-agent-lint
+        name: AIRM Agent lint
+        entry: bash -c 'cd apps/agent && make lint > /dev/null 2>&1 || (make lint && exit 1)'
+        language: system
+        pass_filenames: false
+        files: ^apps/agent/.*\.go$
+        stages: [pre-commit, pre-push]
       - id: shellcheck-with-message
         name: shellcheck with fixer message
         description: Run shellcheck and suggest using the fixer when issues are found
@@ -93,28 +118,47 @@ repos:
           - text
       - id: airm-ui-test-coverage
         name: AIRM UI test coverage
-        entry: pnpm --dir services/airm/ui test -- --coverage --bail=1
+        entry: >
+          bash -c 'pnpm --dir apps/ui/airm test -- --coverage --bail=1 &&
+          pnpm --dir apps/ui/aiwb test -- --coverage --bail=1'
         language: system
         pass_filenames: false
-        files: ^services/airm/ui/.*$
+        files: ^apps/ui/airm/.*$|^apps/ui/aiwb/.*$
         stages: [pre-push]
         verbose: true
         fail_fast: true
       - id: airm-api-test
         name: AIRM API tests
-        entry: bash -c 'cd services/airm/api && uv run pytest -x'
+        entry: bash -c 'cd apps/api/airm && uv run pytest -x'
         language: system
         pass_filenames: false
-        files: ^services/airm/api/.*$
+        files: ^apps/api/airm/.*$
         stages: [pre-push]
         verbose: true
         fail_fast: true
-      - id: airm-dispatcher-test
-        name: AIRM Dispatcher tests
-        entry: bash -c 'cd services/airm/dispatcher && uv run pytest -x'
+      - id: airm-agent-test
+        name: AIRM Agent tests
+        entry: bash -c 'cd apps/agent && make test > /dev/null 2>&1 || (make test && exit 1)'
         language: system
         pass_filenames: false
-        files: ^services/airm/dispatcher/.*$
+        files: ^apps/agent/.*\.go$
+        stages: [pre-commit, pre-push]
+        fail_fast: true
+      - id: robot-dryrun
+        name: Robot Framework dry-run validation
+        description: Validates keyword names, arguments, imports, and syntax without executing tests
+        entry: tooling/robot_dryrun.sh
+        language: script
+        pass_filenames: false
+        files: ^(apps/api/aiwb/specs|apps/ui/aiwb/specs|apps/api/airm/specs)/.*\.(robot|resource|py|txt|csv)$
         stages: [pre-push]
         verbose: true
-        fail_fast: true
+      - id: spectral
+        name: AIRM API OpenAPI Spectral
+        description: Lint OpenAPI spec with Spectral (run manually with pre-commit run spectral --hook-stage manual)
+        entry: tooling/spectral/run_spectral.sh apps/api/airm
+        language: script
+        pass_filenames: false
+        files: ^apps/api/airm/.*$
+        stages: [manual]
+        verbose: true

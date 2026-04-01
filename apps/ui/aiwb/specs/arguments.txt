@@ -1,0 +1,53 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Robot Framework Arguments File for AIWB UI E2E Tests
+#
+# Usage:
+#   uv run --project .. robot --argumentfile arguments.txt .
+#   uv run --project .. robot --argumentfile arguments.txt --include smoke .
+#   uv run --project .. robot --argumentfile arguments.txt --exclude gpu .
+#
+# Override any argument by specifying it AFTER --argumentfile:
+#   robot --argumentfile arguments.txt --loglevel TRACE .
+#   robot --argumentfile arguments.txt --outputdir /tmp/results .
+
+# Python path resolution:
+# 1. Local specs (resources/, libraries/)
+# 2. AIWB API specs (aiwb_aims.resource, etc.)
+# 3. AIRM specs (airm_projects.resource, authorization, deployment, etc.)
+# 4. Shared testing infrastructure (common.resource, TestPrefix, KubeconfigAuth, etc.)
+--pythonpath
+.
+--pythonpath
+../../../api/aiwb/specs
+--pythonpath
+../../../api/airm/specs
+--pythonpath
+../../../../testing
+--pythonpath
+../../../../testing/libraries
+
+# Output directory for test results
+--outputdir
+results
+
+# Log level: INFO (default), DEBUG, TRACE
+--loglevel
+INFO
+
+# Console output width
+--consolewidth
+120
+
+# Exclude tests tagged with 'skip'
+--exclude
+skip
+
+# Report and log titles
+--reporttitle
+AIWB UI E2E Test Report
+
+--logtitle
+AIWB UI E2E Test Execution Log

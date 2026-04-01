@@ -1,0 +1,10 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: v1
+kind: Template
+metadata:
+  name: sample-chart
+spec:
+  description: "A sample chart template for testing."

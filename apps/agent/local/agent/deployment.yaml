@@ -1,0 +1,62 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airm-agent
+  namespace: airm
+spec:
+  template:
+    spec:
+      containers:
+        - name: agent
+          workingDir: /code/apps/agent
+          command: ["air"]
+          ports:
+            - $patch: delete
+          env:
+            - name: RABBITMQ_HOST
+              value: "host.docker.internal"
+            - name: RABBITMQ_USER
+              $patch: delete
+            - name: RABBITMQ_PASSWORD
+              $patch: delete
+            - name: KUBE_CLUSTER_NAME
+              $patch: delete
+            - name: GOINSECURE
+              value: "*"
+            - name: GOPROXY
+              value: direct
+            - name: GIT_SSL_NO_VERIFY
+              value: "true"
+            - name: GOCACHE
+              value: "/go-cache/build"
+            - name: GOMODCACHE
+              value: "/go-cache/mod"
+          livenessProbe:
+            $patch: delete
+          readinessProbe:
+            $patch: delete
+          volumeMounts:
+            - name: code
+              mountPath: /code
+            - name: go-build-cache
+              mountPath: /go-cache/build
+            - name: go-mod-cache
+              mountPath: /go-cache/mod
+          securityContext:
+            $patch: delete
+      volumes:
+        - name: code
+          hostPath:
+            path: /code
+        - name: go-build-cache
+          hostPath:
+            path: /tmp/airm-agent-go-build-cache
+            type: DirectoryOrCreate
+        - name: go-mod-cache
+          hostPath:
+            path: /tmp/airm-agent-go-mod-cache
+            type: DirectoryOrCreate

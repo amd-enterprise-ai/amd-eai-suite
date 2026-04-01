@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="090-remove-organizations" author="akshayv">
+        <comment>
+            Remove organization concept from the application.
+
+            This migration removes all organization-related tables and foreign keys.
+            Clusters, projects, users, secrets, and storages are now global without organization scoping.
+        </comment>
+
+        <!-- Drop organization-related constraints and indexes -->
+        <dropIndex indexName="clusters_name_organization_id_key" tableName="clusters"  />
+        <dropUniqueConstraint tableName="storages" constraintName="uq_storage_org_name"/>
+        <dropUniqueConstraint tableName="secrets" constraintName="uq_secret_org_proj_name_type"/>
+        <dropIndex tableName="projects" indexName="projects_name_organization_id_key"/>
+
+        <!-- Remove organization_id columns -->
+        <dropColumn tableName="projects" columnName="organization_id"/>
+        <dropColumn tableName="users" columnName="organization_id"/>
+        <dropColumn tableName="secrets" columnName="organization_id"/>
+        <dropColumn tableName="storages" columnName="organization_id"/>
+        <dropColumn tableName="clusters" columnName="organization_id"/>
+
+        <!-- Add new unique constraints without organization_id -->
+        <addUniqueConstraint tableName="storages" columnNames="name" constraintName="uq_storage_name"/>
+        <addUniqueConstraint tableName="projects" columnNames="name" constraintName="uq_project_name"/>
+        <addUniqueConstraint tableName="secrets" columnNames="project_id,name,type" constraintName="uq_secret_proj_name_type"/>
+        <sql>
+            CREATE UNIQUE INDEX clusters_name_key
+            ON clusters (LOWER(name))
+            WHERE name IS NOT NULL;
+        </sql>
+
+        <!-- Drop organizations table -->
+        <dropTable tableName="organizations" cascadeConstraints="true"/>
+    </changeSet>
+
+</databaseChangeLog>

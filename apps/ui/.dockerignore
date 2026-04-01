@@ -1,0 +1,59 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Environment files
+.env
+.env.local
+.env.gcp
+
+# Dependencies
+node_modules
+
+# Build outputs
+.next
+test-results
+
+# Testing
+__tests__
+__mocks__
+*.test.ts
+*.test.tsx
+*.test.js
+*.test.jsx
+coverage
+htmlcov
+.vitest
+vitest.config.ts
+vite.config.ts
+
+# Version control
+.git
+.gitignore
+.github
+
+# Development files
+.vscode
+.idea
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Kubernetes
+kustomize
+
+# Documentation
+*.md
+!README.md
+
+# Ladle (component stories)
+.ladle
+__stories__
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+*~

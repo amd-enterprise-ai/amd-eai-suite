@@ -1,0 +1,68 @@
+{
+  "title": "Autoscaling",
+  "settingsTitle": "Autoscaling settings",
+  "enable": "Enable",
+  "helper": "Automatically adjust the number of replicas based on demand to optimize resource usage and performance.",
+  "description": "Automatically adjust the number of replicas based on demand to optimize resource usage and performance. Scaling up typically takes around 30 seconds, while the scale-down stabilization period is configured at 300 seconds.",
+  "replicaRange": "Replica range",
+  "replicas": "Replicas",
+  "replicasMinimum": "Replicas (minimum {{count}})",
+  "scalingMetric": {
+    "label": "Scaling metric",
+    "placeholder": "Select a metric",
+    "defaultDescription": "Select a metric to determine when to scale.",
+    "options": {
+      "runningRequests": "Running requests",
+      "waitingRequests": "Waiting requests"
+    },
+    "descriptions": {
+      "runningRequests": "Scale based on the number of requests currently being processed.",
+      "waitingRequests": "Scale based on the number of requests waiting in queue."
+    }
+  },
+  "aggregation": {
+    "label": "Aggregation",
+    "placeholder": "Select aggregation method",
+    "description": "How the metric values are aggregated over the evaluation period.",
+    "options": {
+      "avg": "Average",
+      "max": "Maximum",
+      "min": "Minimum"
+    },
+    "tooltips": {
+      "avg": "Average metric value across all pods. Best for stable, gradual scaling.",
+      "max": "Highest metric value across all pods. Reacts to peak load.",
+      "min": "Lowest metric value across all pods. Only scales when all pods are busy."
+    }
+  },
+  "targetType": {
+    "label": "Target type",
+    "placeholder": "Select target type",
+    "description": "How the target value is interpreted for scaling decisions.",
+    "options": {
+      "value": "Absolute value",
+      "averageValue": "Average per pod"
+    },
+    "tooltips": {
+      "value": "Scale when the total metric value across all pods exceeds the target.",
+      "averageValue": "Scale when the average metric per pod exceeds the target. Best for request-based metrics."
+    }
+  },
+  "targetValue": {
+    "label": "Target value",
+    "descriptions": {
+      "value": "Scale up when metric exceeds this value.",
+      "averageValue": "Scale up when average metric per pod exceeds this value."
+    }
+  },
+  "actions": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "settings": "Settings"
+  },
+  "notifications": {
+    "noWorkloadId": "No workload ID provided",
+    "updateSuccess": "Scaling settings updated successfully",
+    "updateError": "Failed to update scaling settings"
+  }
+}

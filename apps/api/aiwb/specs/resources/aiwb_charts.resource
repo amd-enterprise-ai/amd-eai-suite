@@ -1,0 +1,162 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+*** Settings ***
+Documentation       High-level chart testing keywords.
+...                 Provides business-logic level keywords for testing chart operations.
+...                 Uses the low-level API keywords from api/charts.resource to implement
+...                 higher-level testing scenarios.
+Resource            api/charts.resource
+Resource    resources/aiwb_test_data.resource
+Resource    resources/common/resource_tracking.resource
+Library             String
+Library             uuid
+Library             TestPrefix
+
+
+*** Variables ***
+${TEMPLATE_FILE}        ${CURDIR}/../test_data/charts/template.yaml
+${VALUES_FILE}          ${CURDIR}/../test_data/charts/values.yaml
+${SCHEMA_FILE}          ${CURDIR}/../test_data/charts/schema.json
+${SIGNATURE_FILE}       ${CURDIR}/../test_data/charts/signature.yaml
+${TEST_CHART_ID}        ${None}
+${TEST_CHART_NAME}      ${None}
+${TEST_CHART_DATA}      ${None}
+@{CREATED_CHART_IDS}    # List to track created chart IDs for cleanup
+
+
+*** Keywords ***
+Create chart request is sent
+    [Documentation]    Sends a request to create a new chart and stores the ID
+    [Arguments]             ${name}=${TEST_CHART_NAME}                      ${template}=${TEMPLATE_FILE}                    ${values}=${VALUES_FILE}                        ${schema}=${SCHEMA_FILE}       ${signature}=${SIGNATURE_FILE}
+    ${response}=            Create chart request    ${name}                 ${template}             ${values}               ${schema}       ${signature}
+    Set Test Variable       ${TEST_RESPONSE}        ${response}
+
+    Response status should be 201
+
+    ${json}=                Set Variable            ${TEST_RESPONSE.json()}
+    ${chart_id}=            Get From Dictionary     ${json}                 id
+    Set Test Variable       ${TEST_CHART_ID}        ${chart_id}
+
+    Append To List          ${CREATED_CHART_IDS}    ${chart_id}
+    Log                     Added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}           DEBUG
+
+List charts request is sent
+    [Documentation]    Sends a list charts request and stores the response
+    [Arguments]             ${page_number}=1        ${page_size}=10         ${sort_by}=created_at   ${sort_order}=desc
+    ${response}=            List charts request     ${page_number}          ${page_size}            ${sort_by}              ${sort_order}
+    Set Test Variable       ${TEST_RESPONSE}        ${response}
+
+Delete chart request is sent
+    [Documentation]    Sends a delete chart request for the current test chart
+    ${response}=            Delete chart            ${TEST_CHART_ID}
+    Set Test Variable       ${TEST_RESPONSE}        ${response}
+
+Valid chart data is prepared
+    [Documentation]    Creates chart data with valid test values using unique chart name
+    [Arguments]             ${chart_name}=${None}                           ${chart_type}=INFERENCE
+
+    # Generate unique chart name to avoid 409 conflicts from stale data
+    IF    $chart_name is None
+        ${random_suffix}=       Generate random string                          8                       [LETTERS][NUMBERS]
+        ${prefix}=              Test Prefix
+        ${test_chart_name}=     Set Variable            ${prefix}chart-${random_suffix}
+    ELSE
+        ${test_chart_name}=     Set Variable            ${chart_name}
+    END
+    Set Test Variable       ${TEST_CHART_NAME}      ${test_chart_name}
+
+    # No project_id needed for AIWB charts
+    &{chart_data}=          Create Dictionary       name=${test_chart_name}                         type=${chart_type}
+    Set Test Variable       ${TEST_CHART_DATA}      ${chart_data}
+
+Chart should exist in database
+    [Documentation]    Verifies the created chart exists in database and is ready for use
+    ${chart_id}=            Set Variable            ${TEST_CHART_ID}
+    Get chart               ${chart_id}             expected_status=200
+
+The chart should not exist in database
+    [Documentation]    Verifies the chart no longer exists in database
+    ${chart_id}=            Set Variable            ${TEST_CHART_ID}
+
+    ${chart}=               Get chart               ${chart_id}             expected_status=404
+    Log                     Chart ${chart_id} does not exist in database (404 Not Found) as expected              DEBUG
+
+A chart exists
+    [Documentation]    Creates a new chart and stores its ID as a test variable
+    Valid chart data is prepared
+    Create chart request is sent
+
+    Response status should be 201
+
+    # Extract chart ID as a test variable to ensure test independence
+    ${json}=                Set Variable            ${TEST_RESPONSE.json()}
+
+    # Try to get direct ID first
+    ${has_direct_id}=       Evaluate                'id' in $json
+
+    IF    ${has_direct_id}
+        ${chart_id}=            Get from dictionary     ${json}                 id
+        Set test variable       ${TEST_CHART_ID}        ${chart_id}
+        Log                     Using chart ID: ${chart_id}                     DEBUG
+    ELSE
+        # Try to get it from charts array
+        Dictionary Should Contain Key                   ${json}                 charts                  Chart response does not contain either direct ID or charts array
+        ${charts}=              Get from dictionary     ${json}                 charts
+        @{charts_list}=         Convert to list         ${charts}
+        Should not be empty     ${charts_list}          Charts array is empty, cannot extract chart ID
+        ${chart}=               Get from list           ${charts_list}          0
+        Dictionary Should Contain Key                   ${chart}                id                      First chart in array does not contain ID
+        ${chart_id}=            Get from dictionary     ${chart}                id
+        Set test variable       ${TEST_CHART_ID}        ${chart_id}
+        Log                     Using chart ID from charts array: ${chart_id}                   DEBUG
+    END
+
+    # Verify chart was actually created by making a separate verification call
+    ${verify_response}=     Get chart               ${TEST_CHART_ID}        expected_status=200
+
+Multiple charts exist
+    [Documentation]    Creates multiple charts to ensure listing/pagination tests have data
+    FOR    ${i}    IN RANGE    3
+        Valid chart data is prepared
+        Create chart request is sent
+    END
+
+Required chart files exist
+    [Documentation]    Verifies required chart files exist
+    File should exist       ${TEMPLATE_FILE}        Template file does not exist
+    File should exist       ${VALUES_FILE}          Values file does not exist
+    File should exist       ${SCHEMA_FILE}          Schema file does not exist
+
+A chart does not exist
+    [Documentation]    Sets up a non-existent chart ID for testing
+    ${chart_id}=            Evaluate                str(uuid.uuid4())       modules=uuid
+    Set test variable       ${TEST_CHART_ID}        ${chart_id}
+
+Find chart ID by name
+    [Documentation]    Find chart ID by chart name through API and set as variable
+    [Arguments]             ${chart_name}           ${variable_name}=TEST_CHART_ID
+    Create api session    aiwb
+    ${endpoint}=            Charts endpoint
+    ${response}=            Safe Get Request         ${endpoint}             expected_status=200
+
+    ${json}=                Set Variable            ${response.json()}
+
+    # Handle different response formats (direct list or object with charts property)
+    IF    $json.__class__.__name__ == 'list'
+        @{charts}=              Set Variable            ${json}
+    ELSE
+        @{charts}=              Get From Dictionary     ${json}                 charts                  default=@{EMPTY}
+    END
+
+    FOR    ${chart}    IN    @{charts}
+        ${name}=                Get From Dictionary     ${chart}                name                    default=${None}
+        IF    "${name}" == "${chart_name}"
+            ${chart_id}=            Get From Dictionary     ${chart}                id
+            Set Test Variable       ${${variable_name}}     ${chart_id}
+            RETURN                  ${chart_id}
+        END
+    END
+
+    RETURN                  ${None}

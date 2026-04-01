@@ -1,0 +1,53 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+---
+# Namespace for e2e testing
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e2e-test-runner
+---
+# ConfigMap with Keycloak configuration for e2e tests in e2e-test-runner namespace
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+  namespace: e2e-test-runner
+data:
+  KEYCLOAK_SERVER_URL: "{{ .Values.keycloak.internalUrl }}"
+  KEYCLOAK_PUBLIC_URL: "{{ include "eai-e2e.keycloakPublicUrl" . }}"
+  KEYCLOAK_REALM: "{{ .Values.keycloak.realm }}"
+  KEYCLOAK_CLIENT_ID: "k8s"
+  E2E_USERNAME: "devuser@{{ .Values.appDomain }}"
+---
+# Secret with devuser password for e2e tests
+apiVersion: v1
+kind: Secret
+metadata:
+  name: e2e-user-credentials
+  namespace: e2e-test-runner
+type: Opaque
+stringData:
+  E2E_PASSWORD: password
+---
+# External secret to sync Keycloak client secret for e2e tests
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: e2e-keycloak-client-secret
+  namespace: e2e-test-runner
+spec:
+  data:
+    - remoteRef:
+        key: k8s-client-secret
+        property: value
+      secretKey: KEYCLOAK_CLIENT_SECRET
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: {{ .Values.secretStore.kind }}
+    name: {{ .Values.secretStore.name }}
+  target:
+    creationPolicy: Owner
+    name: e2e-keycloak-client-secret

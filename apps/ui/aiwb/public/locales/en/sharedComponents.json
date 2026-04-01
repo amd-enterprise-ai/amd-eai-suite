@@ -1,0 +1,14 @@
+{
+  "filterDropdown": {
+    "selectAll": {
+      "label": "Select all"
+    },
+    "clear": {
+      "label": "Clear"
+    }
+  },
+  "RelevantDocs": {
+    "title": "Documentation",
+    "learnMore": "Learn more"
+  }
+}

@@ -40,6 +40,7 @@ EXCLUDED_EXTENSIONS = {
     ".xml",
     ".zip",
     ".patch",
+    ".jsonl",
 }
 
 EXCLUDED_FILES = {"pnpm-lock.yaml", "uv.lock", "LICENSE"}
@@ -61,7 +62,6 @@ COMMENT_STYLES_GROUPS = {
         ".gitignore",
         ".ini",
         ".jinja",
-        ".jsonl",
         ".lock",
         ".mdc",
         ".prettierignore",
@@ -85,6 +85,7 @@ COMMENT_STYLES_GROUPS = {
         ".ts",
         ".tsx",
         ".jsx",
+        ".go",
     ],
     # HTML/XML style comments
     ("<!--\n", "\n-->"): [".html", ".htm", ".md", ".markdown"],

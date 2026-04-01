@@ -1,0 +1,89 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates.
+//
+// SPDX-License-Identifier: MIT
+
+import { Button } from '@heroui/react';
+import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
+import { useState } from 'react';
+
+import { useTranslation } from 'next-i18next';
+import { useRouter } from 'next/router';
+import { ActionButton, HeroMessage } from '@amdenterpriseai/components';
+import { ErrorCodes, ErrorMessageProps, Intent } from '@amdenterpriseai/types';
+
+export function ErrorMessage({
+  message = '',
+  code,
+  onRefresh,
+}: ErrorMessageProps) {
+  const { t } = useTranslation('common');
+  const [isErrorExpanded, setIsErrorExpanded] = useState(false);
+  const router = useRouter();
+
+  const handleRefresh = () => {
+    if (onRefresh) {
+      onRefresh();
+    } else {
+      router.replace(router.asPath);
+    }
+  };
+
+  const toggleErrorDetails = () => {
+    setIsErrorExpanded(!isErrorExpanded);
+  };
+
+  const isKnownError = Object.values(ErrorCodes).includes(code as ErrorCodes);
+
+  return (
+    <HeroMessage
+      intent={Intent.DANGER}
+      title={isKnownError ? t(`error.${code}.title`) : t(`error.unknown.title`)}
+      description={
+        isKnownError
+          ? t(`error.${code}.description`)
+          : t(`error.unknown.description`)
+      }
+      endContent={
+        <>
+          {message && (
+            <div className="w-full mt-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onPress={toggleErrorDetails}
+                endContent={
+                  <IconChevronDown
+                    size={16}
+                    className={`transition-transform ${
+                      isErrorExpanded ? 'rotate-180' : ''
+                    }`}
+                  />
+                }
+              >
+                {t('actions.showDetails.title')}
+              </Button>
+              <div
+                className={`overflow-hidden transition-all duration-300 ${
+                  isErrorExpanded ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'
+                }`}
+              >
+                <div className="text-default-700 text-sm mt-3 rounded-md break-all">
+                  {t('error.label')}: {message}
+                </div>
+              </div>
+            </div>
+          )}
+          <ActionButton
+            className="mt-4"
+            onPress={handleRefresh}
+            icon={<IconRefresh size={18} />}
+          >
+            {t(`error.refreshActionLabel`)}
+          </ActionButton>
+        </>
+      }
+    />
+  );
+}
+
+export default ErrorMessage;

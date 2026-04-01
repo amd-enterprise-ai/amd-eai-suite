@@ -1,0 +1,435 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+from datetime import UTC, datetime
+from uuid import UUID
+
+import yaml
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..clusters.models import Cluster
+from ..messaging.schemas import (
+    ConfigMapStatus,
+    ProjectS3StorageCreateMessage,
+    ProjectStorageDeleteMessage,
+    ProjectStorageStatus,
+    ProjectStorageUpdateMessage,
+    SecretScope,
+)
+from ..messaging.sender import MessageSender
+from ..projects.models import Project
+from ..projects.schemas import ProjectAssignment, ProjectResponse
+from ..secrets.enums import SecretUseCase
+from ..secrets.models import OrganizationSecretAssignment
+from ..secrets.repository import (
+    create_organization_secret_assignment,
+    get_organization_scoped_secret,
+    get_organization_secret_assignment,
+    get_secret,
+)
+from ..secrets.utils import (
+    parse_manifest_yaml_to_model,
+    publish_project_secret_creation_message,
+)
+from ..utilities.exceptions import ConflictException, NotFoundException, ValidationException
+from .enums import StorageStatus
+from .models import ProjectStorage as ProjectStorageModel
+from .models import Storage as StorageModel
+from .repository import (
+    assign_storage_to_projects,
+    create_project_storage_configmap,
+    delete_project_storage,
+    get_configmap_by_project_storage_id,
+    get_project_storage,
+    get_project_storage_by_id,
+    get_storage_by_id,
+    get_storage_by_secret_id,
+    get_storages,
+    get_storages_for_project,
+    update_project_storage_configmap_status,
+    update_project_storage_status,
+)
+from .repository import create_storage as create_storage_in_db
+from .repository import delete_storage as delete_storage_in_db
+from .repository import update_project_storage_status as update_project_storage_status_in_db
+from .repository import update_storage_status as update_storage_status_in_db
+from .schemas import (
+    ProjectStoragesWithParentStorage,
+    ProjectStorageWithParentStorage,
+    StorageIn,
+    StorageResponse,
+    Storages,
+    StorageWithProjects,
+)
+from .utils import (
+    _build_storage_info_configmap_manifest,
+    resolve_project_storage_composite_status,
+    resolve_storage_status,
+    verify_projects_ready,
+)
+
+
+async def recalculate_storage_status(session: AsyncSession, storage: StorageModel, updated_at: datetime) -> None:
+    """Recalculate and update the status of a storage after its project assignments change."""
+    await session.refresh(storage, attribute_names=["project_storages"])
+
+    storage_status, status_reason = resolve_storage_status(storage.status, storage.project_storages)
+
+    if storage.status != storage_status:
+        await update_storage_status_in_db(session, storage, storage_status, status_reason, "system", updated_at)
+
+
+async def get_storages_with_assigned_project_storages(session: AsyncSession) -> Storages:
+    storages = await get_storages(session)
+
+    return Storages(
+        data=[
+            StorageWithProjects.model_validate(
+                StorageResponse.model_validate(storage).model_dump()
+                | {"project_storages": [ProjectAssignment.model_validate(ps) for ps in storage.project_storages]}
+            )
+            for storage in storages
+        ]
+    )
+
+
+async def get_project_storages_in_project(session: AsyncSession, project: Project) -> ProjectStoragesWithParentStorage:
+    storages = await get_storages_for_project(session, project.id)
+
+    project_storages = []
+    for storage in storages:
+        for ps in storage.project_storages:
+            if ps.project_id == project.id:
+                assignment = ProjectAssignment.model_validate(ps)
+                storage_response = StorageResponse.model_validate(storage)
+                project_storages.append(
+                    ProjectStorageWithParentStorage.model_validate(
+                        assignment.model_dump() | {"storage": storage_response}
+                    )
+                )
+    return ProjectStoragesWithParentStorage(data=project_storages)
+
+
+async def create_storage(
+    session: AsyncSession, user_email: str, storage_in: StorageIn, message_sender: MessageSender
+) -> StorageWithProjects:
+    secret = await get_secret(session, storage_in.secret_id)
+    if not secret:
+        raise NotFoundException(f"Secret with ID {storage_in.secret_id} not found")
+
+    if secret.scope != SecretScope.ORGANIZATION or secret.use_case != SecretUseCase.S3:
+        raise ValidationException(
+            "Only organization-scoped secrets with S3 use case can be used for storage. "
+            f"Current secret has scope '{secret.scope}' and use case '{secret.use_case}'."
+        )
+
+    initial_status = StorageStatus.PENDING if storage_in.project_ids else StorageStatus.UNASSIGNED
+    storage = await create_storage_in_db(session, storage_in, initial_status, user_email)
+
+    if storage_in.project_ids:
+        await verify_projects_ready(session, storage_in.project_ids)
+
+        for pid in storage_in.project_ids:
+            organization_secret_assignment = await ensure_organization_scoped_secret_exists(
+                session, storage_in.secret_id, pid, user_email, message_sender
+            )
+            ps = await _assign_and_get_project_storage(session, storage.id, pid, user_email)
+            await _publish_storage_create(ps, storage, organization_secret_assignment, message_sender)
+
+    await session.refresh(storage)
+
+    return StorageWithProjects(
+        id=storage.id,
+        name=storage.name,
+        type=storage.type,
+        secret_id=storage.secret_id,
+        scope=storage.scope,
+        status=storage.status,
+        status_reason=storage.status_reason,
+        created_at=storage.created_at,
+        updated_at=storage.updated_at,
+        created_by=storage.created_by,
+        updated_by=storage.updated_by,
+        project_storages=[
+            ProjectAssignment(
+                id=ps.id,
+                project=ProjectResponse.model_validate(ps.project) if ps.project else None,
+                status=ps.status,
+                status_reason=ps.status_reason,
+                created_at=ps.created_at,
+                updated_at=ps.updated_at,
+                created_by=ps.created_by,
+                updated_by=ps.updated_by,
+            )
+            for ps in storage.project_storages
+        ],
+    )
+
+
+async def submit_delete_storage(
+    session: AsyncSession, storage: StorageModel, user: str, message_sender: MessageSender
+) -> None:
+    if storage.status == StorageStatus.PENDING:
+        raise ConflictException("Storage is in PENDING state and cannot be deleted")
+    elif storage.status == StorageStatus.DELETING:
+        raise ConflictException("Storage is already marked for deletion")
+
+    await update_storage_status_in_db(session, storage, StorageStatus.DELETING, None, user)
+
+    if not storage.project_storages:
+        await delete_storage_in_db(session, storage)
+    else:
+        for project_storage in storage.project_storages:
+            # Set the status to DELETING for each project storage
+            await update_project_storage_status_in_db(
+                session, project_storage, ProjectStorageStatus.DELETING, None, user
+            )
+
+            # Submit a message to the cluster queue to handle deletion
+            message = ProjectStorageDeleteMessage(
+                message_type="project_storage_delete",
+                project_storage_id=project_storage.id,
+                project_name=project_storage.project.name,
+            )
+
+            await message_sender.enqueue(project_storage.project.cluster_id, message)
+
+
+async def submit_delete_project_storage(
+    session: AsyncSession, project_storage: ProjectStorageModel, user: str, message_sender: MessageSender
+) -> None:
+    if project_storage.status == ProjectStorageStatus.DELETING:
+        raise ConflictException("Project Storage is already marked for deletion")
+
+    parent_storage = await get_storage_by_id(session, project_storage.storage_id)
+    if not parent_storage:
+        raise NotFoundException("Storage not found")
+
+    # update the project storage status to PENDING state to indcate project unassignment is in progress
+    await update_storage_status_in_db(session, parent_storage, StorageStatus.PENDING, None, user, datetime.now(UTC))
+
+    await update_project_storage_status_in_db(
+        session, project_storage, ProjectStorageStatus.DELETING, None, user, datetime.now(UTC)
+    )
+
+    # Submit a message to the cluster queue to handle deletion
+    message = ProjectStorageDeleteMessage(
+        message_type="project_storage_delete",
+        project_storage_id=project_storage.id,
+        project_name=project_storage.project.name,
+    )
+    await message_sender.enqueue(project_storage.project.cluster_id, message)
+
+
+async def update_project_storage_assignments(
+    session: AsyncSession,
+    user_email: str,
+    storage: StorageModel,
+    project_ids: list[UUID],
+    message_sender: MessageSender,
+) -> None:
+    current_project_ids = {ps.project_id for ps in storage.project_storages}
+    new_project_ids = set(project_ids)
+
+    to_add = new_project_ids - current_project_ids
+    to_remove = current_project_ids - new_project_ids
+
+    if not to_add and not to_remove:
+        raise ValueError("No changes in project assignments")
+
+    await update_storage_status_in_db(
+        session,
+        storage,
+        StorageStatus.PENDING,
+        None,
+        user_email,
+    )
+
+    # Send create messages for new project assignments
+    if to_add:
+        await assign_projects_to_storage(session, storage, list(to_add), user_email, message_sender)
+
+    # Send delete messages for removed project assignments
+    for pid in to_remove:
+        project_storage = await get_project_storage(session, storage.id, pid)
+
+        if not project_storage or not project_storage.project:
+            raise ValueError(f"Project ID {pid} is not assigned to the storage")
+
+        await update_project_storage_status_in_db(
+            session, project_storage, ProjectStorageStatus.DELETING, None, "system"
+        )
+        delete_message = ProjectStorageDeleteMessage(
+            message_type="project_storage_delete",
+            project_storage_id=project_storage.id,
+            project_name=project_storage.project.name,
+        )
+        await message_sender.enqueue(project_storage.project.cluster_id, delete_message)
+
+
+async def ensure_organization_scoped_secret_exists(
+    session: AsyncSession, secret_id: UUID, project_id: UUID, user_email: str, message_sender: MessageSender
+) -> OrganizationSecretAssignment:
+    """
+    Ensure the organization scoped secret exists, creating it if necessary and publishing a creation message to the
+    cluster queue
+    """
+    organization_secret_assignment = await get_organization_secret_assignment(session, secret_id, project_id)
+
+    if not organization_secret_assignment:
+        org_secret = await get_organization_scoped_secret(session, secret_id)
+        if not org_secret:
+            raise NotFoundException(f"Organization scoped secret with ID {secret_id} not found")
+        organization_secret_assignment = await create_organization_secret_assignment(
+            session, secret_id, project_id, user_email
+        )
+        manifest = parse_manifest_yaml_to_model(org_secret.manifest, org_secret.type)
+        await publish_project_secret_creation_message(
+            organization_secret_assignment, manifest, message_sender, parent_secret=org_secret
+        )
+
+    return organization_secret_assignment
+
+
+async def _assign_and_get_project_storage(
+    session: AsyncSession,
+    storage_id: UUID,
+    project_id: UUID,
+    user_email: str,
+) -> ProjectStorageModel:
+    await assign_storage_to_projects(
+        session=session,
+        storage_id=storage_id,
+        project_ids=[project_id],
+        user_email=user_email,
+    )
+    ps = await get_project_storage(session, storage_id, project_id)
+
+    if not ps:
+        raise ConflictException(f"Failed to create project storage for project {project_id}")
+
+    await create_project_storage_configmap(
+        session=session,
+        project_storage_id=ps.id,
+        user_email=user_email,
+    )
+
+    return ps
+
+
+async def assign_projects_to_storage(
+    session: AsyncSession,
+    storage: StorageModel,
+    project_ids: list[UUID],
+    user_email: str,
+    message_sender: MessageSender,
+) -> None:
+    await verify_projects_ready(session, project_ids)
+
+    for pid in project_ids:
+        organization_secret_assignment = await ensure_organization_scoped_secret_exists(
+            session, storage.secret_id, pid, user_email, message_sender
+        )
+        ps = await _assign_and_get_project_storage(session, storage.id, pid, user_email)
+        await _publish_storage_create(ps, storage, organization_secret_assignment, message_sender)
+
+
+async def _publish_storage_create(
+    project_storage: ProjectStorageModel,
+    storage: StorageModel,
+    organization_secret_assignment: OrganizationSecretAssignment,
+    message_sender: MessageSender,
+) -> None:
+    manifest = _build_storage_info_configmap_manifest(
+        storage, organization_secret_assignment, project_storage.id, project_storage.project.name
+    )
+    manifest_yaml = yaml.dump(manifest.model_dump(exclude_none=True))
+
+    msg = ProjectS3StorageCreateMessage(
+        message_type="project_s3_storage_create",
+        project_storage_id=project_storage.id,
+        project_name=project_storage.project.name,
+        manifest=manifest_yaml,
+    )
+    await message_sender.enqueue(project_storage.project.cluster_id, msg)
+
+
+async def update_configmap_status(
+    session: AsyncSession, cluster: Cluster, message: ProjectStorageUpdateMessage
+) -> None:
+    configmap = await get_configmap_by_project_storage_id(session, message.project_storage_id)
+    if not configmap:
+        raise NotFoundException(
+            f"ProjectStorageConfigmap for project_storage_id {message.project_storage_id} not found."
+        )
+
+    project_storage = await get_project_storage_by_id(session, message.project_storage_id)
+    if not project_storage:
+        raise NotFoundException(f"ProjectStorage with id {message.project_storage_id} not found.")
+
+    if message.status == ConfigMapStatus.DELETED:
+        await delete_project_storage(session, project_storage)
+        await update_storage_overall_status(session, project_storage.storage_id)
+        return
+
+    await update_project_storage_configmap_status(session, configmap, message.status, message.status_reason, "system")
+
+    await update_project_storage_composite_status(session, project_storage)
+
+
+async def update_project_storage_secret_status(
+    session: AsyncSession, secret_id: UUID, project_storage: ProjectStorageModel
+) -> None:
+    storage = await get_storage_by_secret_id(session, secret_id)
+    if not storage:
+        raise NotFoundException(f"Storage with secret_id {secret_id} not found.")
+
+    await update_project_storage_composite_status(session, project_storage)
+
+
+async def update_project_storage_composite_status(session: AsyncSession, project_storage: ProjectStorageModel) -> None:
+    configmap = await get_configmap_by_project_storage_id(session, project_storage.id)
+    if not configmap:
+        raise NotFoundException(f"ProjectStorageConfigmap for project_storage_id {project_storage.id} not found.")
+
+    await session.refresh(project_storage, ["storage"])
+    secret_id = project_storage.storage.secret_id
+
+    organization_secret_assignment = await get_organization_secret_assignment(
+        session, secret_id, project_storage.project_id
+    )
+    if not organization_secret_assignment:
+        raise NotFoundException(
+            f"OrganizationSecretAssignment for secret_id {secret_id} and project_id {project_storage.project_id} not found."
+        )
+
+    composite_status, composite_reason = await resolve_project_storage_composite_status(
+        configmap, organization_secret_assignment
+    )
+
+    await update_project_storage_status(session, project_storage, composite_status, composite_reason, "system")
+    await update_storage_overall_status(session, project_storage.storage_id)
+
+
+async def update_storage_overall_status(session: AsyncSession, storage_id: UUID) -> None:
+    storage = await get_storage_by_id(session, storage_id)
+
+    if storage is None:
+        logger.error(f"Storage {storage_id} not found")
+        return
+
+    storage_status, storage_reason = resolve_storage_status(storage.status, storage.project_storages)
+    if storage_status == StorageStatus.DELETED:
+        logger.info(f"Deleting storage {storage.name} since it was marked for deletion and criteria was met")
+        await delete_storage_in_db(session, storage)
+        return
+    elif storage.status != storage_status:
+        await update_storage_status_in_db(
+            session,
+            storage,
+            storage_status,
+            storage_reason,
+            "system",
+        )

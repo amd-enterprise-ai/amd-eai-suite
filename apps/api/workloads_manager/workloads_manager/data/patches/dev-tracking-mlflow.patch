@@ -1,0 +1,13 @@
+diff --git a/workloads/dev-tracking-mlflow/helm/overrides/dev-center/signature.yaml b/workloads/dev-tracking-mlflow/helm/overrides/dev-center/signature.yaml
+index 6e83e63..0f44aa6 100644
+--- a/workloads/dev-tracking-mlflow/helm/overrides/dev-center/signature.yaml
++++ b/workloads/dev-tracking-mlflow/helm/overrides/dev-center/signature.yaml
+@@ -20,7 +20,7 @@ ingress:
+   enabled: true
+ 
+ kaiwo:
+-  enabled: true
++  enabled: false
+ 
+ persistent_storage:
+   enabled: true

@@ -1,0 +1,186 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Spectral ruleset for AIRM API OpenAPI validation
+# See: https://docs.stoplight.io/docs/spectral/
+
+extends:
+  - spectral:oas
+
+rules:
+  # =============================================================================
+  # URL Path Naming Conventions
+  # =============================================================================
+
+  # Enforce kebab-case for all URL paths (excluding path parameter names and metric identifiers)
+  paths-kebab-case:
+    description: URL path segments must use kebab-case (lowercase with hyphens)
+    severity: error
+    given: $.paths[?(!@property.match(/\/metrics\//))]~
+    then:
+      function: pattern
+      functionOptions:
+        # Match paths that are kebab-case, allowing any characters inside {braces} for path parameters
+        # Path segments between slashes must be lowercase alphanumeric with hyphens, or a parameter like {any_name}
+        match: "^(/([a-z0-9]+(-[a-z0-9]+)*|\\{[a-zA-Z_][a-zA-Z0-9_]*\\}))+$"
+    message: "Path '{{value}}' must use kebab-case for path segments. Use hyphens (-) instead of underscores or camelCase. Path parameters like {param_name} are allowed."
+
+  # Reject underscores in path segments (but allow in path parameter names and metric identifiers)
+  no-underscore-paths:
+    description: URL path segments must not contain underscores (path parameter names and metric identifiers are exempt)
+    severity: error
+    given: $.paths[?(!@property.match(/\/metrics\//))]~
+    then:
+      function: pattern
+      functionOptions:
+        # Reject underscores that are NOT inside braces
+        # This regex matches paths with underscores outside of {param} blocks
+        notMatch: "(?<!\\{[^}]*)_(?![^{]*\\})"
+    message: "Path '{{value}}' contains underscores in path segments. Use kebab-case (hyphens) instead. Path parameters like {param_name} are allowed."
+
+  # =============================================================================
+  # HTTP Method Semantics
+  # =============================================================================
+
+  # PATCH operations should indicate partial updates
+  patch-partial-update:
+    description: PATCH operations should be documented as partial updates
+    severity: warn
+    given: $.paths[*].patch
+    then:
+      - field: summary
+        function: truthy
+      - field: description
+        function: pattern
+        functionOptions:
+          # Case-insensitive match using character classes
+          # Note: Spectral doesn't support (?i) flag, so we use [Xx] pattern
+          match: "[Pp]artial|[Uu]pdate|[Mm]odify|[Cc]hange|[Ee]dit"
+    message: "PATCH operation should clearly indicate it performs a partial update in its description."
+
+  # PUT operations should indicate the update semantics
+  put-complete-replacement:
+    description: PUT operations should be documented with clear update semantics
+    severity: warn
+    given: $.paths[*].put
+    then:
+      - field: summary
+        function: truthy
+      - field: description
+        function: pattern
+        functionOptions:
+          # Accepts both replacement and update terminology (case-insensitive)
+          # Note: Spectral doesn't support (?i) flag, so we use [Xx] pattern
+          # Pragmatically accepts update/modify since many APIs use PUT for partial updates
+          match: "[Rr]eplace|[Cc]omplete|[Ff]ull|[Oo]verwrite|[Ss]et|[Uu]pdate|[Mm]odify|[Aa]ssign|[Gg]rant"
+    message: "PUT operation should clearly document its update semantics in the description."
+
+  # =============================================================================
+  # Response Status Codes
+  # =============================================================================
+
+  # POST create operations should return 200 OK (per SDA-2626 standardization)
+  # Uses positive matching: only applies to operations with operationId starting with "create_" or "submit_"
+  # This is future-proof - new create endpoints just need to follow the naming convention
+  post-create-status-200:
+    description: POST create operations should return 200 OK with response body
+    severity: error
+    given: $.paths[*].post[?(@.operationId && (@.operationId.match(/^(create_|submit_)/) || @.operationId.match(/create.*endpoint/)))]
+    then:
+      - field: responses.200
+        function: truthy
+      - field: responses.201
+        function: falsy
+    message: "POST create operations should return 200 OK (not 201 Created) per SDA-2626 standardization. Include the created resource in the response body. This applies to endpoints with operationId starting with 'create_' or 'submit_'."
+
+  # =============================================================================
+  # Response Format Consistency
+  # =============================================================================
+
+  # Collection responses should use data wrapper
+  response-data-wrapper:
+    description: Collection endpoints should wrap results in a 'data' property
+    severity: warn
+    given: $.paths[*].get.responses.200.content.application/json.schema
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          anyOf:
+            - required: [data]
+            - properties:
+                type:
+                  not:
+                    const: array
+    message: "GET responses returning collections should wrap results in a 'data' property for consistency."
+
+  # =============================================================================
+  # Error Response Format
+  # =============================================================================
+
+  # Error responses should have consistent format
+  consistent-error-format:
+    description: Error responses should include detail message
+    severity: warn
+    given: $.paths[*][*].responses[?(@property >= '400' && @property < '600')].content.application/json.schema
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          properties:
+            detail:
+              type: string
+    message: "Error responses should include a 'detail' property with error information."
+
+  # =============================================================================
+  # General Best Practices
+  # =============================================================================
+
+  # Require operation IDs for all operations
+  operation-operationId:
+    description: Operations must have an operationId
+    severity: error
+    given: $.paths[*][get,post,put,patch,delete]
+    then:
+      field: operationId
+      function: truthy
+    message: "Operation must have an operationId for client SDK generation."
+
+  # Require descriptions for operations
+  operation-description:
+    description: Operations should have descriptions
+    severity: warn
+    given: $.paths[*][get,post,put,patch,delete]
+    then:
+      field: description
+      function: truthy
+    message: "Operation should have a description explaining its purpose."
+
+  # Require tags for operations
+  operation-tags:
+    description: Operations should be tagged for organization
+    severity: warn
+    given: $.paths[*][get,post,put,patch,delete]
+    then:
+      field: tags
+      function: truthy
+    message: "Operation should have at least one tag for API documentation organization."
+
+  # =============================================================================
+  # Disabled/Relaxed Built-in Rules
+  # =============================================================================
+
+  # Allow servers to be empty (handled by deployment)
+  oas3-api-servers: off
+
+  # Info contact is optional for internal APIs
+  info-contact: off
+
+  # Tags defined in operations should exist globally (disable for now - can enable after cleanup)
+  operation-tag-defined: off
+
+  # Info description is optional for internal APIs
+  info-description: off

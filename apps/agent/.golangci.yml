@@ -1,0 +1,62 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+version: "2"
+
+run:
+  timeout: 5m
+  allow-parallel-runners: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  gocyclo:
+    min-complexity: 15
+  govet:
+    enable:
+      - shadow
+  lll:
+    line-length: 160
+  misspell:
+    locale: US
+  staticcheck:
+    checks: ["all"]
+
+linters:
+  enable:
+    - copyloopvar
+    - dupl
+    - errcheck
+    - goconst
+    - gocyclo
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+
+issues:
+  fix: false
+  max-issues-per-linter: 100
+  max-same-issues: 50
+  exclude-rules:
+    - linters:
+        - lll
+      path: _test\.go$
+    - linters:
+        - errcheck
+      text: "Error return value.*is not checked"
+      path: _test\.go$
+  exclude-dirs:
+    - vendor
+    - bin
+    - tmp

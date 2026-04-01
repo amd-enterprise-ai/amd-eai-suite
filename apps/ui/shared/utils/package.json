@@ -1,0 +1,36 @@
+{
+  "name": "@amdenterpriseai/utils",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./app": "./src/app/index.ts",
+    "./data": "./src/data/index.ts",
+    "./server": "./src/server/index.ts"
+  },
+  "dependencies": {
+    "@amdenterpriseai/types": "workspace:*"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "@testing-library/jest-dom": "*",
+    "@testing-library/react": "*",
+    "@testing-library/react-hooks": "*",
+    "@testing-library/user-event": "*",
+    "@vitest/browser": "*",
+    "@vitest/coverage-v8": "*",
+    "@vitest/ui": "*",
+    "jsdom": "*",
+    "@types/jsdom": "*",
+    "@vitejs/plugin-react": "*",
+    "vite": "*",
+    "vitest": "*"
+  }
+}

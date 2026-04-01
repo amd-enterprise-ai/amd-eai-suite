@@ -1,0 +1,10 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+name: test-chart
+version: 1.0.0
+description: Test chart for E2E testing
+image: amd/test:latest
+type: INFERENCE
+entrypoint: python main.py

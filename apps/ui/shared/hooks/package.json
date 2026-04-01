@@ -1,0 +1,22 @@
+{
+  "name": "@amdenterpriseai/hooks",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@amdenterpriseai/assets": "workspace:*",
+    "@amdenterpriseai/types": "workspace:*",
+    "@amdenterpriseai/utils": "workspace:*"
+  },
+  "peerDependencies": {
+    "next-i18next": "*"
+  }
+}

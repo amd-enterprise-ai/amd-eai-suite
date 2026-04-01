@@ -1,0 +1,170 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+services:
+  postgres:
+    container_name: postgres
+    image: postgres:17
+    environment:
+      PG_HOST: localhost
+      PG_PORT: 5432
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: airm
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql
+    networks:
+      - airm_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  liquibase:
+    container_name: liquibase
+    image: docker.io/liquibase/liquibase:4.31
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: --url="jdbc:postgresql://postgres:5432/airm" --username="postgres" --password="postgres" --changeLogFile=changelog/changelog.xml --logLevel=info update
+    volumes:
+      - ./migrations:/liquibase/changelog
+    networks:
+      - airm_network
+  seed-db:
+    container_name: seed-db
+    image: postgres:17
+    environment:
+      PGPASSWORD: postgres
+    depends_on:
+      liquibase:
+        condition: service_completed_successfully
+    command: psql --host=postgres --username=postgres --dbname=airm --file=/seed-db.sql
+    networks:
+      - airm_network
+    volumes:
+      - ./seed-db.sql:/seed-db.sql
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    container_name: rabbitmq
+    ports:
+      # The AMQP protocol port
+      - "5672:5672"
+      # HTTP Management UI
+      - "15672:15672"
+    environment:
+      RABBITMQ_ADMIN_USER: guest
+      RABBITMQ_ADMIN_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - airm_network
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmqctl status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  prometheus:
+    image: prom/prometheus:v3.3.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus_config.yaml:/etc/prometheus/prometheus.yml
+    networks:
+      - airm_network
+  keycloak-certgen:
+    image: alpine/openssl:3.5.2
+    container_name: keycloak-certgen
+    volumes:
+      - ./.kc-certs:/out
+    command: >
+      req -x509 -nodes -days 3650 -newkey rsa:2048
+          -subj /CN=localhost
+          -addext subjectAltName=DNS:host.docker.internal,IP:127.0.0.1,IP:0.0.0.0
+          -keyout /out/tls.key
+          -out /out/tls.crt
+    restart: "no"
+  keycloak:
+    image: keycloak/keycloak:26.2
+    container_name: keycloak
+    user: root
+    depends_on:
+      keycloak-certgen:
+        condition: service_completed_successfully
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+      - "8443:8443" # HTTPS required by kube-apiserver OIDC
+    volumes:
+      - keycloak_data:/opt/keycloak/data/h2
+      - ../airm-realm.json:/opt/keycloak/data/import/airm-realm.json
+      - ./.kc-certs/:/certs/:ro
+    command: ["start-dev", "--import-realm"]
+    networks:
+      - airm_network
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    ports:
+      - "8200:8200"
+    volumes:
+      - vault-data:/vault/data
+      - ./dev-vault-config:/vault/config
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "local-dev-access" # For development only
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK # Required for Vault's memory locking
+    entrypoint: >
+      sh -c "
+      vault server -dev -dev-root-token-id=local-dev-access &
+      VAULT_PID=$!;
+      sleep 5 &&
+      export VAULT_ADDR=http://127.0.0.1:8200 &&
+      export VAULT_TOKEN=local-dev-access &&
+      sh /vault/config/load-secrets.sh;
+      wait $VAULT_PID"
+  keycloak-export:
+    image: keycloak/keycloak:26.2
+    container_name: keycloak-export
+    user: root
+    profiles:
+      - export
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    volumes:
+      - keycloak_data:/opt/keycloak/data/h2
+      - ..:/opt/keycloak/data/export
+    command:
+      [
+        "export",
+        "--file",
+        "/opt/keycloak/data/export/airm-realm.json",
+        "--realm",
+        "airm",
+      ]
+    networks:
+      - airm_network
+
+networks:
+  airm_network:
+    name: airm_network
+volumes:
+  rabbitmq_data:
+    name: rabbitmq_data
+  keycloak_data:
+    name: keycloak_data
+  pg_data:
+    name: pg_data
+  vault-data:
+    name: vault-data
+  uv_cache:
+    name: uv_cache

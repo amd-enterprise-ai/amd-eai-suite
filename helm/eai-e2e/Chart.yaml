@@ -1,0 +1,14 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+---
+apiVersion: v2
+name: eai-e2e
+description: A Helm chart for EAI E2E testing resources
+
+type: application
+
+version: 0.1.0
+
+appVersion: "1.0.0"

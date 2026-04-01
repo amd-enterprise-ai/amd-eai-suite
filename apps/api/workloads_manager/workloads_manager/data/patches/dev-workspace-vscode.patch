@@ -1,0 +1,13 @@
+diff --git a/workloads/dev-workspace-vscode/helm/overrides/dev-center/signature.yaml b/workloads/dev-workspace-vscode/helm/overrides/dev-center/signature.yaml
+index d9b4234..89c3221 100644
+--- a/workloads/dev-workspace-vscode/helm/overrides/dev-center/signature.yaml
++++ b/workloads/dev-workspace-vscode/helm/overrides/dev-center/signature.yaml
+@@ -17,7 +17,7 @@ ingress:
+   enabled: true
+ 
+ kaiwo:
+-  enabled: true
++  enabled: false
+ 
+ persistent_storage:
+   enabled: true

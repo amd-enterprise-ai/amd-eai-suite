@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="002-create-charts-tables" author="system">
+        <comment>Create tables for charts, chart files, and overlays</comment>
+
+        <!-- Charts table -->
+        <createTable tableName="charts">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="type" type="VARCHAR(50)"/>
+            <column name="signature" type="JSONB">
+                <constraints nullable="false"/>
+            </column>
+            <column name="display_name" type="VARCHAR(255)"/>
+            <column name="slug" type="VARCHAR(255)"/>
+            <column name="description" type="TEXT"/>
+            <column name="long_description" type="TEXT"/>
+            <column name="category" type="VARCHAR(255)"/>
+            <column name="tags" type="JSONB"/>
+            <column name="featured_image" type="VARCHAR(500)"/>
+            <column name="required_resources" type="JSONB"/>
+            <column name="external_url" type="VARCHAR(500)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="charts" indexName="idx_charts_name">
+            <column name="name"/>
+        </createIndex>
+
+        <!-- Chart Files table -->
+        <createTable tableName="chart_files">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="path" type="VARCHAR(500)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="chart_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="chart_files" indexName="idx_chart_files_chart_id">
+            <column name="chart_id"/>
+        </createIndex>
+
+        <!-- Overlays table -->
+        <createTable tableName="overlays">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="canonical_name" type="VARCHAR(255)"/>
+            <column name="overlay" type="JSONB">
+                <constraints nullable="false"/>
+            </column>
+            <column name="chart_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="overlays" indexName="idx_overlays_chart_id">
+            <column name="chart_id"/>
+        </createIndex>
+
+        <createIndex tableName="overlays" indexName="overlays_chart_id_canonical_name_key" unique="true">
+            <column name="chart_id"/>
+            <column name="canonical_name"/>
+        </createIndex>
+
+        <!-- Foreign key constraints -->
+        <addForeignKeyConstraint
+            baseTableName="chart_files"
+            baseColumnNames="chart_id"
+            constraintName="fk_chart_files_chart"
+            referencedTableName="charts"
+            referencedColumnNames="id"
+            onDelete="CASCADE"/>
+
+        <addForeignKeyConstraint
+            baseTableName="overlays"
+            baseColumnNames="chart_id"
+            constraintName="fk_overlays_chart"
+            referencedTableName="charts"
+            referencedColumnNames="id"
+            onDelete="CASCADE"/>
+
+    </changeSet>
+
+</databaseChangeLog>

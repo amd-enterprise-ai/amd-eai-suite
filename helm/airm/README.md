@@ -17,7 +17,7 @@ Please refer to the README files in each of those charts for more details, inclu
 ```
 cd helm
 
-# 1. Create output template just to validate (the public domain could be app-dev.silogen.ai, staging.silogen.ai, etc.)
+# 1. Create output template just to validate
 helm template airm ./airm -n airm --create-namespace --set airm-api.airm.appDomain=<PUBLIC-DOMAIN-HERE> > airm-helm-generated.yaml
 
 # 2. Run chart install

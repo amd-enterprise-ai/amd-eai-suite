@@ -25,7 +25,7 @@ The following external components must be available in the Kubernetes cluster be
 ```
 cd helm/airm/charts
 
-# 1. Create output template just to validate (the public domain could be app-dev.silogen.ai, staging.silogen.ai, etc.)
+# 1. Create output template just to validate
 helm template airm-api ./airm-api -n airm --create-namespace --set airm.appDomain=<PUBLIC-DOMAIN-HERE> > airm-api-helm-generated.yaml
 
 # 2. Run chart install

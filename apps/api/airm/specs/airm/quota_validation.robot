@@ -24,7 +24,6 @@ Resource            resources/api/common.resource
 Resource            ../resources/airm_keywords.resource
 Library             Collections
 Suite Setup         Setup Quota Validation Suite
-Test Setup          Initialize Project Tracking
 Test Teardown       Clean Up All Created Projects With Wait
 
 
@@ -112,8 +111,8 @@ Quota exceeding cluster CPU capacity is prepared
     [Documentation]    Prepares quota data that exceeds total cluster CPU capacity
     ${response}=    Get clusters    expected_status=200
     ${cluster}=    Set Variable    ${response.json()['data'][0]}
-    ${available_cpu}=    Set Variable    ${cluster['available_resources']['cpu_milli_cores']}
-    ${allocated_cpu}=    Set Variable    ${cluster['allocated_resources']['cpu_milli_cores']}
+    ${available_cpu}=    Set Variable    ${cluster['availableResources']['cpuMilliCores']}
+    ${allocated_cpu}=    Set Variable    ${cluster['allocatedResources']['cpuMilliCores']}
 
     # Request 10% more than total cluster CPU capacity
     ${excessive_cpu}=    Evaluate    int(${available_cpu} * 1.1)
@@ -134,7 +133,7 @@ Quota exceeding cluster memory capacity is prepared
     [Documentation]    Prepares quota data that exceeds total cluster memory capacity
     ${response}=    Get clusters    expected_status=200
     ${cluster}=    Set Variable    ${response.json()['data'][0]}
-    ${available_memory}=    Set Variable    ${cluster['available_resources']['memory_bytes']}
+    ${available_memory}=    Set Variable    ${cluster['availableResources']['memoryBytes']}
 
     # Request 10% more than total cluster memory capacity
     ${excessive_memory}=    Evaluate    int(${available_memory} * 1.1)
@@ -152,7 +151,7 @@ Quota exceeding cluster GPU capacity is prepared
     [Documentation]    Prepares quota data that exceeds total cluster GPU capacity
     ${response}=    Get clusters    expected_status=200
     ${cluster}=    Set Variable    ${response.json()['data'][0]}
-    ${available_gpu}=    Set Variable    ${cluster['available_resources']['gpu_count']}
+    ${available_gpu}=    Set Variable    ${cluster['availableResources']['gpuCount']}
 
     # Request 2 more GPUs than total cluster capacity
     ${excessive_gpu}=    Evaluate    int(${available_gpu} + 2)
@@ -170,7 +169,7 @@ Quota exceeding cluster storage capacity is prepared
     [Documentation]    Prepares quota data that exceeds total cluster storage capacity
     ${response}=    Get clusters    expected_status=200
     ${cluster}=    Set Variable    ${response.json()['data'][0]}
-    ${available_storage}=    Set Variable    ${cluster['available_resources']['ephemeral_storage_bytes']}
+    ${available_storage}=    Set Variable    ${cluster['availableResources']['ephemeralStorageBytes']}
 
     # Request 10% more than total cluster storage capacity
     ${excessive_storage}=    Evaluate    int(${available_storage} * 1.1)
@@ -189,8 +188,8 @@ A project exists consuming ${percentage} percent of cluster CPU
 
     ${response}=    Get clusters    expected_status=200
     ${cluster}=    Set Variable    ${response.json()['data'][0]}
-    ${available_cpu}=    Set Variable    ${cluster['available_resources']['cpu_milli_cores']}
-    ${allocated_cpu}=    Set Variable    ${cluster['allocated_resources']['cpu_milli_cores']}
+    ${available_cpu}=    Set Variable    ${cluster['availableResources']['cpuMilliCores']}
+    ${allocated_cpu}=    Set Variable    ${cluster['allocatedResources']['cpuMilliCores']}
 
     # Calculate remaining capacity
     ${remaining_cpu}=    Evaluate    ${available_cpu} - ${allocated_cpu}
@@ -217,8 +216,8 @@ Quota consuming ${percentage} percent of cluster CPU is prepared
 
     ${response}=    Get clusters    expected_status=200
     ${cluster}=    Set Variable    ${response.json()['data'][0]}
-    ${available_cpu}=    Set Variable    ${cluster['available_resources']['cpu_milli_cores']}
-    ${allocated_cpu}=    Set Variable    ${cluster['allocated_resources']['cpu_milli_cores']}
+    ${available_cpu}=    Set Variable    ${cluster['availableResources']['cpuMilliCores']}
+    ${allocated_cpu}=    Set Variable    ${cluster['allocatedResources']['cpuMilliCores']}
 
     # Calculate remaining capacity
     ${remaining_cpu}=    Evaluate    ${available_cpu} - ${allocated_cpu}

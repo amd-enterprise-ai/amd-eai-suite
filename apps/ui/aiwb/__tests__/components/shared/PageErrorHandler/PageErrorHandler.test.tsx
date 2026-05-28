@@ -15,10 +15,11 @@ import userEvent from '@testing-library/user-event';
 
 // Mock Next.js router
 const mockRouter = {
-  pathname: '/start',
+  pathname: '/project-1/start',
   replace: vi.fn(),
   push: vi.fn(),
-  asPath: '/start',
+  asPath: '/project-1/start',
+  query: { project: 'project-1' },
 };
 
 vi.mock('next/router', () => ({
@@ -48,18 +49,33 @@ vi.mock('@amdenterpriseai/components', async (importOriginal) => ({
   ),
 }));
 
+vi.mock('@/components/shared/ProjectSelect', () => ({
+  ProjectSelectPrompt: ({ errorCode }: { errorCode?: string }) => (
+    <div data-testid="project-select-prompt" data-error-code={errorCode}>
+      <span>error.{errorCode}.title</span>
+      <span>error.{errorCode}.description</span>
+      <div data-testid="project-select">Project Select</div>
+    </div>
+  ),
+}));
+
 const setProjectState = (
   overrides: Partial<ReturnType<typeof useProject>> = {},
 ) => {
   mockUseProject.mockReturnValue({
     isStandaloneMode: false,
+    clusterAuthEnabled: true,
+    airmAppUrl: undefined,
     activeProject: 'project-1',
     projects: [{ id: 'project-1', name: 'Project 1' }],
     isLoading: false,
-    isInitialized: true,
     projectError: null,
     refetchProjects: mockRefetchProjects,
     setActiveProject: vi.fn(),
+    projectPath: (path: string) =>
+      `/project-1${path.startsWith('/') ? path : `/${path}`}`,
+    projectUrl: (path: string) =>
+      `/project-1${path.startsWith('/') ? path : `/${path}`}`,
     ...overrides,
   });
 };
@@ -76,7 +92,6 @@ describe('PageErrorHandler Component', () => {
       setProjectState({
         activeProject: null,
         projects: [],
-        isInitialized: false,
       });
       render(
         <PageErrorHandler>
@@ -109,15 +124,25 @@ describe('PageErrorHandler Component', () => {
       expect(screen.queryByTestId('chat-content')).not.toBeInTheDocument();
     });
 
-    it('renders loading state while required project context is initializing', async () => {
-      setProjectState({ isInitialized: false });
+    it('renders ProjectSelectPrompt with error when workspace in URL is not in projects list', async () => {
+      setProjectState({
+        activeProject: null,
+        projects: [{ id: 'other-project', name: 'Other Project' }],
+      });
       render(
         <PageErrorHandler projectRequired={true}>
           <div data-testid="content">Page Content</div>
         </PageErrorHandler>,
       );
 
-      expect(screen.getByText('charts.loading')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('project-select-prompt')).toBeInTheDocument();
+      });
+      expect(screen.getByTestId('project-select-prompt')).toHaveAttribute(
+        'data-error-code',
+        'projectNotFound',
+      );
+      expect(screen.getByTestId('project-select')).toBeInTheDocument();
       expect(screen.queryByTestId('content')).not.toBeInTheDocument();
     });
 
@@ -178,7 +203,13 @@ describe('PageErrorHandler Component', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('renders no active project component when projects exist but no active project selected', async () => {
+    it('renders no active project component when on root page with no workspace in URL', async () => {
+      (useRouter as any).mockReturnValue({
+        ...mockRouter,
+        pathname: '/',
+        asPath: '/',
+        query: {},
+      });
       setProjectState({
         activeProject: null,
         projects: [{ id: 'project-1', name: 'Project 1' }],

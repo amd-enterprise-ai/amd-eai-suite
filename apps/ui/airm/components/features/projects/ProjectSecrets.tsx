@@ -8,17 +8,16 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'next-i18next';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
-import { ProjectStatus, SecretScope } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { SecretScope } from '@/types/enums/secrets';
+import { ProjectStoragesResponse } from '@/types/storages';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import { ProjectWithMembers } from '@amdenterpriseai/types';
-import { ProjectStorage } from '@amdenterpriseai/types';
-import {
-  ProjectSecretsResponse,
-  ProjectSecretWithParentSecret,
-  Secret,
-} from '@amdenterpriseai/types';
+import { ProjectWithMembers } from '@/types/projects';
+import { ProjectStorage } from '@/types/storages';
+import { ProjectSecretsResponse, Secret } from '@/types/secrets';
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { SecretType } from '@amdenterpriseai/types';
+import { ProjectSecretWithParentSecret } from '@/types/secrets';
+import { SecretType } from '@/types/enums/secrets';
 
 import { AddSecret, AssignOrgSecretToProject } from '../secrets';
 import DeleteSecretModal from '../secrets/DeleteSecretModal';
@@ -27,17 +26,17 @@ import { ActionsToolbar } from '@amdenterpriseai/components';
 import AddProjectSecretButton from '../secrets/AddProjectSecretButton';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProjectSecrets } from '@/services/app';
-import { doesProjectSecretDataNeedToBeRefreshed } from '@amdenterpriseai/utils/app';
+import { doesProjectSecretDataNeedToBeRefreshed } from '@/utils/secrets';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 import { Status, StatusProps } from '@amdenterpriseai/components';
-import { getProjectStatusVariants } from '@amdenterpriseai/utils/app';
+import { getProjectStatusVariants } from '@/utils/projects-status-variants';
 import { StatusError } from '@amdenterpriseai/components';
 
 interface Props {
   project: ProjectWithMembers;
   secrets: Secret[];
-  projectSecrets: ProjectSecretWithParentSecret[];
-  projectStorages: ProjectStorage[];
+  projectSecrets: ProjectSecretsResponse;
+  projectStorages: ProjectStoragesResponse;
 }
 
 export const ProjectSecrets: React.FC<Props> = ({
@@ -77,9 +76,7 @@ export const ProjectSecrets: React.FC<Props> = ({
   } = useQuery<ProjectSecretsResponse>({
     queryKey: ['secrets', project.id],
     queryFn: () => fetchProjectSecrets(project.id),
-    initialData: {
-      data: projectSecrets,
-    },
+    initialData: projectSecrets,
     refetchInterval: (query) => {
       return !query.state.data ||
         doesProjectSecretDataNeedToBeRefreshed(query.state.data.data)
@@ -100,7 +97,7 @@ export const ProjectSecrets: React.FC<Props> = ({
         },
         label: t('list.actions.delete.projectSecret.label'),
         isDisabled: (projectSecret: ProjectSecretWithParentSecret) => {
-          const isUsedByStorage = projectStorages.some(
+          const isUsedByStorage = projectStorages.data.some(
             (ps) => ps.storage.secretId === projectSecret.secret.id,
           );
 

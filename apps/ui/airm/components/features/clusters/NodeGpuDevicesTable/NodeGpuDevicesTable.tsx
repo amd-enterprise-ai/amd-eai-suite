@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'next-i18next';
 
 import {
@@ -15,11 +16,13 @@ import { NodeGpuDevicesTableField } from '@/types/enums/clusters';
 
 import { ClientSideDataTable } from '@amdenterpriseai/components';
 
+import { fetchNodeGpuDevices } from '@/services/app';
+import { getClusterNodeQueryKeyPrefix } from '@/utils/cluster-nodes';
 import type { NodeGpuDevice } from '@/types/clusters';
 
 interface Props {
-  gpuDevices: NodeGpuDevice[];
-  isLoading: boolean;
+  clusterId: string;
+  nodeId: string;
 }
 
 const T_PREFIX = 'nodes.detail.gpuDevices';
@@ -38,11 +41,19 @@ const columns: TableColumns<NodeGpuDevicesTableField> = [
   { key: NodeGpuDevicesTableField.LAST_UPDATED, sortable: true },
 ];
 
-export const NodeGpuDevicesTable: React.FC<Props> = ({
-  gpuDevices,
-  isLoading,
-}) => {
+export const NodeGpuDevicesTable: React.FC<Props> = ({ clusterId, nodeId }) => {
   const { t } = useTranslation('clusters', { keyPrefix: T_PREFIX });
+
+  // Query key matches NodeDeviceMetricsSection intentionally — TanStack Query deduplicates the request.
+  const { data, isLoading } = useQuery({
+    queryKey: [
+      ...getClusterNodeQueryKeyPrefix(clusterId, nodeId),
+      'gpu-devices',
+    ],
+    queryFn: () => fetchNodeGpuDevices(clusterId, nodeId),
+  });
+
+  const gpuDevices = data?.gpuDevices ?? [];
 
   const customRenderers: Partial<
     Record<

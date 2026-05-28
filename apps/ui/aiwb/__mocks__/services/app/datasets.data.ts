@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DatasetType } from '@amdenterpriseai/types';
+import { DatasetType } from '@/types/datasets';
 
 export const mockDatasets = [
   {

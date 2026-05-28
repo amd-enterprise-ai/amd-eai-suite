@@ -85,16 +85,16 @@ describe('defaultComparator', () => {
     expect(result).not.toBe(0);
   });
 
-  it('should sort empty or missing values at the end for A-Z order', () => {
+  it('should sort empty string before non-empty string values (localeCompare)', () => {
     const compareFn = defaultComparator<{ name: string }, 'name'>('name');
     const a = { name: '' };
     const b = { name: 'Alice' };
 
-    expect(compareFn(a, b)).toBeGreaterThan(0);
-    expect(compareFn(b, a)).toBeLessThan(0);
+    expect(compareFn(a, b)).toBeLessThan(0);
+    expect(compareFn(b, a)).toBeGreaterThan(0);
   });
 
-  it('should sort array with undefined and empty string at end in A-Z order', () => {
+  it('should sort empty string first, then names A–Z, then undefined last', () => {
     const compareFn = defaultComparator<{ name: string | undefined }, 'name'>(
       'name',
     );
@@ -108,11 +108,11 @@ describe('defaultComparator', () => {
 
     const sorted = [...items].sort(compareFn);
 
-    expect(sorted[0].name).toBe('Alice');
-    expect(sorted[1].name).toBe('Bob');
-    expect(sorted[2].name).toBe('Charlie');
-    expect(sorted[3].name === '' || sorted[3].name === undefined).toBe(true);
-    expect(sorted[4].name === '' || sorted[4].name === undefined).toBe(true);
+    expect(sorted[0].name).toBe('');
+    expect(sorted[1].name).toBe('Alice');
+    expect(sorted[2].name).toBe('Bob');
+    expect(sorted[3].name).toBe('Charlie');
+    expect(sorted[4].name).toBeUndefined();
   });
 
   it('should handle zero values', () => {

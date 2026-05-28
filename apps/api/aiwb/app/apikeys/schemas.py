@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, Field
 
-from api_common.schemas import BaseEntityPublic
+from api_common.schemas import BaseEntityPublic, BaseModel
 
 
 class ApiKeyCreate(BaseModel):
@@ -26,10 +26,7 @@ class ApiKeyCreate(BaseModel):
     aim_ids: list[str] = Field(
         default_factory=list,
         description="List of AIM IDs to bind this API key to (use AIM service IDs from workloads)",
-        alias="aimIds",
     )
-
-    model_config = ConfigDict(populate_by_name=True)
 
 
 class ApiKeyResponse(BaseEntityPublic):
@@ -80,10 +77,7 @@ class ApiKeyUpdate(BaseModel):
 
     aim_ids: list[str] = Field(
         description="List of AIM IDs to bind this API key to (replaces existing bindings)",
-        alias="aimIds",
     )
-
-    model_config = ConfigDict(populate_by_name=True)
 
 
 class BindGroupRequest(BaseModel):

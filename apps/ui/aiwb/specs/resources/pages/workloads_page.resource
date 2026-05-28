@@ -30,17 +30,17 @@ ${DELETE_BUTTON_SELECTOR}         button:has-text("Delete")
 *** Keywords ***
 Navigate to dashboard
     [Documentation]    Navigates to the Dashboard which contains the workloads table.
-    [Arguments]    ${base_url}
+    [Arguments]    ${base_url}    ${project}
 
-    Go To    ${base_url}${DASHBOARD_PATH}
+    Go To    ${base_url}/${project}${DASHBOARD_PATH}
     VAR    ${grid}    css=${WORKLOADS_GRID_SELECTOR}
     Wait For Elements State    ${grid}    visible    timeout=15s
 
 Navigate to AIM details page
     [Documentation]    Navigates directly to an AIM service details page.
-    [Arguments]    ${base_url}    ${service_id}
+    [Arguments]    ${base_url}    ${project}    ${service_id}
 
-    Go To    ${base_url}${AIM_DETAILS_PATH}/${service_id}
+    Go To    ${base_url}/${project}${AIM_DETAILS_PATH}/${service_id}
     Wait For Elements State    ${BASIC_INFO_SECTION_SELECTOR}    visible    timeout=30s
 
 Get inference workload row text

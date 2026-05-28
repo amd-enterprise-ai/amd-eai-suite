@@ -18,28 +18,21 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.secrets import SecretUseCase
 from app.clusters.models import Cluster, ClusterNode
-from app.messaging.schemas import (
-    ConfigMapStatus,
-    GPUVendor,
-    NamespaceStatus,
-    ProjectSecretStatus,
-    ProjectStorageStatus,
-    QuotaStatus,
-    SecretKind,
-    SecretScope,
-    WorkloadComponentKind,
-)
+from app.namespaces.enums import NamespaceStatus
 from app.namespaces.models import Namespace
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
+from app.quotas.enums import QuotaStatus
 from app.quotas.models import Quota
-from app.secrets.enums import SecretStatus, SecretUseCase
+from app.secrets.enums import ProjectSecretStatus, SecretKind, SecretScope, SecretStatus
 from app.secrets.models import OrganizationScopedSecret, OrganizationSecretAssignment, ProjectScopedSecret, Secret
-from app.storages.enums import StorageScope, StorageStatus, StorageType
+from app.storages.enums import ProjectStorageStatus, StorageScope, StorageStatus, StorageType
 from app.storages.models import ProjectStorage, ProjectStorageConfigmap, Storage
 from app.users.models import User
-from app.workloads.enums import WorkloadType
+from app.utilities.enums import GPUVendor
+from app.workloads.enums import ConfigMapStatus, WorkloadComponentKind, WorkloadType
 from app.workloads.models import Workload, WorkloadComponent, WorkloadTimeSummary
 
 
@@ -77,7 +70,7 @@ async def create_cluster(
     id: UUID | None = None,
     name: str = "test-cluster",
     creator: str = "test@example.com",
-    workloads_base_url: str = "https://example.com",
+    workbench_base_url: str = "https://example.com",
     kube_api_url: str = "https://k8s.example.com:6443",
 ) -> Cluster:
     """Create a test cluster."""
@@ -86,7 +79,7 @@ async def create_cluster(
         name=name,
         created_by=creator,
         updated_by=creator,
-        workloads_base_url=workloads_base_url,
+        workbench_base_url=workbench_base_url,
         kube_api_url=kube_api_url,
     )
     session.add(cluster)
@@ -157,6 +150,7 @@ async def create_project(
         status=project_status,
         status_reason="Project is being created.",
         keycloak_group_id=keycloak_group_id or str(uuid4()),
+        gpu_preemption_enabled=False,
     )
     session.add(project)
     await session.flush()
@@ -327,7 +321,7 @@ async def create_basic_test_environment(
         create_project_quota: If True, creates the project with a quota. Use this
             for tests that need projects with quotas (e.g., resource allocation tests).
     """
-    cluster = await create_cluster(session, name=cluster_name, creator=creator, workloads_base_url=cluster_base_url)
+    cluster = await create_cluster(session, name=cluster_name, creator=creator, workbench_base_url=cluster_base_url)
 
     if create_project_quota:
         project, quota = await create_project_with_quota(session, cluster, project_name=project_name, creator=creator)
@@ -352,7 +346,7 @@ async def create_full_test_environment(
     This factory creates the basic hierarchy plus a user and optionally
     charts, models, and datasets based on the provided flags.
     """
-    cluster = await create_cluster(session, name=cluster_name, creator=creator, workloads_base_url=cluster_base_url)
+    cluster = await create_cluster(session, name=cluster_name, creator=creator, workbench_base_url=cluster_base_url)
     project = await create_project(session, cluster, name=project_name, creator=creator)
     user = await create_user(session, email=user_email, invited_by=creator)
 

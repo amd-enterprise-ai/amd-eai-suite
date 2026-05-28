@@ -11,9 +11,6 @@ Resource            ../resources/airm_projects.resource
 Resource            ../resources/airm_clusters.resource
 Resource            resources/api/common.resource
 Library             Collections
-Test Setup          Run Keywords
-...                 Initialize Project Tracking    AND
-...                 Initialize Secret ID Tracking
 Test Teardown       Run Keywords
 ...                 Clean Up Kubectl ExternalSecret    AND
 ...                 Clean Up Kubectl Secret    AND

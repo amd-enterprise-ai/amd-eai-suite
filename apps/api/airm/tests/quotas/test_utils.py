@@ -10,7 +10,7 @@ from prometheus_client.core import GaugeMetricFamily
 
 from app.clusters.models import ClusterNode
 from app.clusters.schemas import ClusterWithResources
-from app.messaging.schemas import ClusterQuotaAllocation, GPUVendor
+from app.quotas.messaging import ClusterQuotaAllocation
 from app.quotas.models import Quota
 from app.quotas.schemas import QuotaCreate
 from app.quotas.utils import (
@@ -19,6 +19,7 @@ from app.quotas.utils import (
     set_allocated_vram_metric_samples,
     validate_quota_against_available_cluster_resources,
 )
+from app.utilities.enums import GPUVendor
 
 
 @pytest.fixture

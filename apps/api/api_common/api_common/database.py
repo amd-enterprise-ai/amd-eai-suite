@@ -3,25 +3,19 @@
 # SPDX-License-Identifier: MIT
 
 """
-Common database utilities - same pattern as apps/api/airm with optional messaging support.
-
-This maintains compatibility with AIRM's MessageSender pattern but allows it to be disabled
-for services like AIWB that don't use RabbitMQ.
+Common database utilities.
 """
 
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-# Module-level globals - same pattern as AIRM
 engine: AsyncEngine | None = None
 session_maker: async_sessionmaker[AsyncSession] | None = None
 
-# Database connection configuration - same as AIRM
 DATABASE_PROTOCOL = os.environ.get("DATABASE_PROTOCOL", "postgresql+asyncpg")
 DATABASE_HOST = os.environ.get("DATABASE_HOST", "localhost")
 DATABASE_PORT = int(os.environ.get("DATABASE_PORT", 5432))
@@ -39,29 +33,9 @@ DATABASE_MAX_OVERFLOW = os.environ.get("DATABASE_MAX_OVERFLOW")
 DATABASE_POOL_TIMEOUT = os.environ.get("DATABASE_POOL_TIMEOUT")
 DATABASE_POOL_RECYCLE = os.environ.get("DATABASE_POOL_RECYCLE")
 
-# Messaging support - disabled by default for services that don't need it
-USE_MESSAGING = False
-_message_sender_dependency: Any = None
-
-
-def enable_messaging(get_message_sender_func: Any) -> None:
-    """
-    Enable MessageSender dependency for transactional messaging (like AIRM).
-
-    Call this during app initialization if you want get_session() to depend on MessageSender.
-
-    Example (AIRM):
-        from app.messaging.sender import get_message_sender
-        from api_common.database import enable_messaging
-        enable_messaging(get_message_sender)
-    """
-    global USE_MESSAGING, _message_sender_dependency
-    USE_MESSAGING = True
-    _message_sender_dependency = get_message_sender_func
-
 
 def create_engine(
-    database_connection_string: str = None,
+    database_connection_string: str | None = None,
 ) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
     """
     Create and configure the database engine with connection pooling.
@@ -97,7 +71,7 @@ def create_engine(
     return engine, session_maker
 
 
-def init_db(database_connection_string: str = None) -> None:
+def init_db(database_connection_string: str | None = None) -> None:
     """Initialize database engine."""
     create_engine(database_connection_string)
 
@@ -141,26 +115,10 @@ async def get_session() -> AsyncGenerator[AsyncSession]:
     """
     FastAPI dependency that provides a database session with transaction management.
 
-    This is the base version without messaging support (used by AIWB).
-    AIRM uses get_session_with_messaging() instead.
-
     Usage:
         @router.post("/workloads")
         async def create(session: AsyncSession = Depends(get_session)):
             ...
-    """
-    async with session_scope() as session:
-        yield session
-
-
-async def get_session_with_messaging(
-    _message_sender: Any = None,
-) -> AsyncGenerator[AsyncSession]:
-    """
-    FastAPI dependency for database session WITH messaging support (AIRM only).
-
-    The _message_sender parameter enforces transactional ordering.
-    AIRM should use this instead of get_session().
     """
     async with session_scope() as session:
         yield session

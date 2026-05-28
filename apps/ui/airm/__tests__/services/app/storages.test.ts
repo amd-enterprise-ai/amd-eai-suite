@@ -12,10 +12,7 @@ import {
 } from '@/services/app';
 import { getProjectStorages } from '@/services/server';
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
@@ -24,7 +21,6 @@ vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
   return {
     ...actual,
     getErrorMessage: vi.fn().mockResolvedValue('error message'),
-    convertSnakeToCamel: vi.fn((data) => data),
   };
 });
 
@@ -199,11 +195,10 @@ describe('storages service', () => {
       vi.clearAllMocks();
       mockFetch.mockReset();
       mockJson.mockReset();
-      (convertSnakeToCamel as any).mockClear();
       (getErrorMessage as any).mockClear();
     });
 
-    it('returns converted project storages on success', async () => {
+    it('returns project storages on success', async () => {
       mockFetch.mockResolvedValueOnce({ ok: true, json: mockJson });
       mockJson.mockResolvedValueOnce([{ id: 'projStor1' }]);
       const result = await getProjectStorages('token123', 'proj1');
@@ -217,7 +212,6 @@ describe('storages service', () => {
           },
         },
       );
-      expect(convertSnakeToCamel).toHaveBeenCalledWith([{ id: 'projStor1' }]);
     });
 
     it('throws error with message on failure', async () => {

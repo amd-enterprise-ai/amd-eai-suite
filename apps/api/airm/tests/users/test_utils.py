@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from api_common.exceptions import ConflictException, PreconditionNotMetException
 from app.organizations.schemas import OrganizationResponse
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
@@ -21,7 +22,6 @@ from app.users.utils import (
     merge_user_details,
     merge_user_details_with_projects,
 )
-from app.utilities.exceptions import ConflictException, PreconditionNotMetException
 from app.utilities.security import Roles
 
 
@@ -78,6 +78,7 @@ def test_merge_user_details_with_projects_platform_admin():
             updated_at=datetime(2025, 1, 1, tzinfo=UTC),
             created_by="admin@example.com",
             updated_by="admin@example.com",
+            gpu_preemption_enabled=False,
         ),
         Project(
             id=uuid.UUID("2c375428-1a9b-4e48-a025-8c4e81d2804b"),
@@ -89,6 +90,7 @@ def test_merge_user_details_with_projects_platform_admin():
             updated_at=datetime(2025, 1, 1, tzinfo=UTC),
             created_by="admin@example.com",
             updated_by="admin@example.com",
+            gpu_preemption_enabled=False,
         ),
     ]
 
@@ -139,6 +141,7 @@ def test_merge_user_details_with_projects_team_member():
             updated_at=datetime(2025, 1, 1, tzinfo=UTC),
             created_by="admin@example.com",
             updated_by="admin@example.com",
+            gpu_preemption_enabled=False,
         ),
     ]
 

@@ -242,7 +242,7 @@
         "name": {
           "label": "Name",
           "placeholder": "Eg. project-name",
-          "description": "Provide a unique name for the project. Only lowercase letters, numbers and hyphens are allowed.",
+          "description": "Provide a unique name for the project (namespace). Only lowercase letters, numbers and hyphens are allowed.",
           "validation": {
             "unique": "A project with the same name already exists.",
             "format": "A project name can only consist of lowercase characters, numbers and '-' character (and not start or end with '-').",
@@ -435,23 +435,15 @@
         "title": "Wait Time (Avg)",
         "description": "The average time a workload spends waiting to be executed, prior to execution."
       },
-      "quotaUtilizationAvg": {
-        "title": "Quota Utilization (Avg)",
-        "description": "The average ratio of utilized GPUs versus the allocated GPUs for all workloads running within the project, submitted in the selected time range."
-      },
-      "gpuIdleTimeAvg": {
-        "title": "GPU Idle Time (Avg)",
-        "description": "The average time each GPU devices allocated to the project is in an idling state. Idle state meaning running workloads not utilizing GPUs quota allocated to the project."
-      },
       "gpuDeviceUsage": {
         "title": "GPU Device Usage",
-        "description": "The number of GPU devices utilized by workloads in this project versus the GPUs allocated to it, over specified timeframe.",
+        "description": "The number of GPU devices utilized over the specified timeframe.",
         "upperLimit": "/ {{num}} allocated",
         "upperLimitUnallocated": "/ no allocation"
       },
       "vramDeviceUsage": {
         "title": "GPU VRAM Usage",
-        "description": "The amount of GPU VRAM GPU utilized by workloads in this project versus the VRAM allocated to them, via the allocated GPUs, over specified timeframe.",
+        "description": "The amount of GPU VRAM utilized over the specified timeframe.",
         "upperLimit": "/ {{num}} allocated",
         "upperLimitUnallocated": "/ no allocation"
       }

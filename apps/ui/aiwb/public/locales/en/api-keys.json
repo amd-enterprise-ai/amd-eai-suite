@@ -1,6 +1,7 @@
 {
   "list": {
     "title": "API Keys",
+    "clusterAuthDisabled": "API key management is not available because cluster-auth is disabled.",
     "filters": {
       "search": {
         "placeholder": "Search API keys"
@@ -27,11 +28,21 @@
     },
     "apiKeys": {
       "headers": {
-        "name": { "title": "Name" },
-        "secretKey": { "title": "Secret Key" },
-        "createdAt": { "title": "Created At" },
-        "createdBy": { "title": "Created By" },
-        "actions": { "title": "" }
+        "name": {
+          "title": "Name"
+        },
+        "secretKey": {
+          "title": "Secret Key"
+        },
+        "createdAt": {
+          "title": "Created At"
+        },
+        "createdBy": {
+          "title": "Created By"
+        },
+        "actions": {
+          "title": ""
+        }
       },
       "empty": {
         "description": "No API keys found for this project."
@@ -50,7 +61,7 @@
       "title": "Create API Key",
       "action": {
         "create": "Create API key",
-        "cancel": "Discard changes"
+        "cancel": "Cancel"
       },
       "field": {
         "name": {
@@ -96,7 +107,7 @@
       "title": "Edit API Key",
       "action": {
         "save": "Save API key",
-        "cancel": "Discard changes"
+        "cancel": "Cancel"
       },
       "section": {
         "linkedDeployments": "Linked deployments",
@@ -105,6 +116,9 @@
       "notification": {
         "success": "API key updated successfully",
         "error": "Failed to update API key"
+      },
+      "warning": {
+        "linkedDeploymentsWarning": "You are editing an existing API key. Changes to linked model deployments can take some time to propagate."
       }
     },
     "keyCreated": {

@@ -35,7 +35,7 @@ const formSchema = z.object({
 interface Props {
   isOpen: boolean;
   onClose?: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (savedValues: AutoscalingFieldValues) => void;
   namespace?: string;
   id?: string;
   /** Initial values for the form. */
@@ -76,7 +76,7 @@ export const DeploymentSettingsDrawer = ({
       };
       await updateAimScalingPolicy(namespace, id, payload);
       toast.success(t('notifications.updateSuccess'));
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(data);
       if (onClose) onClose();
     } catch (error) {
       toast.error(t('notifications.updateError'));

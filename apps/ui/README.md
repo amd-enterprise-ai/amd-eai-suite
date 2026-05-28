@@ -6,7 +6,7 @@ SPDX-License-Identifier: MIT
 
 # UI Applications
 
-This directory contains the Next.js-based frontend applications for AMD Enterprise AI suite, organized as a monorepo using Turborepo and pnpm workspaces.
+This directory contains the Next.js-based frontend applications for AMD enterprise AI reference stack, organized as a monorepo using Turborepo and pnpm workspaces.
 
 ## Structure
 

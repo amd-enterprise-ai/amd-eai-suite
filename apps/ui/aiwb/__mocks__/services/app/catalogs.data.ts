@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { CatalogItem } from '@amdenterpriseai/types';
+import { CatalogItem } from '@/types/catalog';
 import {
   CatalogItemCategory,
   CatalogItemType,
   CatalogUsageScope,
-} from '@amdenterpriseai/types';
+} from '@/types/enums/catalog';
 
 export const mockCatalogItems: CatalogItem[] = [
   {
@@ -81,7 +81,7 @@ export const mockProjectScopedCatalogItems: CatalogItem[] = [
     type: CatalogItemType.WORKSPACE,
     id: '28d2eee1-616e-47ae-a73d-19c72a939d27',
     createdAt: '2025-09-24T09:53:26.239368Z',
-    usageScope: CatalogUsageScope.PROJECT,
+    usageScope: CatalogUsageScope.NAMESPACE,
     workloadsCount: 0,
     workloads: [],
   },

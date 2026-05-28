@@ -5,14 +5,15 @@
 
 from keycloak import KeycloakAdmin
 
-from ..organizations.utils import get_realm_details
-from ..projects.models import Project
-from ..projects.schemas import ProjectResponse
-from ..utilities.config import POST_REGISTRATION_REDIRECT_URL
-from ..utilities.exceptions import (
+from api_common.exceptions import (
     ConflictException,
     PreconditionNotMetException,
 )
+
+from ..organizations.utils import get_realm_details
+from ..projects.models import Project
+from ..projects.utils import map_to_project_response
+from ..utilities.config import POST_REGISTRATION_REDIRECT_URL
 from ..utilities.keycloak_admin import (
     create_user,
     send_verify_email,
@@ -141,7 +142,7 @@ def merge_user_details_with_projects(
     user = merge_user_details(keycloak_user, user, platform_admins)
     return UserWithProjects(
         **user.model_dump(),
-        projects=[ProjectResponse.model_validate(project) for project in projects] if projects else [],
+        projects=[map_to_project_response(project) for project in projects] if projects else [],
     )
 
 

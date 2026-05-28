@@ -17,9 +17,9 @@ import {
   generateMockSecrets,
 } from '@/__mocks__/utils/secrets-mock';
 
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { ProjectSecretStatus } from '@amdenterpriseai/types';
-import { ProjectWithMembers } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { ProjectSecretStatus } from '@/types/enums/secrets';
+import { ProjectWithMembers } from '@/types/projects';
 
 import { ProjectSecrets } from '@/components/features/projects';
 
@@ -57,8 +57,8 @@ describe('ProjectSecrets', () => {
         <ProjectSecrets
           secrets={secrets}
           project={project}
-          projectSecrets={props?.projectSecrets ?? []}
-          projectStorages={props?.projectStorages ?? []}
+          projectSecrets={props?.projectSecrets ?? { data: [] }}
+          projectStorages={props?.projectStorages ?? { data: [] }}
           {...props}
         />,
         { wrapper },
@@ -124,7 +124,7 @@ describe('ProjectSecrets', () => {
     setup({
       project: mockProject,
       secrets: mockSecrets,
-      projectSecrets: mockProjectSecrets,
+      projectSecrets: { data: mockProjectSecrets },
     });
     const actionButton = screen.getByRole('button', {
       name: 'list.actions.label',
@@ -159,7 +159,7 @@ describe('ProjectSecrets', () => {
     setup({
       project: mockProject,
       secrets: mockSecrets,
-      projectSecrets: mockProjectSecrets,
+      projectSecrets: { data: mockProjectSecrets },
     });
     const actionButton = screen.getByRole('button', {
       name: 'list.actions.label',
@@ -194,7 +194,7 @@ describe('ProjectSecrets', () => {
     setup({
       project: mockProject,
       secrets: mockSecrets,
-      projectSecrets: mockProjectSecrets,
+      projectSecrets: { data: mockProjectSecrets },
     });
     const actionButton = screen.getByRole('button', {
       name: 'list.actions.label',
@@ -238,8 +238,8 @@ describe('ProjectSecrets', () => {
     setup({
       project: mockProject,
       secrets: mockSecrets,
-      projectSecrets: mockProjectSecrets,
-      projectStorages: mockProjectStorages,
+      projectSecrets: { data: mockProjectSecrets },
+      projectStorages: { data: mockProjectStorages },
     });
     const actionButton = screen.getByRole('button', {
       name: 'list.actions.label',
@@ -269,7 +269,7 @@ describe('ProjectSecrets', () => {
     setup({
       project: mockProject,
       secrets: mockSecrets,
-      projectSecrets: mockProjectSecrets,
+      projectSecrets: { data: mockProjectSecrets },
     });
     const actionButton = screen.getByRole('button', {
       name: 'list.actions.label',
@@ -366,7 +366,7 @@ describe('ProjectSecrets', () => {
     setup({
       project: mockProject,
       secrets: mockSecrets,
-      projectSecrets: mockProjectSecrets,
+      projectSecrets: { data: mockProjectSecrets },
     });
 
     // On page load

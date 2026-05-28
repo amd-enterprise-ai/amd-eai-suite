@@ -10,7 +10,7 @@ import {
 import { IconDotsVertical } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ActionButton } from '@amdenterpriseai/components';
+import { ActionButton } from '../Buttons/ActionButton';
 import { ActionHintsList } from './ActionHintsList';
 import { ActionMenuItem } from './ActionMenuItem';
 import { SectionHeader } from './SectionHeader';

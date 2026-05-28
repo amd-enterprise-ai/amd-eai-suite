@@ -16,41 +16,44 @@ import {
   fetchNamespaceGPUMemoryUtilization,
 } from '@/lib/app/namespaces';
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { QuotaStatus } from '@amdenterpriseai/types';
-import { ProjectWithMembers } from '@amdenterpriseai/types';
+import type { GetServerSidePropsContext } from 'next';
+import { getServerSession } from 'next-auth';
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';
-import { Mock } from 'vitest';
-import ProjectDashboardPage from '@/pages';
+import type { ComponentProps } from 'react';
+import { Mock, vi } from 'vitest';
+import ProjectDashboardPage, { getServerSideProps } from '@/pages/[project]';
 
-const generateMockProjects = (count: number): ProjectWithMembers[] => {
-  return Array.from({ length: count }, (_, i) => ({
-    id: (i + 1).toString(),
-    clusterId: '1',
-    name: `Name ${i + 1}`,
-    description: `Description ${i + 1}`,
-    status: ProjectStatus.READY,
-    statusReason: null,
-    quota: {
-      status: QuotaStatus.READY,
-      cpuMilliCores: 1000,
-      gpuCount: 1,
-      memoryBytes: 2000,
-      ephemeralStorageBytes: 10000,
-    },
-    cluster: {
-      id: '1',
-      name: `Cluster ${i + 1}`,
-      lastHeartbeatAt: new Date().toISOString(),
-      status: ClusterStatus.HEALTHY,
-    },
-    users: [],
-    invitedUsers: [],
-  }));
-};
+const mockGetServerSession = vi.mocked(getServerSession);
+const mockServerSideTranslations = vi.mocked(serverSideTranslations);
+
+const mockInvalidateQueries = vi.fn();
+const mockResetQueries = vi.fn();
+
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual('@tanstack/react-query');
+  return {
+    ...actual,
+    useQueryClient: () => ({
+      invalidateQueries: mockInvalidateQueries,
+      resetQueries: mockResetQueries,
+      getQueryCache: () => ({
+        findAll: () => [],
+        subscribe: (_onStoreChange: () => void) => () => {},
+      }),
+    }),
+  };
+});
+
+vi.mock('next-auth', () => ({
+  getServerSession: vi.fn(),
+}));
+
+vi.mock('next-i18next/serverSideTranslations', () => ({
+  serverSideTranslations: vi.fn().mockResolvedValue({}),
+}));
 
 vi.mock('@/lib/app/namespaces', async (importOriginal) => {
   return {
@@ -122,10 +125,12 @@ describe('projects page', () => {
     (fetchNamespaceGPUDeviceUtilization as Mock).mockResolvedValue({
       data: [],
     });
+    mockInvalidateQueries.mockClear();
+    mockResetQueries.mockClear();
   });
 
   const renderProjectPage = (
-    props?: Partial<React.ComponentProps<typeof ProjectDashboardPage>>,
+    props?: Partial<ComponentProps<typeof ProjectDashboardPage>>,
   ) => {
     return render(<ProjectDashboardPage {...props} />, { wrapper });
   };
@@ -202,13 +207,17 @@ describe('projects page', () => {
 
     expect(fetchNamespaceGPUMemoryUtilization as Mock).toBeCalledTimes(2);
     expect(fetchNamespaceGPUDeviceUtilization as Mock).toBeCalledTimes(2);
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['namespace', 'test-project-123', 'workloads'],
+    });
+    expect(mockResetQueries).toHaveBeenCalledWith({
+      queryKey: ['namespace', 'test-project-123', 'stats'],
+    });
   });
 
   it('should handle time range change correctly', async () => {
     await act(() => {
-      renderProjectPage({
-        project: generateMockProjects(1)[0],
-      });
+      renderProjectPage();
     });
 
     // Verify the time selector component is rendered
@@ -226,6 +235,71 @@ describe('projects page', () => {
     await waitFor(() => {
       expect(screen.getByText('dashboard.overview.title')).toBeInTheDocument();
       expect(screen.getByText('dashboard.workloads.title')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('ProjectDashboardPage getServerSideProps', () => {
+  const baseContext = {
+    locale: 'en',
+    params: { project: 'bench-ns' },
+    query: {},
+    resolvedUrl: '/bench-ns',
+    req: {},
+    res: {},
+  } as unknown as GetServerSidePropsContext;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockServerSideTranslations.mockResolvedValue({} as never);
+  });
+
+  it('returns props with breadcrumb when session and translations succeed', async () => {
+    mockGetServerSession.mockResolvedValue({
+      user: { email: 'test@example.com' },
+      accessToken: 'token',
+    } as never);
+
+    const result = await getServerSideProps(baseContext);
+
+    expect(result).toEqual({
+      props: {
+        pageBreadcrumb: [
+          {
+            title: undefined,
+            href: '/bench-ns/',
+          },
+        ],
+      },
+    });
+    expect(mockGetServerSession).toHaveBeenCalledWith(
+      baseContext.req,
+      baseContext.res,
+      expect.any(Object),
+    );
+  });
+
+  it('redirects home when session is missing', async () => {
+    mockGetServerSession.mockResolvedValue(null);
+
+    const result = await getServerSideProps(baseContext);
+
+    expect(result).toEqual({
+      redirect: { destination: '/', permanent: false },
+    });
+  });
+
+  it('redirects home when translations fail', async () => {
+    mockGetServerSession.mockResolvedValue({
+      user: { email: 'test@example.com' },
+      accessToken: 'token',
+    } as never);
+    mockServerSideTranslations.mockRejectedValue(new Error('i18n failed'));
+
+    const result = await getServerSideProps(baseContext);
+
+    expect(result).toEqual({
+      redirect: { destination: '/', permanent: false },
     });
   });
 });

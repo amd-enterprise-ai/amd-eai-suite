@@ -8,12 +8,9 @@ import {
   APIRequestError,
 } from '@amdenterpriseai/utils/app';
 
-import {
-  ClusterKubeConfig,
-  ClusterStatsResponse,
-  CollectionRequestParams,
-  EditClusterRequest,
-} from '@amdenterpriseai/types';
+import { CollectionRequestParams } from '@amdenterpriseai/types';
+import { ClusterKubeConfig } from '@/types/clusters';
+import { ClusterStatsResponse, EditClusterRequest } from '@/types/clusters';
 
 import type {
   NodeGpuDevicesResponse,
@@ -27,7 +24,7 @@ import type {
   NodePowerUsageRawResponse,
 } from '@/types/clusters';
 import {
-  WorkloadWithMetricsServer,
+  WorkloadWithMetrics,
   ClusterWorkloadsMetricsResponse,
   NodeWorkloadsMetricsResponse,
 } from '@/types/workloads';
@@ -163,7 +160,7 @@ export const fetchClusterKubeConfig = async (
 
 export const fetchClusterWorkloadsMetrics = async (
   clusterId: string,
-  collectionRequestParams: CollectionRequestParams<WorkloadWithMetricsServer>,
+  collectionRequestParams: CollectionRequestParams<WorkloadWithMetrics>,
 ): Promise<ClusterWorkloadsMetricsResponse> => {
   const queryParams = buildQueryParams(
     collectionRequestParams.page,

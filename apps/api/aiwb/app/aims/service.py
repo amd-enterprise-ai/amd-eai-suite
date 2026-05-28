@@ -16,21 +16,33 @@ from api_common.exceptions import ExternalServiceError, NotFoundException, Valid
 
 from ..dispatch.kube_client import KubernetesClient
 from ..secrets.service import get_secret_details
+from ..workloads.constants import MODEL_NAME_LABEL
 from ..workloads.service import stream_downstream
-from .constants import CLUSTER_AUTH_GROUP_ANNOTATION
-from .crds import AIMClusterServiceTemplateResource
+from .constants import (
+    AIM_CHATTABLE_CONDITIONS,
+    CLUSTER_AUTH_GROUP_ANNOTATION,
+)
+from .crds import AIMClusterServiceTemplateResource, AIMServiceTemplateResource
 from .enums import AIMClusterModelStatus, AIMServiceStatus
 from .gateway import create_aim_service as create_aim_service_in_k8s
+from .gateway import create_fine_tuned_aim_service as create_fine_tuned_aim_service_in_k8s
 from .gateway import delete_aim_service as delete_aim_service_from_k8s
 from .gateway import get_aim_by_name
+from .gateway import get_aim_model as get_aim_model_from_k8s
 from .gateway import get_aim_service_by_id as get_aim_service_from_k8s
 from .gateway import list_aim_cluster_service_templates as get_aim_templates_from_k8s
+from .gateway import list_aim_service_templates as get_aim_service_templates_from_k8s
 from .gateway import list_aim_services as get_aim_services_from_k8s
 from .gateway import list_aims as get_aims_from_k8s
 from .gateway import patch_aim_service_scaling_policy as patch_aim_service_scaling_policy_in_k8s
 from .repository import list_aim_services_history as list_aim_services_history_from_db
-from .schemas import AIMDeployRequest, AIMResponse, AIMServiceHistoryResponse, AIMServiceResponse
-from .utils import generate_aim_service_name
+from .schemas import (
+    AIMDeployRequest,
+    AIMResponse,
+    AIMServiceHistoryResponse,
+    AIMServiceResponse,
+)
+from .utils import generate_aim_service_name, is_condition_true
 
 if TYPE_CHECKING:
     from ..cluster_auth.client import ClusterAuthClient
@@ -115,59 +127,89 @@ async def deploy_aim(
     deploy_request: AIMDeployRequest,
     namespace: str,
     submitter: str,
-    cluster_auth_client: "ClusterAuthClient",
+    cluster_auth_client: "ClusterAuthClient | None",
 ) -> AIMServiceResponse:
     """Deploy an AIM by creating an AIMService CRD in Kubernetes.
 
-    The model field must reference an existing AIMClusterModel by resource name.
+    Auto-detects the model type: tries AIMClusterModel (cluster-scoped) first,
+    then falls back to AIMModel (namespace-scoped fine-tuned model).
 
     Args:
         kube_client: Kubernetes client
         deploy_request: Deployment request
         namespace: Target namespace
         submitter: User submitting the service
-        cluster_auth_client: Cluster-auth client for access control
+        cluster_auth_client: Cluster-auth client for access control, or None when disabled
     """
-    # Fetch the AIM by resource name
-    aim_model = await get_aim_by_name(kube_client, deploy_request.model)
-    if not aim_model:
-        raise NotFoundException(f"AIM model '{deploy_request.model}' not found")
-
-    # Validate HF token requirement
-    if aim_model.status.image_metadata.model.hf_token_required:
-        if not deploy_request.hf_token:
-            raise ValidationException("This model requires a Hugging Face token but none was provided")
-        # Validate that the secret exists
-        await get_secret_details(kube_client, namespace, deploy_request.hf_token)
-
-    # Generate deterministic service name (UUID generated internally)
     aim_service_name = generate_aim_service_name()
+    group_id: str | None = None
 
-    # Create cluster-auth group for this AIM deployment
-    group_id = await _create_cluster_auth_group_for_aim(
-        cluster_auth_client=cluster_auth_client,
-        aim_model_name=aim_model.metadata.name,
-        aim_service_name=aim_service_name,
-    )
+    # Try cluster-scoped AIMClusterModel first
+    aim_cluster_model = await get_aim_by_name(kube_client, deploy_request.model)
+    if aim_cluster_model:
+        if aim_cluster_model.status.image_metadata.model.hf_token_required:
+            if not deploy_request.hf_token:
+                raise ValidationException("This model requires a Hugging Face token but none was provided")
+            await get_secret_details(kube_client, namespace, deploy_request.hf_token)
 
-    created = await create_aim_service_in_k8s(
-        kube_client=kube_client,
-        namespace=namespace,
-        aim=aim_model,
-        deploy_request=deploy_request,
-        submitter=submitter,
-        service_name=aim_service_name,
-        cluster_auth_group_id=group_id,
+        # Create cluster-auth group for this AIM deployment (only when cluster-auth is enabled)
+        if cluster_auth_client is not None:
+            group_id = await _create_cluster_auth_group_for_aim(
+                cluster_auth_client=cluster_auth_client,
+                aim_model_name=aim_cluster_model.metadata.name,
+                aim_service_name=aim_service_name,
+            )
+
+        created = await create_aim_service_in_k8s(
+            kube_client=kube_client,
+            namespace=namespace,
+            aim=aim_cluster_model,
+            deploy_request=deploy_request,
+            submitter=submitter,
+            service_name=aim_service_name,
+            cluster_auth_group_id=group_id,
+        )
+        logger.info(f"Created AIMService {aim_service_name} in namespace {namespace}")
+        return AIMServiceResponse.model_validate(created, from_attributes=True)
+
+    # Fall back to namespace-scoped AIMModel (fine-tuned)
+    aim_model = await get_aim_model_from_k8s(kube_client, namespace, deploy_request.model)
+    if aim_model:
+        # Create cluster-auth group for this AIM deployment (only when cluster-auth is enabled)
+        if cluster_auth_client is not None:
+            group_id = await _create_cluster_auth_group_for_aim(
+                cluster_auth_client=cluster_auth_client,
+                aim_model_name=deploy_request.model,
+                aim_service_name=aim_service_name,
+            )
+        labels = aim_model.metadata.labels or {}
+        model_sources = aim_model.spec.model_sources or []
+        created = await create_fine_tuned_aim_service_in_k8s(
+            kube_client=kube_client,
+            namespace=namespace,
+            model_name=deploy_request.model,
+            deploy_request=deploy_request,
+            submitter=submitter,
+            service_name=aim_service_name,
+            cluster_auth_group_id=group_id,
+            display_name=labels.get(MODEL_NAME_LABEL, ""),
+            canonical_name=model_sources[0].model_id if model_sources else "",
+        )
+        logger.info(
+            f"Created AIMService {aim_service_name} for fine-tuned model {deploy_request.model} in namespace {namespace}"
+        )
+        return AIMServiceResponse.model_validate(created, from_attributes=True)
+
+    raise NotFoundException(
+        f"Model '{deploy_request.model}' not found as AIMClusterModel or AIMModel in namespace '{namespace}'"
     )
-    logger.info(f"Created AIMService {aim_service_name} in namespace {namespace}")
-    return AIMServiceResponse.model_validate(created, from_attributes=True)
 
 
 async def undeploy_aim(
     kube_client: KubernetesClient,
     id: UUID,
     namespace: str,
-    cluster_auth_client: "ClusterAuthClient",
+    cluster_auth_client: "ClusterAuthClient | None",
 ) -> None:
     """Undeploy an AIM by deleting its AIMService CRD from Kubernetes using service id.
 
@@ -175,7 +217,7 @@ async def undeploy_aim(
         kube_client: Kubernetes client
         id: AIM service ID
         namespace: Target namespace
-        cluster_auth_client: Cluster-auth client for access control cleanup
+        cluster_auth_client: Cluster-auth client for access control cleanup, or None when disabled
     """
     try:
         # Get the service before deletion to access cluster-auth group annotation
@@ -183,15 +225,16 @@ async def undeploy_aim(
         if not service:
             raise NotFoundException(f"AIM service {id} not found in Kubernetes (may be deleted)")
 
-        # Clean up cluster-auth group if it exists
-        routing_annotations = service.spec.routing.get("annotations", {})
-        group_id = routing_annotations.get(CLUSTER_AUTH_GROUP_ANNOTATION)
-        if group_id:
-            await _delete_cluster_auth_group_for_aim(
-                cluster_auth_client=cluster_auth_client,
-                group_id=group_id,
-                aim_service_name=service.metadata.name,
-            )
+        # Clean up cluster-auth group if cluster-auth is enabled and a group was created
+        if cluster_auth_client is not None:
+            routing_annotations = service.spec.routing.get("annotations", {})
+            group_id = routing_annotations.get(CLUSTER_AUTH_GROUP_ANNOTATION)
+            if group_id:
+                await _delete_cluster_auth_group_for_aim(
+                    cluster_auth_client=cluster_auth_client,
+                    group_id=group_id,
+                    aim_service_name=service.metadata.name,
+                )
 
         service_name = await delete_aim_service_from_k8s(kube_client, namespace, id)
         logger.info(f"Deleted AIMService {service_name} (id: {id}) from namespace {namespace}")
@@ -235,7 +278,7 @@ async def list_chattable_aim_services(
     kube_client: KubernetesClient,
     namespace: str,
 ) -> list[AIMServiceResponse]:
-    """List all RUNNING AIM services that support chat."""
+    """List all AIM services with ready conditions that support chat."""
     services_crds = await get_aim_services_from_k8s(kube_client, namespace, chattable_only=True)
     return [AIMServiceResponse.model_validate(crd, from_attributes=True) for crd in services_crds]
 
@@ -250,15 +293,18 @@ async def chat_with_aim_service(
 
     Raises:
         NotFoundException: If AIM service is not found
-        ValidationException: If AIM service is not running or does not support chat
+        ValidationException: If AIM service conditions are not ready (InferenceServiceReady, HTTPRouteReady)
     """
     aim_service = await get_aim_service_from_k8s(kube_client, namespace, id)
     if not aim_service:
         raise NotFoundException(f"AIM service {id} not found in Kubernetes (may be deleted)")
 
-    # Check if service is chattable (must be RUNNING and have chat tag)
-    if aim_service.status.status != AIMServiceStatus.RUNNING:
-        raise ValidationException(f"AIM service {id} is not available for chat (status: {aim_service.status.status})")
+    conditions = aim_service.status.conditions
+    failed = [c for c in AIM_CHATTABLE_CONDITIONS if not is_condition_true(conditions, c)]
+    if failed:
+        raise ValidationException(
+            f"AIM service {id} is not available for chat (conditions not ready: {', '.join(failed)})"
+        )
 
     aim_service_response = AIMServiceResponse.model_validate(aim_service, from_attributes=True)
     base_url = aim_service_response.endpoints.get("internal")
@@ -333,3 +379,19 @@ async def update_aim_scaling_policy(
         raise NotFoundException(str(e))
     except RuntimeError as e:
         raise ExternalServiceError(str(e))
+
+
+async def list_fine_tuned_aim_service_templates(
+    kube_client: KubernetesClient,
+    namespace: str,
+    model_name: str,
+) -> list[AIMServiceTemplateResource]:
+    """List namespace-scoped AIMServiceTemplates for a fine-tuned model.
+
+    Raises:
+        NotFoundException: If the AIMModel CR is not found in the namespace.
+    """
+    aim_model = await get_aim_model_from_k8s(kube_client, namespace, model_name)
+    if not aim_model:
+        raise NotFoundException(f"Fine-tuned model '{model_name}' not found in namespace '{namespace}'")
+    return await get_aim_service_templates_from_k8s(kube_client, namespace, model_name=model_name)

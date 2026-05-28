@@ -4,24 +4,24 @@
 
 from textwrap import dedent
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, status
 from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.auth.security import get_user_groups
-from api_common.collections import SortDirection
+from api_common.collections import SortCondition
 from api_common.database import get_session
-from api_common.schemas import ListResponse
+from api_common.schemas import ListResponse, QueryParam
 
 from ..dispatch.kube_client import KubernetesClient, get_kube_client
 from ..metrics.client import get_prometheus_client
 from ..metrics.enums import NamespaceMetricName
 from ..metrics.schemas import MetricsTimeRange, MetricsTimeseries
 from ..metrics.service import get_metric_by_namespace
-from ..workloads.enums import WorkloadStatus, WorkloadType
 from .crds import Namespace
 from .schemas import (
     ChattableResponse,
+    NamespaceMetricsQuery,
     NamespaceStatsCounts,
     NamespaceWorkloadMetricsListPaginated,
 )
@@ -63,31 +63,24 @@ async def list_namespaces(
     """),
 )
 async def get_namespace_metrics_endpoint(
+    query: QueryParam[NamespaceMetricsQuery],
     namespace: Namespace = Depends(get_workbench_namespace),
     session: AsyncSession = Depends(get_session),
     kube_client: KubernetesClient = Depends(get_kube_client),
     prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
-    page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize", description="Number of items per page"),
-    workload_type: list[WorkloadType] | None = Query(None, description="Filter by workload type(s)"),
-    status_filter: list[WorkloadStatus] | None = Query(None, description="Filter by workload status(es)"),
-    sort_by: str | None = Query(
-        None, alias="sortBy", description="Field to sort by (e.g., 'created_at', 'name', 'status')"
-    ),
-    sort_order: SortDirection = Query(SortDirection.desc, alias="sortOrder", description="Sort order: 'asc' or 'desc'"),
 ) -> NamespaceWorkloadMetricsListPaginated:
     """Get paginated resources and their metrics in a namespace."""
+    sort = [SortCondition(field=query.sort_by, direction=query.sort_order)] if query.sort_by else None
     return await get_namespace_workload_metrics_paginated(
         kube_client=kube_client,
         session=session,
         namespace=namespace,
         prometheus_client=prometheus_client,
-        page=page,
-        page_size=page_size,
-        workload_types=workload_type,
-        status_filter=status_filter,
-        sort_by=sort_by,
-        sort_order=sort_order,
+        page=query.page,
+        page_size=query.page_size,
+        workload_types=query.workload_type,
+        status_filter=query.status_filter,
+        sort=sort,
     )
 
 

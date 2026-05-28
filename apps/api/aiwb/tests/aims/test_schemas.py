@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.aims.constants import AIM_COND_HTTP_ROUTE_READY, AIM_COND_INFERENCE_SERVICE_READY
 from app.aims.enums import AIMServiceStatus, OptimizationMetric
 from app.aims.schemas import (
     AIMDeployRequest,
@@ -153,13 +154,18 @@ def test_aim_service_history_response() -> None:
 
 
 def test_aim_service_response_endpoints_with_httproute() -> None:
-    """Test that AIMServiceResponse.endpoints returns proper values when httproute is present."""
+    """Test that AIMServiceResponse.endpoints returns proper values when both required conditions are ready."""
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
     svc = make_aim_service_k8s(
         name="test-aim",
         namespace="default",
         status=AIMServiceStatus.RUNNING,
         with_httproute=True,
         as_response=True,
+        conditions=conditions,
     )
 
     # Check endpoints are populated
@@ -171,14 +177,15 @@ def test_aim_service_response_endpoints_with_httproute() -> None:
     assert svc.endpoints["external"].startswith("http://localhost:8080/default/")
 
 
-def test_aim_service_response_endpoints_empty_when_not_running() -> None:
-    """Test that endpoints are empty when AIMService is not RUNNING."""
+def test_aim_service_response_endpoints_empty_when_conditions_not_ready() -> None:
+    """Test that endpoints are empty when required conditions are not ready."""
     svc = make_aim_service_k8s(
         name="test-aim",
         namespace="default",
         status=AIMServiceStatus.PENDING,
         with_httproute=True,
         as_response=True,
+        # No conditions provided = conditions not ready
     )
 
     assert svc.endpoints == {}

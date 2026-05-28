@@ -17,7 +17,7 @@ from app.datasets.utils import (
     clean_s3_path,
     delete_from_s3,
     derive_name_from_path,
-    download_from_s3,
+    download_from_s3_stream,
     get_object_key,
     slugify,
     sync_dataset_to_s3,
@@ -260,72 +260,6 @@ async def test_sync_dataset_to_s3_verification_failure(mock_jsonl_file):
 
 
 @pytest.mark.asyncio
-async def test_download_from_s3_success():
-    """Test successful dataset download from S3."""
-    dataset = MagicMock(spec=Dataset)
-    dataset.id = "test-id"
-    dataset.path = "test-namespace/datasets/test-dataset.jsonl"
-
-    content = b'{"text": "test"}\n{"text": "test2"}'
-    mock_client = MagicMock(spec=MinioClient)
-    mock_client.download_object = MagicMock(return_value=content)
-
-    with patch("app.datasets.utils.MINIO_BUCKET", "test-bucket"):
-        file_name, result_content = await download_from_s3(dataset, mock_client)
-
-    assert file_name == "test-dataset.jsonl"
-    assert result_content == content
-
-    # Verify download_object was called with correct parameters
-    mock_client.download_object.assert_called_once_with(
-        bucket_name="test-bucket", object_name="test-namespace/datasets/test-dataset.jsonl"
-    )
-
-
-@pytest.mark.asyncio
-async def test_download_from_s3_not_found():
-    """Test download fails when file doesn't exist in S3."""
-    dataset = MagicMock(spec=Dataset)
-    dataset.id = "test-id"
-    dataset.path = "test-namespace/datasets/missing.jsonl"
-
-    mock_client = MagicMock(spec=MinioClient)
-    # Simulate S3 NoSuchKey error
-    s3_error = S3Error(
-        code="NoSuchKey",
-        message="The specified key does not exist",
-        resource="/test-bucket/test-namespace/datasets/missing.jsonl",
-        request_id="test-request-id",
-        host_id="test-host-id",
-        response=MagicMock(spec=["status"], status=404),
-    )
-    mock_client.download_object = MagicMock(side_effect=s3_error)
-
-    with patch("app.datasets.utils.MINIO_BUCKET", "test-bucket"):
-        # S3Error with NoSuchKey gets mapped to NotFoundException
-        with pytest.raises(NotFoundException, match="File not found"):
-            await download_from_s3(dataset, mock_client)
-
-
-@pytest.mark.asyncio
-async def test_download_from_s3_nested_path():
-    """Test download correctly extracts filename from nested path."""
-    dataset = MagicMock(spec=Dataset)
-    dataset.id = "test-id"
-    dataset.path = "project-name/datasets/subfolder/nested-file.jsonl"
-
-    content = b'{"text": "nested"}'
-    mock_client = MagicMock(spec=MinioClient)
-    mock_client.download_object = MagicMock(return_value=content)
-
-    with patch("app.datasets.utils.MINIO_BUCKET", "test-bucket"):
-        file_name, result_content = await download_from_s3(dataset, mock_client)
-
-    # Should extract just the filename
-    assert file_name == "nested-file.jsonl"
-
-
-@pytest.mark.asyncio
 async def test_delete_from_s3_success():
     """Test successful dataset deletion from S3."""
     dataset = MagicMock(spec=Dataset)
@@ -392,3 +326,82 @@ async def test_delete_from_s3_access_denied():
         # S3Error with AccessDenied gets mapped to ForbiddenException
         with pytest.raises(ForbiddenException, match="Access denied"):
             await delete_from_s3(dataset, mock_client)
+
+
+def test_download_from_s3_stream_success():
+    """Test successful streaming download from S3."""
+    dataset = MagicMock(spec=Dataset)
+    dataset.id = "test-id"
+    dataset.path = "test-namespace/datasets/test.jsonl"
+
+    mock_client = MagicMock(spec=MinioClient)
+    test_chunks = [b'{"text": "line1"}\n', b'{"text": "line2"}\n', b'{"text": "line3"}\n']
+    mock_client.stream_object = MagicMock(return_value=iter(test_chunks))
+
+    with patch("app.datasets.utils.MINIO_BUCKET", "test-bucket"):
+        result = list(download_from_s3_stream(dataset, mock_client))
+
+    mock_client.stream_object.assert_called_once_with("test-bucket", "test-namespace/datasets/test.jsonl")
+    assert result == test_chunks
+
+
+def test_download_from_s3_stream_not_found():
+    """Test streaming download handles missing file."""
+    dataset = MagicMock(spec=Dataset)
+    dataset.id = "test-id"
+    dataset.path = "test-namespace/datasets/missing.jsonl"
+
+    mock_client = MagicMock(spec=MinioClient)
+    # Simulate S3 NoSuchKey error
+    s3_error = S3Error(
+        code="NoSuchKey",
+        message="The specified key does not exist",
+        resource="/test-bucket/test-namespace/datasets/missing.jsonl",
+        request_id="test-request-id",
+        host_id="test-host-id",
+        response=MagicMock(spec=["status"], status=404),
+    )
+    mock_client.stream_object = MagicMock(side_effect=s3_error)
+
+    with patch("app.datasets.utils.MINIO_BUCKET", "test-bucket"):
+        with pytest.raises(NotFoundException, match="File not found"):
+            list(download_from_s3_stream(dataset, mock_client))
+
+
+def test_download_from_s3_stream_access_denied():
+    """Test streaming download fails when access is denied."""
+    dataset = MagicMock(spec=Dataset)
+    dataset.id = "test-id"
+    dataset.path = "test-namespace/datasets/protected.jsonl"
+
+    mock_client = MagicMock(spec=MinioClient)
+    # Simulate S3 AccessDenied error
+    s3_error = S3Error(
+        code="AccessDenied",
+        message="Access Denied",
+        resource="/test-bucket/test-namespace/datasets/protected.jsonl",
+        request_id="test-request-id",
+        host_id="test-host-id",
+        response=MagicMock(spec=["status"], status=403),
+    )
+    mock_client.stream_object = MagicMock(side_effect=s3_error)
+
+    with patch("app.datasets.utils.MINIO_BUCKET", "test-bucket"):
+        with pytest.raises(ForbiddenException, match="Access denied"):
+            list(download_from_s3_stream(dataset, mock_client))
+
+
+def test_download_from_s3_stream_empty_file():
+    """Test streaming download of empty dataset."""
+    dataset = MagicMock(spec=Dataset)
+    dataset.id = "test-id"
+    dataset.path = "test-namespace/datasets/empty.jsonl"
+
+    mock_client = MagicMock(spec=MinioClient)
+    # Empty file returns no chunks
+    mock_client.stream_object = MagicMock(return_value=iter([]))
+
+    with patch("app.datasets.utils.MINIO_BUCKET", "test-bucket"):
+        result = list(download_from_s3_stream(dataset, mock_client))
+
+    assert result == []

@@ -10,32 +10,33 @@ from aio_pika import abc
 from loguru import logger
 from starlette.datastructures import State
 
-from ..clusters.repository import get_cluster_by_id
-from ..clusters.service import delete_cluster_node, update_cluster_node, update_cluster_nodes, update_last_heartbeat
-from ..messaging.schemas import (
-    AutoDiscoveredSecretMessage,
-    AutoDiscoveredWorkloadComponentMessage,
+from ..clusters.messaging import (
     ClusterNodeDeleteMessage,
     ClusterNodesMessage,
     ClusterNodeUpdateMessage,
-    ClusterQuotasFailureMessage,
-    ClusterQuotasStatusMessage,
     HeartbeatMessage,
-    MessageAdapter,
+)
+from ..clusters.repository import get_cluster_by_id
+from ..clusters.service import delete_cluster_node, update_cluster_node, update_cluster_nodes, update_last_heartbeat
+from ..namespaces.messaging import (
     NamespaceDeletedMessage,
     ProjectNamespaceStatusMessage,
-    ProjectSecretsUpdateMessage,
-    ProjectStorageUpdateMessage,
     UnmanagedNamespaceMessage,
-    WorkloadComponentStatusMessage,
-    WorkloadStatusMessage,
 )
 from ..namespaces.service import handle_namespace_deleted, record_unmanaged_namespace, update_project_namespace_status
+from ..quotas.messaging import ClusterQuotasFailureMessage, ClusterQuotasStatusMessage
 from ..quotas.service import update_cluster_quotas_from_allocations, update_pending_quotas_to_failed
+from ..secrets.messaging import AutoDiscoveredSecretMessage, ProjectSecretsUpdateMessage
 from ..secrets.service import register_auto_discovered_secret, update_project_secret_status
+from ..storages.messaging import ProjectStorageUpdateMessage
 from ..storages.service import update_configmap_status
 from ..utilities.database import session_scope
 from ..utilities.keycloak_admin import get_kc_admin_client_from_state
+from ..workloads.messaging import (
+    AutoDiscoveredWorkloadComponentMessage,
+    WorkloadComponentStatusMessage,
+    WorkloadStatusMessage,
+)
 from ..workloads.service import (
     register_auto_discovered_workload_component,
     update_workload_component_status,
@@ -50,6 +51,7 @@ from .config import (
     RABBITMQ_PORT,
 )
 from .connector import init_connection
+from .schemas import MessageAdapter
 from .sender import message_sender_scope
 
 

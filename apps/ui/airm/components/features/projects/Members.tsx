@@ -21,17 +21,13 @@ import { fetchInvitedUsers, fetchUsers } from '@/services/app';
 import {
   getCandidateInvitedUsersForProject,
   getCandidateUsersForProject,
-} from '@amdenterpriseai/utils/app';
+} from '@/utils/projects';
 import { displayTimestamp } from '@amdenterpriseai/utils/app';
 
 import { TableColumns } from '@amdenterpriseai/types';
-import { ProjectUsersTableField } from '@amdenterpriseai/types';
-import {
-  InviteMemberFormData,
-  ProjectWithMembers,
-  UserInProject,
-} from '@amdenterpriseai/types';
-import { InvitedUsersResponse, UsersResponse } from '@amdenterpriseai/types';
+import { ProjectUsersTableField } from '@/types/enums/project-users-table-fields';
+import { InviteMemberFormData } from '@/types/projects';
+import { InvitedUsersResponse, User, UsersResponse } from '@/types/users';
 import { ConfirmationModal } from '@amdenterpriseai/components';
 import { ClientSideDataTable } from '@amdenterpriseai/components';
 import { DrawerForm } from '@amdenterpriseai/components';
@@ -39,6 +35,7 @@ import { DrawerForm } from '@amdenterpriseai/components';
 import { UserMultiSelect } from './UserMultiSelect';
 import { ZodType, z } from 'zod';
 import { SortDirection } from '@amdenterpriseai/types';
+import { ProjectWithMembers } from '@/types/projects';
 import { CustomComparatorConfig } from '@amdenterpriseai/types';
 import { compareUsersByFullName } from '@amdenterpriseai/utils/app';
 import { getFilteredData } from '@amdenterpriseai/utils/app';
@@ -65,18 +62,11 @@ const columns: TableColumns<ProjectUsersTableField | null> = [
   { key: ProjectUsersTableField.LAST_ACTIVE, sortable: true },
 ];
 
-const customComparator: CustomComparatorConfig<
-  UserInProject,
-  ProjectUsersTableField
-> = {
+const customComparator: CustomComparatorConfig<User, ProjectUsersTableField> = {
   [ProjectUsersTableField.NAME]: compareUsersByFullName,
 };
 
-const filterableFields: (keyof UserInProject)[] = [
-  'firstName',
-  'lastName',
-  'email',
-]; // Logical OR search of all fields
+const filterableFields: (keyof User)[] = ['firstName', 'lastName', 'email']; // Logical OR search of all fields
 
 export const Members: React.FC<Props> = ({ project }) => {
   const { t } = useTranslation(translationSet);
@@ -96,16 +86,14 @@ export const Members: React.FC<Props> = ({ project }) => {
     onOpenChange: onRemoveConfirmOpenChange,
   } = useDisclosure();
 
-  const [filter, setFilter] = useState<ClientSideDataFilter<UserInProject>[]>(
-    [],
-  );
+  const [filter, setFilter] = useState<ClientSideDataFilter<User>[]>([]);
 
   const filteredUsersData = useMemo(() => {
     return getFilteredData(project.users, filter);
   }, [filter, project.users]);
 
   const queryClient = useQueryClient();
-  const [userBeingRemoved, setUserBeingRemoved] = useState<UserInProject>();
+  const [userBeingRemoved, setUserBeingRemoved] = useState<User>();
 
   const {
     data: users,
@@ -137,10 +125,7 @@ export const Members: React.FC<Props> = ({ project }) => {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   const customRenderers: Partial<
-    Record<
-      ProjectUsersTableField,
-      (item: UserInProject) => React.ReactNode | string
-    >
+    Record<ProjectUsersTableField, (item: User) => React.ReactNode | string>
   > = {
     [ProjectUsersTableField.NAME]: (item) =>
       `${item.firstName} ${item.lastName}`,
@@ -252,7 +237,7 @@ export const Members: React.FC<Props> = ({ project }) => {
         ),
         color: 'danger',
         startContent: <IconTrash className="text-danger" />,
-        onPress: (user: UserInProject) => {
+        onPress: (user: User) => {
           setUserBeingRemoved(user);
           onRemoveConfirmOpen();
         },

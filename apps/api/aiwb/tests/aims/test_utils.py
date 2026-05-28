@@ -18,8 +18,10 @@ from app.aims.utils import (
     extract_endpoints,
     generate_aim_service_manifest,
     generate_aim_service_name,
+    generate_fine_tuned_aim_service_manifest,
 )
 from app.dispatch.crds import K8sMetadata
+from app.workloads.constants import CANONICAL_NAME_LABEL, MODEL_NAME_LABEL
 from tests.factory import make_aim_cluster_model, make_aim_service_k8s, make_httproute
 
 
@@ -254,6 +256,138 @@ def test_generate_aim_service_manifest_with_allow_unoptimized() -> None:
     assert manifest["spec"]["template"]["allowUnoptimized"] is True
 
 
+def test_generate_aim_service_manifest_with_overrides_and_template_name() -> None:
+    """Test manifest includes overrides (precision, hardware) and template.name when provided."""
+    aim = make_aim_cluster_model(name="llama3-8b")
+    req = AIMDeployRequest(
+        model="llama3-8b",
+        metric=OptimizationMetric.LATENCY,
+        precision="fp8",
+        gpu_model="MI300X",
+        gpu_count=8,
+        template_name="my-explicit-template",
+    )
+
+    manifest = generate_aim_service_manifest(
+        aim=aim,
+        deploy_request=req,
+        namespace="ns",
+        service_name="wb-aim-test",
+        api_version="v1",
+        submitter="u",
+        cluster_auth_group_id="grp",
+    )
+
+    overrides = manifest["spec"].get("overrides", {})
+    assert overrides.get("metric") == "latency"
+    assert overrides.get("precision") == "fp8"
+    assert "hardware" in overrides
+    assert overrides["hardware"].get("gpu", {}).get("model") == "MI300X"
+    assert overrides["hardware"].get("gpu", {}).get("requests") == 8
+
+    template = manifest["spec"].get("template", {})
+    assert template.get("name") == "my-explicit-template"
+
+
+def test_generate_aim_service_manifest_overrides_only_template_name() -> None:
+    """Explicit template name does not require overrides; spec.overrides omitted when empty."""
+    aim = make_aim_cluster_model(name="llama3-8b")
+    req = AIMDeployRequest(model="llama3-8b", template_name="explicit-only")
+
+    manifest = generate_aim_service_manifest(
+        aim=aim,
+        deploy_request=req,
+        namespace="ns",
+        service_name="wb-aim-test",
+        api_version="v1",
+        submitter="u",
+        cluster_auth_group_id="grp",
+    )
+
+    assert manifest["spec"]["template"]["name"] == "explicit-only"
+    # Spec model may include default empty overrides; no user-facing override keys.
+    assert not manifest["spec"].get("overrides")
+
+
+def test_generate_aim_service_manifest_overrides_only_precision() -> None:
+    """Merged overrides: precision alone populates spec.overrides without other keys."""
+    aim = make_aim_cluster_model()
+    req = AIMDeployRequest(model="llama3-8b", precision="bf16")
+
+    manifest = generate_aim_service_manifest(
+        aim=aim,
+        deploy_request=req,
+        namespace="ns",
+        service_name="wb-aim-test",
+        api_version="v1",
+        submitter="u",
+        cluster_auth_group_id="grp",
+    )
+
+    assert manifest["spec"]["overrides"] == {"precision": "bf16"}
+
+
+def test_generate_aim_service_manifest_overrides_only_gpu_count() -> None:
+    """Merged overrides: gpu_count alone sets hardware.gpu.requests only."""
+    aim = make_aim_cluster_model()
+    req = AIMDeployRequest(model="llama3-8b", gpu_count=4)
+
+    manifest = generate_aim_service_manifest(
+        aim=aim,
+        deploy_request=req,
+        namespace="ns",
+        service_name="wb-aim-test",
+        api_version="v1",
+        submitter="u",
+        cluster_auth_group_id="grp",
+    )
+
+    assert manifest["spec"]["overrides"] == {"hardware": {"gpu": {"requests": 4}}}
+
+
+def test_generate_aim_service_manifest_overrides_only_gpu_model() -> None:
+    """Merged overrides: gpu model alone sets hardware.gpu.model only."""
+    aim = make_aim_cluster_model()
+    req = AIMDeployRequest(model="llama3-8b", gpu_model="MI300X")
+
+    manifest = generate_aim_service_manifest(
+        aim=aim,
+        deploy_request=req,
+        namespace="ns",
+        service_name="wb-aim-test",
+        api_version="v1",
+        submitter="u",
+        cluster_auth_group_id="grp",
+    )
+
+    assert manifest["spec"]["overrides"] == {"hardware": {"gpu": {"model": "MI300X"}}}
+
+
+def test_generate_aim_service_manifest_overrides_metric_and_precision_only() -> None:
+    """Metric and precision merge without hardware when GPU fields unset."""
+    aim = make_aim_cluster_model()
+    req = AIMDeployRequest(
+        model="llama3-8b",
+        metric=OptimizationMetric.THROUGHPUT,
+        precision="fp8",
+    )
+
+    manifest = generate_aim_service_manifest(
+        aim=aim,
+        deploy_request=req,
+        namespace="ns",
+        service_name="wb-aim-test",
+        api_version="v1",
+        submitter="u",
+        cluster_auth_group_id="grp",
+    )
+
+    overrides = manifest["spec"]["overrides"]
+    assert overrides.get("metric") == "throughput"
+    assert overrides.get("precision") == "fp8"
+    assert "hardware" not in overrides
+
+
 def test_generate_aim_service_manifest_camelcase_keys_to_cluster() -> None:
     """Test manifest sent to cluster uses camelCase for imagePullSecrets, allowUnoptimized, autoScaling."""
     aim = make_aim_cluster_model()
@@ -325,3 +459,33 @@ def test_generate_aim_service_manifest_includes_workload_type_label() -> None:
     # workload-id and component-id labels are NOT included as they added by Kyverno/AIRM when deployed to the cluster
     assert "airm.silogen.ai/workload-id" not in manifest["metadata"]["labels"]
     assert "airm.silogen.ai/component-id" not in manifest["metadata"]["labels"]
+
+
+def test_generate_fine_tuned_aim_service_manifest_stamps_finetuned_metadata() -> None:
+    """User-facing fine-tune identity (display name + canonical name) lives in annotations,
+    not labels — so values can carry characters K8s label values forbid (e.g. `/`).
+    Labels are reserved for selector-relevant flags (fine-tuned marker, workload type)."""
+    req = AIMDeployRequest(model="wb-llm-finetune-abc123")
+
+    manifest = generate_fine_tuned_aim_service_manifest(
+        model_name="wb-llm-finetune-abc123",
+        deploy_request=req,
+        namespace="workbench",
+        service_name="wb-aim-test",
+        api_version="aim.eai.amd.com/v1alpha1",
+        submitter="user@example.com",
+        cluster_auth_group_id="group-123",
+        display_name="my-finetune",
+        canonical_name="Qwen/Qwen2.5-0.5B-Instruct",
+    )
+
+    labels = manifest["metadata"]["labels"]
+    assert labels["aiwb.apps.eai.amd.com/fine-tuned"] == "true"
+    # User-facing identity is intentionally NOT in labels.
+    assert MODEL_NAME_LABEL not in labels
+    assert CANONICAL_NAME_LABEL not in labels
+
+    annotations = manifest["metadata"]["annotations"]
+    assert annotations[MODEL_NAME_LABEL] == "my-finetune"
+    # Annotation preserves slashes; the FE reads this for code samples.
+    assert annotations[CANONICAL_NAME_LABEL] == "Qwen/Qwen2.5-0.5B-Instruct"

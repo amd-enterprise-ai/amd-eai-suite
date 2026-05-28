@@ -48,7 +48,7 @@ Create chart request
     ${signature_content}=   Get Binary File         ${signature_file}
 
     # Format: {'field_name': ('filename', filedata, 'content-type')}
-    # No project_id needed for AIWB charts API
+    # No projectId needed for AIWB charts API
     ${data}=                Create dictionary       name=${name}            type=INFERENCE
     @{template}=            Create list             template.yaml           ${template_content}
     @{values}=              Create list             values.yaml             ${values_content}
@@ -56,7 +56,7 @@ Create chart request
     @{signature}=           Create list             signature.yaml          ${signature_content}
     &{files}=               Create dictionary
     ...                     files=${template}
-    ...                     user_inputs=${values}
+    ...                     userInputs=${values}
     ...                     signature=${signature}
 
     ${endpoint} =           Charts endpoint
@@ -64,7 +64,7 @@ Create chart request
     &{headers}=             Create Dictionary       Authorization=Bearer ${access_token}
 
     Log                     POST ${endpoint} with data: ${data}             DEBUG
-    ${response}=            POST                    ${endpoint}             headers=${headers}      data=${data}            files=${files}          expected_status=${expected_status}
+    ${response}=            POST                    ${endpoint}             headers=${headers}      data=${data}            files=${files}          expected_status=${expected_status}    verify=${VERIFY_SSL}
     Log                     Chart creation response: status=${response.status_code}                 DEBUG
     IF    ${response.status_code} in [200, 201]
         ${response_json}=       Set Variable            ${response.json()}
@@ -80,17 +80,17 @@ List charts request
     ...    Args:
     ...    page_number (int): Page number for pagination (default: 1)
     ...    page_size (int): Number of items per page (default: 10)
-    ...    sort_by (str): Field to sort by (default: created_at)
+    ...    sort_by (str): Field to sort by (default: createdAt)
     ...    sort_order (str): Sort direction - asc or desc (default: desc)
     ...
     ...    Returns:
     ...    response: API response containing list of charts
-    [Arguments]             ${page_number}=1        ${page_size}=10         ${sort_by}=created_at                           ${sort_order}=desc      ${expected_status}=any
+    [Arguments]             ${page_number}=1        ${page_size}=10         ${sort_by}=createdAt                            ${sort_order}=desc      ${expected_status}=any
     ${params}=              Create dictionary
-    ...                     page_number=${page_number}
-    ...                     page_size=${page_size}
-    ...                     sort_by=${sort_by}
-    ...                     sort_order=${sort_order}
+    ...                     pageNumber=${page_number}
+    ...                     pageSize=${page_size}
+    ...                     sortBy=${sort_by}
+    ...                     sortOrder=${sort_order}
 
     Create api session    aiwb
     ${endpoint} =           Charts endpoint
@@ -119,6 +119,47 @@ Delete chart
     IF    ${response.status_code} == 204
         Log                     Deleted chart ${chart_id}       INFO
     END
+    RETURN                  ${response}
+
+Update chart request
+    [Documentation]    Update an existing chart with the provided files.
+    ...
+    ...    Args:
+    ...    chart_id (str): UUID of the chart to update
+    ...    template_file (str): Optional path to updated chart template file
+    ...    values_file (str): Optional path to updated values YAML file
+    ...    values_schema_file (str): Optional path to updated values schema JSON file
+    ...    signature_file (str): Optional path to updated signature YAML file
+    ...
+    ...    Returns:
+    ...    response: API response containing the updated chart
+    [Arguments]             ${chart_id}             ${template_file}=${None}    ${values_file}=${None}      ${values_schema_file}=${None}       ${signature_file}=${None}    ${expected_status}=any
+    ${data}=                Create Dictionary
+    &{files}=               Create Dictionary
+
+    IF    $template_file is not None
+        ${template_content}=    Get Binary File         ${template_file}
+        @{template}=            Create List             template.yaml           ${template_content}
+        Set To Dictionary       ${files}                files=${template}
+    END
+    IF    $values_file is not None
+        ${values_content}=      Get Binary File         ${values_file}
+        @{values}=              Create List             values.yaml             ${values_content}
+        Set To Dictionary       ${files}                userInputs=${values}
+    END
+    IF    $signature_file is not None
+        ${signature_content}=   Get Binary File         ${signature_file}
+        @{signature}=           Create List             signature.yaml          ${signature_content}
+        Set To Dictionary       ${files}                signature=${signature}
+    END
+
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=charts/${chart_id}
+    ${access_token}=        Authorization Token
+    &{headers}=             Create Dictionary       Authorization=Bearer ${access_token}
+
+    Log                     PUT ${endpoint}         DEBUG
+    ${response}=            PUT                     ${endpoint}             headers=${headers}      data=${data}            files=${files}          expected_status=${expected_status}    verify=${VERIFY_SSL}
+    Log                     Chart update response: status=${response.status_code}                   DEBUG
     RETURN                  ${response}
 
 Get chart

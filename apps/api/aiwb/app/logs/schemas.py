@@ -7,9 +7,9 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import AwareDatetime, BaseModel
+from pydantic import AwareDatetime
 
-from api_common.schemas import PaginationMetadataResponse, TimeRangePaginationRequest
+from api_common.schemas import BaseModel, PaginationMetadataResponse, TimeRangePaginationRequest
 
 # Severity ordering for log levels (lower = less severe, higher = more severe)
 _LOG_LEVEL_SEVERITY: dict[str, int] = {
@@ -116,7 +116,7 @@ class WorkloadLogsResponse(BaseModel):
     pagination: PaginationMetadataResponse
 
 
-class LogsQueryRequest(TimeRangePaginationRequest):
+class LogsQuery(TimeRangePaginationRequest):
     """Query request for logs endpoints"""
 
     level: LogLevel | None = None

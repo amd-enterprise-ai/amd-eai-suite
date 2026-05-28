@@ -23,6 +23,16 @@ from app.workloads.service import (
 from tests import factory
 
 
+@pytest.fixture(autouse=True)
+def mock_canonical_name():
+    with patch(
+        "app.workloads.service.get_workload_canonical_name",
+        new_callable=AsyncMock,
+        return_value="meta/llama3-8b",
+    ) as mock:
+        yield mock
+
+
 @pytest.mark.asyncio
 async def test_delete_workload_components_success(db_session: AsyncSession) -> None:
     """Test successful deletion of workload components."""
@@ -70,8 +80,6 @@ async def test_delete_workload_components_gateway_error(db_session: AsyncSession
 async def test_is_workload_chattable_running_with_chat(db_session: AsyncSession) -> None:
     """Test that a RUNNING inference workload with chat overlay is chattable."""
     chart = await factory.create_chart(db_session, name="inference-chart")
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b", namespace="test-ns")
-
     # Create overlay with chat capability
     await factory.create_overlay(
         db_session,
@@ -83,7 +91,6 @@ async def test_is_workload_chattable_running_with_chat(db_session: AsyncSession)
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
@@ -97,10 +104,8 @@ async def test_is_workload_chattable_running_with_chat(db_session: AsyncSession)
 @pytest.mark.asyncio
 async def test_is_workload_chattable_not_running(db_session: AsyncSession) -> None:
     """Test that a non-RUNNING workload is not chattable."""
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
     workload = await factory.create_workload(
         db_session,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.PENDING,  # Not RUNNING
     )
@@ -111,27 +116,13 @@ async def test_is_workload_chattable_not_running(db_session: AsyncSession) -> No
 
 
 @pytest.mark.asyncio
-async def test_is_workload_chattable_no_model(db_session: AsyncSession) -> None:
-    """Test that a workload without a model is not chattable."""
+async def test_is_workload_chattable_no_canonical_name(
+    db_session: AsyncSession, mock_canonical_name: AsyncMock
+) -> None:
+    """When the cluster has no canonical-name label for the workload, it is not chattable."""
+    mock_canonical_name.return_value = None
     workload = await factory.create_workload(
         db_session,
-        model_id=None,  # No model
-        workload_type=WorkloadType.INFERENCE,
-        status=WorkloadStatus.RUNNING,
-    )
-
-    result = await is_workload_chattable(db_session, workload)
-
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_is_workload_chattable_no_canonical_name(db_session: AsyncSession) -> None:
-    """Test that a workload with a model without canonical_name is not chattable."""
-    model = await factory.create_inference_model(db_session, canonical_name=None)
-    workload = await factory.create_workload(
-        db_session,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -145,13 +136,10 @@ async def test_is_workload_chattable_no_canonical_name(db_session: AsyncSession)
 async def test_is_workload_chattable_no_overlays(db_session: AsyncSession) -> None:
     """Test that a workload with no matching overlays is not chattable."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     # No overlay created for this chart + canonical_name combination
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -165,8 +153,6 @@ async def test_is_workload_chattable_no_overlays(db_session: AsyncSession) -> No
 async def test_is_workload_chattable_overlay_no_chat_label(db_session: AsyncSession) -> None:
     """Test that a workload with overlay but no chat label is not chattable."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     # Create overlay WITHOUT chat label
     await factory.create_overlay(
         db_session,
@@ -178,7 +164,6 @@ async def test_is_workload_chattable_overlay_no_chat_label(db_session: AsyncSess
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -192,8 +177,6 @@ async def test_is_workload_chattable_overlay_no_chat_label(db_session: AsyncSess
 async def test_is_workload_chattable_overlay_chat_true_string(db_session: AsyncSession) -> None:
     """Test that overlay with chat='true' (string) makes workload chattable."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -204,7 +187,6 @@ async def test_is_workload_chattable_overlay_chat_true_string(db_session: AsyncS
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -218,8 +200,6 @@ async def test_is_workload_chattable_overlay_chat_true_string(db_session: AsyncS
 async def test_is_workload_chattable_overlay_chat_true_bool(db_session: AsyncSession) -> None:
     """Test that overlay with chat=True (boolean) makes workload chattable."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -230,7 +210,6 @@ async def test_is_workload_chattable_overlay_chat_true_bool(db_session: AsyncSes
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -241,13 +220,9 @@ async def test_is_workload_chattable_overlay_chat_true_bool(db_session: AsyncSes
 
 
 @pytest.mark.asyncio
-async def test_list_chattable_workloads_multiple(db_session: AsyncSession) -> None:
+async def test_list_chattable_workloads_multiple(db_session: AsyncSession, mock_canonical_name: AsyncMock) -> None:
     """Test listing multiple chattable workloads in a namespace."""
     chart = await factory.create_chart(db_session)
-    model1 = await factory.create_inference_model(db_session, name="model-1", canonical_name="meta/llama3-8b")
-    model2 = await factory.create_inference_model(db_session, name="model-2", canonical_name="meta/llama3-70b")
-
-    # Create overlays for both models
     for canonical_name in ["meta/llama3-8b", "meta/llama3-70b"]:
         await factory.create_overlay(
             db_session,
@@ -256,11 +231,13 @@ async def test_list_chattable_workloads_multiple(db_session: AsyncSession) -> No
             chat_enabled=True,
         )
 
-    # Create chattable workloads
+    # Each running workload returns a different canonical name from the cluster
+    # (PENDING workload short-circuits on status, so only 2 calls are made)
+    mock_canonical_name.side_effect = ["meta/llama3-8b", "meta/llama3-70b"]
+
     await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model1.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
@@ -269,18 +246,16 @@ async def test_list_chattable_workloads_multiple(db_session: AsyncSession) -> No
     await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model2.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
         display_name="Workload 2",
     )
 
-    # Create a non-chattable workload (wrong status)
+    # Non-chattable workload (wrong status — short-circuits before K8s lookup)
     await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model1.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.PENDING,
         namespace="test-ns",
@@ -306,8 +281,6 @@ async def test_list_chattable_workloads_empty(db_session: AsyncSession) -> None:
 async def test_chat_with_workload_success(db_session: AsyncSession) -> None:
     """Test chatting with a chattable workload."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -318,7 +291,6 @@ async def test_chat_with_workload_success(db_session: AsyncSession) -> None:
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
@@ -353,11 +325,11 @@ async def test_chat_with_workload_not_found(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_with_workload_not_chattable(db_session: AsyncSession) -> None:
+async def test_chat_with_workload_not_chattable(db_session: AsyncSession, mock_canonical_name: AsyncMock) -> None:
     """Test chatting with a non-chattable workload raises ValidationException."""
+    mock_canonical_name.return_value = None  # No canonical-name label => not chattable
     workload = await factory.create_workload(
         db_session,
-        model_id=None,  # No model, so not chattable
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
     )
@@ -372,8 +344,6 @@ async def test_chat_with_workload_not_chattable(db_session: AsyncSession) -> Non
 async def test_chat_with_workload_httpx_error(db_session: AsyncSession) -> None:
     """Test handling of httpx connection errors during chat."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -384,7 +354,6 @@ async def test_chat_with_workload_httpx_error(db_session: AsyncSession) -> None:
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
     )
@@ -473,8 +442,6 @@ async def test_stream_downstream_with_body() -> None:
 async def test_chat_with_workload_timeout_error(db_session: AsyncSession) -> None:
     """Test handling of httpx.TimeoutError, verify ValidationException raised."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -485,7 +452,6 @@ async def test_chat_with_workload_timeout_error(db_session: AsyncSession) -> Non
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
     )
@@ -503,8 +469,6 @@ async def test_chat_with_workload_timeout_error(db_session: AsyncSession) -> Non
 async def test_chat_with_workload_read_error(db_session: AsyncSession) -> None:
     """Test handling of httpx.ReadError, verify ValidationException raised."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -515,7 +479,6 @@ async def test_chat_with_workload_read_error(db_session: AsyncSession) -> None:
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
     )
@@ -533,8 +496,6 @@ async def test_chat_with_workload_read_error(db_session: AsyncSession) -> None:
 async def test_chat_with_workload_generic_exception(db_session: AsyncSession) -> None:
     """Test handling of unexpected exceptions, verify ValidationException raised."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -545,7 +506,6 @@ async def test_chat_with_workload_generic_exception(db_session: AsyncSession) ->
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
     )
@@ -563,8 +523,6 @@ async def test_chat_with_workload_generic_exception(db_session: AsyncSession) ->
 async def test_chat_with_workload_logs_errors(db_session: AsyncSession) -> None:
     """Test that errors are properly logged."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -575,7 +533,6 @@ async def test_chat_with_workload_logs_errors(db_session: AsyncSession) -> None:
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",
         name="test-workload",
@@ -914,8 +871,6 @@ async def test_delete_workload_components_logs_deletion(db_session: AsyncSession
 async def test_is_workload_chattable_malformed_metadata(db_session: AsyncSession) -> None:
     """Test handling of overlay with non-dict metadata."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     # Create overlay with malformed metadata (non-dict)
     await factory.create_overlay(
         db_session,
@@ -927,7 +882,6 @@ async def test_is_workload_chattable_malformed_metadata(db_session: AsyncSession
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -942,8 +896,6 @@ async def test_is_workload_chattable_malformed_metadata(db_session: AsyncSession
 async def test_is_workload_chattable_malformed_labels(db_session: AsyncSession) -> None:
     """Test handling of overlay with non-dict labels."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     # Create overlay with malformed labels (non-dict)
     await factory.create_overlay(
         db_session,
@@ -955,7 +907,6 @@ async def test_is_workload_chattable_malformed_labels(db_session: AsyncSession) 
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -970,8 +921,6 @@ async def test_is_workload_chattable_malformed_labels(db_session: AsyncSession) 
 async def test_is_workload_chattable_chat_false_string(db_session: AsyncSession) -> None:
     """Test overlay with chat='false' string returns False."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -982,7 +931,6 @@ async def test_is_workload_chattable_chat_false_string(db_session: AsyncSession)
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -996,8 +944,6 @@ async def test_is_workload_chattable_chat_false_string(db_session: AsyncSession)
 async def test_is_workload_chattable_chat_false_bool(db_session: AsyncSession) -> None:
     """Test overlay with chat=False boolean returns False."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     await factory.create_overlay(
         db_session,
         chart_id=chart.id,
@@ -1008,7 +954,6 @@ async def test_is_workload_chattable_chat_false_bool(db_session: AsyncSession) -
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
     )
@@ -1022,8 +967,6 @@ async def test_is_workload_chattable_chat_false_bool(db_session: AsyncSession) -
 async def test_list_chattable_workloads_validation_error(db_session: AsyncSession) -> None:
     """Test handling of WorkloadResponse validation errors."""
     chart = await factory.create_chart(db_session)
-    model = await factory.create_inference_model(db_session, canonical_name="meta/llama3-8b")
-
     # Create overlay with chat capability
     await factory.create_overlay(
         db_session,
@@ -1035,7 +978,6 @@ async def test_list_chattable_workloads_validation_error(db_session: AsyncSessio
     workload = await factory.create_workload(
         db_session,
         chart=chart,
-        model_id=model.id,
         workload_type=WorkloadType.INFERENCE,
         status=WorkloadStatus.RUNNING,
         namespace="test-ns",

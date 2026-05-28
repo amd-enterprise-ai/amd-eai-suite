@@ -90,10 +90,11 @@ Create api session
     ...                     Connection=close
     Log                     Session headers configured (token length: ${access_token.__len__()})    DEBUG
 
-    # Create session with improved settings for connection stability
+    # Create session with configurable SSL verification; VERIFY_SSL defaults to disabled
+    # for clusters using self-signed certificates, but can be enabled when needed.
     ${session_alias}=       Set Variable            ${service_name}_api
     Create session          ${session_alias}        ${base_url}             headers=${headers}
-    ...                     verify=False            timeout=30              max_retries=3
+    ...                     verify=${VERIFY_SSL}    timeout=30              max_retries=3
 
     Set suite variable      ${API_SESSION}          ${session_alias}
     Set suite variable      ${SESSION_SERVICE_NAME}    ${service_name}
@@ -167,7 +168,7 @@ Safe Get Request
     Ensure Port Forward Alive
 
     ${expected}=            Pop From Dictionary     ${kwargs}    expected_status    default=any
-    ${response}=            Get On Session          ${API_SESSION}          ${endpoint}             expected_status=any    &{kwargs}
+    ${response}=            Get On Session          ${API_SESSION}          ${endpoint}             expected_status=any    verify=${VERIFY_SSL}    &{kwargs}
     Assert Expected Status    ${response}    ${expected}
     RETURN                  ${response}
 
@@ -189,7 +190,7 @@ Safe Post Request
     [Arguments]             ${endpoint}             &{kwargs}
 
     ${expected}=            Pop From Dictionary     ${kwargs}    expected_status    default=any
-    ${response}=            Post On Session         ${API_SESSION}          ${endpoint}             expected_status=any    &{kwargs}
+    ${response}=            Post On Session         ${API_SESSION}          ${endpoint}             expected_status=any    verify=${VERIFY_SSL}    &{kwargs}
     Assert Expected Status    ${response}    ${expected}
     RETURN                  ${response}
 
@@ -211,7 +212,7 @@ Safe Put Request
     [Arguments]             ${endpoint}             &{kwargs}
 
     ${expected}=            Pop From Dictionary     ${kwargs}    expected_status    default=any
-    ${response}=            Put On Session          ${API_SESSION}          ${endpoint}             expected_status=any    &{kwargs}
+    ${response}=            Put On Session          ${API_SESSION}          ${endpoint}             expected_status=any    verify=${VERIFY_SSL}    &{kwargs}
     Assert Expected Status    ${response}    ${expected}
     RETURN                  ${response}
 
@@ -233,7 +234,7 @@ Safe Delete Request
     [Arguments]             ${endpoint}             &{kwargs}
 
     ${expected}=            Pop From Dictionary     ${kwargs}    expected_status    default=any
-    ${response}=            Delete On Session       ${API_SESSION}          ${endpoint}             expected_status=any    &{kwargs}
+    ${response}=            Delete On Session       ${API_SESSION}          ${endpoint}             expected_status=any    verify=${VERIFY_SSL}    &{kwargs}
     Assert Expected Status    ${response}    ${expected}
     RETURN                  ${response}
 
@@ -255,7 +256,7 @@ Safe Patch Request
     [Arguments]             ${endpoint}             &{kwargs}
 
     ${expected}=            Pop From Dictionary     ${kwargs}    expected_status    default=any
-    ${response}=            Patch On Session        ${API_SESSION}          ${endpoint}             expected_status=any    &{kwargs}
+    ${response}=            Patch On Session        ${API_SESSION}          ${endpoint}             expected_status=any    verify=${VERIFY_SSL}    &{kwargs}
     Assert Expected Status    ${response}    ${expected}
     RETURN                  ${response}
 

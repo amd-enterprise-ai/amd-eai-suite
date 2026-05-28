@@ -99,7 +99,7 @@ func TestReconcile_AddsFinalizerToNewResource(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -141,7 +141,7 @@ func TestReconcile_DoesNotDuplicateFinalizer(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -193,7 +193,7 @@ func TestReconcile_HandlesDeletionWithValidLabels(t *testing.T) {
 
 	// Verify deletion message was published
 	assert.Len(t, mock.Published, 1)
-	msg, ok := mock.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := mock.Published[0].(common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-deployment", msg.Name)
 	assert.Equal(t, "Deleted", msg.Status)
@@ -332,7 +332,7 @@ func TestReconcile_Deployment_AutoDiscoveryBehavior(t *testing.T) {
 			autoDiscovered:         true,
 			submitter:              "system:serviceaccount:kube-system:my-controller",
 			expectedMsgCount:       2,
-			expectedSubmitter:      strPtr("kube-system:my-controller"),
+			expectedSubmitter:      testutils.Ptr("kube-system:my-controller"),
 			expectAutoDiscoveryMsg: true,
 		},
 		{
@@ -401,7 +401,7 @@ func TestReconcile_Deployment_AutoDiscoveryBehavior(t *testing.T) {
 			require.Len(t, mockPub.Published, tt.expectedMsgCount)
 
 			if tt.expectAutoDiscoveryMsg {
-				autoDiscMsg, ok := mockPub.Published[0].(*messaging.AutoDiscoveredWorkloadComponentMessage)
+				autoDiscMsg, ok := mockPub.Published[0].(*common.AutoDiscoveredWorkloadComponentMessage)
 				require.True(t, ok)
 				if tt.expectedSubmitter != nil {
 					assert.NotNil(t, autoDiscMsg.Submitter)
@@ -410,20 +410,16 @@ func TestReconcile_Deployment_AutoDiscoveryBehavior(t *testing.T) {
 					assert.Nil(t, autoDiscMsg.Submitter)
 				}
 
-				statusMsg, ok := mockPub.Published[1].(*messaging.WorkloadComponentStatusMessage)
+				statusMsg, ok := mockPub.Published[1].(*common.WorkloadComponentStatusMessage)
 				require.True(t, ok)
 				assert.Equal(t, "Running", statusMsg.Status)
 			} else {
-				statusMsg, ok := mockPub.Published[0].(*messaging.WorkloadComponentStatusMessage)
+				statusMsg, ok := mockPub.Published[0].(*common.WorkloadComponentStatusMessage)
 				require.True(t, ok)
 				assert.Equal(t, "Running", statusMsg.Status)
 			}
 		})
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func TestReconcile_Deployment_StatusPublishFailure(t *testing.T) {

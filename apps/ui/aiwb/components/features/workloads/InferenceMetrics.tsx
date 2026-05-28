@@ -7,7 +7,6 @@ import { TimeRangePeriod } from '@amdenterpriseai/types';
 import { TimeRange, TimeSeriesResponse } from '@amdenterpriseai/types';
 import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isEqual } from 'lodash';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   GPUDeviceUsageCard,
@@ -27,7 +26,7 @@ import {
   formatSeconds,
   formatTokens,
 } from '@amdenterpriseai/utils/app';
-import { InferenceMetricsColors } from '@amdenterpriseai/types';
+import { InferenceMetricsColors } from '@/types/enums/inference-metrics';
 
 const LATENCY_METRICS: TimeseriesMetricConfig[] = [
   {
@@ -70,10 +69,12 @@ const SCALAR_METRICS: ScalarMetricConfig[] = [
 
 interface InferenceMetricsProps {
   workloadId: string;
+  podName?: string;
 }
 
 export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
   workloadId,
+  podName,
 }) => {
   const { t } = useTranslation(['workloads']);
   const queryClient = useQueryClient();
@@ -109,15 +110,8 @@ export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
   }, [isFetchingMetrics]);
 
   const handleChartsRefresh = useCallback(() => {
-    const newRange = getCurrentTimeRange(currentTimePeriod.current);
-    if (isEqual(newRange, timeRange)) {
-      queryClient.invalidateQueries({
-        queryKey: ['project', namespace, 'workload', workloadId, 'metrics'],
-      });
-    } else {
-      setTimeRange(newRange);
-    }
-  }, [timeRange, queryClient, workloadId, namespace]);
+    setTimeRange(getCurrentTimeRange(currentTimePeriod.current));
+  }, []);
 
   const { data: gpuDeviceData, isLoading: isGpuDeviceLoading } =
     useQuery<TimeSeriesResponse>({
@@ -128,6 +122,7 @@ export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
         workloadId,
         'metrics',
         'gpu_device_utilization',
+        podName,
         {
           start: timeRange.start.toISOString(),
           end: timeRange.end.toISOString(),
@@ -140,6 +135,7 @@ export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
           start: timeRange.start,
           end: timeRange.end,
           metric: 'gpu_device_utilization',
+          podName: podName,
         }),
       enabled: !!namespace,
     });
@@ -153,6 +149,7 @@ export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
         workloadId,
         'metrics',
         'gpu_memory_utilization',
+        podName,
         {
           start: timeRange.start.toISOString(),
           end: timeRange.end.toISOString(),
@@ -165,6 +162,7 @@ export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
           start: timeRange.start,
           end: timeRange.end,
           metric: 'gpu_memory_utilization',
+          podName: podName,
         }),
       enabled: !!namespace,
     });
@@ -212,6 +210,7 @@ export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
                 namespace={namespace}
                 workloadId={workloadId}
                 timeRange={timeRange}
+                podName={podName}
               />
             </div>
           ))}
@@ -235,7 +234,9 @@ export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
             <InferenceRequestsCard
               namespace={namespace}
               workloadId={workloadId}
+              timeRange={timeRange}
               timePeriod={currentTimePeriod.current}
+              podName={podName}
             />
           </div>
           <div className="grid grid-cols-2 grid-rows-3 gap-2 w-full lg:w-[280px] shrink-0">
@@ -246,6 +247,7 @@ export const InferenceMetrics: React.FC<InferenceMetricsProps> = ({
                 namespace={namespace}
                 workloadId={workloadId}
                 timeRange={timeRange}
+                podName={podName}
               />
             ))}
           </div>

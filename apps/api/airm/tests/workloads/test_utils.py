@@ -8,7 +8,9 @@ from uuid import UUID, uuid4
 import pytest
 import yaml
 
-from app.messaging.schemas import (
+from api_common.exceptions import ValidationException
+from app.projects.models import Project
+from app.workloads.enums import (
     CommonComponentStatus,
     DeploymentStatus,
     JobStatus,
@@ -16,8 +18,6 @@ from app.messaging.schemas import (
     WorkloadComponentKind,
     WorkloadStatus,
 )
-from app.projects.models import Project
-from app.utilities.exceptions import ValidationException
 from app.workloads.models import WorkloadComponent
 from app.workloads.utils import (
     extract_workload_components_from_manifest,

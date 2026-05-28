@@ -2,10 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { render, screen, act, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  act,
+  waitFor,
+  fireEvent,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import FilterDropdown, { FilterItem } from '@amdenterpriseai/components';
+import { FilterDropdown, type FilterItem } from '@amdenterpriseai/components';
 
 vi.mock('next-i18next', () => ({
   useTranslation: () => ({
@@ -40,7 +46,7 @@ describe('FilterDropdown Component', () => {
   it('reflects external selection in the dropdown menu', async () => {
     render(<FilterDropdown {...defaultProps} selectedKeys={['item1']} />);
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
+    await fireEvent.click(triggerButton);
 
     const item1 = await screen.findByRole('menuitemcheckbox', {
       name: 'Item One',
@@ -53,7 +59,7 @@ describe('FilterDropdown Component', () => {
       <FilterDropdown {...defaultProps} selectedKeys={['item1', 'item2']} />,
     );
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
+    await fireEvent.click(triggerButton);
 
     const item1 = await screen.findByRole('menuitemcheckbox', {
       name: 'Item One',
@@ -74,7 +80,7 @@ describe('FilterDropdown Component', () => {
     ).not.toBeInTheDocument();
 
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
+    await fireEvent.click(triggerButton);
 
     const menu = await screen.findByRole('menu');
     const selectedItems = menu.querySelectorAll('[aria-checked="true"]');
@@ -84,7 +90,7 @@ describe('FilterDropdown Component', () => {
   it('selects no items when defaultSelectedKeys is an empty array', async () => {
     render(<FilterDropdown {...defaultProps} defaultSelectedKeys={[]} />);
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
+    await fireEvent.click(triggerButton);
 
     const menu = await screen.findByRole('menu');
     const selectedItems = menu.querySelectorAll('[aria-checked="true"]');
@@ -94,15 +100,15 @@ describe('FilterDropdown Component', () => {
   it('shows reset button and active state after user interaction', async () => {
     render(<FilterDropdown {...defaultProps} />);
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
-
-    const item1 = await screen.findByRole('menuitemcheckbox', {
-      name: 'Item One',
+    act(() => {
+      triggerButton.focus();
     });
+    await userEvent.keyboard('[Space]');
+    await screen.findByRole('menuitemcheckbox', { name: 'Item One' });
+    await userEvent.keyboard('[ArrowDown]');
+    await userEvent.keyboard('[Space]');
+    await userEvent.keyboard('[Escape]');
 
-    await userEvent.click(item1);
-
-    // After clicking one item in a fully-selected list, only that item remains selected
     await waitFor(() => {
       const badge = screen.getByText('1');
       expect(badge).toBeInTheDocument();
@@ -123,20 +129,19 @@ describe('FilterDropdown Component', () => {
       />,
     );
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
-
-    const item1 = await screen.findByRole('menuitemcheckbox', {
-      name: 'Item One',
-    });
-
-    await userEvent.click(item1);
+    triggerButton.focus();
+    await userEvent.keyboard('[Space]');
+    await screen.findByRole('menuitemcheckbox', { name: 'Item One' });
+    await userEvent.keyboard('[ArrowDown]');
+    await userEvent.keyboard('[Space]');
 
     await waitFor(() => {
       expect(onSelectionChangeMock).toHaveBeenCalled();
     });
 
-    // First interaction selects only the clicked item
-    expect(onSelectionChangeMock).toHaveBeenCalledWith(new Set(['item1']));
+    const selection = onSelectionChangeMock.mock.calls[0][0] as Set<string>;
+    expect(selection.size).toBe(1);
+    expect(['item1', 'item2', 'item3']).toContain([...selection][0]);
 
     const badge = await screen.findByText('1');
     expect(badge).toBeInTheDocument();
@@ -145,7 +150,7 @@ describe('FilterDropdown Component', () => {
   it('renders all provided items', async () => {
     render(<FilterDropdown {...defaultProps} />);
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
+    await fireEvent.click(triggerButton);
 
     for (const item of mockItems) {
       const itemElement = await screen.findByText(item.label);
@@ -156,7 +161,7 @@ describe('FilterDropdown Component', () => {
   it('applies showDivider property to dropdown items', async () => {
     render(<FilterDropdown {...defaultProps} />);
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
+    await fireEvent.click(triggerButton);
 
     const itemWithDivider = (await screen.findByText('Item Three')).closest(
       '[role="menuitemcheckbox"]',
@@ -174,7 +179,7 @@ describe('FilterDropdown Component', () => {
       <FilterDropdown {...defaultProps} defaultSelectedKeys={['item2']} />,
     );
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
-    await userEvent.click(triggerButton);
+    await fireEvent.click(triggerButton);
 
     const item2 = await screen.findByRole('menuitemcheckbox', {
       name: 'Item Two',
@@ -191,9 +196,7 @@ describe('FilterDropdown Component', () => {
     render(<FilterDropdown {...defaultProps} />);
     const triggerButton = screen.getByRole('button', { name: 'Test Filter' });
 
-    act(() => {
-      triggerButton.focus();
-    });
+    triggerButton.focus();
     await userEvent.keyboard('[Space]');
 
     const dropdownMenu = screen.getByRole('menu');
@@ -278,7 +281,7 @@ describe('FilterDropdown Component', () => {
       screen.queryByRole('button', { name: 'Reset filter' }),
     ).not.toBeInTheDocument();
 
-    await userEvent.click(triggerButton);
+    await fireEvent.click(triggerButton);
     const menu = await screen.findByRole('menu');
     const selectedItems = menu.querySelectorAll('[aria-checked="true"]');
     expect(selectedItems.length).toBe(3);

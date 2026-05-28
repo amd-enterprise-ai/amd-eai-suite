@@ -20,7 +20,7 @@
   },
   "list": {
     "actions": {
-      "deploy": "View and deploy",
+      "deploy": "Deploy",
       "pending": "Pending...",
       "launch": "Launch",
       "view": "View details",
@@ -101,7 +101,7 @@
       "launchButtonPending": "Deploying..."
     },
     "actions": {
-      "deploy": "Quick deploy",
+      "deploy": "Deploy",
       "cancel": "Cancel"
     }
   },

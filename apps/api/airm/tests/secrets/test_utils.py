@@ -9,20 +9,15 @@ from uuid import uuid4
 import pytest
 import yaml
 
-from app.messaging.schemas import (
-    ExternalSecretManifest,
-    KubernetesMetadata,
-    KubernetesSecretManifest,
-    ProjectSecretStatus,
-    SecretKind,
-    SecretScope,
-)
+from api_common.exceptions import ValidationException
+from api_common.secrets import SecretUseCase
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
 from app.secrets import constants as secrets_constants
 from app.secrets import utils as packgeUtils
 from app.secrets.constants import PROJECT_SECRET_ID_LABEL, PROJECT_SECRET_SCOPE_LABEL, PROJECT_SECRET_USE_CASE_LABEL
-from app.secrets.enums import SecretStatus, SecretUseCase
+from app.secrets.enums import ProjectSecretStatus, SecretKind, SecretScope, SecretStatus
+from app.secrets.messaging import ExternalSecretManifest, KubernetesSecretManifest
 from app.secrets.models import OrganizationScopedSecret, OrganizationSecretAssignment
 from app.secrets.schemas import BaseSecretIn
 from app.secrets.utils import (
@@ -36,7 +31,7 @@ from app.secrets.utils import (
     sanitize_external_secret_manifest,
     validate_and_patch_secret_manifest,
 )
-from app.utilities.exceptions import ValidationException
+from app.utilities.messaging import KubernetesMetadata
 
 
 def test_removes_namespace_from_metadata():
@@ -738,30 +733,36 @@ async def test_publish_project_secret_creation_message_preserves_existing_scope_
 def test_build_project_secret_response_filters_by_project():
     """Test that only assignments for the specified project are returned."""
 
-    # Create target project and another project
-    target_project = Mock(spec=Project)
-    target_project.id = uuid4()
-    target_project.name = "target-project"
-    target_project.description = "Target project description"
-    target_project.cluster_id = uuid4()
-    target_project.status = ProjectStatus.READY.value
-    target_project.status_reason = None
-    target_project.created_at = datetime.now(UTC)
-    target_project.updated_at = datetime.now(UTC)
-    target_project.created_by = "user@test.com"
-    target_project.updated_by = "user@test.com"
+    cluster_id = uuid4()
+    now = datetime.now(UTC)
 
-    other_project = Mock(spec=Project)
-    other_project.id = uuid4()
-    other_project.name = "other-project"
-    other_project.description = "Other project description"
-    other_project.cluster_id = uuid4()
-    other_project.status = ProjectStatus.READY.value
-    other_project.status_reason = None
-    other_project.created_at = datetime.now(UTC)
-    other_project.updated_at = datetime.now(UTC)
-    other_project.created_by = "user@test.com"
-    other_project.updated_by = "user@test.com"
+    target_project = Project(
+        id=uuid4(),
+        name="target-project",
+        description="Target project description",
+        cluster_id=cluster_id,
+        status=ProjectStatus.READY,
+        keycloak_group_id=str(uuid4()),
+        gpu_preemption_enabled=False,
+        created_by="user@test.com",
+        updated_by="user@test.com",
+        created_at=now,
+        updated_at=now,
+    )
+
+    other_project = Project(
+        id=uuid4(),
+        name="other-project",
+        description="Other project description",
+        cluster_id=cluster_id,
+        status=ProjectStatus.READY,
+        keycloak_group_id=str(uuid4()),
+        gpu_preemption_enabled=False,
+        created_by="user@test.com",
+        updated_by="user@test.com",
+        created_at=now,
+        updated_at=now,
+    )
 
     # Create organization-scoped secret
     org_secret = Mock(spec=OrganizationScopedSecret)

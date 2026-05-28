@@ -11,10 +11,10 @@ import pytest
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import ForbiddenException
 from app.clusters.models import Cluster
 from app.projects.models import Project
 from app.users.models import User
-from app.utilities.exceptions import ForbiddenException
 from app.utilities.security import (
     Roles,
     auth_token_claimset,

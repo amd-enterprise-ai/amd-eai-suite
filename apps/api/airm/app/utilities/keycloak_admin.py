@@ -9,8 +9,9 @@ from keycloak import KeycloakAdmin, KeycloakPutError
 from loguru import logger
 from starlette.datastructures import State
 
+from api_common.exceptions import ExternalServiceError
+
 from .config import KEYCLOAK_INTERNAL_URL, KEYCLOAK_PUBLIC_URL, KEYCLOAK_REALM
-from .exceptions import ExternalServiceError
 
 KEYCLOAK_ADMIN_CLIENT_ID = os.environ.get("KEYCLOAK_ADMIN_CLIENT_ID")
 KEYCLOAK_ADMIN_CLIENT_SECRET = os.environ.get("KEYCLOAK_ADMIN_CLIENT_SECRET")

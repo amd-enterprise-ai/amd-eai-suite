@@ -1,15 +1,10 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 
-import {
-  ProjectStoragesResponse,
-  StoragesResponse,
-} from '@amdenterpriseai/types';
+import { ProjectStoragesResponse } from '@/types/storages';
+import { StoragesResponse } from '@/types/storages';
 
 export const getStorages = async (
   accessToken: string,
@@ -23,8 +18,7 @@ export const getStorages = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get storages: ${await getErrorMessage(response)}`,
@@ -45,8 +39,7 @@ export const getProjectStorages = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get project storages: ${await getErrorMessage(response)}`,

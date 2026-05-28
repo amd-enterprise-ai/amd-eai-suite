@@ -9,16 +9,17 @@ import { useTranslation } from 'next-i18next';
 import router from 'next/router';
 
 import { fetchNodeWorkloadsMetrics } from '@/services/app';
+import { getClusterNodeQueryKeyPrefix } from '@/utils/cluster-nodes';
 import { getClusterProjects } from '@/services/app';
 
 import { displayMegabytesInGigabytes } from '@amdenterpriseai/utils/app';
 import { displayTimestamp } from '@amdenterpriseai/utils/app';
-import { getWorkloadStatusVariants } from '@amdenterpriseai/utils/app';
+import { getWorkloadStatusVariants } from '@/utils/workloads';
 import { getWorkloadTypeVariants } from '@amdenterpriseai/utils/app';
 
 import { TableColumns } from '@amdenterpriseai/types';
 import { SortDirection } from '@amdenterpriseai/types';
-import { ProjectBasicInfo } from '@amdenterpriseai/types';
+import { ProjectBasicInfo } from '@/types/projects';
 
 import { NodeWorkloadsTableField } from '@/types/enums/node-workloads-table-field';
 
@@ -61,7 +62,10 @@ export const NodeWorkloadsTable: React.FC<Props> = ({
     isLoading,
     isFetching,
   } = useQuery<NodeWorkloadsMetricsResponse>({
-    queryKey: ['cluster', clusterId, 'node', nodeId, 'workloads-metrics'],
+    queryKey: [
+      ...getClusterNodeQueryKeyPrefix(clusterId, nodeId),
+      'workloads-metrics',
+    ],
     queryFn: () => fetchNodeWorkloadsMetrics(clusterId, nodeId),
   });
 

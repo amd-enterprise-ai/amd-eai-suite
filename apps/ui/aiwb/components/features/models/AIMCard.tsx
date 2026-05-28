@@ -23,15 +23,14 @@ import {
   IconChevronDown,
   IconLock,
 } from '@tabler/icons-react';
+import { AggregatedAIM, AIMMetric } from '@/types/aims';
+import { Intent } from '@amdenterpriseai/types';
 import {
-  AggregatedAIM,
   AIMService,
   AIMServiceStatus,
-  AIMMetric,
   AIMWorkloadStatus,
   ParsedAIM,
 } from '@/types/aims';
-import { Intent } from '@amdenterpriseai/types';
 import { Status } from '@amdenterpriseai/components';
 
 interface Props {
@@ -234,6 +233,12 @@ export const AIMCard = ({
   ]);
 
   const isSupported = aggregatedAim.isSupported;
+  const hasPending =
+    aggregatedAim.deploymentCounts[AIMWorkloadStatus.PENDING] > 0;
+  const hasStarting =
+    aggregatedAim.deploymentCounts[AIMWorkloadStatus.STARTING] > 0;
+  const hasDeployed =
+    aggregatedAim.deploymentCounts[AIMWorkloadStatus.DEPLOYED] > 0;
 
   return (
     <Card
@@ -302,10 +307,17 @@ export const AIMCard = ({
                 />
               </div>
               <div className="ml-auto">
-                {aggregatedAim.deploymentCounts[AIMWorkloadStatus.PENDING] >
-                  0 && (
+                {hasPending && (
                   <Status
-                    label={t('aimCatalog.status.deploying')}
+                    label={t('models:status.pending')}
+                    intent={Intent.PENDING}
+                    size="sm"
+                    isTextColored
+                  />
+                )}
+                {hasStarting && (
+                  <Status
+                    label={t('models:status.starting')}
                     intent={Intent.PENDING}
                     size="sm"
                     isTextColored
@@ -403,14 +415,7 @@ export const AIMCard = ({
                     size="sm"
                     aria-label={t('aimCatalog.card.actionsMenu')}
                     icon={<IconChevronDown size={16} />}
-                    isDisabled={
-                      aggregatedAim.deploymentCounts[
-                        AIMWorkloadStatus.PENDING
-                      ] === 0 &&
-                      aggregatedAim.deploymentCounts[
-                        AIMWorkloadStatus.DEPLOYED
-                      ] === 0
-                    }
+                    isDisabled={!hasPending && !hasStarting && !hasDeployed}
                   />
                 </NestedDropdown>
               ) : (

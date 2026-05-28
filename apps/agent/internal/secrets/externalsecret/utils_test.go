@@ -7,7 +7,7 @@ package externalsecret
 import (
 	"testing"
 
-	"github.com/silogen/agent/internal/messaging"
+	"github.com/silogen/agent/internal/secrets/common"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -59,7 +59,7 @@ func TestGetExternalSecretStatus(t *testing.T) {
 	tests := []struct {
 		name           string
 		conditions     []map[string]interface{}
-		expectedStatus messaging.ProjectSecretStatus
+		expectedStatus common.ProjectSecretStatus
 		expectedReason string
 	}{
 		{
@@ -84,7 +84,7 @@ func TestGetExternalSecretStatus(t *testing.T) {
 					"message": "Secret was synced",
 				},
 			},
-			expectedStatus: messaging.ProjectSecretStatusSynced,
+			expectedStatus: common.ProjectSecretStatusSynced,
 			expectedReason: "Secret was synced",
 		},
 		{
@@ -97,7 +97,7 @@ func TestGetExternalSecretStatus(t *testing.T) {
 					"message": "sync failed",
 				},
 			},
-			expectedStatus: messaging.ProjectSecretStatusSyncedError,
+			expectedStatus: common.ProjectSecretStatusSyncedError,
 			expectedReason: "sync failed",
 		},
 		{
@@ -108,7 +108,7 @@ func TestGetExternalSecretStatus(t *testing.T) {
 					"status": string(corev1.ConditionUnknown),
 				},
 			},
-			expectedStatus: messaging.ProjectSecretStatusUnknown,
+			expectedStatus: common.ProjectSecretStatusUnknown,
 			expectedReason: "Secret status could not be determined.",
 		},
 		{
@@ -119,7 +119,7 @@ func TestGetExternalSecretStatus(t *testing.T) {
 					"status": string(corev1.ConditionTrue),
 				},
 			},
-			expectedStatus: messaging.ProjectSecretStatusUnknown,
+			expectedStatus: common.ProjectSecretStatusUnknown,
 			expectedReason: "Secret status could not be determined.",
 		},
 	}

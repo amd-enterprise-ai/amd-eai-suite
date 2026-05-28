@@ -109,13 +109,13 @@ func TestSecretReconciler_Reconcile_AddFinalizer(t *testing.T) {
 
 	// Verify status was published
 	require.Len(t, publisher.Published, 1)
-	statusMsg, ok := publisher.Published[0].(*messaging.ProjectSecretsUpdateMessage)
+	statusMsg, ok := publisher.Published[0].(*common.ProjectSecretsUpdateMessage)
 	require.True(t, ok)
 	assert.Equal(t, messaging.MessageTypeProjectSecretsUpdate, statusMsg.MessageType)
 	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", statusMsg.ProjectSecretID)
-	assert.Equal(t, messaging.ProjectSecretStatusSynced, statusMsg.Status)
+	assert.Equal(t, common.ProjectSecretStatusSynced, statusMsg.Status)
 	assert.NotNil(t, statusMsg.SecretScope)
-	assert.Equal(t, messaging.SecretScopeProject, *statusMsg.SecretScope)
+	assert.Equal(t, common.SecretScopeProject, *statusMsg.SecretScope)
 }
 
 func TestSecretReconciler_Reconcile_WithExistingFinalizer(t *testing.T) {
@@ -147,11 +147,11 @@ func TestSecretReconciler_Reconcile_WithExistingFinalizer(t *testing.T) {
 
 	// Verify status was published
 	require.Len(t, publisher.Published, 1)
-	statusMsg, ok := publisher.Published[0].(*messaging.ProjectSecretsUpdateMessage)
+	statusMsg, ok := publisher.Published[0].(*common.ProjectSecretsUpdateMessage)
 	require.True(t, ok)
-	assert.Equal(t, messaging.ProjectSecretStatusSynced, statusMsg.Status)
+	assert.Equal(t, common.ProjectSecretStatusSynced, statusMsg.Status)
 	assert.NotNil(t, statusMsg.SecretScope)
-	assert.Equal(t, messaging.SecretScopeOrganization, *statusMsg.SecretScope)
+	assert.Equal(t, common.SecretScopeOrganization, *statusMsg.SecretScope)
 }
 
 func TestSecretReconciler_Reconcile_SecretNotFound(t *testing.T) {
@@ -205,9 +205,9 @@ func TestSecretReconciler_HandleDeletion(t *testing.T) {
 
 	// Verify deletion status was published
 	require.Len(t, publisher.Published, 1)
-	statusMsg, ok := publisher.Published[0].(*messaging.ProjectSecretsUpdateMessage)
+	statusMsg, ok := publisher.Published[0].(*common.ProjectSecretsUpdateMessage)
 	require.True(t, ok)
-	assert.Equal(t, messaging.ProjectSecretStatusDeleted, statusMsg.Status)
+	assert.Equal(t, common.ProjectSecretStatusDeleted, statusMsg.Status)
 	assert.NotNil(t, statusMsg.StatusReason)
 	assert.Equal(t, "Secret deleted successfully", *statusMsg.StatusReason)
 

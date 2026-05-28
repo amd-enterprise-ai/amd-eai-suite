@@ -14,10 +14,12 @@ import {
   IconUserBolt,
 } from '@tabler/icons-react';
 import { FC, memo, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 
 import { useTranslation } from 'next-i18next';
 
-import { DebugInfo, Message } from '@amdenterpriseai/types';
+import { ContentItem, DebugInfo, Message } from '@/types/chat';
+import { extractTextContent } from '@/lib/app/image-utils';
 
 import { CodeBlock } from '@amdenterpriseai/components';
 import { MemoizedReactMarkdown } from '@amdenterpriseai/components';
@@ -56,7 +58,9 @@ export const ChatMessage: FC<Props> = memo(
 
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [isTyping, setIsTyping] = useState<boolean>(false);
-    const [messageContent, setMessageContent] = useState(message.content);
+    const [messageContent, setMessageContent] = useState<string>(
+      extractTextContent(message.content),
+    );
     const [messagedCopied, setMessageCopied] = useState(false);
     const [showDebug, setShowDebug] = useState(false);
 
@@ -81,9 +85,25 @@ export const ChatMessage: FC<Props> = memo(
     };
 
     const handleEditMessage = () => {
-      if (message.content != messageContent) {
-        onEdit?.({ ...message, content: messageContent });
+      if (extractTextContent(message.content) === messageContent) {
+        setIsEditing(false);
+        return;
       }
+
+      let newContent: string | ContentItem[];
+      if (typeof message.content === 'string') {
+        newContent = messageContent;
+      } else {
+        // Replace text items with the edited text, preserve all image_url items.
+        // If no text item existed originally, prepend one.
+        const nonTextItems = message.content.filter(
+          (item) => item.type !== 'text',
+        );
+        const textItem: ContentItem = { type: 'text', text: messageContent };
+        newContent = [textItem, ...nonTextItems];
+      }
+
+      onEdit?.({ ...message, content: newContent });
       setIsEditing(false);
     };
 
@@ -101,7 +121,8 @@ export const ChatMessage: FC<Props> = memo(
     const copyOnClick = () => {
       if (!navigator.clipboard) return;
 
-      navigator.clipboard.writeText(message.content).then(() => {
+      const textToCopy = extractTextContent(message.content);
+      navigator.clipboard.writeText(textToCopy).then(() => {
         setMessageCopied(true);
         setTimeout(() => {
           setMessageCopied(false);
@@ -110,7 +131,7 @@ export const ChatMessage: FC<Props> = memo(
     };
 
     useEffect(() => {
-      setMessageContent(message.content);
+      setMessageContent(extractTextContent(message.content));
     }, [message.content]);
 
     useEffect(() => {
@@ -238,16 +259,18 @@ export const ChatMessage: FC<Props> = memo(
 
                     <div className="my-4 flex justify-start space-x-4">
                       <button
-                        className="h-[40px] rounded-md bg-primary px-4 py-1 text-sm font-medium text-white enabled:hover:bg-primary-800 disabled:opacity-50"
+                        className="h-10 rounded-md bg-primary px-4 py-1 text-sm font-medium text-white enabled:hover:bg-primary-800 disabled:opacity-50"
                         onClick={handleEditMessage}
                         disabled={messageContent.trim().length <= 0}
                       >
                         {t('Save & Submit')}
                       </button>
                       <button
-                        className="h-[40px] rounded-md border border-default-300 px-4 py-1 text-sm font-medium text-default-800 hover:bg-default-100 dark:border-default-700 dark:hover:bg-default-800"
+                        className="h-10 rounded-md border border-default-300 px-4 py-1 text-sm font-medium text-default-800 hover:bg-default-100 dark:border-default-700 dark:hover:bg-default-800"
                         onClick={() => {
-                          setMessageContent(message.content);
+                          setMessageContent(
+                            extractTextContent(message.content),
+                          );
                           setIsEditing(false);
                         }}
                       >
@@ -256,8 +279,60 @@ export const ChatMessage: FC<Props> = memo(
                     </div>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap flex-1 user-message text-default-700">
-                    {message.content}
+                  <div className="flex-1">
+                    {/* Display text content */}
+                    {typeof message.content === 'string' ? (
+                      <div className="whitespace-pre-wrap user-message text-default-700">
+                        {message.content}
+                      </div>
+                    ) : (
+                      <>
+                        {/* Display text from content items */}
+                        {message.content.map((item, index) => {
+                          if (item.type === 'text') {
+                            return (
+                              <div
+                                key={index}
+                                className="whitespace-pre-wrap user-message text-default-700 mb-4"
+                              >
+                                {item.text}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                        {/* Display images from content items */}
+                        {message.content.some(
+                          (item) => item.type === 'image_url',
+                        ) && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {message.content
+                              .filter((item) => item.type === 'image_url')
+                              .map((item, index) => {
+                                if (item.type === 'image_url') {
+                                  return (
+                                    <div
+                                      key={index}
+                                      className="relative rounded-lg overflow-hidden border border-default-200"
+                                    >
+                                      <Image
+                                        src={item.image_url.url}
+                                        alt={t('chatInput.attachedImageAlt', {
+                                          index: index + 1,
+                                        })}
+                                        width={200}
+                                        height={200}
+                                        className="max-h-50 w-auto"
+                                      />
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -329,14 +404,14 @@ export const ChatMessage: FC<Props> = memo(
                         },
                         th({ children }) {
                           return (
-                            <th className="break-words border border-black bg-gray-500 px-3 py-1 text-white dark:border-white">
+                            <th className="wrap-break-word border border-black bg-gray-500 px-3 py-1 text-white dark:border-white">
                               {children}
                             </th>
                           );
                         },
                         td({ children }) {
                           return (
-                            <td className="break-words border border-black px-3 py-1 dark:border-white ">
+                            <td className="wrap-break-word border border-black px-3 py-1 dark:border-white ">
                               {children}
                             </td>
                           );
@@ -357,7 +432,7 @@ export const ChatMessage: FC<Props> = memo(
                         },
                       }}
                     >
-                      {`${message.content}${
+                      {`${extractTextContent(message.content)}${
                         messageIsStreaming && showCursorOnMessage ? '▍' : ''
                       }`}
                     </MemoizedReactMarkdown>

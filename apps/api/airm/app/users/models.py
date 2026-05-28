@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..utilities.models import BaseEntity
+from api_common.models import BaseEntity
 
 
 class User(BaseEntity):

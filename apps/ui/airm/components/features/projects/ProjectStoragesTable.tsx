@@ -11,19 +11,17 @@ import { displayTimestamp } from '@amdenterpriseai/utils/app';
 
 import { ActionItem, TableColumns } from '@amdenterpriseai/types';
 import { CustomComparatorConfig } from '@amdenterpriseai/types';
-import { SecretsTableField } from '@amdenterpriseai/types';
-import { StoragesTableField } from '@amdenterpriseai/types';
+import { StoragesTableField } from '@/types/enums/storages';
 import { ClientSideDataFilter } from '@amdenterpriseai/types';
-import { ProjectStorageWithParentStorage } from '@amdenterpriseai/types';
+import { ProjectStorageWithParentStorage } from '@/types/storages';
 
 import {
   ClientSideDataTable,
   StatusDisplay,
 } from '@amdenterpriseai/components';
-import { getProjectStorageStatusVariants } from '@amdenterpriseai/utils/app';
+import { getProjectStorageStatusVariants } from '@/utils/project-storage-status-variants';
 import { StatusError } from '@amdenterpriseai/components';
-// import { ProjectStorageStatus } from "../storages";
-import { ProjectStorageStatus } from '@amdenterpriseai/types';
+import { ProjectStorageStatus } from '@/types/enums/storages';
 
 interface Props {
   filters?: ClientSideDataFilter<ProjectStorageWithParentStorage>[];
@@ -109,9 +107,9 @@ export const ProjectStoragesTable: React.FC<Props> = ({
     ProjectStorageWithParentStorage,
     StoragesTableField
   > = {
-    [SecretsTableField.NAME]: (a, b) =>
+    [StoragesTableField.NAME]: (a, b) =>
       a?.storage.name.localeCompare(b?.storage.name),
-    [SecretsTableField.TYPE]: (a, b) =>
+    [StoragesTableField.TYPE]: (a, b) =>
       a?.storage.type.localeCompare(b?.storage.type),
   };
 

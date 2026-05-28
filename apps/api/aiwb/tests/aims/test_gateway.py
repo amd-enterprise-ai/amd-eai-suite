@@ -2,31 +2,73 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Tests for aims gateway layer - K8s interaction functions."""
+"""Tests for aims gateway layer - K8s interaction functions.
 
+TODO(EAI-5676 follow-up): Many tests below still use
+`with patch("app.aims.gateway.get_resource_version", ...)` to control the AIM
+CRD version. After the v1alpha1 pin those patches are no-ops for AIM call
+sites — the gateway reads `AIM_API_VERSION` directly. They keep passing but
+add noise. Strip them in a follow-up sweep (the patches that target HTTPRoute
+/ KServe paths must stay; only the AIM-flow patches are dead).
+"""
+
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from kubernetes.client.exceptions import ApiException
+from kubernetes_asyncio.client import ApiException
 
-from app.aims.crds import AIMClusterModelResource
+from app.aims.constants import AIM_COND_HTTP_ROUTE_READY, AIM_COND_INFERENCE_SERVICE_READY
+from app.aims.crds import AIMClusterModelResource, AIMModelResource
 from app.aims.enums import AIMClusterModelStatus, AIMServiceStatus
 from app.aims.gateway import (
     _get_aims_by_name,
     _get_httproutes_for_aim_services,
     create_aim_service,
+    delete_aim_model,
     delete_aim_service,
     get_aim_by_name,
+    get_aim_model,
     get_aim_service_by_id,
     is_aim_service_chattable,
     list_aim_cluster_service_templates,
+    list_aim_service_replicas,
     list_aim_services,
+    list_aim_services_for_model,
     list_aims,
     patch_aim_service_scaling_policy,
 )
 from app.aims.schemas import AIMDeployRequest
 from tests.factory import make_aim_cluster_model, make_aim_cluster_service_template, make_aim_service_k8s
+
+
+def _make_pod(
+    name: str = "pod-abc",
+    phase: str = "Running",
+    ready: bool = True,
+    gpu_limits: dict[str, str] | None = None,
+    created_at: datetime | None = None,
+) -> MagicMock:
+    """Build a minimal mock K8s pod for list_aim_service_replicas tests."""
+    pod = MagicMock()
+    pod.metadata.name = name
+    pod.metadata.creation_timestamp = created_at or datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+    pod.status.phase = phase
+    cs = MagicMock()
+    cs.ready = ready
+    pod.status.container_statuses = [cs]
+    container = MagicMock()
+    container.resources.limits = gpu_limits or {}
+    pod.spec.containers = [container]
+    return pod
+
+
+def _pods_result(*pods: MagicMock) -> MagicMock:
+    """Wrap pod mocks in an object that mimics the k8s list response."""
+    result = MagicMock()
+    result.items = list(pods)
+    return result
 
 
 @pytest.fixture
@@ -36,11 +78,14 @@ def kube_client() -> MagicMock:
     mock.custom_objects = MagicMock()
     mock.custom_objects.list_cluster_custom_object = AsyncMock(return_value={"items": []})
     mock.custom_objects.get_cluster_custom_object = AsyncMock()
+    mock.custom_objects.get_namespaced_custom_object = AsyncMock()
     mock.custom_objects.list_namespaced_custom_object = AsyncMock(return_value={"items": []})
     mock.custom_objects.create_namespaced_custom_object = AsyncMock()
     mock.custom_objects.delete_namespaced_custom_object = AsyncMock()
     mock.custom_objects.patch_namespaced_custom_object = AsyncMock()
     mock.get_events_for_resource = AsyncMock(return_value=[])
+    mock.core_v1 = MagicMock()
+    mock.core_v1.list_namespaced_pod = AsyncMock(return_value=_pods_result())
     return mock
 
 
@@ -182,22 +227,6 @@ async def test_create_aim_service_manifest_uses_camelcase_for_cluster(kube_clien
 
 
 @pytest.mark.asyncio
-async def test_create_aim_service_crd_not_available(kube_client: MagicMock) -> None:
-    """Test raises when CRD not available."""
-    with patch("app.aims.gateway.get_resource_version", return_value=None):
-        with pytest.raises(RuntimeError, match="CRD not available"):
-            await create_aim_service(
-                kube_client,
-                "ns",
-                make_aim_cluster_model(),
-                AIMDeployRequest(model="x"),
-                "u",
-                "wb-aim-test",
-                "test-group-id",
-            )
-
-
-@pytest.mark.asyncio
 async def test_delete_aim_service(kube_client: MagicMock) -> None:
     """Test deleting AIMService."""
     wid = uuid4()
@@ -233,8 +262,16 @@ async def test_patch_aim_service_scaling_policy(kube_client: MagicMock) -> None:
 
 
 def test_is_aim_service_chattable_true() -> None:
-    """Test service is chattable when RUNNING with chat tag."""
-    svc = make_aim_service_k8s(status=AIMServiceStatus.RUNNING, model_ref="llama")
+    """Test service is chattable when conditions are ready and has chat tag."""
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
+    svc = make_aim_service_k8s(
+        status=AIMServiceStatus.RUNNING,
+        model_ref="llama",
+        conditions=conditions,
+    )
     aim = make_aim_cluster_model(name="llama", tags=["chat"])
     aims_by_name = {"llama": aim}
 
@@ -243,9 +280,12 @@ def test_is_aim_service_chattable_true() -> None:
     assert result is True
 
 
-def test_is_aim_service_chattable_false_wrong_status() -> None:
-    """Test service not chattable when not RUNNING."""
-    svc = make_aim_service_k8s(status=AIMServiceStatus.PENDING, model_ref="llama")
+def test_is_aim_service_chattable_false_missing_conditions() -> None:
+    """Test service not chattable when conditions are not ready."""
+    svc = make_aim_service_k8s(
+        status=AIMServiceStatus.PENDING,
+        model_ref="llama",
+    )
     aim = make_aim_cluster_model(name="llama", tags=["chat"])
     aims_by_name = {"llama": aim}
 
@@ -256,7 +296,15 @@ def test_is_aim_service_chattable_false_wrong_status() -> None:
 
 def test_is_aim_service_chattable_false_no_chat_tag() -> None:
     """Test service not chattable without chat tag."""
-    svc = make_aim_service_k8s(status=AIMServiceStatus.RUNNING, model_ref="llama")
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
+    svc = make_aim_service_k8s(
+        status=AIMServiceStatus.RUNNING,
+        model_ref="llama",
+        conditions=conditions,
+    )
     aim = make_aim_cluster_model(name="llama", tags=["text-generation"])  # No chat tag
     aims_by_name = {"llama": aim}
 
@@ -267,12 +315,39 @@ def test_is_aim_service_chattable_false_no_chat_tag() -> None:
 
 def test_is_aim_service_chattable_false_aim_not_found() -> None:
     """Test service not chattable when AIM not found."""
-    svc = make_aim_service_k8s(status=AIMServiceStatus.RUNNING, model_ref="missing")
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
+    svc = make_aim_service_k8s(
+        status=AIMServiceStatus.RUNNING,
+        model_ref="missing",
+        conditions=conditions,
+    )
     aims_by_name: dict[str, AIMClusterModelResource] = {}
 
     result = is_aim_service_chattable(svc, aims_by_name)
 
     assert result is False
+
+
+def test_is_aim_service_chattable_degraded_but_healthy() -> None:
+    """Test DEGRADED service is chattable if conditions are healthy."""
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
+    svc = make_aim_service_k8s(
+        status=AIMServiceStatus.DEGRADED,
+        model_ref="llama",
+        conditions=conditions,
+    )
+    aim = make_aim_cluster_model(name="llama", tags=["chat"])
+    aims_by_name = {"llama": aim}
+
+    result = is_aim_service_chattable(svc, aims_by_name)
+
+    assert result is True
 
 
 @pytest.mark.asyncio
@@ -332,14 +407,6 @@ async def test_get_aim_service_by_id_handles_exception(kube_client: MagicMock) -
 
 
 @pytest.mark.asyncio
-async def test_patch_aim_service_crd_not_available(kube_client: MagicMock) -> None:
-    """Test patch raises when CRD not available."""
-    with patch("app.aims.gateway.get_resource_version", return_value=None):
-        with pytest.raises(RuntimeError, match="CRD not available"):
-            await patch_aim_service_scaling_policy(kube_client, "ns", uuid4(), 2, 10, {})
-
-
-@pytest.mark.asyncio
 async def test_patch_aim_service_handles_patch_error(kube_client: MagicMock) -> None:
     """Test patch raises RuntimeError on K8s patch failure."""
     wid = uuid4()
@@ -372,14 +439,6 @@ async def test_list_aim_cluster_service_templates_handles_exception(kube_client:
 
 
 @pytest.mark.asyncio
-async def test_delete_aim_service_crd_not_available(kube_client: MagicMock) -> None:
-    """Test delete raises when CRD not available."""
-    with patch("app.aims.gateway.get_resource_version", return_value=None):
-        with pytest.raises(RuntimeError, match="CRD not available"):
-            await delete_aim_service(kube_client, "ns", uuid4())
-
-
-@pytest.mark.asyncio
 async def test_get_aim_by_name_crd_not_available(kube_client: MagicMock) -> None:
     """Test get_aim_by_name returns None when CRD not available."""
     with patch("app.aims.gateway.get_resource_version", return_value=None):
@@ -390,7 +449,11 @@ async def test_get_aim_by_name_crd_not_available(kube_client: MagicMock) -> None
 @pytest.mark.asyncio
 async def test_list_aim_services_with_chattable_filter(kube_client: MagicMock) -> None:
     """Test listing services with chattable filter."""
-    svc = make_aim_service_k8s(status=AIMServiceStatus.RUNNING, model_ref="llama")
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
+    svc = make_aim_service_k8s(status=AIMServiceStatus.RUNNING, model_ref="llama", conditions=conditions)
     aim = make_aim_cluster_model(name="llama", tags=["chat"])
     kube_client.custom_objects.list_namespaced_custom_object.return_value = {"items": [svc.model_dump(by_alias=True)]}
     kube_client.custom_objects.list_cluster_custom_object.return_value = {"items": [aim.model_dump(by_alias=True)]}
@@ -576,3 +639,197 @@ async def test_get_httproutes_for_aim_services_handles_exception(kube_client: Ma
     assert result == {}
     # Verify the API was called despite the error
     kube_client.custom_objects.list_namespaced_custom_object.assert_called_once()
+
+
+# =============================================================================
+# list_aim_service_replicas
+# =============================================================================
+
+
+def _setup_pod_serialization(kube_client: MagicMock, pod_dicts: list[dict]) -> None:
+    """Wire sanitize_for_serialization to return successive dicts for each pod call."""
+    kube_client._api_client.sanitize_for_serialization.side_effect = pod_dicts
+
+
+@pytest.mark.asyncio
+async def test_list_aim_service_replicas_returns_parsed_replica(kube_client: MagicMock) -> None:
+    """Returns raw pod dicts serialized from Kubernetes objects."""
+    pod = _make_pod(name="pod-abc")
+    pod_dict = {"metadata": {"name": "pod-abc"}, "status": {"phase": "Running"}}
+    kube_client.core_v1.list_namespaced_pod.return_value = _pods_result(pod)
+    _setup_pod_serialization(kube_client, [pod_dict])
+
+    result = await list_aim_service_replicas(kube_client, "test-ns", uuid4())
+
+    assert len(result) == 1
+    assert result[0]["metadata"]["name"] == "pod-abc"
+    assert result[0]["status"]["phase"] == "Running"
+
+
+@pytest.mark.asyncio
+async def test_list_aim_service_replicas_sorted_by_name(kube_client: MagicMock) -> None:
+    """Results are sorted alphabetically by metadata.name."""
+    pods = [_make_pod(name=n) for n in ("pod-zzz", "pod-aaa", "pod-mmm")]
+    pod_dicts = [{"metadata": {"name": n}} for n in ("pod-zzz", "pod-aaa", "pod-mmm")]
+    kube_client.core_v1.list_namespaced_pod.return_value = _pods_result(*pods)
+    _setup_pod_serialization(kube_client, pod_dicts)
+
+    result = await list_aim_service_replicas(kube_client, "test-ns", uuid4())
+
+    assert [r["metadata"]["name"] for r in result] == ["pod-aaa", "pod-mmm", "pod-zzz"]
+
+
+@pytest.mark.asyncio
+async def test_list_aim_service_replicas_skips_pods_without_name(kube_client: MagicMock) -> None:
+    """Pods missing a metadata name are silently skipped."""
+    named = _make_pod(name="pod-ok")
+    unnamed = _make_pod()
+    unnamed.metadata.name = None
+    kube_client.core_v1.list_namespaced_pod.return_value = _pods_result(named, unnamed)
+    _setup_pod_serialization(kube_client, [{"metadata": {"name": "pod-ok"}}])
+
+    result = await list_aim_service_replicas(kube_client, "test-ns", uuid4())
+
+    assert len(result) == 1
+    assert result[0]["metadata"]["name"] == "pod-ok"
+
+
+@pytest.mark.asyncio
+async def test_list_aim_service_replicas_handles_exception(kube_client: MagicMock) -> None:
+    """Returns an empty list when the k8s API call fails."""
+    kube_client.core_v1.list_namespaced_pod.side_effect = Exception("API error")
+
+    result = await list_aim_service_replicas(kube_client, "test-ns", uuid4())
+
+    assert result == []
+
+
+# --- get_aim_model ---
+
+
+@pytest.mark.asyncio
+async def test_get_aim_model(kube_client: MagicMock) -> None:
+    """Test getting a namespace-scoped AIMModel by name."""
+    raw = {"metadata": {"name": "ft-model", "namespace": "test-ns"}, "spec": {"modelSources": []}}
+    kube_client.custom_objects.get_namespaced_custom_object.return_value = raw
+
+    with patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"):
+        result = await get_aim_model(kube_client, "test-ns", "ft-model")
+
+    assert result is not None
+    assert isinstance(result, AIMModelResource)
+    assert result.metadata.name == "ft-model"
+
+
+@pytest.mark.asyncio
+async def test_get_aim_model_404(kube_client: MagicMock) -> None:
+    """Test returns None when AIMModel resource does not exist (404)."""
+    kube_client.custom_objects.get_namespaced_custom_object.side_effect = ApiException(status=404, reason="Not Found")
+
+    with patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"):
+        result = await get_aim_model(kube_client, "test-ns", "missing")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_aim_model_non_404_exception(kube_client: MagicMock) -> None:
+    """Test non-404 exceptions are re-raised so callers aren't silently misled."""
+    kube_client.custom_objects.get_namespaced_custom_object.side_effect = ApiException(
+        status=500, reason="Server error"
+    )
+
+    with (
+        patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"),
+        pytest.raises(ApiException),
+    ):
+        await get_aim_model(kube_client, "test-ns", "ft-model")
+
+
+# --- list_aim_services_for_model ---
+
+
+@pytest.mark.asyncio
+async def test_list_aim_services_for_model(kube_client: MagicMock) -> None:
+    """Test listing AIMServices that reference a specific model."""
+    matching = make_aim_service_k8s(model_ref="ft-model")
+    other = make_aim_service_k8s(model_ref="other-model")
+    kube_client.custom_objects.list_namespaced_custom_object.return_value = {
+        "items": [matching.model_dump(by_alias=True), other.model_dump(by_alias=True)]
+    }
+
+    with patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"):
+        result = await list_aim_services_for_model(kube_client, "test-ns", "ft-model")
+
+    assert len(result) == 1
+    assert result[0].spec.model["name"] == "ft-model"
+
+
+@pytest.mark.asyncio
+async def test_list_aim_services_for_model_no_matches(kube_client: MagicMock) -> None:
+    """Test returns empty when no services reference the model."""
+    svc = make_aim_service_k8s(model_ref="other-model")
+    kube_client.custom_objects.list_namespaced_custom_object.return_value = {"items": [svc.model_dump(by_alias=True)]}
+
+    with patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"):
+        result = await list_aim_services_for_model(kube_client, "test-ns", "ft-model")
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_list_aim_services_for_model_propagates_non_404_exception(kube_client: MagicMock) -> None:
+    """Non-404 exceptions propagate so the active-deployment guard is never silently bypassed."""
+    kube_client.custom_objects.list_namespaced_custom_object.side_effect = Exception("API error")
+
+    with (
+        patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"),
+        pytest.raises(Exception, match="API error"),
+    ):
+        await list_aim_services_for_model(kube_client, "test-ns", "ft-model")
+
+
+@pytest.mark.asyncio
+async def test_list_aim_services_for_model_returns_empty_on_404(kube_client: MagicMock) -> None:
+    """404 from the API returns empty list — model has no services."""
+    kube_client.custom_objects.list_namespaced_custom_object.side_effect = ApiException(status=404, reason="Not Found")
+
+    with patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"):
+        result = await list_aim_services_for_model(kube_client, "test-ns", "ft-model")
+
+    assert result == []
+
+
+# --- delete_aim_model ---
+
+
+@pytest.mark.asyncio
+async def test_delete_aim_model(kube_client: MagicMock) -> None:
+    """Test successful deletion of AIMModel."""
+    with patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"):
+        await delete_aim_model(kube_client, "test-ns", "ft-model")
+
+    kube_client.custom_objects.delete_namespaced_custom_object.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_aim_model_404(kube_client: MagicMock) -> None:
+    """Test no-ops when AIMModel resource does not exist (404)."""
+    kube_client.custom_objects.delete_namespaced_custom_object.side_effect = ApiException(
+        status=404, reason="Not Found"
+    )
+
+    with patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"):
+        await delete_aim_model(kube_client, "test-ns", "missing")
+
+    # Should not raise
+
+
+@pytest.mark.asyncio
+async def test_delete_aim_model_non_404_exception(kube_client: MagicMock) -> None:
+    """Test re-raises non-404 exceptions."""
+    kube_client.custom_objects.delete_namespaced_custom_object.side_effect = Exception("Server error")
+
+    with patch("app.aims.gateway.get_resource_version", return_value="v1alpha1"):
+        with pytest.raises(Exception, match="Server error"):
+            await delete_aim_model(kube_client, "test-ns", "ft-model")

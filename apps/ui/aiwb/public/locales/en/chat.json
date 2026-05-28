@@ -9,7 +9,8 @@
     "description": "Chat mode lets you experiment with individual models you're able to access. You can tweak various retrieval and generation settings to see how they impact the model's responses.",
     "tips": {
       "tip1": "Pick a model from the dropdown menu",
-      "tip2": "Open settings to explore the options you can adjust."
+      "tip2": "Open settings to explore the options you can adjust",
+      "tip3": "For vision-enabled models, you can attach images to your message"
     }
   },
   "compare": {
@@ -17,7 +18,8 @@
     "description": "Compare mode lets you experiment with models you're able to access in parallel. You can tweak various retrieval and generation settings to see how they impact the model's responses.",
     "tips": {
       "tip1": "Pick two models from the dropdown menus",
-      "tip2": "Open settings to explore the options you can adjust."
+      "tip2": "Open settings to explore the options you can adjust",
+      "tip3": "When comparing two vision-enabled models, you can attach images to your message"
     }
   },
   "roles": {
@@ -93,7 +95,12 @@
   "chatInput": {
     "placeholder": "Type your message here...",
     "placeholderDisabled": "Select model(s) to chat",
-    "regenerateResponse": "Regenerate response"
+    "regenerateResponse": "Regenerate response",
+    "attachImages": "Attach images",
+    "attachImage": "Attach image",
+    "removeImage": "Remove {{fileName}}",
+    "attachedImageAlt": "Attached image {{index}}",
+    "dropImages": "Drop images here"
   },
   "actions": {
     "selectModel": "Select model",
@@ -102,7 +109,12 @@
   "errors": {
     "modelLoadingFailed": "Error loading models",
     "workloadLoadingFailed": "Error loading workloads",
-    "chatResponseFailed": "Error fetching chat response. Please try again."
+    "chatResponseFailed": "Error fetching chat response. Please try again.",
+    "invalidImageFile": "Invalid image file: {{fileName}}. Supported formats: JPEG, PNG, GIF, WebP.",
+    "imageTooLarge": "Image too large: {{fileName}}. Maximum size is {{maxSize}}.",
+    "totalAttachmentTooLarge": "Total attachment size would exceed the {{maxSize}} request limit. Remove an image before adding more.",
+    "failedToReadImage": "Failed to read image file: {{fileName}}. Please try again.",
+    "failedToSendMessage": "Failed to send message. Please try again."
   },
   "notifications": {
     "delayedResponse": "It seems that the response is taking longer than usual. This might be due to high server load or model warmup. Please wait a moment while we process your request."

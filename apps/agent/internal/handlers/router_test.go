@@ -99,6 +99,31 @@ func TestRouter_RoutesNamespaceDelete(t *testing.T) {
 	}
 }
 
+func TestRouter_RoutesNamespaceUpdate(t *testing.T) {
+	mock := &mockHandler{}
+	router := newTestRouter(mock, &mockHandler{}, nil)
+
+	msg := &messaging.RawMessage{
+		Type:    messaging.MessageTypeProjectNamespaceUpdate,
+		Payload: []byte(`{"message_type": "project_namespace_update"}`),
+	}
+
+	err := router.Handle(context.Background(), msg)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mock.updateCalled {
+		t.Error("expected HandleUpdate to be called")
+	}
+	if mock.createCalled || mock.deleteCalled {
+		t.Error("only HandleUpdate should be called for namespace update")
+	}
+	if mock.lastMsg != msg {
+		t.Error("handler should receive the same message")
+	}
+}
+
 func TestRouter_RoutesSecretsCreate(t *testing.T) {
 	secretMock := &mockHandler{}
 	router := newTestRouter(nil, &mockHandler{}, secretMock)

@@ -4,7 +4,7 @@
 
 import { RefObject, memo } from 'react';
 
-import { ChatConversation } from '@amdenterpriseai/types';
+import { ChatConversation } from '@/types/chat';
 
 import { MemoizedChatMessage } from './MemoizedChatMessage';
 import { ChatMessage } from './ChatMessage';

@@ -28,8 +28,8 @@
       "viewAllMetrics": "View all metrics",
       "memoryUtilization": "Memory utilization",
       "memoryUtilizationTooltip": "Percentage of GPU video memory (VRAM) currently in use by the workload. High utilization may indicate the workload is memory-bound.",
-      "junctionTemperature": "Junction temperature",
-      "junctionTemperatureTooltip": "Temperature at the GPU die (junction). Shown in °C. Sustained high temperatures may trigger throttling.",
+      "gpuUtilization": "GPU utilization",
+      "gpuUtilizationTooltip": "GPU core activity as a percentage of available compute. Reflects how actively the workload is using the GPU engines.",
       "gpuPowerUsage": "GPU power usage",
       "gpuPowerUsageTooltip": "Current power draw of the GPU in watts. Reflects workload activity and can vary with utilization and temperature.",
       "noGpuMetrics": "No GPU device metrics available.",
@@ -55,6 +55,7 @@
     "DeleteFailed": "Delete failed",
     "Deleted": "Deleted",
     "Pending": "Pending",
+    "Starting": "Starting",
     "Running": "Running",
     "Terminated": "Terminated",
     "Unknown": "Unknown"

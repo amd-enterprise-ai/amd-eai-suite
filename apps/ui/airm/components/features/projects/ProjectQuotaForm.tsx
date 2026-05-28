@@ -3,21 +3,21 @@
 // SPDX-License-Identifier: MIT
 
 import { ManagedForm } from '@amdenterpriseai/components';
-import { QuotaAllocationEditFields } from '@amdenterpriseai/types';
-import {
-  ProjectQuotaFormData,
-  ProjectWithMembers,
-  ProjectWithResourceAllocation,
-  UpdateProjectRequest,
-} from '@amdenterpriseai/types';
+import { QuotaAllocationEditFields } from '@/types/enums/quotas-form-fields';
+import { ProjectQuotaFormData } from '@/types/projects';
+import { UpdateProjectRequest } from '@/types/projects';
 import { convertStringToNumber } from '@amdenterpriseai/utils/app';
 import { useTranslation } from 'next-i18next';
 import { Alert } from '@amdenterpriseai/components';
 import { useCallback, useMemo } from 'react';
 import { z } from 'zod';
 import { AllocationSettings } from '../quotas';
-import { Cluster } from '@amdenterpriseai/types';
-import { UpdateQuotaRequest } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import {
+  ProjectWithMembers,
+  ProjectWithResourceAllocation,
+} from '@/types/projects';
+import { UpdateQuotaRequest } from '@/types/quotas';
 import { gigabytesToBytes } from '@amdenterpriseai/utils/app';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
@@ -88,17 +88,19 @@ export const ProjectQuotaForm: React.FC<Props> = ({ project, cluster }) => {
   const handleFormSubmit = useCallback(
     (data: ProjectQuotaFormData) => {
       const quota: UpdateQuotaRequest = {
-        cpu_milli_cores: data[QuotaAllocationEditFields.CPU] * 1000,
-        memory_bytes: gigabytesToBytes(data[QuotaAllocationEditFields.RAM]),
-        ephemeral_storage_bytes: gigabytesToBytes(
+        cpuMilliCores: data[QuotaAllocationEditFields.CPU] * 1000,
+        memoryBytes: gigabytesToBytes(data[QuotaAllocationEditFields.RAM]),
+        ephemeralStorageBytes: gigabytesToBytes(
           data[QuotaAllocationEditFields.DISK],
         ),
-        gpu_count: data[QuotaAllocationEditFields.GPU] ?? 0,
+        gpuCount: data[QuotaAllocationEditFields.GPU] ?? 0,
       };
 
       updateProjectMutation({
-        ...project,
-        quota: quota,
+        id: project.id,
+        description: project.description,
+        quota,
+        gpuPreemption: project.gpuPreemption,
       });
     },
     [project, updateProjectMutation],
@@ -122,7 +124,6 @@ export const ProjectQuotaForm: React.FC<Props> = ({ project, cluster }) => {
               <Alert
                 color="primary"
                 hideIconWrapper={true}
-                className="bg-primary/10!"
                 description={t('settings.form.guaranteedQuota.info')}
               />
               <AllocationSettings

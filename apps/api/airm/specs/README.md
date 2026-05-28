@@ -31,7 +31,7 @@ End-to-end tests for the AI Resource Manager (AIRM) backend service, covering AP
            args:
              - oidc-login
              - get-token
-             - --oidc-issuer-url=https://kc.your-domain.silogen.ai/realms/airm
+             - --oidc-issuer-url=https://kc.<your-domain>/realms/airm
              - --oidc-client-id=k8s
              - --oidc-client-secret=<insert client secret>
              - --grant-type=password
@@ -226,7 +226,7 @@ Tests use Robot Framework tags for filtering and test selection. Use tags to run
 
 **Feature-Specific Tags:**
 
-Tests are also tagged by feature area (`projects`, `workload`, `quota`, `secret`, `storage`, `preemption`) and operation type (`create`, `delete`, `list`, etc.). See individual test files for complete tag lists.
+Tests are also tagged by feature area (`projects`, `workload`, `quota`, `secret`, `storage`, `preemption`, `metrics`, `nodes`, `clusters`) and operation type (`create`, `delete`, `list`, etc.). See individual test files for complete tag lists.
 
 ## Test Suites
 

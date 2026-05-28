@@ -6,12 +6,24 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, Field
+
+from api_common.collections import SortDirection
+from api_common.schemas import BaseModel
 
 from ..aims.constants import AIM_SERVICE_RESOURCE
 from ..aims.schemas import AIMServiceResponse
 from ..workloads.constants import DEPLOYMENT_RESOURCE, JOB_RESOURCE
 from ..workloads.enums import WorkloadStatus, WorkloadType
+
+
+class NamespaceMetricsQuery(BaseModel):
+    page: int = Field(default=1, ge=1, description="Page number (1-indexed)")
+    page_size: int = Field(default=20, ge=1, le=100, description="Number of items per page")
+    workload_type: list[WorkloadType] | None = Field(default=None, description="Filter by workload type(s)")
+    status_filter: list[WorkloadStatus] | None = Field(default=None, description="Filter by workload status(es)")
+    sort_by: str | None = Field(default=None, description="Field to sort by (e.g., 'created_at', 'name', 'status')")
+    sort_order: SortDirection = Field(default=SortDirection.desc, description="Sort order: 'asc' or 'desc'")
 
 
 class ResourceType(StrEnum):
@@ -30,7 +42,6 @@ class ChattableResponse(BaseModel):
 
     aim_services: list[AIMServiceResponse] = Field(
         default_factory=list,
-        alias="aimServices",
         description="List of chattable AIM services",
     )
     workloads: list[Any] = Field(
@@ -38,28 +49,20 @@ class ChattableResponse(BaseModel):
         description="List of chattable workloads (finetuned models)",
     )
 
-    model_config = ConfigDict(populate_by_name=True)
-
 
 class NamespaceWorkloadMetrics(BaseModel):
     """Metrics for a single resource (AIM service or workload)."""
 
     id: UUID = Field(..., description="The unique ID of the resource")
     name: str = Field(..., description="The name of the resource")
-    display_name: str | None = Field(None, alias="displayName", description="The display name of the resource")
+    display_name: str | None = Field(None, description="The display name of the resource")
     type: WorkloadType = Field(..., description="The type of the resource (INFERENCE, FINE_TUNING, WORKSPACE)")
     status: WorkloadStatus = Field(..., description="The current status of the resource")
-    resource_type: ResourceType = Field(
-        ..., alias="resourceType", description="The resource type (Deployment, Job, AIMService)"
-    )
-    gpu_count: int | None = Field(None, alias="gpuCount", description="The number of GPUs allocated to the resource")
+    resource_type: ResourceType = Field(..., description="The resource type (Deployment, Job, AIMService)")
+    gpu_count: int | None = Field(None, description="The number of GPUs allocated to the resource")
     vram: float | None = Field(None, description="The amount of VRAM used by the resource in bytes")
-    created_at: AwareDatetime | None = Field(
-        None, alias="createdAt", description="The timestamp of when the resource was created"
-    )
-    created_by: str | None = Field(None, alias="createdBy", description="The user who created the resource")
-
-    model_config = ConfigDict(populate_by_name=True)
+    created_at: AwareDatetime | None = Field(None, description="The timestamp of when the resource was created")
+    created_by: str | None = Field(None, description="The user who created the resource")
 
 
 class NamespaceWorkloadMetricsListPaginated(BaseModel):
@@ -71,10 +74,8 @@ class NamespaceWorkloadMetricsListPaginated(BaseModel):
     data: list[NamespaceWorkloadMetrics] = Field(..., description="List of resources with their metrics")
     total: int = Field(..., description="Total number of resources")
     page: int = Field(..., description="Current page number (1-indexed)")
-    page_size: int = Field(..., description="Number of items per page", alias="pageSize")
-    total_pages: int = Field(..., description="Total number of pages", alias="totalPages")
-
-    model_config = ConfigDict(populate_by_name=True)
+    page_size: int = Field(..., description="Number of items per page")
+    total_pages: int = Field(..., description="Total number of pages")
 
 
 class ResourceStatusCount(BaseModel):
@@ -93,8 +94,4 @@ class NamespaceStatsCounts(BaseModel):
 
     namespace: str = Field(..., description="The namespace name")
     total: int = Field(..., description="The total number of resources (AIM services + workloads)")
-    status_counts: list[ResourceStatusCount] = Field(
-        ..., description="The total count of resources grouped by status", alias="statusCounts"
-    )
-
-    model_config = ConfigDict(populate_by_name=True)
+    status_counts: list[ResourceStatusCount] = Field(..., description="The total count of resources grouped by status")

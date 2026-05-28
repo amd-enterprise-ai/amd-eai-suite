@@ -22,7 +22,6 @@ Resource            resources/autoscaling.resource
 Resource            resources/aiwb_aims.resource
 Resource            resources/airm_projects.resource
 
-Suite Setup         Initialize Project Tracking
 Suite Teardown      Clean Up All Created Projects
 Test Setup          Open test browser
 Test Teardown       Close test browser
@@ -37,6 +36,7 @@ Deploy drawer shows autoscaling toggle
     Given a ready project with user access exists
     And an AIM exists in system
     And user is logged in
+    And project "${TEST_PROJECT}[name]" is selected
     And user is on models page
     When user opens deploy drawer for "${TEST_AIM_DISPLAY_NAME}"
     Then deploy drawer should be open
@@ -50,6 +50,7 @@ Deploy drawer shows autoscaling configuration when enabled
     Given a ready project with user access exists
     And an AIM exists in system
     And user is logged in
+    And project "${TEST_PROJECT}[name]" is selected
     And user is on models page
     And user opens deploy drawer for "${TEST_AIM_DISPLAY_NAME}"
     When user enables autoscaling in deploy drawer
@@ -101,3 +102,17 @@ Autoscaling settings drawer opens from status card
     And user opens inference workload details
     When user opens autoscaling settings
     Then deployment settings drawer should be open
+
+Running workload shows expandable replica list
+    [Documentation]    Verify that when an AIM is running with autoscaling, the autoscaling
+    ...                card shows a chevron button that expands to display individual replica rows.
+    [Tags]    ui    autoscaling    workloads    replicas    gpu
+
+    Given a ready project with user access exists
+    And an AIM with autoscaling is running
+    And user is logged in
+    And project for deployed AIM is selected
+    And user opens inference workload details
+    When user expands replicas list on autoscaling card
+    Then replicas list should be visible
+    And replicas list should show at least one replica

@@ -3,22 +3,22 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  CatalogItem,
-  CatalogItemDeployment,
   CollectionRequestParams,
   PlotPoint,
   TimeRangePeriod,
   TimeSeriesData,
+  WorkloadType,
+} from '@amdenterpriseai/types';
+import { CatalogItem, CatalogItemDeployment } from '@/types/catalog';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import {
   Workload,
   WorkloadLogParams,
   WorkloadLogResponse,
-  WorkloadStatus,
-  WorkloadType,
-} from '@amdenterpriseai/types';
+} from '@/types/workloads';
 import {
   APIRequestError,
   buildQueryParams,
-  convertCamelToSnake,
   getErrorMessage,
 } from '@amdenterpriseai/utils/app';
 
@@ -45,12 +45,12 @@ export const listWorkloads = async (
 
   if (filters?.type) {
     filters.type.forEach((t) => {
-      urlParams.append('workload_type', t);
+      urlParams.append('workloadType', t);
     });
   }
   if (filters?.status) {
     filters.status.forEach((s) => {
-      urlParams.append('status_filter', s);
+      urlParams.append('statusFilter', s);
     });
   }
   const paginationParams = collectionRequestParams
@@ -181,12 +181,12 @@ export const getWorkloadLogs = async (
     if (!pageToken.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(pageToken)) {
       pageToken = pageToken + 'Z';
     }
-    urlParams.append('page_token', pageToken);
+    urlParams.append('pageToken', pageToken);
   }
   if (params.level) urlParams.append('level', params.level);
   if (params.limit) urlParams.append('limit', params.limit.toString());
   if (params.direction) urlParams.append('direction', params.direction);
-  if (params.logType) urlParams.append('log_type', params.logType);
+  if (params.logType) urlParams.append('logType', params.logType);
   const response = await fetch(
     `/api/namespaces/${namespace}/workloads/${workloadId}/logs?${urlParams.toString()}`,
     {
@@ -279,22 +279,25 @@ export const deployWorkspace = async (
     imagePullSecrets,
   } = payload;
 
-  const url = `/api/namespaces/${namespace}/workspaces/${template}?display_name=${displayName}`;
+  const params = new URLSearchParams();
+  if (displayName) {
+    params.set('displayName', displayName);
+  }
+  const query = params.toString();
+  const url = `/api/namespaces/${namespace}/workspaces/${template}${query ? `?${query}` : ''}`;
 
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(
-      convertCamelToSnake({
-        gpus,
-        memoryPerGpu,
-        cpuPerGpu,
-        image,
-        imagePullSecrets,
-      }),
-    ),
+    body: JSON.stringify({
+      gpus,
+      memoryPerGpu,
+      cpuPerGpu,
+      image,
+      imagePullSecrets,
+    }),
   });
 
   if (!response.ok) {

@@ -11,7 +11,7 @@ import React from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { AddStorageButtonOptions } from '@amdenterpriseai/types';
+import { AddStorageButtonOptions } from '@/types/storages';
 
 import { ActionButton } from '@amdenterpriseai/components';
 

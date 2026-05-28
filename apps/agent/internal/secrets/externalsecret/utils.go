@@ -7,7 +7,6 @@ package externalsecret
 import (
 	"fmt"
 
-	"github.com/silogen/agent/internal/messaging"
 	"github.com/silogen/agent/internal/secrets/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -17,7 +16,7 @@ import (
 
 // GetExternalSecretStatus extracts the status from an ExternalSecret's conditions.
 // Supports unstructured ExternalSecrets (any served version).
-func GetExternalSecretStatus(obj client.Object) (messaging.ProjectSecretStatus, string) {
+func GetExternalSecretStatus(obj client.Object) (common.ProjectSecretStatus, string) {
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok || u == nil {
 		return "", common.ProjectSecretStatusUnknownReason
@@ -41,7 +40,7 @@ func GetExternalSecretStatus(obj client.Object) (messaging.ProjectSecretStatus, 
 		return statusFromReadyCondition(condStatus, message, reason)
 	}
 
-	return messaging.ProjectSecretStatusUnknown, common.ProjectSecretStatusUnknownReason
+	return common.ProjectSecretStatusUnknown, common.ProjectSecretStatusUnknownReason
 }
 
 func parseReadyCondition(m map[string]interface{}) (corev1.ConditionStatus, string, string, bool, error) {
@@ -88,27 +87,27 @@ func statusFromReadyCondition(
 	condStatus corev1.ConditionStatus,
 	message string,
 	reason string,
-) (messaging.ProjectSecretStatus, string) {
+) (common.ProjectSecretStatus, string) {
 	switch condStatus {
 	case corev1.ConditionTrue:
 		if message != "" {
-			return messaging.ProjectSecretStatusSynced, message
+			return common.ProjectSecretStatusSynced, message
 		}
-		return messaging.ProjectSecretStatusSynced, common.ProjectSecretStatusReadyReason
+		return common.ProjectSecretStatusSynced, common.ProjectSecretStatusReadyReason
 	case corev1.ConditionFalse:
 		if message != "" {
-			return messaging.ProjectSecretStatusSyncedError, message
+			return common.ProjectSecretStatusSyncedError, message
 		}
 		if reason != "" {
-			return messaging.ProjectSecretStatusSyncedError, reason
+			return common.ProjectSecretStatusSyncedError, reason
 		}
-		return messaging.ProjectSecretStatusSyncedError, common.ProjectSecretStatusNotReadyReason
+		return common.ProjectSecretStatusSyncedError, common.ProjectSecretStatusNotReadyReason
 	case corev1.ConditionUnknown:
 		if message != "" {
-			return messaging.ProjectSecretStatusUnknown, message
+			return common.ProjectSecretStatusUnknown, message
 		}
-		return messaging.ProjectSecretStatusUnknown, common.ProjectSecretStatusUnknownReason
+		return common.ProjectSecretStatusUnknown, common.ProjectSecretStatusUnknownReason
 	default:
-		return messaging.ProjectSecretStatusUnknown, common.ProjectSecretStatusUnknownReason
+		return common.ProjectSecretStatusUnknown, common.ProjectSecretStatusUnknownReason
 	}
 }

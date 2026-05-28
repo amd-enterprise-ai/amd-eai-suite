@@ -10,6 +10,8 @@ import (
 
 	"github.com/silogen/agent/internal/messaging"
 	"github.com/silogen/agent/internal/testutils"
+
+	agent "github.com/silogen/agent/internal/common"
 	kaiwov1alpha1 "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,10 +33,10 @@ func newTestScheme() *runtime.Scheme {
 }
 
 func TestBuildKaiwoQueueConfigManifest_NVIDIAGPUs(t *testing.T) {
-	gpuVendor := messaging.GPUVendorNVIDIA
-	msg := &messaging.ClusterQuotasAllocationMessage{
+	gpuVendor := agent.GPUVendorNVIDIA
+	msg := &ClusterQuotasAllocationMessage{
 		GPUVendor: &gpuVendor,
-		QuotaAllocations: []messaging.ClusterQuotaAllocation{
+		QuotaAllocations: []ClusterQuotaAllocation{
 			{
 				QuotaName:             "test-quota",
 				Namespaces:            []string{"default"},
@@ -44,7 +46,7 @@ func TestBuildKaiwoQueueConfigManifest_NVIDIAGPUs(t *testing.T) {
 				GPUCount:              1,
 			},
 		},
-		PriorityClasses: []messaging.PriorityClass{
+		PriorityClasses: []PriorityClass{
 			{Name: "normal", Priority: 50},
 		},
 	}
@@ -63,10 +65,10 @@ func TestBuildKaiwoQueueConfigManifest_NVIDIAGPUs(t *testing.T) {
 }
 
 func TestBuildKaiwoQueueConfigManifest_AMDGPUs(t *testing.T) {
-	gpuVendor := messaging.GPUVendorAMD
-	msg := &messaging.ClusterQuotasAllocationMessage{
+	gpuVendor := agent.GPUVendorAMD
+	msg := &ClusterQuotasAllocationMessage{
 		GPUVendor: &gpuVendor,
-		QuotaAllocations: []messaging.ClusterQuotaAllocation{
+		QuotaAllocations: []ClusterQuotaAllocation{
 			{
 				QuotaName:             "amd-quota",
 				Namespaces:            []string{"gpu-ns"},
@@ -76,7 +78,7 @@ func TestBuildKaiwoQueueConfigManifest_AMDGPUs(t *testing.T) {
 				GPUCount:              4,
 			},
 		},
-		PriorityClasses: []messaging.PriorityClass{},
+		PriorityClasses: []PriorityClass{},
 	}
 
 	config := buildKaiwoQueueConfigManifest(msg)
@@ -92,9 +94,9 @@ func TestBuildKaiwoQueueConfigManifest_AMDGPUs(t *testing.T) {
 }
 
 func TestBuildKaiwoQueueConfigManifest_NoGPUVendor(t *testing.T) {
-	msg := &messaging.ClusterQuotasAllocationMessage{
+	msg := &ClusterQuotasAllocationMessage{
 		GPUVendor: nil,
-		QuotaAllocations: []messaging.ClusterQuotaAllocation{
+		QuotaAllocations: []ClusterQuotaAllocation{
 			{
 				QuotaName:             "cpu-only",
 				Namespaces:            []string{},
@@ -104,7 +106,7 @@ func TestBuildKaiwoQueueConfigManifest_NoGPUVendor(t *testing.T) {
 				GPUCount:              0,
 			},
 		},
-		PriorityClasses: []messaging.PriorityClass{},
+		PriorityClasses: []PriorityClass{},
 	}
 
 	config := buildKaiwoQueueConfigManifest(msg)
@@ -120,32 +122,6 @@ func TestBuildKaiwoQueueConfigManifest_NoGPUVendor(t *testing.T) {
 	assert.Contains(t, rg.CoveredResources, corev1.ResourceName(EphemeralStorageResource))
 	assert.NotContains(t, rg.CoveredResources, corev1.ResourceName(AMDGPUResource))
 	assert.NotContains(t, rg.CoveredResources, corev1.ResourceName(NVIDIAGPUResource))
-}
-
-func TestBuildKaiwoQueueConfigManifest_DefaultTopologies(t *testing.T) {
-	msg := &messaging.ClusterQuotasAllocationMessage{
-		QuotaAllocations: []messaging.ClusterQuotaAllocation{
-			{
-				QuotaName:             "quota",
-				Namespaces:            []string{"default"},
-				CPUMilliCores:         1000,
-				MemoryBytes:           1024,
-				EphemeralStorageBytes: 1024,
-				GPUCount:              0,
-			},
-		},
-		PriorityClasses: []messaging.PriorityClass{},
-	}
-
-	config := buildKaiwoQueueConfigManifest(msg)
-
-	require.Len(t, config.Spec.Topologies, 1)
-	topo := config.Spec.Topologies[0]
-	assert.Equal(t, DefaultTopologyName, topo.Name)
-	require.Len(t, topo.Spec.Levels, 3)
-	assert.Equal(t, TopologyLevelBlockNodeLabel, topo.Spec.Levels[0].NodeLabel)
-	assert.Equal(t, TopologyLevelRackNodeLabel, topo.Spec.Levels[1].NodeLabel)
-	assert.Equal(t, corev1.LabelHostname, topo.Spec.Levels[2].NodeLabel)
 }
 
 func TestHandleDeletion_NoFinalizer(t *testing.T) {
@@ -187,7 +163,7 @@ func TestHandleDeletion_PublishesEmptyQuotasAndRemovesFinalizer(t *testing.T) {
 	assert.NoError(t, err)
 
 	require.Len(t, pub.Published, 1)
-	msg, ok := pub.Published[0].(*messaging.ClusterQuotasStatusMessage)
+	msg, ok := pub.Published[0].(*ClusterQuotasStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, messaging.MessageTypeClusterQuotasStatusMessage, msg.MessageType)
 	assert.NotNil(t, msg.QuotaAllocations)

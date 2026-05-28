@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_common.auth.security import get_user_email
 from api_common.database import get_session
 from app import app  # type: ignore[attr-defined]
-from app.cluster_auth.client import get_cluster_auth_client
+from app.cluster_auth import get_cluster_auth_client
 from app.dispatch.kube_client import KubernetesClient, get_kube_client
 from app.metrics.client import get_prometheus_client
 from app.minio import get_minio_client

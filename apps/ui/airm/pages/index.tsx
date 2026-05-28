@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { Card, CardBody, CardHeader } from '@heroui/react';
-import { useQuery } from '@tanstack/react-query';
+import { useIsFetching, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { getServerSession } from 'next-auth';
@@ -27,22 +27,22 @@ import {
   rollupTimeSeriesData,
   transformTimeSeriesDataToChartData,
 } from '@amdenterpriseai/utils/app';
-import { getLatestDate } from '@amdenterpriseai/utils/app';
-import { getProjectDashboardUrl } from '@amdenterpriseai/utils/app';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
+import { getProjectDashboardUrl } from '@/utils/projects';
 import { displayFixedNumber } from '@amdenterpriseai/utils/app';
 import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 
-import { ClusterStatsResponse } from '@amdenterpriseai/types';
+import { ClusterStatsResponse } from '@/types/clusters';
 import { TableColumns } from '@amdenterpriseai/types';
 import { TimeRangePeriod } from '@amdenterpriseai/types';
-import { ConsumptionByProjectTableField } from '@amdenterpriseai/types';
+import { ConsumptionByProjectTableField } from '@/types/enums/project-consumption-table-field';
 import { UserRole } from '@amdenterpriseai/types';
-import {
-  TimeRange,
-  TimeSeriesResponse,
-  UtilizationResponse,
-} from '@amdenterpriseai/types';
+import { TimeRange, TimeSeriesResponse } from '@amdenterpriseai/types';
+import { UtilizationResponse } from '@/types/metrics';
 
 import { ClientSideDataTable } from '@amdenterpriseai/components';
 import { AreaChart } from '@amdenterpriseai/components';
@@ -53,9 +53,15 @@ import {
   StatisticsCard,
   StatisticsCardProps,
 } from '@amdenterpriseai/components';
+import {
+  RelevantDocs,
+  AirmDocsPage,
+  airmDocumentationMapping,
+} from '@amdenterpriseai/components';
 
-import { isEqual } from 'lodash';
 import { SortDirection } from '@amdenterpriseai/types';
+
+import { useLastQueryUpdated } from '@amdenterpriseai/hooks';
 
 interface Props {
   clusterStats: ClusterStatsResponse;
@@ -72,61 +78,54 @@ const columns: TableColumns<ConsumptionByProjectTableField> = [
   { key: ConsumptionByProjectTableField.PENDING_WORKLOADS, sortable: true },
 ];
 
-const DashboardPage = ({ clusterStats }: Props) => {
+const CLUSTER_DASHBOARD_METRICS_QUERY_PREFIX = ['metrics'] as const;
+
+const DashboardPage: React.FC<Props> & WithDocumentationLink = ({
+  clusterStats,
+}: Props) => {
   const { t } = useTranslation('dashboard');
   const [timeRange, setTimeRange] = useState<TimeRange>(
     getCurrentTimeRange(TimeRangePeriod['1H']),
   );
   const currentTimePeriod = useRef<TimeRangePeriod>(TimeRangePeriod['1H']);
 
-  const {
-    data: gpuMemoryUsageData,
-    isFetching: isGPUMemoryUsageDataFetching,
-    refetch: refetchGPUMemoryUsageData,
-    dataUpdatedAt: gpuMemoryUsageDataUpdatedAt,
-  } = useQuery<TimeSeriesResponse>({
-    queryKey: [
-      'gpu-memory-utilization',
-      {
-        start: timeRange.start.toISOString(),
-        end: timeRange.end.toISOString(),
+  const { data: gpuMemoryUsageData, isLoading: isGPUMemoryUsageChartLoading } =
+    useQuery<TimeSeriesResponse>({
+      queryKey: [
+        ...CLUSTER_DASHBOARD_METRICS_QUERY_PREFIX,
+        'gpu-memory-utilization',
+        {
+          start: timeRange.start.toISOString(),
+          end: timeRange.end.toISOString(),
+        },
+      ],
+      queryFn: () => {
+        return fetchGPUMemoryUtilization(timeRange.start, timeRange.end);
       },
-    ],
-    queryFn: () => {
-      return fetchGPUMemoryUtilization(timeRange.start, timeRange.end);
-    },
-  });
+    });
 
-  const {
-    data: gpuDeviceUsageData,
-    isFetching: isGPUDeviceUsageDataFetching,
-    refetch: refreshGPUDeviceUsageData,
-    dataUpdatedAt: gpuDeviceUsageDataUpdatedAt,
-  } = useQuery<TimeSeriesResponse>({
-    queryKey: [
-      'gpu-device-utilization',
-      {
-        start: timeRange.start.toISOString(),
-        end: timeRange.end.toISOString(),
+  const { data: gpuDeviceUsageData, isLoading: isGPUDeviceUsageChartLoading } =
+    useQuery<TimeSeriesResponse>({
+      queryKey: [
+        ...CLUSTER_DASHBOARD_METRICS_QUERY_PREFIX,
+        'gpu-device-utilization',
+        {
+          start: timeRange.start.toISOString(),
+          end: timeRange.end.toISOString(),
+        },
+      ],
+      queryFn: () => {
+        return fetchGPUDeviceUtilization(timeRange.start, timeRange.end);
       },
-    ],
-    queryFn: () => {
-      return fetchGPUDeviceUtilization(timeRange.start, timeRange.end);
-    },
-  });
-  const latestMetricsUpdatedAt = useMemo(() => {
-    const latestUpdatedAt: Date[] = [];
+    });
+  const isGpuClusterChartsFetching =
+    useIsFetching({
+      queryKey: CLUSTER_DASHBOARD_METRICS_QUERY_PREFIX,
+    }) > 0;
 
-    if (gpuDeviceUsageDataUpdatedAt) {
-      latestUpdatedAt.push(new Date(gpuDeviceUsageDataUpdatedAt));
-    }
-
-    if (gpuMemoryUsageDataUpdatedAt) {
-      latestUpdatedAt.push(new Date(gpuMemoryUsageDataUpdatedAt));
-    }
-
-    return getLatestDate(latestUpdatedAt);
-  }, [gpuDeviceUsageDataUpdatedAt, gpuMemoryUsageDataUpdatedAt]);
+  const gpuClusterChartsLastUpdated = useLastQueryUpdated(
+    CLUSTER_DASHBOARD_METRICS_QUERY_PREFIX,
+  );
 
   const { data: utilizationData, isLoading: isUtilizationDataLoading } =
     useQuery<UtilizationResponse>({
@@ -245,24 +244,16 @@ const DashboardPage = ({ clusterStats }: Props) => {
             ? `${displayFixedNumber(number, 2)}%`
             : t('common:charts.nodata');
         }}
-        isLoading={isGPUMemoryUsageDataFetching && !memoryChartData}
+        isLoading={isGPUMemoryUsageChartLoading}
         loadingText={t('common:charts.loading') || ''}
       />
     ),
-    [isGPUMemoryUsageDataFetching, memoryChartData, t],
+    [isGPUMemoryUsageChartLoading, memoryChartData, t],
   );
 
   const handleChartsRefresh = useCallback(() => {
-    const newRange = getCurrentTimeRange(currentTimePeriod.current);
-    if (isEqual(newRange, timeRange)) {
-      // Time range is the same, just refresh the data
-      refetchGPUMemoryUsageData();
-      refreshGPUDeviceUsageData();
-    } else {
-      // Time range has changed, set the new time range and react-query will auto refetch the data
-      setTimeRange(newRange);
-    }
-  }, [refetchGPUMemoryUsageData, refreshGPUDeviceUsageData, timeRange]);
+    setTimeRange(getCurrentTimeRange(currentTimePeriod.current));
+  }, []);
 
   const deviceUtilizationChart = useMemo(
     () => (
@@ -282,15 +273,12 @@ const DashboardPage = ({ clusterStats }: Props) => {
             ? `${displayFixedNumber(number, 2)}%`
             : t('common:charts.nodata');
         }}
-        isLoading={isGPUDeviceUsageDataFetching && !deviceChartData}
+        isLoading={isGPUDeviceUsageChartLoading}
         loadingText={t('common:charts.loading') || ''}
       />
     ),
-    [deviceChartData, isGPUDeviceUsageDataFetching, t],
+    [deviceChartData, isGPUDeviceUsageChartLoading, t],
   );
-
-  const chartsLoading =
-    isGPUDeviceUsageDataFetching || isGPUMemoryUsageDataFetching;
 
   return (
     <div className="inline-flex flex-col w-full h-full max-h-full">
@@ -367,10 +355,8 @@ const DashboardPage = ({ clusterStats }: Props) => {
           initialTimePeriod={TimeRangePeriod['1H']}
           translationPrefix="timeRange"
           onChartsRefresh={handleChartsRefresh}
-          isFetching={chartsLoading}
-          lastFetchedTimestamp={
-            latestMetricsUpdatedAt ? latestMetricsUpdatedAt : undefined
-          }
+          isFetching={isGpuClusterChartsFetching}
+          lastFetchedTimestamp={gpuClusterChartsLastUpdated}
         />
         <Card className="border border-default-200 shadow-sm rounded-sm dark:bg-default-100">
           <CardHeader className="pb-2">
@@ -389,9 +375,12 @@ const DashboardPage = ({ clusterStats }: Props) => {
           <CardBody className="pt-0 mt-4">{deviceUtilizationChart}</CardBody>
         </Card>
       </div>
+      <RelevantDocs docs={airmDocumentationMapping[AirmDocsPage.DASHBOARD]} />
     </div>
   );
 };
+
+DashboardPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/dashboard.html`;
 
 export default DashboardPage;
 

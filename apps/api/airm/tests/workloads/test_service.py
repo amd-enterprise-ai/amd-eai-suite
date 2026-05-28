@@ -12,16 +12,13 @@ import pytest
 from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import (
+from app.workloads.enums import JobStatus, WorkloadComponentKind, WorkloadStatus, WorkloadType
+from app.workloads.messaging import (
     AutoDiscoveredWorkloadComponentMessage,
     DeleteWorkloadMessage,
-    JobStatus,
-    WorkloadComponentKind,
     WorkloadComponentStatusMessage,
-    WorkloadStatus,
     WorkloadStatusMessage,
 )
-from app.workloads.enums import WorkloadType
 from app.workloads.repository import (
     get_workload_by_id_in_cluster,
     get_workload_component_by_id,
@@ -351,7 +348,7 @@ async def test_get_stats_for_workloads_in_project_success(db_session: AsyncSessi
     result = await get_stats_for_workloads_in_project(db_session, env.project)
 
     # Verify returned stats match the created workloads
-    status_counts = {sc.status: sc.count for sc in result.statusCounts}
+    status_counts = {sc.status: sc.count for sc in result.status_counts}
     assert status_counts.get(WorkloadStatus.RUNNING, 0) == 1
     assert status_counts.get(WorkloadStatus.PENDING, 0) == 1
     assert status_counts.get(WorkloadStatus.FAILED, 0) == 1
@@ -392,7 +389,7 @@ async def test_get_status_stats_for_workloads_in_cluster_success(db_session: Asy
     # Verify returned stats match the created workloads across all projects
     assert result.name == env.cluster.name
     assert result.total_workloads == 5
-    status_counts = {sc.status: sc.count for sc in result.statusCounts}
+    status_counts = {sc.status: sc.count for sc in result.status_counts}
     assert status_counts.get(WorkloadStatus.RUNNING, 0) == 2
     assert status_counts.get(WorkloadStatus.PENDING, 0) == 1
     assert status_counts.get(WorkloadStatus.FAILED, 0) == 1

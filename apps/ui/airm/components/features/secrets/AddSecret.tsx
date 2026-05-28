@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectItem, Textarea } from '@heroui/react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { SelectItem, Textarea } from '@heroui/react';
+import { useMutation } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -13,32 +13,27 @@ import { useSystemToast } from '@amdenterpriseai/hooks';
 import { createProjectSecret, createSecret } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
-import { isDuplicateSecret } from '@amdenterpriseai/utils/app';
 
-import { SecretScope, SecretType, SecretUseCase } from '@amdenterpriseai/types';
-import { FormField } from '@amdenterpriseai/types';
-import { Project } from '@amdenterpriseai/types';
 import {
-  AddSecretFormData,
+  DrawerForm,
+  FormFieldComponent,
+  FormSelect,
+} from '@amdenterpriseai/components';
+import { FormField } from '@amdenterpriseai/types';
+import { AddSecretFormData } from '@/types/secrets';
+import { SecretScope, SecretType } from '@/types/enums/secrets';
+import { SecretUseCase } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import {
   CreateProjectSecretRequest,
   CreateSecretRequest,
   Secret,
-} from '@amdenterpriseai/types';
+} from '@/types/secrets';
 
-import { DrawerForm } from '@amdenterpriseai/components';
-import { FormFieldComponent } from '@amdenterpriseai/components';
-
-import {
-  EXTERNAL_SECRETS_API_GROUP,
-  EXTERNAL_SECRETS_KIND,
-  KUBERNETES_SECRETS_KIND,
-  KUBERNETES_SECRETS_VERSION,
-  nameRegex,
-} from './constants';
+import { createAddSecretFormSchema } from './addSecretFormSchema';
+import { createManifestYamlValidators } from './secretManifestYaml';
 
 import { parseAllDocuments } from 'yaml';
-import { ZodType, z } from 'zod';
-import { FormSelect } from '@amdenterpriseai/components';
 
 interface Props {
   isOpen: boolean;
@@ -68,81 +63,16 @@ export const AddSecret: React.FC<Props> = ({
   const { t } = useTranslation('secrets');
   const { toast } = useSystemToast();
 
-  const manifestYamlValidator = useCallback(
-    (
-      expectedApiVersion: string | ((apiVersion: string) => boolean),
-      expectedKind: string,
-    ) => {
-      return (value: string) => {
-        try {
-          const yamls = parseAllDocuments(value);
-          if (!Array.isArray(yamls) || yamls.length !== 1) {
-            return 'form.add.field.manifest.error.yaml.multiple';
-          }
-          const yamlDoc = yamls[0];
-          const yaml = yamlDoc?.toJSON?.() ?? {};
-
-          // Validate apiVersion
-          const isValidApiVersion =
-            typeof expectedApiVersion === 'function'
-              ? expectedApiVersion(yaml?.apiVersion)
-              : yaml?.apiVersion === expectedApiVersion;
-
-          if (!yaml || !yaml.apiVersion || !isValidApiVersion) {
-            return typeof expectedApiVersion === 'function'
-              ? 'form.add.field.manifest.error.yaml.incorrectGroup'
-              : 'form.add.field.manifest.error.yaml.incorrectVersion';
-          }
-
-          if (!yaml || yaml.kind !== expectedKind) {
-            return 'form.add.field.manifest.error.yaml.incorrectKind';
-          }
-
-          if (
-            !yaml.metadata ||
-            typeof yaml.metadata.name !== 'string' ||
-            yaml.metadata.name.length === 0
-          ) {
-            return 'form.add.field.manifest.error.yaml.noName';
-          }
-
-          // Validate Kubernetes resource name
-          if (!nameRegex.test(yaml.metadata.name)) {
-            return 'form.add.field.manifest.error.yaml.invalidName';
-          }
-
-          return true;
-        } catch {
-          return 'form.add.field.manifest.error.yaml.malformed';
-        }
-      };
-    },
+  const { validateExternalSecretYaml, validateKubernetesSecretYaml } = useMemo(
+    () => createManifestYamlValidators(),
     [],
-  );
-
-  const isValidExternalSecret = useMemo(
-    () =>
-      manifestYamlValidator(
-        (apiVersion) => apiVersion?.startsWith(EXTERNAL_SECRETS_API_GROUP),
-        EXTERNAL_SECRETS_KIND,
-      ),
-    [manifestYamlValidator],
-  );
-
-  const isValidKubernetesSecret = useMemo(
-    () =>
-      manifestYamlValidator(
-        KUBERNETES_SECRETS_VERSION,
-        KUBERNETES_SECRETS_KIND,
-      ),
-    [manifestYamlValidator],
   );
 
   const { mutate: addSecret, isPending } = useMutation({
     mutationFn: async (data: CreateSecretRequest) => {
       if (data.scope === SecretScope.PROJECT) {
         return createProjectSecret(
-          data.project_ids[0],
+          data.projectIds[0],
           data as CreateProjectSecretRequest,
         );
       }
@@ -168,9 +98,9 @@ export const AddSecret: React.FC<Props> = ({
       addSecret({
         type: data.type,
         name,
-        use_case: data.useCase ?? SecretUseCase.GENERIC,
+        useCase: data.useCase ?? SecretUseCase.GENERIC,
         scope: data.scope,
-        project_ids: data.projectIds,
+        projectIds: data.projectIds,
         manifest: data.manifest,
       });
     },
@@ -179,112 +109,13 @@ export const AddSecret: React.FC<Props> = ({
 
   const formSchema = useMemo(
     () =>
-      z
-        .object({
-          projectIds: z.preprocess((val: unknown) => {
-            if (Array.isArray(val)) return val;
-            if (typeof val === 'string' && val !== '') return val.split(',');
-            return [];
-          }, z.array(z.string())),
-          manifest: z.string().optional(),
-          scope: z.nativeEnum(SecretScope),
-          type: z.nativeEnum(SecretType),
-          useCase: z.nativeEnum(SecretUseCase),
-          name: z.string().optional(),
-          token: z.string().optional(),
-        })
-        .refine(
-          (data) =>
-            data.scope !== SecretScope.PROJECT || data.projectIds.length > 0,
-          {
-            message: t('form.add.field.projectIds.error.required'),
-            path: ['projectIds'],
-          },
-        )
-        .refine(
-          (data) =>
-            data.scope !== SecretScope.PROJECT ||
-            data.useCase !== SecretUseCase.S3,
-          {
-            message: t('form.add.field.useCase.error.s3NotAllowedForProject'),
-            path: ['useCase'],
-          },
-        )
-        .superRefine((data, ctx) => {
-          const resourceKey =
-            data.type === SecretType.EXTERNAL_SECRET
-              ? 'form.add.field.manifest.externalSecret.name'
-              : 'form.add.field.manifest.secret.name';
-
-          if (!data.manifest || data.manifest.length < 2) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: t('form.add.field.manifest.error.required', {
-                resource: t(resourceKey),
-              }),
-              path: ['manifest'],
-            });
-            return;
-          }
-
-          const isValid =
-            data.type === SecretType.EXTERNAL_SECRET
-              ? isValidExternalSecret(data.manifest)
-              : isValidKubernetesSecret(data.manifest);
-
-          if (isValid !== true) {
-            const expectedKind =
-              data.type === SecretType.EXTERNAL_SECRET
-                ? EXTERNAL_SECRETS_KIND
-                : KUBERNETES_SECRETS_KIND;
-
-            const message =
-              typeof isValid === 'string'
-                ? t(isValid, { resource: t(resourceKey), kind: expectedKind })
-                : t('form.add.field.manifest.error.yaml.malformed', {
-                    resource: t(resourceKey),
-                  });
-
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message,
-              path: ['manifest'],
-            });
-            return;
-          }
-
-          const yamls = parseAllDocuments(data.manifest || '');
-          const yamlDoc = yamls[0];
-          const manifest = yamlDoc?.toJSON?.() ?? {};
-          const secretName = manifest.metadata?.name ?? '';
-
-          if (
-            isDuplicateSecret(
-              secrets,
-              secretName,
-              data.type,
-              data.scope,
-              data.scope === SecretScope.PROJECT && data.projectIds?.[0]
-                ? data.projectIds[0]
-                : undefined,
-            )
-          ) {
-            const secretTypeLabel = t(`secretType.${data.type}`);
-            const scopeLabel = data.scope;
-
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: t('form.add.field.manifest.error.yaml.duplicateName', {
-                resource: t(resourceKey),
-                secretType: secretTypeLabel,
-                name: secretName,
-                scope: scopeLabel,
-              }),
-              path: ['manifest'],
-            });
-          }
-        }) as ZodType<AddSecretFormData>,
-    [t, isValidExternalSecret, isValidKubernetesSecret, secrets],
+      createAddSecretFormSchema({
+        t,
+        secrets,
+        validateExternalSecretYaml,
+        validateKubernetesSecretYaml,
+      }),
+    [t, validateExternalSecretYaml, validateKubernetesSecretYaml, secrets],
   );
 
   const formScopeContent: FormField<AddSecretFormData> = useMemo(

@@ -4,7 +4,7 @@
 
 from typing import Any
 
-from ..messaging.schemas import ClusterNode as ClusterNodeMessage
+from .messaging import ClusterNode as ClusterNodeMessage
 from .models import Cluster
 from .models import ClusterNode as ClusterNodeModel
 from .schemas import ClusterKubeConfig, ClusterNodeResponse, GPUInfo

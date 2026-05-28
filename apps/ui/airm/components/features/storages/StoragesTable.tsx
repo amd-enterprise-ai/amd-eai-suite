@@ -7,8 +7,8 @@ import { useMemo } from 'react';
 import { useTranslation } from 'next-i18next';
 
 import { ActionItem, TableColumns } from '@amdenterpriseai/types';
-import { StoragesTableField } from '@amdenterpriseai/types';
-import { ProjectStorage, Storage } from '@amdenterpriseai/types';
+import { StoragesTableField } from '@/types/enums/storages';
+import { ProjectStorage, Storage } from '@/types/storages';
 
 import { ClientSideDataTable } from '@amdenterpriseai/components';
 import {
@@ -17,9 +17,9 @@ import {
   StatusDisplay,
 } from '@amdenterpriseai/components';
 
-import { getStorageStatusVariants } from '@amdenterpriseai/utils/app';
+import { getStorageStatusVariants } from '@/utils/storages-status-variants';
 import { StatusError } from '@amdenterpriseai/components';
-import { StorageStatus } from '@amdenterpriseai/types';
+import { StorageStatus } from '@/types/enums/storages';
 interface Props {
   actions?: ActionItem<Storage>[];
   storages: Storage[];

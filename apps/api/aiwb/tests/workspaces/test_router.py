@@ -50,7 +50,7 @@ def test_create_workspace_vscode(mock_create: MagicMock) -> None:
     with TestClient(app) as client:
         response = client.post(
             "/v1/namespaces/test-namespace/workspaces/vscode",
-            json={"image": "test-image", "gpus": 1, "memory_per_gpu": 128, "cpu_per_gpu": 4},
+            json={"image": "test-image", "gpus": 1, "memoryPerGpu": 128, "cpuPerGpu": 4},
         )
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["type"] == WorkloadType.WORKSPACE.value
@@ -64,7 +64,7 @@ def test_create_workspace_jupyterlab(mock_create: MagicMock) -> None:
     with TestClient(app) as client:
         response = client.post(
             "/v1/namespaces/test-namespace/workspaces/jupyterlab",
-            json={"image": "test-image", "gpus": 1, "memory_per_gpu": 128, "cpu_per_gpu": 4},
+            json={"image": "test-image", "gpus": 1, "memoryPerGpu": 128, "cpuPerGpu": 4},
         )
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -77,7 +77,7 @@ def test_create_workspace_mlflow(mock_create: MagicMock) -> None:
     with TestClient(app) as client:
         response = client.post(
             "/v1/namespaces/test-namespace/workspaces/mlflow",
-            json={"image": "test-image", "gpus": 1, "memory_per_gpu": 128, "cpu_per_gpu": 4},
+            json={"image": "test-image", "gpus": 1, "memoryPerGpu": 128, "cpuPerGpu": 4},
         )
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -93,7 +93,7 @@ def test_create_workspace_conflict(mock_create: MagicMock) -> None:
     with TestClient(app) as client:
         response = client.post(
             "/v1/namespaces/test-namespace/workspaces/mlflow",
-            json={"image": "test-image", "gpus": 1, "memory_per_gpu": 32, "cpu_per_gpu": 4},
+            json={"image": "test-image", "gpus": 1, "memoryPerGpu": 32, "cpuPerGpu": 4},
         )
     assert response.status_code == status.HTTP_409_CONFLICT
     assert "MLflow workspace already running" in response.json()["detail"]
@@ -106,11 +106,11 @@ def test_create_workspace_with_display_name(mock_create: MagicMock) -> None:
     mock_create.return_value = make_workload_response(WorkspaceType.VSCODE, display_name="My Custom Workspace")
     with TestClient(app) as client:
         response = client.post(
-            "/v1/namespaces/test-namespace/workspaces/vscode?display_name=My%20Custom%20Workspace",
-            json={"gpus": 1, "memory_per_gpu": 64, "cpu_per_gpu": 2},
+            "/v1/namespaces/test-namespace/workspaces/vscode?displayName=My%20Custom%20Workspace",
+            json={"gpus": 1, "memoryPerGpu": 64, "cpuPerGpu": 2},
         )
     assert response.status_code == status.HTTP_201_CREATED
-    assert response.json()["display_name"] == "My Custom Workspace"
+    assert response.json()["displayName"] == "My Custom Workspace"
     # Verify display_name was passed to service
     mock_create.assert_called_once()
     assert mock_create.call_args.kwargs["display_name"] == "My Custom Workspace"
@@ -135,7 +135,7 @@ def test_create_workspace_comfyui(mock_create: MagicMock) -> None:
     with TestClient(app) as client:
         response = client.post(
             "/v1/namespaces/test-namespace/workspaces/comfyui",
-            json={"image": "test-image", "gpus": 2, "memory_per_gpu": 64, "cpu_per_gpu": 8},
+            json={"image": "test-image", "gpus": 2, "memoryPerGpu": 64, "cpuPerGpu": 8},
         )
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["type"] == WorkloadType.WORKSPACE.value

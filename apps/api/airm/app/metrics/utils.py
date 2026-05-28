@@ -10,7 +10,7 @@ from typing import Any
 from prometheus_api_client import PrometheusConnect
 
 from ..projects.models import Project
-from ..projects.schemas import ProjectResponse
+from ..projects.utils import map_to_project_response
 from .constants import (
     CLUSTER_NAME_METRIC_LABEL,
     DEFAULT_DEVICE_LOOKBACK,
@@ -135,7 +135,7 @@ def map_timeseries_split_by_project(
     if result_without_project:
         for timestamp, value in result_without_project["values"]:
             timestamp_dt = datetime.fromtimestamp(float(timestamp), tz=UTC).replace(microsecond=0)
-            if timestamp_dt in default_datapoints and value != PROMETHEUS_NAN_STRING:
+            if timestamp_dt in default_datapoints and is_valid_metric_value(value):
                 default_datapoints[timestamp_dt] = 0
 
     for series in results:
@@ -146,12 +146,12 @@ def map_timeseries_split_by_project(
         datapoints = default_datapoints.copy()
         for timestamp, value in series["values"]:
             timestamp_dt = datetime.fromtimestamp(float(timestamp), tz=UTC).replace(microsecond=0)
-            if timestamp_dt in datapoints and value != PROMETHEUS_NAN_STRING:
+            if timestamp_dt in datapoints and is_valid_metric_value(value):
                 datapoints[timestamp_dt] = float(value)
 
         data.append(
             DatapointsWithMetadata(
-                metadata=ProjectDatapointMetadata(project=ProjectResponse.model_validate(project), label=series_label),
+                metadata=ProjectDatapointMetadata(project=map_to_project_response(project), label=series_label),
                 values=[Datapoint(timestamp=key, value=datapoints[key]) for key in sorted(datapoints.keys())],
             )
         )
@@ -179,7 +179,7 @@ def map_metrics_timeseries(
 
     if project is not None:
         metadata = ProjectDatapointMetadata(
-            project=ProjectResponse.model_validate(project),
+            project=map_to_project_response(project),
             label=series_label,
         )
     else:
@@ -188,7 +188,7 @@ def map_metrics_timeseries(
     for series in results:
         for timestamp, value in series["values"]:
             timestamp_dt = datetime.fromtimestamp(float(timestamp), tz=UTC).replace(microsecond=0)
-            if timestamp_dt in datapoints and value != PROMETHEUS_NAN_STRING:
+            if timestamp_dt in datapoints and is_valid_metric_value(value):
                 datapoints[timestamp_dt] = float(value)
 
     data.append(
@@ -227,19 +227,7 @@ or
 
 
 def convert_prometheus_string_to_float(value: str) -> float:
-    return float(value if value != PROMETHEUS_NAN_STRING else 0)
-
-
-def parse_per_device_results(results: list[dict]) -> dict[tuple[str, str], float]:
-    """Extract {(gpu_uuid, hostname): value} from a Prometheus instant-query result set."""
-    device_values: dict[tuple[str, str], float] = {}
-    for result in results:
-        gpu_uuid = result["metric"].get(GPU_UUID_METRIC_LABEL)
-        hostname = result["metric"].get(HOSTNAME_METRIC_LABEL)
-        if gpu_uuid is None or hostname is None:
-            continue
-        device_values[(gpu_uuid, hostname)] = convert_prometheus_string_to_float(result["value"][1])
-    return device_values
+    return float(value if is_valid_metric_value(value) else 0)
 
 
 DeviceKey = tuple[str, str, str]
@@ -266,7 +254,7 @@ def parse_device_range_timeseries(
         datapoints = default_datapoints.copy()
         for timestamp, value in series["values"]:
             timestamp_dt = datetime.fromtimestamp(float(timestamp), tz=UTC).replace(microsecond=0)
-            if timestamp_dt in datapoints and value != PROMETHEUS_NAN_STRING:
+            if timestamp_dt in datapoints and is_valid_metric_value(value):
                 datapoints[timestamp_dt] = float(value)
 
         device_series[(gpu_uuid, hostname, gpu_id)] = [
@@ -283,7 +271,7 @@ def build_workload_device_query(
     use_lookback: bool,
     lookback: str = DEFAULT_DEVICE_LOOKBACK,
 ) -> str:
-    """Build a per-device PromQL query for a workload. aggregation in ('sum', 'avg')."""
+    """Build a per-device PromQL query for a workload. aggregation is the outer PromQL reducer (e.g. 'avg', 'max')."""
     wid_filter = f'{WORKLOAD_ID_METRIC_LABEL}="{workload_id}"'
     group_by = f"{GPU_ID_METRIC_LABEL}, {GPU_UUID_METRIC_LABEL}, {HOSTNAME_METRIC_LABEL}"
     if use_lookback:
@@ -300,11 +288,14 @@ def build_node_device_query(
     aggregation: str,
     lookback: str,
     extra_filters: dict[str, str] | None = None,
+    extra_regex_filters: dict[str, str] | None = None,
 ) -> str:
     """Build a per-device PromQL query for a cluster node, filtered by hostname and cluster."""
     node_filter = f'{HOSTNAME_METRIC_LABEL}="{node_name}", {CLUSTER_NAME_METRIC_LABEL}="{cluster_name}"'
     if extra_filters:
         node_filter += ", " + ", ".join(f'{k}="{v}"' for k, v in extra_filters.items())
+    if extra_regex_filters:
+        node_filter += ", " + ", ".join(f'{k}=~"{v}"' for k, v in extra_regex_filters.items())
     group_by = f"{GPU_ID_METRIC_LABEL}, {GPU_UUID_METRIC_LABEL}, {HOSTNAME_METRIC_LABEL}"
     expr = f"avg_over_time({metric_name}{{{node_filter}}}[{lookback}])"
     return f"{aggregation} by ({group_by}) ({expr})"
@@ -322,7 +313,7 @@ def build_node_vram_utilization_instant_query(node_name: str, cluster_name: str)
     return f"{GPU_USED_VRAM_METRIC}{{{node_filter}}} / {GPU_TOTAL_VRAM_METRIC}{{{node_filter}}} * 100"
 
 
-def _extract_by_gpu_id(results: list[dict]) -> dict[str, tuple[float, float]]:
+def _extract_snapshot_metric_by_gpu_id(results: list[dict]) -> dict[str, tuple[float, float]]:
     """Extract {gpu_id: (value, timestamp)} from instant-query results, skipping NaN/Inf."""
     by_id: dict[str, tuple[float, float]] = {}
     for result in results:
@@ -330,14 +321,14 @@ def _extract_by_gpu_id(results: list[dict]) -> dict[str, tuple[float, float]]:
         if gpu_id is None:
             continue
         raw_value = result["value"][1]
-        if raw_value in (PROMETHEUS_NAN_STRING, PROMETHEUS_INF_STRING, PROMETHEUS_MINUS_INF_STRING):
+        if not is_valid_metric_value(value=raw_value):
             continue
         by_id[gpu_id] = (float(raw_value), float(result["value"][0]))
     return by_id
 
 
-def _extract_gpu_uuid_map(*result_sets: list[dict]) -> dict[str, str]:
-    """Extract {gpu_id: gpu_uuid} from one or more instant-query result sets."""
+def _extract_gpu_id_to_uuid_map(*result_sets: list[dict]) -> dict[str, str]:
+    """Extract {gpu_id: gpu_uuid} from one or more result sets."""
     uuid_map: dict[str, str] = {}
     for results in result_sets:
         for result in results:
@@ -355,10 +346,10 @@ def map_results_to_node_gpu_devices(
     gpu_product_name: str | None,
 ) -> list[NodeGpuDevice]:
     """Map raw Prometheus instant-query results into a list of NodeGpuDevice models."""
-    temps = _extract_by_gpu_id(temp_results)
-    powers = _extract_by_gpu_id(power_results)
-    vram_utils = _extract_by_gpu_id(vram_util_results)
-    uuid_map = _extract_gpu_uuid_map(temp_results, power_results, vram_util_results)
+    temps = _extract_snapshot_metric_by_gpu_id(temp_results)
+    powers = _extract_snapshot_metric_by_gpu_id(power_results)
+    vram_utils = _extract_snapshot_metric_by_gpu_id(vram_util_results)
+    uuid_map = _extract_gpu_id_to_uuid_map(temp_results, power_results, vram_util_results)
 
     all_gpu_ids = sorted(temps.keys() | powers.keys() | vram_utils.keys())
 

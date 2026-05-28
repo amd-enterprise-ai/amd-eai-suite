@@ -8,6 +8,7 @@ import { Session } from 'next-auth';
 import App from '@/pages/_app';
 import { PageBreadcrumbs } from '@amdenterpriseai/types';
 import '@testing-library/jest-dom';
+import { CollectionElement } from '@react-types/shared';
 
 // Mock next-i18next
 vi.mock('next-i18next', () => ({
@@ -81,19 +82,25 @@ vi.mock('@amdenterpriseai/layouts', () => ({
     children,
     pageBreadcrumb,
     toolbarEndContent,
+    additionalMenuItems,
   }: {
     children: React.ReactNode;
     pageBreadcrumb?: PageBreadcrumbs;
     toolbarEndContent?: React.ReactNode;
-  }) => (
-    <div
-      data-testid="app-layout"
-      data-breadcrumb-count={pageBreadcrumb?.length || 0}
-      data-has-toolbar-content={!!toolbarEndContent}
-    >
-      {children}
-    </div>
-  ),
+    additionalMenuItems?: CollectionElement<object>;
+  }) => {
+    return (
+      <div
+        data-testid="app-layout"
+        data-breadcrumb-count={pageBreadcrumb?.length || 0}
+        data-has-toolbar-content={!!toolbarEndContent}
+        data-has-additional-menu-items={!!additionalMenuItems}
+      >
+        {additionalMenuItems}
+        {children}
+      </div>
+    );
+  },
 }));
 
 vi.mock('@/components/shared/PageErrorHandler/PageErrorHandler', () => ({
@@ -102,9 +109,27 @@ vi.mock('@/components/shared/PageErrorHandler/PageErrorHandler', () => ({
   ),
 }));
 
+vi.mock('@/hooks/useAirmLinkMenuItem', () => ({
+  useAirmLinkMenuItem: () => <div data-testid="airm-link-menu-item" />,
+}));
+
 vi.mock('@amdenterpriseai/components', () => ({
   SystemToastContainer: () => <div data-testid="system-toast-container" />,
 }));
+
+const defaultUseProjectReturn = {
+  isStandaloneMode: false,
+  airmAppUrl: undefined as string | undefined,
+  activeProject: 'project1',
+  projects: [{ id: 'project1', name: 'Project 1' }],
+  isLoading: false,
+  isInitialized: true,
+  projectError: null,
+  refetchProjects: vi.fn(),
+  setActiveProject: vi.fn(),
+};
+
+const mockUseProject = vi.fn(() => defaultUseProjectReturn);
 
 vi.mock('@/contexts/ProjectContext', () => ({
   ProjectProvider: ({
@@ -121,6 +146,7 @@ vi.mock('@/contexts/ProjectContext', () => ({
       {children}
     </div>
   ),
+  useProject: () => mockUseProject(),
 }));
 
 const { appConfigMock } = vi.hoisted(() => ({
@@ -149,6 +175,20 @@ vi.mock('@heroui/react', () => ({
     disableRipple?: boolean;
   }) => (
     <div data-testid="heroui-provider" data-disable-ripple={disableRipple}>
+      {children}
+    </div>
+  ),
+  DropdownSection: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="dropdown-section">{children}</div>
+  ),
+  DropdownItem: ({
+    children,
+    href,
+  }: {
+    children: React.ReactNode;
+    href?: string;
+  }) => (
+    <div data-testid="dropdown-item" data-href={href}>
       {children}
     </div>
   ),
@@ -199,6 +239,7 @@ describe('App Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseProject.mockImplementation(() => defaultUseProjectReturn);
   });
 
   describe('Provider Setup', () => {
@@ -307,6 +348,24 @@ describe('App Component', () => {
       expect(screen.getByTestId('session-provider')).toHaveAttribute(
         'data-session',
         'authenticated',
+      );
+    });
+  });
+
+  describe('Additional menu items', () => {
+    it('should render AirmLinkMenuItem component', () => {
+      render(<App {...baseAppProps} />);
+
+      expect(screen.getByTestId('airm-link-menu-item')).toBeInTheDocument();
+    });
+
+    it('should pass AirmLinkMenuItem to AppLayout additionalMenuItems', () => {
+      render(<App {...baseAppProps} />);
+
+      const appLayout = screen.getByTestId('app-layout');
+      expect(appLayout).toHaveAttribute(
+        'data-has-additional-menu-items',
+        'true',
       );
     });
   });

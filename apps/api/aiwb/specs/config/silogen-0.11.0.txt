@@ -1,0 +1,31 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# AIM Catalog Source: Silogen 0.11.0 models
+#
+# Each line specifies a model to test. Two formats are supported:
+#
+#   model_image:aim_version   — pin exact image and version (for reproducible release testing)
+#   huggingface/model-name    — match by HuggingFace model ID (tests latest deployed version)
+#
+# To list available model images and versions on your cluster:
+#   silodev curl http://aiwb-api.aiwb/v1/cluster/aims/models 2>/dev/null \
+#     | jq '.data[] | "\(.docker_image)  # \(.model_name)"'
+
+# 1 GPU models
+ghcr.io/silogen/aim-mistralai-ministral-3-14b-instruct-2512:0.11.0
+ghcr.io/silogen/aim-mistralai-mistral-small-3-2-24b-instruct-2506:0.11.0
+ghcr.io/silogen/aim-mistralai-mixtral-8x7b-instruct-v0-1:0.11.0
+ghcr.io/silogen/aim-openai-gpt-oss-20b:0.11.0
+ghcr.io/silogen/aim-qwen-qwen3-32b:0.11.0
+
+# 4 GPU models
+ghcr.io/silogen/aim-mistralai-mixtral-8x22b-instruct-v0-1:0.11.0
+ghcr.io/silogen/aim-openai-gpt-oss-120b:0.11.0
+
+# 8 GPU models
+ghcr.io/silogen/aim-deepseek-ai-deepseek-r1-0528:0.11.0
+ghcr.io/silogen/aim-deepseek-ai-deepseek-r1:0.11.0
+ghcr.io/silogen/aim-deepseek-ai-deepseek-v3-1-terminus:0.11.0
+ghcr.io/silogen/aim-deepseek-ai-deepseek-v3-1:0.11.0

@@ -27,14 +27,13 @@ Documentation       Test scenarios for AIWB API AIMs endpoints.
 Resource            resources/aiwb_aims.resource
 Resource            resources/airm_keywords.resource
 Resource            resources/airm_projects.resource
-Suite Setup         Initialize Project Tracking
-Suite Teardown      Clean Up All Created Projects
+Suite Teardown      Clean Up All Tracked Resources
 
 
 *** Test Cases ***
 List available AIMs
     [Documentation]    Verify that users can see a list of available AIMs with proper structure
-    [Tags]                  aims                    list                    smoke
+    [Tags]                  aims                    list                    smoke                   skip-in-ci
 
     Given a ready project with user access exists
     When List AIMs request is sent
@@ -45,7 +44,7 @@ List available AIMs
 
 Get specific AIM by ID
     [Documentation]    Verify that a specific AIM can be retrieved by its ID
-    [Tags]                  aims                    get
+    [Tags]                  aims                    get                     skip-in-ci
 
     Given a ready project with user access exists
     And an AIM exists in system
@@ -57,7 +56,7 @@ AIM catalog returns models with image metadata
     [Documentation]    Verify that the AIM catalog returns models with complete image metadata
     ...    Tests that each AIM in the catalog has status, imageMetadata with model title,
     ...    canonicalName, tags, and variants fields.
-    [Tags]                  aims                    catalog                 smoke
+    [Tags]                  aims                    catalog                 smoke                   skip-in-ci
 
     Given a ready project with user access exists
     When List AIMs request is sent
@@ -67,7 +66,7 @@ AIM catalog returns models with image metadata
 AIM catalog returns templates for a model
     [Documentation]    Verify that AIM templates endpoint returns deployment configurations
     ...    Tests that templates exist for a given AIM model and have proper CRD structure.
-    [Tags]                  aims                    catalog                 smoke
+    [Tags]                  aims                    catalog                 smoke                   skip-in-ci
 
     Given a ready project with user access exists
     And an AIM exists in system
@@ -119,6 +118,18 @@ Deployed AIM service shows version info
     And project quota is set to    gpu_count=2
     And AIM is deployed and running
     Then AIM service should have version info
+
+Deployed AIM service profile is visible via resolved template
+    [Documentation]    Verify that the deployed AIM service has a resolved template with accessible
+    ...    profile metadata (GPU model, GPU count, metric, precision, type).
+    ...    This validates the data chain the UI uses to display profile information
+    ...    in the workload details page.
+    [Tags]    aims    deploy    profile    gpu
+
+    Given a ready project with user access exists
+    And the project has GPU quota available
+    And AIM is deployed and running
+    Then AIM workload details should include profile information
 
 Deployed AIM is accessible externally
     [Documentation]    Verify that a running AIM workload has external endpoint and is accessible

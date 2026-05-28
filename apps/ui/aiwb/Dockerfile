@@ -55,6 +55,7 @@ COPY --chown=node:node --from=build /app/aiwb/next-i18next.config.js /app/aiwb/n
 # Accept runtime args for dynamic config
 ARG STANDALONE_MODE
 ARG DEFAULT_NAMESPACE
+ARG CLUSTER_AUTH_ENABLED
 
 # Switch to non-root user
 USER node
@@ -65,6 +66,7 @@ ENV NODE_ENV=$NODE_ENV
 # Set runtime environment variables for Next.js
 ENV STANDALONE_MODE=${STANDALONE_MODE}
 ENV DEFAULT_NAMESPACE=${DEFAULT_NAMESPACE}
+ENV CLUSTER_AUTH_ENABLED=${CLUSTER_AUTH_ENABLED}
 
 # Expose the port the app will run on
 ARG PORT=8000

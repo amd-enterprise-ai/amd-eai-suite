@@ -9,15 +9,15 @@ import {
   waitFor,
 } from '@testing-library/react';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 import {
   generateMockProjectStoragesWithParentStorage,
   generateMockStorages,
 } from '@/__mocks__/utils/storages-mock';
 
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { ProjectStorageStatus } from '@amdenterpriseai/types';
-import { ProjectWithMembers } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { ProjectStorageStatus } from '@/types/enums/storages';
+import { ProjectWithMembers } from '@/types/projects';
 
 import { ProjectStorages } from '@/components/features/projects';
 

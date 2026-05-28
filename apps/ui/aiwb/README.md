@@ -20,7 +20,7 @@ The app has various settings and features that can be set or toggled using envir
 - NEXTAUTH_URL: the url the app will run on. This is used by next-auth for authentication. See the `.env.local.example` file.
 - KEYCLOAK_ID: ID for the keycloak client used by next-auth for authentication
 - KEYCLOAK_SECRET: the secret for the keycloak authentication client used by next-auth for authentication
-- KEYCLOAK_ISSUER: the URL to the Keycloak issuer (something like https://auth.dev.silogen.ai/realms/airm with the realms)
+- KEYCLOAK_ISSUER: the URL to the Keycloak issuer (e.g., `https://kc.<your-domain>/realms/airm`)
 - AIRM_API_SERVICE_URL: the URL for the AIWB API backend (for local development set to `http://localhost:8002`)
 - STANDALONE_MODE: when `true`, the UI operates in single-namespace mode. The project selector is hidden, namespace fetching from the API is disabled, and the UI uses `DEFAULT_NAMESPACE` as the only active project. When `false`, the UI fetches accessible namespaces from the API based on the user's JWT group claims and shows the project selector.
 - DEFAULT_NAMESPACE: the namespace to use as the active project in standalone mode (default: `workbench`). Must match the namespace created during Helm installation.
@@ -60,19 +60,9 @@ Here are the instructions for running locally:
 
 > **Note:** The default username and password is `devuser@amd.com` and `password`.
 
-## Setup pre-commit for linting and formatting
+## Code quality hooks
 
-Just be sure to be in the root of the repo and run the following command:
-
-```bash
-pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
-```
-
-This will install the pre-commit hooks and will run the formatting and linting before each commit and run tests before pushing.
-
-### How to skip the pre-commit hooks
-
-Just add the `--no-verify` or `-n` flag to the `git commit` command.
+See [Repository Setup](../../../README.md#repository-setup) for installing prek hooks. Use `git commit --no-verify` or `git push --no-verify` to skip hooks for a single command.
 
 ## Running tests locally
 
@@ -106,7 +96,7 @@ Docker image building process is done at each push event for each branch, main i
 The docker images have the following format:
 
 ```txt
-ghcr.io/silogen/core/aiwb-ui:<branch-name>-<commit-hash>
+silogenai/aiwb-ui:<branch-name>-<commit-hash>
 ```
 
-E.g. ghcr.io/silogen/core/aiwb-ui:main-b973967
+E.g. silogenai/aiwb-ui:main-b973967

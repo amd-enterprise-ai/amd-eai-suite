@@ -6,13 +6,14 @@ import {
   StorageScope,
   StorageStatus,
   StorageType,
-} from '@amdenterpriseai/types';
+} from '@/types/enums/storages';
 import {
   ProjectStorage,
   ProjectStorageWithParentStorage,
   Storage,
-} from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
+} from '@/types/storages';
+import { ProjectStatus } from '@/types/enums/projects';
+import { GPU_PREEMPTION_DISABLED } from '@/types/projects';
 
 export const generateMockStorages = (n: number): Storage[] => {
   return Array.from({ length: n }, (_, index) => ({
@@ -42,6 +43,7 @@ export const generateMockProjectStorages = (n: number): ProjectStorage[] => {
       status: ProjectStatus.READY,
       statusReason: null,
       clusterId: `cluster-${index}`,
+      gpuPreemption: GPU_PREEMPTION_DISABLED,
     },
     scope: StorageScope.ORGANIZATION,
     status: ProjectStorageStatus.SYNCED,
@@ -81,6 +83,7 @@ export const generateMockProjectStoragesWithParentStorage = (
       status: ProjectStatus.READY,
       statusReason: null,
       clusterId: `cluster-${i + 1}`,
+      gpuPreemption: GPU_PREEMPTION_DISABLED,
     },
     scope: StorageScope.ORGANIZATION,
     status: ProjectStorageStatus.PENDING,

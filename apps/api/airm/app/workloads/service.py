@@ -10,22 +10,22 @@ from loguru import logger
 from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import ConflictException
+
 from ..clusters.models import Cluster
 from ..clusters.repository import get_cluster_by_id
-from ..messaging.schemas import (
+from ..messaging.sender import MessageSender
+from ..metrics.service import get_gpu_and_node_counts_for_workload
+from ..projects.models import Project
+from .constants import WORKLOAD_STATS_STATUSES
+from .enums import WorkloadStatus, WorkloadType
+from .messaging import (
     AutoDiscoveredWorkloadComponentMessage,
     DeleteWorkloadMessage,
     WorkloadComponentStatusMessage,
     WorkloadMessage,
-    WorkloadStatus,
     WorkloadStatusMessage,
 )
-from ..messaging.sender import MessageSender
-from ..metrics.service import get_gpu_and_node_counts_for_workload
-from ..projects.models import Project
-from ..utilities.exceptions import ConflictException
-from .constants import WORKLOAD_STATS_STATUSES
-from .enums import WorkloadType
 from .models import Workload
 from .repository import create_workload as create_workload_in_db
 from .repository import create_workload_component as create_workload_component_in_db
@@ -162,8 +162,8 @@ async def get_workload_details(
 
     cluster, queue_time, running_time = await asyncio.gather(
         get_cluster_by_id(session, workload.cluster_id),
-        get_workload_time_in_status(session, workload.id, WorkloadStatus.PENDING.value),
-        get_workload_time_in_status(session, workload.id, WorkloadStatus.RUNNING.value),
+        get_workload_time_in_status(session, workload.id, WorkloadStatus.PENDING),
+        get_workload_time_in_status(session, workload.id, WorkloadStatus.RUNNING),
     )
 
     return WorkloadMetricsDetailsResponse(
@@ -195,7 +195,7 @@ async def get_status_stats_for_workloads_in_cluster(session: AsyncSession, clust
     status_counts = [WorkloadStatusCount(status=status, count=count) for status, count in workloads_counts.items()]
 
     return WorkloadStatusStats(
-        name=cluster.name, total_workloads=sum(workloads_counts.values()), statusCounts=status_counts
+        name=cluster.name, total_workloads=sum(workloads_counts.values()), status_counts=status_counts
     )
 
 
@@ -282,7 +282,7 @@ async def update_workload_component_status(
 
     new_workload_status = resolve_workload_status(workload.status, components)
 
-    if workload.status != new_workload_status.value:
+    if workload.status != new_workload_status:
         await increment_workload_time_summary(
             session, workload.id, workload.status, message.updated_at - workload.last_status_transition_at
         )
@@ -322,7 +322,7 @@ async def register_auto_discovered_workload_component(
 
 
 async def increment_workload_time_summary(
-    session: AsyncSession, workload_id: UUID, status: str, duration_in_status: timedelta
+    session: AsyncSession, workload_id: UUID, status: WorkloadStatus, duration_in_status: timedelta
 ) -> None:
     duration_in_status_seconds = duration_in_status.total_seconds()
     workload_time_summary = await get_workload_time_summary_by_workload_id_and_status(session, workload_id, status)
@@ -346,5 +346,5 @@ async def get_stats_for_workloads_in_project(session: AsyncSession, project: Pro
     status_counts = [WorkloadStatusCount(status=status, count=count) for status, count in workloads_counts.items()]
 
     return WorkloadStatusStats(
-        name=project.name, total_workloads=sum(workloads_counts.values()), statusCounts=status_counts
+        name=project.name, total_workloads=sum(workloads_counts.values()), status_counts=status_counts
     )

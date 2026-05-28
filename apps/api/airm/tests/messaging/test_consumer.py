@@ -9,25 +9,20 @@ from uuid import uuid4
 import pytest
 from starlette.datastructures import State
 
+from app.clusters.messaging import ClusterNodesMessage, HeartbeatMessage
 from app.clusters.models import Cluster
 from app.messaging.connector import init_connection
 from app.messaging.constants import DEAD_LETTER_QUEUE_NAME
 from app.messaging.consumer import __process_message, start_queue_consumer
 from app.messaging.publisher import publish_message_to_queue
 from app.messaging.queues import configure_queues
-from app.messaging.schemas import (
-    ClusterNodesMessage,
-    ClusterQuotasFailureMessage,
-    ClusterQuotasStatusMessage,
-    HeartbeatMessage,
-    ProjectNamespaceStatusMessage,
-    ProjectSecretStatus,
-    ProjectSecretsUpdateMessage,
-    ProjectStorageUpdateMessage,
-    SecretScope,
-    WorkloadStatusMessage,
-)
+from app.namespaces.messaging import ProjectNamespaceStatusMessage
+from app.quotas.messaging import ClusterQuotasFailureMessage, ClusterQuotasStatusMessage
+from app.secrets.enums import ProjectSecretStatus, SecretScope
+from app.secrets.messaging import ProjectSecretsUpdateMessage
+from app.storages.messaging import ProjectStorageUpdateMessage
 from app.utilities.keycloak_admin import KeycloakAdmin
+from app.workloads.messaging import WorkloadStatusMessage
 
 
 @pytest.mark.asyncio
@@ -175,7 +170,6 @@ async def test_process_message_update_last_heartbeat(
     message = HeartbeatMessage(
         message_type="heartbeat",
         cluster_name="test_cluster",
-        organization_name="test_org",
         last_heartbeat_at=datetime.datetime(2025, 1, 1, tzinfo=datetime.UTC),
     )
     mock_message.body.decode = lambda: message.json()

@@ -3,7 +3,12 @@
 # SPDX-License-Identifier: MIT
 
 *** Settings ***
-Documentation       Priority class-specific kubectl operations for workload preemption tests
+Documentation       Priority class-specific kubectl operations for workload preemption tests.
+...
+...                 Kaiwo's idle GPU pre-emption only applies to Deployment-backed pods — it creates
+...                 GpuWorkload resources that track GPU utilization per pod and pre-empts the owning
+...                 Deployment when utilization stays below the namespace threshold after the grace period.
+...                 Plain batch Jobs are not tracked by Kaiwo and will never be pre-empted this way.
 Resource            resources/common/resource_resolver.resource
 Resource            resources/api/common.resource
 Library             Process
@@ -11,12 +16,25 @@ Library             Process
 
 *** Keywords ***
 Submit GPU job with priority class via kubectl
-    [Documentation]    Submits a GPU Job with priority class directly via kubectl
-    ...    Extends the kubectl job pattern to support priority classes
-    [Arguments]    ${namespace}    ${gpu_count}    ${priority_class}    ${sleep_seconds}=600
+    [Documentation]    Submits a GPU Job directly via kubectl, optionally with a Kueue priority class label.
+    ...    When priority_class is None, the priority-class label is omitted from the Job metadata.
+    [Arguments]    ${namespace}    ${gpu_count}    ${priority_class}=${None}    ${sleep_seconds}=600
 
     ${unique_suffix}=    Generate random string    6    [LOWER][NUMBERS]
-    ${job_name}=    Set variable    gpu-job-${priority_class}-${unique_suffix}
+    IF    $priority_class != $None
+        ${job_name}=    Set variable    gpu-job-${priority_class}-${unique_suffix}
+        ${priority_label}=    Set variable    ${SPACE}${SPACE}${SPACE}${SPACE}kueue.x-k8s.io/priority-class: ${priority_class}
+    ELSE
+        ${job_name}=    Set variable    gpu-job-${unique_suffix}
+        ${priority_label}=    Set variable    ${EMPTY}
+    END
+
+    ${labels_block}=    Catenate    SEPARATOR=\n
+    ...    ${SPACE}${SPACE}labels:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}kueue.x-k8s.io/queue-name: ${namespace}
+    IF    "${priority_label}" != ""
+        ${labels_block}=    Catenate    SEPARATOR=\n    ${labels_block}    ${priority_label}
+    END
 
     ${job_yaml}=    Catenate    SEPARATOR=\n
     ...    apiVersion: batch/v1
@@ -24,9 +42,7 @@ Submit GPU job with priority class via kubectl
     ...    metadata:
     ...    ${SPACE}${SPACE}name: ${job_name}
     ...    ${SPACE}${SPACE}namespace: ${namespace}
-    ...    ${SPACE}${SPACE}labels:
-    ...    ${SPACE}${SPACE}${SPACE}${SPACE}kueue.x-k8s.io/queue-name: ${namespace}
-    ...    ${SPACE}${SPACE}${SPACE}${SPACE}kueue.x-k8s.io/priority-class: ${priority_class}
+    ...    ${labels_block}
     ...    spec:
     ...    ${SPACE}${SPACE}ttlSecondsAfterFinished: 300
     ...    ${SPACE}${SPACE}template:
@@ -50,8 +66,76 @@ Submit GPU job with priority class via kubectl
     Should be equal as integers    ${result.rc}    0
     ...    msg=Failed to create Job: ${result.stderr}
 
-    Log    Created Job ${job_name} with priority class ${priority_class} in namespace ${namespace}    INFO
+    Log    Created Job ${job_name} in namespace ${namespace}    INFO
     RETURN    ${job_name}
+
+Submit GPU deployment via kubectl
+    [Documentation]    Submits a GPU Deployment directly via kubectl.
+    ...    The container sleeps to hold a GPU with zero utilization — the signal Kaiwo uses
+    ...    to identify idle workloads eligible for pre-emption.
+    ...    Kaiwo tracks Deployment-backed GPU pods via GpuWorkload resources; batch Jobs are not tracked.
+    [Arguments]    ${namespace}    ${gpu_count}=1    ${sleep_seconds}=7200
+
+    ${unique_suffix}=    Generate random string    6    [LOWER][NUMBERS]
+    ${deploy_name}=    Set variable    gpu-deploy-${unique_suffix}
+
+    ${deploy_yaml}=    Catenate    SEPARATOR=\n
+    ...    apiVersion: apps/v1
+    ...    kind: Deployment
+    ...    metadata:
+    ...    ${SPACE}${SPACE}name: ${deploy_name}
+    ...    ${SPACE}${SPACE}namespace: ${namespace}
+    ...    spec:
+    ...    ${SPACE}${SPACE}replicas: 1
+    ...    ${SPACE}${SPACE}selector:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}matchLabels:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}app: ${deploy_name}
+    ...    ${SPACE}${SPACE}template:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}metadata:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}labels:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}app: ${deploy_name}
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}spec:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}containers:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}- name: gpu-idle
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}image: busybox:latest
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}command: ["sh", "-c", "sleep ${sleep_seconds}"]
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}resources:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}requests:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}cpu: 100m
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}memory: 128Mi
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}amd.com/gpu: "${gpu_count}"
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}limits:
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}cpu: 100m
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}memory: 128Mi
+    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}amd.com/gpu: "${gpu_count}"
+
+    ${result}=    Run process    kubectl    apply    -f    -    stdin=${deploy_yaml}
+    Should be equal as integers    ${result.rc}    0
+    ...    msg=Failed to create Deployment: ${result.stderr}
+
+    Log    Created Deployment ${deploy_name} in namespace ${namespace}    INFO
+    RETURN    ${deploy_name}
+
+Kubectl deployment should be running
+    [Documentation]    Verifies that a kubectl-submitted Deployment has at least one ready pod
+    [Arguments]    ${namespace}    ${deploy_name}    ${timeout}=5 min
+
+    Wait until keyword succeeds    ${timeout}    10 sec
+    ...    Verify kubectl deployment running    ${namespace}    ${deploy_name}
+
+Verify kubectl deployment running
+    [Documentation]    Helper to verify Deployment has at least 1 ready pod
+    [Arguments]    ${namespace}    ${deploy_name}
+
+    ${result}=    Run process    kubectl    get    deployment    ${deploy_name}
+    ...    -n    ${namespace}
+    ...    -o    jsonpath\={.status.readyReplicas}
+
+    ${ready_count}=    Set variable if    "${result.stdout.strip()}" != ""    ${result.stdout.strip()}    0
+    Should be true    ${ready_count} > 0
+    ...    msg=Deployment ${deploy_name} has no ready pods (readyReplicas=${ready_count})
+
+    Log    Deployment ${deploy_name} has ${ready_count} ready pods    DEBUG
 
 Kubectl job should be pending
     [Documentation]    Verifies that a kubectl-submitted Job has Pending pods

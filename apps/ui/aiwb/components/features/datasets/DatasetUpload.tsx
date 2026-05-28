@@ -18,11 +18,8 @@ import { useProject } from '@/contexts/ProjectContext';
 import { DATASET_FILESIZE_LIMIT } from '@/lib/app/datasets';
 import { displayBytesInOptimalUnit } from '@amdenterpriseai/utils/app';
 
-import {
-  DatasetType,
-  UploadDatasetFormData,
-  UploadDatasetParams,
-} from '@amdenterpriseai/types';
+import { DatasetType } from '@/types/datasets';
+import { UploadDatasetFormData, UploadDatasetParams } from '@/types/datasets';
 
 import {
   FormFileUpload,
@@ -187,8 +184,9 @@ export const DatasetUpload = ({ onClose, isOpen, refresh }: Props) => {
             </p>
             <Link
               className="text-small"
-              href="https://docs.silogen.ai/core/docs/workbench/training/datasets/?h=datasets#data-formats"
+              href="https://enterprise-ai.docs.amd.com/en/latest/workbench/training/datasets.html#data-formats"
               target="_blank"
+              rel="noopener noreferrer"
             >
               {t('modals.upload.docs')}
               <IconExternalLink size="16" stroke="2" />

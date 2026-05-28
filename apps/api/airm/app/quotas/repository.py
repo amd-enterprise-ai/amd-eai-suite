@@ -9,9 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..messaging.schemas import QuotaStatus
-from ..utilities.exceptions import ConflictException
-from ..utilities.models import set_updated_fields
+from api_common.exceptions import ConflictException
+from api_common.models import set_updated_fields
+
+from .enums import QuotaStatus
 from .models import Quota
 from .schemas import QuotaCreate, QuotaUpdate
 

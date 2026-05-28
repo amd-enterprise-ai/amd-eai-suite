@@ -43,13 +43,15 @@ Navigate to API keys page
     ...                Uses retry because the sidebar link click occasionally doesn't
     ...                navigate (e.g., due to animation timing or project context
     ...                redirecting back to Dashboard).
+    [Arguments]    ${project}
 
-    Wait Until Keyword Succeeds    30s    2s    Navigate to API keys via sidebar
+    Wait Until Keyword Succeeds    30s    2s    Navigate to API keys via sidebar    ${project}
 
 Navigate to API keys via sidebar
     [Documentation]    Clicks the sidebar API Keys link and verifies the page loaded.
+    [Arguments]    ${project}
 
-    VAR    ${sidebar_link}    css=a[href="${API_KEYS_PATH}"]
+    VAR    ${sidebar_link}    css=a[href="/${project}${API_KEYS_PATH}"]
     Wait For Elements State    ${sidebar_link}    visible    timeout=5s
     Click    ${sidebar_link}
     Wait For Elements State    ${API_KEYS_PAGE_HEADING}    visible    timeout=10s

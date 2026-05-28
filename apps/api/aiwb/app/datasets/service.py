@@ -5,9 +5,10 @@
 import asyncio
 from uuid import UUID, uuid4
 
-from fastapi import Response, UploadFile
+from fastapi import UploadFile
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import StreamingResponse
 
 from api_common.exceptions import (
     ConflictException,
@@ -16,6 +17,7 @@ from api_common.exceptions import (
     ValidationException,
 )
 
+from ..minio.config import MINIO_BUCKET
 from .models import Dataset
 from .repository import delete_datasets as delete_datasets_by_ids
 from .repository import (
@@ -27,7 +29,7 @@ from .schemas import DatasetType
 from .utils import (
     MinioClient,
     delete_from_s3,
-    download_from_s3,
+    download_from_s3_stream,
     get_object_key,
     sync_dataset_to_s3,
     validate_jsonl,
@@ -123,9 +125,14 @@ async def create_and_upload_dataset(
 
 async def download_dataset_file(
     dataset_id: UUID, namespace: str, session: AsyncSession, minio_client: MinioClient
-) -> Response:
+) -> StreamingResponse:
     """
-    Download a dataset file from S3 storage and return it as a response.
+    Stream a dataset file from S3 storage without loading into memory.
+
+    This uses streaming to prevent:
+    - Memory exhaustion on large files
+    - Event loop blocking in frontend proxies
+    - Gateway timeouts on slow downloads
 
     Raises:
         NotFoundException: If the dataset is not found or has no content
@@ -138,14 +145,18 @@ async def download_dataset_file(
     if not dataset.path:
         raise NotFoundException(message=f"Dataset {dataset_id} has no content to download.")
 
-    file_name, content = await download_from_s3(dataset, minio_client)
+    object_key = dataset.path
+    file_name = object_key.split("/")[-1]
 
-    return Response(
-        content=content,
-        media_type="application/jsonlines",
+    # stat_object is a blocking call; run it in a thread to get Content-Length before streaming.
+    stat = await asyncio.to_thread(minio_client.stat_object, MINIO_BUCKET, object_key)
+
+    return StreamingResponse(
+        download_from_s3_stream(dataset, minio_client),
+        media_type="application/jsonl; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{file_name}"',
-            "Content-Type": "application/jsonl; charset=utf-8",
+            "Content-Length": str(stat.size),
         },
     )
 

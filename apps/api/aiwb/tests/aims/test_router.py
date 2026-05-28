@@ -4,6 +4,7 @@
 
 """Tests for AIMs router endpoints using FastAPI TestClient with dependency overrides."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -12,7 +13,14 @@ from fastapi.testclient import TestClient
 
 from api_common.exceptions import NotFoundException
 from app import app  # type: ignore[attr-defined]
-from tests.dependency_overrides import BASE_OVERRIDES, CLUSTER_AUTH_OVERRIDES, SESSION_OVERRIDES, override_dependencies
+from app.metrics.schemas import MetricsScalar
+from tests.dependency_overrides import (
+    BASE_OVERRIDES,
+    CLUSTER_AUTH_OVERRIDES,
+    PROMETHEUS_OVERRIDES,
+    SESSION_OVERRIDES,
+    override_dependencies,
+)
 from tests.factory import make_aim_cluster_model, make_aim_cluster_service_template, make_aim_service_k8s
 
 
@@ -73,11 +81,9 @@ def test_deploy_aim(mock_deploy: MagicMock) -> None:
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
 @patch("app.aims.router.deploy_aim")
-def test_deploy_aim_accepts_snake_case_and_camelcase_field_names(mock_deploy: MagicMock) -> None:
-    """Test that deploy accepts both snake_case and camelCase; UI can send either."""
+def test_deploy_aim_rejects_snake_case_field_names(mock_deploy: MagicMock) -> None:
+    """API must reject snake_case field names with 422; only camelCase is accepted."""
     mock_deploy.return_value = make_aim_service_k8s(as_response=True)
-    scaling = {"minReplicas": 2, "maxReplicas": 10, "autoScaling": {"metrics": []}}
-    scaling_snake = {"min_replicas": 2, "max_replicas": 10, "auto_scaling": {"metrics": []}}
     with TestClient(app) as client:
         snake_resp = client.post(
             "/v1/namespaces/test-ns/aims/services",
@@ -86,7 +92,9 @@ def test_deploy_aim_accepts_snake_case_and_camelcase_field_names(mock_deploy: Ma
                 "hf_token": "secret-xyz",
                 "image_pull_secrets": ["s1", "s2"],
                 "allow_unoptimized": True,
-                **scaling_snake,
+                "min_replicas": 2,
+                "max_replicas": 10,
+                "auto_scaling": {"metrics": []},
             },
         )
         camel_resp = client.post(
@@ -96,24 +104,14 @@ def test_deploy_aim_accepts_snake_case_and_camelcase_field_names(mock_deploy: Ma
                 "hfToken": "secret-xyz",
                 "imagePullSecrets": ["s1", "s2"],
                 "allowUnoptimized": True,
-                **scaling,
+                "minReplicas": 2,
+                "maxReplicas": 10,
+                "autoScaling": {"metrics": []},
             },
         )
 
-    assert snake_resp.status_code == 202
-    assert camel_resp.status_code == 202
-
-    _, kwargs_snake = mock_deploy.call_args_list[0]
-    _, kwargs_camel = mock_deploy.call_args_list[1]
-    req_snake = kwargs_snake["deploy_request"]
-    req_camel = kwargs_camel["deploy_request"]
-
-    assert req_snake.hf_token == req_camel.hf_token == "secret-xyz"
-    assert req_snake.image_pull_secrets == req_camel.image_pull_secrets == ["s1", "s2"]
-    assert req_snake.allow_unoptimized is req_camel.allow_unoptimized is True
-    assert req_snake.min_replicas == req_camel.min_replicas == 2
-    assert req_snake.max_replicas == req_camel.max_replicas == 10
-    assert req_snake.auto_scaling == req_camel.auto_scaling == {"metrics": []}
+    assert snake_resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert camel_resp.status_code == status.HTTP_202_ACCEPTED
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
@@ -188,10 +186,40 @@ def test_list_chattable_aim_services(mock_list: MagicMock) -> None:
 
 
 @override_dependencies(BASE_OVERRIDES)
+@patch("app.aims.router.list_aim_service_replicas")
+def test_get_aim_service_replicas(mock_replicas: MagicMock) -> None:
+    """Test GET /v1/namespaces/{ns}/aims/services/{id}/replicas returns 200."""
+    mock_replicas.return_value = [
+        {"metadata": {"name": "pod-1"}, "status": {"phase": "Running"}},
+        {"metadata": {"name": "pod-2"}, "status": {"phase": "Pending"}},
+    ]
+    with TestClient(app) as client:
+        response = client.get(f"/v1/namespaces/test-namespace/aims/services/{uuid4()}/replicas")
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.json()["data"]) == 2
+
+
+@override_dependencies(PROMETHEUS_OVERRIDES)
+@patch("app.aims.router.get_metric_by_workload_id")
+def test_get_aim_metric_passes_pod_name_to_service(mock_metric: MagicMock) -> None:
+    """podName query param is forwarded to the metrics service as pod_name."""
+    mock_metric.return_value = MetricsScalar(data=42.0)
+    end = datetime.now(UTC)
+    start = end - timedelta(hours=1)
+    with TestClient(app) as client:
+        response = client.get(
+            f"/v1/namespaces/test-namespace/aims/services/{uuid4()}/metrics/total_tokens",
+            params={"start": start.isoformat(), "end": end.isoformat(), "podName": "pod-abc123"},
+        )
+    assert response.status_code == status.HTTP_200_OK
+    assert mock_metric.call_args.kwargs["pod_name"] == "pod-abc123"
+
+
+@override_dependencies(BASE_OVERRIDES)
 @patch("app.aims.router.list_aim_cluster_service_templates")
 def test_list_aim_cluster_service_templates(mock_list: MagicMock) -> None:
     """Test GET /v1/cluster/aims/templates returns 200."""
     mock_list.return_value = [make_aim_cluster_service_template()]
     with TestClient(app) as client:
-        response = client.get("/v1/cluster/aims/templates?aim_resource_name=llama3-8b")
+        response = client.get("/v1/cluster/aims/templates?aimResourceName=llama3-8b")
     assert response.status_code == status.HTTP_200_OK

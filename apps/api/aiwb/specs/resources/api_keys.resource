@@ -86,9 +86,9 @@ Create api key
     ...    name=${key_name}
     ...    ttl=${ttl}
     ...    renewable=${renewable}
-    ...    num_uses=${0}
+    ...    numUses=${0}
     ...    meta=${empty_meta}
-    ...    aim_ids=${empty_aims}
+    ...    aimIds=${empty_aims}
 
     ${namespace}=    Get Project Namespace
     ${response}=    api_keys_api.Create api key    ${key_data}    namespace=${namespace}    expected_status=any
@@ -98,7 +98,7 @@ Create api key
     IF    ${response.status_code} == 200
         ${key_info}=    Set variable    ${response.json()}
         Set test variable    ${TEST_API_KEY}    ${key_info}
-        Set test variable    ${TEST_API_KEY_VALUE}    ${key_info}[full_key]
+        Set test variable    ${TEST_API_KEY_VALUE}    ${key_info}[fullKey]
     END
 
 # API Key Renewal Keywords
@@ -113,7 +113,7 @@ Api key renewal should succeed
     [Documentation]    Verifies that API key renewal was successful
     Should be equal as integers    ${TEST_RESPONSE.status_code}    200
     ${response_data}=    Set variable    ${TEST_RESPONSE.json()}
-    Should contain    ${response_data}    lease_duration
+    Should contain    ${response_data}    leaseDuration
 
 Api key renewal should fail
     [Documentation]    Verifies that API key renewal failed with non-200 status
@@ -154,9 +154,9 @@ Api key should be created successfully
     [Documentation]    Verifies that API key was created successfully
     Should be equal as integers    ${TEST_RESPONSE.status_code}    200
     ${key_info}=    Set variable    ${TEST_RESPONSE.json()}
-    # AIWB API returns: id, full_key, truncated_key, namespace, etc.
+    # AIWB API returns: id, fullKey, truncatedKey, namespace, etc.
     Should contain    ${key_info}    id
-    Should contain    ${key_info}    full_key
+    Should contain    ${key_info}    fullKey
 
 Key assignment should succeed
     [Documentation]    Verifies that key assignment was successful
@@ -230,16 +230,16 @@ Api key should be created with expiration time
     [Documentation]    Verifies API key has expiration time set (AIWB API)
     Should be equal as integers    ${TEST_RESPONSE.status_code}    200
     ${key_info}=    Set variable    ${TEST_RESPONSE.json()}
-    # AIWB API returns expires_at field
-    Should contain    ${key_info}    expires_at
-    Should not be empty    ${key_info}[expires_at]
-    # Verify expires_at is a valid, parseable date
-    ${expires}=    Convert date    ${key_info}[expires_at]    result_format=epoch
+    # AIWB API returns expiresAt field
+    Should contain    ${key_info}    expiresAt
+    Should not be empty    ${key_info}[expiresAt]
+    # Verify expiresAt is a valid, parseable date
+    ${expires}=    Convert date    ${key_info}[expiresAt]    result_format=epoch
     Should be true    ${expires} > 0
-    ...    expires_at should be a valid date
-    # Known limitation: AIWB API currently sets expires_at ≈ created_at regardless of TTL.
-    # The TTL value is passed to Vault but not reflected in the API response's expires_at field.
-    # TODO: Once the API correctly computes expires_at = created_at + TTL, add:
+    ...    expiresAt should be a valid date
+    # Known limitation: AIWB API currently sets expiresAt ≈ createdAt regardless of TTL.
+    # The TTL value is passed to Vault but not reflected in the API response's expiresAt field.
+    # TODO: Once the API correctly computes expiresAt = createdAt + TTL, add:
     #     ${now}=    Get current date    result_format=epoch
     #     Should be true    ${expires} > ${now}    Expiration time should be in the future
 

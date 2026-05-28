@@ -62,7 +62,7 @@ func TestSendClusterNodes_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mockPublisher.Published, 1)
 
-	msg, ok := mockPublisher.Published[0].(*messaging.ClusterNodesMessage)
+	msg, ok := mockPublisher.Published[0].(*ClusterNodesMessage)
 	require.True(t, ok, "message should be of type *ClusterNodesMessage")
 
 	assert.Equal(t, messaging.MessageTypeClusterNodes, msg.MessageType)
@@ -92,7 +92,7 @@ func TestSendClusterNodes_NoNodes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mockPublisher.Published, 1)
 
-	msg, ok := mockPublisher.Published[0].(*messaging.ClusterNodesMessage)
+	msg, ok := mockPublisher.Published[0].(*ClusterNodesMessage)
 	require.True(t, ok)
 	assert.Empty(t, msg.ClusterNodes)
 }

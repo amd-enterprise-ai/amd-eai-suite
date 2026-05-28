@@ -7,14 +7,9 @@ from uuid import UUID
 
 import yaml
 
-from ..messaging.schemas import (
-    CommonComponentStatus,
-    WorkloadComponentKind,
-    WorkloadComponentStatusMessage,
-    WorkloadStatus,
-)
+from api_common.exceptions import ValidationException
+
 from ..projects.models import Project
-from ..utilities.exceptions import ValidationException
 from .constants import (
     COMPONENT_ID_LABEL,
     COMPONENT_SPECIFIC_COMPLETED_STATUSES,
@@ -26,6 +21,8 @@ from .constants import (
     PROJECT_ID_LABEL,
     WORKLOAD_ID_LABEL,
 )
+from .enums import CommonComponentStatus, WorkloadComponentKind, WorkloadStatus
+from .messaging import WorkloadComponentStatusMessage
 from .models import WorkloadComponent
 from .schemas import WorkloadComponentIn
 

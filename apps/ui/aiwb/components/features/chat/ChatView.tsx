@@ -10,20 +10,15 @@ import { useTranslation } from 'next-i18next';
 import { useSearchParams } from 'next/navigation';
 import router from 'next/router';
 
-import { useChatWindowScroll } from '@amdenterpriseai/hooks';
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useChatWindowScroll, useSystemToast } from '@amdenterpriseai/hooks';
 
 import { getChatSettings, saveChatSettings } from '@/lib/app/chat-settings';
 
-import {
-  ChatBody,
-  ChatContext,
-  ChatConversation,
-  DebugInfo,
-  Message,
-} from '@amdenterpriseai/types';
-import { DEFAULT_SETTINGS, InferenceSettings } from '@amdenterpriseai/types';
-import { Workload } from '@amdenterpriseai/types';
+import { ChatContext } from '@/types/chat';
+import { ChatBody } from '@/types/chat';
+import { ChatConversation, DebugInfo, Message } from '@/types/chat';
+import { DEFAULT_SETTINGS, InferenceSettings } from '@/types/models';
+import { Workload } from '@/types/workloads';
 
 import { BasicChatInput } from '@/components/features/chat/BasicChatInput';
 import { Toolbar } from '@amdenterpriseai/layouts';
@@ -32,31 +27,53 @@ import { ModelDeploymentSelect } from './ModelDeploymentSelect';
 import ChatInfoCard from './ChatInfoCard';
 import { ChatMessages } from './ChatMessages';
 import SettingsDrawer from './SettingsDrawer';
+import { useMediaQuery } from './useMediaQuery';
 import { useProject } from '@/contexts/ProjectContext';
 import { DELAYED_RESPONSE_THRESHOLD_MS } from './constants';
 import { streamChatResponse, type WorkloadDisplayInfo } from '@/lib/app/chat';
+import { formatModelDeploymentSubtitle } from '@/lib/app/modelDeploymentDisplay';
 import { ChatWorkloadType } from '@/types/chat';
-import { RelevantDocs } from '@amdenterpriseai/components';
+import {
+  RelevantDocs,
+  AiwbDocsPage,
+  aiwbDocumentationMapping,
+} from '@amdenterpriseai/components';
 
 interface ChatViewProps {
   workloads: Workload[];
   workloadDisplayInfo?: Record<string, WorkloadDisplayInfo>;
 }
 
+const checkSupportForImageInput = (workload?: Workload) =>
+  workload
+    ? (workload.tags?.some((tag: string) =>
+        [
+          'vision',
+          'vision-language',
+          'image-to-text',
+          'image-text-to-text',
+          'multimodal',
+        ].includes(tag),
+      ) ?? false)
+    : false;
+
 export const ChatView = ({
   workloads,
   workloadDisplayInfo = {},
 }: ChatViewProps) => {
+  // JS media query is required here — at <lg the DOM structure changes entirely:
+  // ChatInfoCard and BasicChatInput are co-located in a single scrollable column
+  // so they never clip. At lg+ they're separate (card centred, input fixed at bottom).
+  // Pure CSS can't conditionally move BasicChatInput between two parent elements,
+  // and rendering it twice would break the shared textareaRef/stopConversationRef.
+  const isLgUp = useMediaQuery('(min-width: 1024px)');
   const { toast } = useSystemToast();
   const { t } = useTranslation(['chat', 'models']);
   const workloadDescriptions = useMemo(() => {
     const map: Record<string, string> = {};
     for (const [id, info] of Object.entries(workloadDisplayInfo)) {
-      const metricLabel = t(`performanceMetrics.values.${info.metric}`, {
-        ns: 'models',
-      });
-      const parts = [info.imageVersion, metricLabel].filter(Boolean);
-      if (parts.length > 0) map[id] = parts.join(' · ');
+      const line = formatModelDeploymentSubtitle(t, info);
+      if (line !== '') map[id] = line;
     }
     return map;
   }, [workloadDisplayInfo, t]);
@@ -125,6 +142,12 @@ export const ChatView = ({
   const stopConversationRef = useRef<boolean>(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [chatInputContent, setChatInputContent] = useState<string>('');
+
+  const enableImageInput =
+    checkSupportForImageInput(firstModelWorkload) &&
+    (secondModelWorkload && chatMode === 'compare'
+      ? checkSupportForImageInput(secondModelWorkload)
+      : true);
 
   function constructMessagesToSendToLLM(
     conversationMessages: Message[],
@@ -549,67 +572,108 @@ export const ChatView = ({
         </div>
       </Toolbar>
       <div className="flex flex-1 flex-col min-h-0">
-        <div className="flex flex-1 min-h-0 w-full overflow-x-scroll overflow-hidden justify-center">
-          {firstConversation.messages.length === 0 && (
-            <ChatInfoCard mode={chatMode} />
-          )}
-
-          <div
-            ref={chatContainerRef1}
-            onScroll={handleScroll}
-            className={
-              'flex pt-6 overflow-y-scroll ' +
-              (chatMode != 'compare' ? 'w-full' : 'w-1/2 max-w-[50%]')
-            }
-          >
-            <ChatMessages
-              compareMode={chatMode === 'compare'}
-              conversation={firstConversation}
-              onConversationUpdated={setFirstConversation}
-              messagesEndRef={messagesEndRef1}
-              loading={firstLoading}
-              delayedResponseNotification={firstDelayedResponseNotification}
-              messageIsStreaming={firstMessageIsStreaming}
-            />
-          </div>
-          {chatMode === 'compare' && (
+        {firstConversation.messages.length === 0 ? (
+          !isLgUp ? (
+            <div className="flex flex-1 flex-col">
+              <div className="mx-auto flex w-full max-w-[480px] flex-col px-4 pt-6 pb-8 sm:px-5">
+                <ChatInfoCard mode={chatMode} variant="belowDesktop" />
+                <div className="mt-10 w-full sm:mt-12">
+                  <BasicChatInput
+                    content={chatInputContent}
+                    enableImageInput={enableImageInput}
+                    setContent={setChatInputContent}
+                    stopConversationRef={stopConversationRef}
+                    textareaRef={textareaRef}
+                    onSend={onMessage}
+                    onScrollDownClick={handleScrollDown}
+                    showScrollDownButton={showScrollDownButton}
+                    messageIsStreaming={
+                      firstMessageIsStreaming || secondMessageIsStreaming
+                    }
+                    disabled={
+                      !firstModelWorkload ||
+                      (chatMode === 'compare' && !secondModelWorkload)
+                    }
+                    allowRegenerate={false}
+                    embedded
+                    aria-label="chat-input"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col">
+              <div className="my-auto flex justify-center">
+                <ChatInfoCard mode={chatMode} />
+              </div>
+            </div>
+          )
+        ) : (
+          <div className="flex flex-1 min-h-0 w-full overflow-x-scroll overflow-y-hidden justify-center">
             <div
-              ref={chatContainerRef2}
+              ref={chatContainerRef1}
               onScroll={handleScroll}
-              className="w-1/2 max-w-[50%] pt-6 overflow-y-scroll "
+              className={
+                'flex pt-6 overflow-y-scroll ' +
+                (chatMode !== 'compare' ? 'w-full' : 'w-1/2 max-w-[50%]')
+              }
             >
               <ChatMessages
                 compareMode={chatMode === 'compare'}
-                conversation={secondConversation}
-                onConversationUpdated={setSecondConversation}
-                messagesEndRef={messagesEndRef2}
-                loading={secondLoading}
-                delayedResponseNotification={secondDelayedResponseNotification}
-                messageIsStreaming={secondMessageIsStreaming}
+                conversation={firstConversation}
+                onConversationUpdated={setFirstConversation}
+                messagesEndRef={messagesEndRef1}
+                loading={firstLoading}
+                delayedResponseNotification={firstDelayedResponseNotification}
+                messageIsStreaming={firstMessageIsStreaming}
               />
             </div>
-          )}
-        </div>
-        <BasicChatInput
-          content={chatInputContent}
-          setContent={setChatInputContent}
-          stopConversationRef={stopConversationRef}
-          textareaRef={textareaRef}
-          onSend={onMessage}
-          onScrollDownClick={handleScrollDown}
-          showScrollDownButton={showScrollDownButton}
-          messageIsStreaming={
-            firstMessageIsStreaming || secondMessageIsStreaming
-          }
-          disabled={
-            !firstModelWorkload ||
-            (chatMode === 'compare' && !secondModelWorkload)
-          }
-          allowRegenerate={false}
-          aria-label="chat-input"
-        />
+            {chatMode === 'compare' && (
+              <div
+                ref={chatContainerRef2}
+                onScroll={handleScroll}
+                className="w-1/2 max-w-[50%] pt-6 overflow-y-scroll "
+              >
+                <ChatMessages
+                  compareMode={chatMode === 'compare'}
+                  conversation={secondConversation}
+                  onConversationUpdated={setSecondConversation}
+                  messagesEndRef={messagesEndRef2}
+                  loading={secondLoading}
+                  delayedResponseNotification={
+                    secondDelayedResponseNotification
+                  }
+                  messageIsStreaming={secondMessageIsStreaming}
+                />
+              </div>
+            )}
+          </div>
+        )}
+        {(firstConversation.messages.length > 0 || isLgUp) && (
+          <BasicChatInput
+            content={chatInputContent}
+            enableImageInput={enableImageInput}
+            setContent={setChatInputContent}
+            stopConversationRef={stopConversationRef}
+            textareaRef={textareaRef}
+            onSend={onMessage}
+            onScrollDownClick={handleScrollDown}
+            showScrollDownButton={showScrollDownButton}
+            messageIsStreaming={
+              firstMessageIsStreaming || secondMessageIsStreaming
+            }
+            disabled={
+              !firstModelWorkload ||
+              (chatMode === 'compare' && !secondModelWorkload)
+            }
+            allowRegenerate={false}
+            aria-label="chat-input"
+          />
+        )}
+        {firstConversation.messages.length === 0 && (
+          <RelevantDocs docs={aiwbDocumentationMapping[AiwbDocsPage.CHAT]} />
+        )}
       </div>
-      {firstConversation.messages.length === 0 && <RelevantDocs page="chat" />}
     </div>
   );
 };

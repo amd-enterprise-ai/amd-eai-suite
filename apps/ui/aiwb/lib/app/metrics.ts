@@ -10,15 +10,17 @@ type MetricTimeRangeParams = {
   namespace: string;
   start: Date;
   end: Date;
+  podName?: string;
 };
 
 export const getTimeseriesMetric = async (
   params: MetricTimeRangeParams & { metric: string },
 ): Promise<TimeSeriesResponse> => {
-  const { workloadId, namespace, start, end, metric } = params;
+  const { workloadId, namespace, start, end, metric, podName } = params;
   const urlParams = new URLSearchParams();
   urlParams.append('start', start.toISOString());
   urlParams.append('end', end.toISOString());
+  if (podName) urlParams.append('podName', podName);
 
   const metricPath = `aims/services/${workloadId}/metrics/${metric}`;
   const response = await fetch(
@@ -37,10 +39,11 @@ export const getTimeseriesMetric = async (
 export const getScalarMetric = async (
   params: MetricTimeRangeParams & { metric: string },
 ): Promise<MetricScalarResponse> => {
-  const { workloadId, namespace, start, end, metric } = params;
+  const { workloadId, namespace, start, end, metric, podName } = params;
   const urlParams = new URLSearchParams();
   urlParams.append('start', start.toISOString());
   urlParams.append('end', end.toISOString());
+  if (podName) urlParams.append('podName', podName);
 
   const metricPath = `aims/services/${workloadId}/metrics/${metric}`;
   const response = await fetch(

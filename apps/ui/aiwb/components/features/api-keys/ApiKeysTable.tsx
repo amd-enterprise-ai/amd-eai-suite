@@ -16,9 +16,9 @@ import { deleteApiKey, fetchProjectApiKeys } from '@/lib/app/api-keys';
 import { getFilteredData } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { ApiKey } from '@amdenterpriseai/types';
+import { ApiKey } from '@/types/api-keys';
 import { TableColumns } from '@amdenterpriseai/types';
-import { ApiKeysTableField } from '@amdenterpriseai/types';
+import { ApiKeysTableField } from '@/types/enums/api-keys-table-fields';
 import { FilterComponentType } from '@amdenterpriseai/types';
 import { SortDirection } from '@amdenterpriseai/types';
 import { ClientSideDataFilter } from '@amdenterpriseai/types';

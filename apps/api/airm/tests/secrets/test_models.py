@@ -9,8 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import SecretKind, SecretScope
-from app.secrets.enums import SecretStatus
+from app.secrets.enums import SecretKind, SecretScope, SecretStatus
 from app.secrets.models import OrganizationScopedSecret, ProjectScopedSecret, Secret
 from tests import factory  # type: ignore[attr-defined]
 

@@ -75,7 +75,7 @@ Add users to project
     [Arguments]             ${project_id}           ${user_ids}             ${expected_status}=any
     Create api session    airm
     ${endpoint}=            Projects endpoint
-    ${user_data}=           Create Dictionary       user_ids=${user_ids}
+    ${user_data}=           Create Dictionary       userIds=${user_ids}
     Log    API Request: POST ${endpoint}/${project_id}/users - Body: ${user_data}    DEBUG
     ${response}=            Safe Post Request       ${endpoint}/${project_id}/users                 json=${user_data}       expected_status=${expected_status}
     Log    API Response: ${response.status_code}    DEBUG

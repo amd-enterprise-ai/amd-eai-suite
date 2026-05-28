@@ -200,18 +200,19 @@ describe('AutoscalingFormFields', () => {
   });
 
   describe('Target Value Input', () => {
-    it('renders target value input with number type', () => {
+    it('renders target value input', () => {
       render(<FormWrapper />, { wrapper });
 
-      const input = screen.getByRole('spinbutton');
-      expect(input).toHaveAttribute('type', 'number');
+      const input = screen.getByLabelText('targetValue.label');
+      expect(input).toBeInTheDocument();
     });
 
-    it('has minimum value of 1', () => {
+    it('renders as a FormNumberInput component', () => {
       render(<FormWrapper />, { wrapper });
 
-      const input = screen.getByRole('spinbutton');
-      expect(input).toHaveAttribute('min', '1');
+      // FormNumberInput renders the data-testid on the input element directly.
+      // minValue={1} is enforced internally by React Aria, not via a DOM attribute.
+      expect(screen.getByTestId('target-value-input')).toBeInTheDocument();
     });
   });
 });

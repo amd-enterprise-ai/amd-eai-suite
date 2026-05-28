@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.responses import Response
+from starlette.responses import StreamingResponse
 
 from api_common.auth.security import get_user_email
 from api_common.database import get_session
@@ -123,7 +123,7 @@ async def download_dataset(
     session: AsyncSession = Depends(get_session),
     minio_client: MinioClient = Depends(get_minio_client),
     namespace: str = Depends(ensure_access_to_workbench_namespace),
-) -> Response:
+) -> StreamingResponse:
     return await download_dataset_file(dataset_id, namespace, session, minio_client)
 
 

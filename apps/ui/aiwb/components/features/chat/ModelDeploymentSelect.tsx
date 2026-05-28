@@ -6,7 +6,9 @@ import { useMemo } from 'react';
 import { Select, SelectItem } from '@heroui/react';
 import { IconCpu } from '@tabler/icons-react';
 
-import { Workload, WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { Workload } from '@/types/workloads';
+import { WorkloadStatus } from '@/types/enums/workloads';
 
 interface Props {
   selectedModelId?: string;
@@ -81,6 +83,9 @@ export function ModelDeploymentSelect({
           key={workload.id}
           aria-label={workload.id}
           description={workloadDescriptions?.[workload.id]}
+          classNames={{
+            description: 'text-default-500',
+          }}
         >
           {workload.displayName ?? workload.name}
         </SelectItem>

@@ -14,7 +14,7 @@ export const buildQueryParams = <T>(
 ): string => {
   const availableParams: { [key: string]: string } = {
     page: page.toString(),
-    page_size: pageSize.toString(),
+    pageSize: pageSize.toString(),
   };
 
   if (sort) {

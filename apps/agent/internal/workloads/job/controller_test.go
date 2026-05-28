@@ -107,7 +107,7 @@ func TestReconcile_AddsFinalizerToNewResource(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -156,7 +156,7 @@ func TestReconcile_DoesNotDuplicateFinalizer(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -199,7 +199,7 @@ func TestReconcile_HandlesDeletionWithValidLabels(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 	assert.Len(t, mock.Published, 1)
 
-	msg, ok := mock.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := mock.Published[0].(common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-job", msg.Name)
 	assert.Equal(t, "Deleted", msg.Status)
@@ -347,7 +347,7 @@ func TestReconcile_Job_AutoDiscovered_WithSubmitter(t *testing.T) {
 	require.Len(t, mockPub.Published, 2)
 
 	// First message should be auto-discovery
-	autoDiscMsg, ok := mockPub.Published[0].(*messaging.AutoDiscoveredWorkloadComponentMessage)
+	autoDiscMsg, ok := mockPub.Published[0].(*common.AutoDiscoveredWorkloadComponentMessage)
 	require.True(t, ok)
 	assert.Equal(t, "121aede7-b363-4188-8d5a-2e034e4d0b3f", autoDiscMsg.ProjectID)
 	assert.Equal(t, "827862af-41b9-4bd6-bd8d-04e4e866dff3", autoDiscMsg.WorkloadID)
@@ -357,7 +357,7 @@ func TestReconcile_Job_AutoDiscovered_WithSubmitter(t *testing.T) {
 	assert.Equal(t, "kube-system:my-controller", *autoDiscMsg.Submitter)
 
 	// Second message should be status update
-	statusMsg, ok := mockPub.Published[1].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mockPub.Published[1].(*common.WorkloadComponentStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, "Running", statusMsg.Status)
 }
@@ -401,11 +401,11 @@ func TestReconcile_Job_AutoDiscovered_WithoutSubmitter(t *testing.T) {
 	mockPub := reconciler.Publisher.(*testutils.MockPublisher)
 	require.Len(t, mockPub.Published, 2)
 
-	autoDiscMsg, ok := mockPub.Published[0].(*messaging.AutoDiscoveredWorkloadComponentMessage)
+	autoDiscMsg, ok := mockPub.Published[0].(*common.AutoDiscoveredWorkloadComponentMessage)
 	require.True(t, ok)
 	assert.Nil(t, autoDiscMsg.Submitter)
 
-	statusMsg, ok := mockPub.Published[1].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mockPub.Published[1].(*common.WorkloadComponentStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, "Running", statusMsg.Status)
 }
@@ -487,7 +487,7 @@ func TestReconcile_Job_NotAutoDiscovered(t *testing.T) {
 	mockPub := reconciler.Publisher.(*testutils.MockPublisher)
 	require.Len(t, mockPub.Published, 1)
 
-	statusMsg, ok := mockPub.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mockPub.Published[0].(*common.WorkloadComponentStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, "Running", statusMsg.Status)
 }

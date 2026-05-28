@@ -5,8 +5,8 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import QuotaStatus
 from app.quotas.constants import DEFAULT_CATCH_ALL_QUOTA_NAME
+from app.quotas.enums import QuotaStatus
 from app.quotas.utils import calculate_dynamic_catch_all_quota_allocation
 from tests import factory  # type: ignore[attr-defined]
 

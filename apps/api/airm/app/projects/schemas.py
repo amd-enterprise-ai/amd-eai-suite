@@ -4,16 +4,17 @@
 
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import ConfigDict, Field, computed_field, field_validator
+
+from api_common.schemas import BaseEntityPublic, BaseModel
 
 from ..clusters.schemas import ClusterResponse, ClusterWithResources
 from ..quotas.schemas import (
     QuotaResponse,  # noqa: E402
     QuotaUpdate,  # noqa: E402
 )
-from ..utilities.schema import BaseEntityPublic
 from .constants import MAX_PROJECT_NAME_LENGTH, RESTRICTED_PROJECT_NAMES
-from .enums import ProjectStatus
+from .enums import GpuPreemptionPolicy, ProjectStatus
 
 
 class ProjectBase(BaseModel):
@@ -33,34 +34,56 @@ class ProjectBase(BaseModel):
             raise ValueError(f"{v} is a restricted project name.")
         return v
 
-    model_config = ConfigDict(from_attributes=True)
+
+class GpuPreemptionConfig(BaseModel):
+    enabled: bool = Field(False, description="Whether GPU preemption is enabled for this project.")
+    threshold: int | None = Field(
+        None, description="GPU utilization threshold (0-100%) that triggers preemption.", ge=0, le=100
+    )
+    grace_period: int | None = Field(
+        None,
+        description=(
+            "Grace period in seconds before preemption takes effect. "
+            "Must be a multiple of 60 so values align with the UI (whole minutes)."
+        ),
+        ge=900,
+        multiple_of=60,
+    )
+    policy: GpuPreemptionPolicy | None = Field(None, description="The GPU preemption policy.")
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ProjectResponse(ProjectBase, BaseEntityPublic):
     status: ProjectStatus = Field(description="The status of the project.")
     status_reason: str | None = Field(None, description="The reason for the project's status.")
-
-    model_config = ConfigDict(from_attributes=True)
+    gpu_preemption: GpuPreemptionConfig = Field(
+        default_factory=GpuPreemptionConfig, description="GPU preemption configuration."
+    )
 
 
 class ProjectEdit(BaseModel):
     description: str = Field(description="The description of the project.", min_length=2, max_length=1024)
     quota: QuotaUpdate = Field(description="The quota for the project.")
+    # TODO: Make gpu_preemption required (no default) once the UI sends it on update.
+    gpu_preemption: GpuPreemptionConfig = Field(
+        default_factory=GpuPreemptionConfig, description="GPU preemption configuration."
+    )
 
     model_config = ConfigDict(extra="forbid")
 
 
 class ProjectCreate(ProjectBase):
     quota: QuotaUpdate = Field(description="The quota for the project.")
-
-    model_config = ConfigDict(from_attributes=True)
+    # TODO: Make gpu_preemption required (no default) once the UI sends it on create.
+    gpu_preemption: GpuPreemptionConfig = Field(
+        default_factory=GpuPreemptionConfig, description="GPU preemption configuration."
+    )
 
 
 class ProjectWithClusterAndQuota(ProjectResponse):
     quota: QuotaResponse = Field(description="The quota assigned to the project.")
     cluster: ClusterResponse = Field(description="The cluster the project belongs to.")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectWithResourceAllocation(ProjectResponse):
@@ -109,8 +132,6 @@ class ProjectWithResourceAllocation(ProjectResponse):
         """True if memory allocation exceeds available resources."""
         return self.quota.memory_bytes > self.cluster.available_resources.memory_bytes
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 from ..users.schemas import InvitedUser, UserResponse  # noqa: E402
 
@@ -143,8 +164,6 @@ class ProjectAssignment(BaseEntityPublic):
     project: ProjectResponse = Field(description="The project information")
     status: str = Field(description="The status of the project assignment.")
     status_reason: str | None = Field(None, description="Details if any about the status")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 # Circular dependencies:

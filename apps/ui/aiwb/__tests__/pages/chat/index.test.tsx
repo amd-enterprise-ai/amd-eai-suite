@@ -6,9 +6,9 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 
 import { listChattableWorkloads } from '@/lib/app/chat';
 
-import { Workload } from '@amdenterpriseai/types';
+import { Workload } from '@/types/workloads';
 
-import ChatPage from '@/pages/chat';
+import ChatPage from '@/pages/[project]/chat';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock, vi } from 'vitest';

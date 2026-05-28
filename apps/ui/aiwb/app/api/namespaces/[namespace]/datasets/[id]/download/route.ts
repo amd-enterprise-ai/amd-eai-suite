@@ -2,4 +2,4 @@
 //
 // SPDX-License-Identifier: MIT
 
-export { GET } from '@/lib/server/dataset-download-handler';
+export { GET, maxDuration } from '@/lib/server/dataset-download-handler';

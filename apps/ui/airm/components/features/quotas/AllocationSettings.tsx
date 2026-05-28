@@ -19,14 +19,14 @@ import { useTranslation } from 'next-i18next';
 import { bytesToGigabytes } from '@amdenterpriseai/utils/app';
 import { displayFixedNumber } from '@amdenterpriseai/utils/app';
 
-import { Cluster } from '@amdenterpriseai/types';
-import { QuotaResource } from '@amdenterpriseai/types';
-import { QuotaAllocationEditFields } from '@amdenterpriseai/types';
-import { Quota } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { QuotaResource } from '@/types/enums/quotas';
+import { QuotaAllocationEditFields } from '@/types/enums/quotas-form-fields';
+import { Quota } from '@/types/quotas';
 
 import { FormFieldComponent } from '@amdenterpriseai/components';
 import { SliderInput } from '@amdenterpriseai/components';
-import { ProjectQuotaFormData } from '@amdenterpriseai/types';
+import { ProjectQuotaFormData } from '@/types/projects';
 
 interface Props {
   form: UseFormReturn<ProjectQuotaFormData>;

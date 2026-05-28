@@ -19,6 +19,7 @@ import {
   mockDebugInfo,
   mockMarkdownMessage,
   mockUserMarkdownMessage,
+  mockMultimodalUserMessage,
 } from '@/__mocks__/services/app/chat.data';
 
 setupClipboardMock();
@@ -523,6 +524,51 @@ describe('ChatMessage Component', () => {
 
       const saveButton = screen.getByText('Save & Submit');
       expect(saveButton).toBeDisabled();
+    });
+
+    it('preserves image_url items when editing a multimodal user message', async () => {
+      const mockOnEdit = vi.fn();
+
+      render(
+        <ProviderWrapper>
+          <ChatMessage
+            {...defaultProps}
+            message={mockMultimodalUserMessage}
+            onEdit={mockOnEdit}
+          />
+        </ProviderWrapper>,
+      );
+
+      const editButton = document
+        .querySelector('.tabler-icon-edit')
+        ?.closest('button');
+
+      await act(async () => {
+        fireEvent.click(editButton!);
+      });
+
+      const textarea = screen.getByRole('textbox');
+
+      await act(async () => {
+        fireEvent.change(textarea, { target: { value: 'updated caption' } });
+      });
+
+      const saveButton = screen.getByText('Save & Submit');
+
+      await act(async () => {
+        fireEvent.click(saveButton);
+      });
+
+      expect(mockOnEdit).toHaveBeenCalledWith({
+        ...mockMultimodalUserMessage,
+        content: [
+          { type: 'text', text: 'updated caption' },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,abc' },
+          },
+        ],
+      });
     });
 
     it('does not call onEdit when message content is unchanged', async () => {

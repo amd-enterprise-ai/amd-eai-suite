@@ -26,11 +26,13 @@ vi.mock('next-i18next', () => ({
 }));
 
 // Mock the time range utility and formatters
+const mockGetCurrentTimeRange = vi.fn(() => ({
+  start: new Date('2024-01-01T00:00:00Z'),
+  end: new Date('2024-01-01T01:00:00Z'),
+}));
+
 vi.mock('@amdenterpriseai/utils/app', () => ({
-  getCurrentTimeRange: vi.fn(() => ({
-    start: new Date('2024-01-01T00:00:00Z'),
-    end: new Date('2024-01-01T01:00:00Z'),
-  })),
+  getCurrentTimeRange: () => mockGetCurrentTimeRange(),
   formatSeconds: vi.fn((v: number) => `${v}s`),
   formatTokens: vi.fn((v: number) => `${v}t`),
   displayPercentage: vi.fn((v: number) => `${v}%`),
@@ -143,6 +145,7 @@ describe('InferenceMetrics', () => {
     vi.useFakeTimers();
     mockUseIsFetching.mockReturnValue(0);
     mockInvalidateQueries.mockClear();
+    mockGetCurrentTimeRange.mockClear();
   });
 
   afterEach(() => {
@@ -261,15 +264,8 @@ describe('InferenceMetrics', () => {
     const refreshButton = screen.getByTestId('refresh-button');
     fireEvent.click(refreshButton);
 
-    expect(mockInvalidateQueries).toHaveBeenCalledWith({
-      queryKey: [
-        'project',
-        'test-project-id',
-        'workload',
-        'workload-1',
-        'metrics',
-      ],
-    });
+    expect(mockGetCurrentTimeRange).toHaveBeenCalled();
+    expect(mockInvalidateQueries).not.toHaveBeenCalled();
   });
 
   it('handles refresh when time range has changed', () => {

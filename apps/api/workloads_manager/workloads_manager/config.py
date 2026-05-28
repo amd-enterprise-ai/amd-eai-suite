@@ -38,7 +38,6 @@ TOKEN = os.environ.get("TOKEN")
 # Only these specific files and directories will be included, everything else will be skipped
 _default_chart_paths = [
     "templates",
-    "overrides/dev-center",
     "overrides/models",
     "overrides/extension-gallery",
     "mount",
@@ -50,7 +49,6 @@ _default_chart_paths = [
 # Get from environment or use default
 _chart_paths_env = os.environ.get("WM_ALLOWED_CHART_PATHS", None)
 if _chart_paths_env is not None:
-    # Parse comma-separated string from environment variable
     ALLOWED_CHART_PATHS = [p.strip() for p in _chart_paths_env.split(",") if p.strip()]
 else:
     ALLOWED_CHART_PATHS = _default_chart_paths

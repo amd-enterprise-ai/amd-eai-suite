@@ -13,7 +13,7 @@ import {
 import { assignRoleToUser } from '@/services/app';
 
 import { UserRole } from '@amdenterpriseai/types';
-import { UserWithProjects } from '@amdenterpriseai/types';
+import { UserWithProjects } from '@/types/users';
 
 import { UserRoles } from '@/components/features/user';
 

@@ -6,20 +6,17 @@ from keycloak import KeycloakAdmin
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import ValidationException
+
 from ..clusters.models import Cluster
 from ..clusters.service import get_cluster_with_resources
-from ..messaging.schemas import (
-    ClusterQuotaAllocation,
-    ClusterQuotasFailureMessage,
-    ClusterQuotasStatusMessage,
-    GPUVendor,
-    QuotaStatus,
-)
 from ..messaging.sender import MessageSender
 from ..projects.models import Project
 from ..projects.repository import get_projects_in_cluster
-from ..utilities.exceptions import ValidationException
+from ..utilities.enums import GPUVendor
 from .constants import DEFAULT_CATCH_ALL_QUOTA_NAME
+from .enums import QuotaStatus
+from .messaging import ClusterQuotaAllocation, ClusterQuotasFailureMessage, ClusterQuotasStatusMessage
 from .models import Quota
 from .repository import create_quota as create_quota_in_db
 from .repository import update_quota, update_quota_status
@@ -145,6 +142,8 @@ async def update_cluster_quotas_from_allocations(
             logger.warning(
                 f"Quota with name {quota_allocation.quota_name} not found for cluster {cluster.id}. Skipping quota."
             )
+            continue
+        if quota.status in [QuotaStatus.DELETING, QuotaStatus.DELETED]:
             continue
 
         if does_quota_match_allocation(quota, quota_allocation):

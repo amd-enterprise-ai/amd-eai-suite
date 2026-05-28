@@ -39,10 +39,8 @@ Resource            resources/deployment.resource
 Library             Collections
 Library             RequestsLibrary
 
-Suite Setup         Run Keywords
-...                 Initialize Project Tracking    AND
-...                 Initialize AIMS API key test environment
-Suite Teardown      Clean Up All Created Projects
+Suite Setup         Initialize AIMS API key test environment
+Suite Teardown      Clean Up All Tracked Resources
 
 
 *** Test Cases ***
@@ -54,7 +52,7 @@ Api key with expiration
     ...    Note: TTL is specified in seconds (3600 = 1 hour). The keyword automatically
     ...    appends 's' suffix, so duration format like "1d" cannot be used here.
     ...
-    ...    Verifies that expires_at is set and in the future. Actual expiration enforcement
+    ...    Verifies that expiresAt is set and in the future. Actual expiration enforcement
     ...    (rejecting expired keys) can't be reliably tested in E2E due to timing constraints.
     [Tags]    api-keys    expiration    ttl
 
@@ -95,7 +93,7 @@ Assign api key to deployed AIMS model
     ...    1. Deploy a test AIMS model
     ...    2. Assign API key to AIMS model
     ...    3. Verify key-model mapping
-    [Tags]    api-keys    assign    aims
+    [Tags]    api-keys    assign    aims    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
@@ -114,7 +112,7 @@ Access AIMS model with valid api key
     ...    1. Deploy AIMS model with API key assigned
     ...    2. Make request to AIMS model with API key
     ...    3. Verify successful access
-    [Tags]    api-keys    access    aims    positive
+    [Tags]    api-keys    access    aims    positive    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
@@ -135,7 +133,7 @@ Access AIMS model with invalid api key
     ...    1. Deploy AIMS model with API key assigned
     ...    2. Make request with INVALID API key
     ...    3. Verify request fails with 401/403 (authentication failure)
-    [Tags]    api-keys    access    aims    negative
+    [Tags]    api-keys    access    aims    negative    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
@@ -154,7 +152,7 @@ Access AIMS model without api key
     ...    1. Deploy AIMS model with API key assigned
     ...    2. Make request to AIMS model without any API key
     ...    3. Verify request fails with 401/403 (authentication failure)
-    [Tags]    api-keys    access    aims    negative
+    [Tags]    api-keys    access    aims    negative    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
@@ -165,7 +163,7 @@ Access AIMS model without api key
 
 Assign multiple keys to single AIMS model
     [Documentation]    Verify that multiple API keys can be assigned to one AIMS model
-    [Tags]    api-keys    assign    aims    multiple
+    [Tags]    api-keys    assign    aims    multiple    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
@@ -195,13 +193,13 @@ Assign multiple keys to single AIMS model
     Then key assignment should succeed
 
     # Verify each key works with the model
-    When request is made to AIMS model with valid api key    api_key_value=${API_KEY_1}[full_key]
+    When request is made to AIMS model with valid api key    api_key_value=${API_KEY_1}[fullKey]
     Then request should succeed
 
-    When request is made to AIMS model with valid api key    api_key_value=${API_KEY_2}[full_key]
+    When request is made to AIMS model with valid api key    api_key_value=${API_KEY_2}[fullKey]
     Then request should succeed
 
-    When request is made to AIMS model with valid api key    api_key_value=${API_KEY_3}[full_key]
+    When request is made to AIMS model with valid api key    api_key_value=${API_KEY_3}[fullKey]
     Then request should succeed
 
 Access AIMS model with revoked api key
@@ -229,7 +227,7 @@ Model redeployment preserves key but breaks binding
     [Documentation]    Verify that AIM redeployment breaks the key-to-model binding.
     ...    After redeployment, the AIM gets a new cluster auth group ID.
     ...    The key remains bound to the OLD group, so the binding is stale.
-    [Tags]    api-keys    deployment    mapping    aims
+    [Tags]    api-keys    deployment    mapping    aims    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
@@ -253,7 +251,7 @@ Renew renewable API key
     ...    1. Ensure project and authentication
     ...    2. Create a renewable API key
     ...    3. Renew the key's lease
-    ...    4. Verify renewal succeeded with lease_duration in response
+    ...    4. Verify renewal succeeded with leaseDuration in response
     [Tags]    api-keys    renewal    management
 
     Given a ready project with user access exists
@@ -310,7 +308,7 @@ Remove AIMS model with active key mapping
     ...
     ...    Note: Known limitation - API key cleanup after AIM deletion may have edge cases.
     ...    This is tracked for future improvements.
-    [Tags]    api-keys    deployment    aims    cleanup
+    [Tags]    api-keys    deployment    aims    cleanup    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736

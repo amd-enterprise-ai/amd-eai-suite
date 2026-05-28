@@ -3,28 +3,32 @@
 // SPDX-License-Identifier: MIT
 
 import {
+  AIM_CANONICAL_NAME_ANNOTATION,
+  AIM_MODEL_NAME_LABEL,
   AIMClusterModel,
+  AIMModel,
   AIMClusterServiceTemplate,
+  FINE_TUNED_LABEL,
   AIMMetric,
+  AIMAutoscaling,
+  UpdateScalingPolicyPayload,
+  AutoscalingPolicyConfig,
+  AIMServiceHistoryResponse,
+} from '@/types/aims';
+import { Intent, StatusBadgeVariant } from '@amdenterpriseai/types';
+import {
+  AIMNamespaceServiceTemplate,
   AIMService,
   AIMServiceStatus,
   AIMStatus,
   AIMDeployPayload,
   AIMWorkloadStatus,
   ParsedAIM,
-  AIMAutoscaling,
-  UpdateScalingPolicyPayload,
-  AutoscalingPolicyConfig,
   AggregatedAIM,
-  AIMServiceHistoryResponse,
+  AimServiceReplica,
 } from '@/types/aims';
-import {
-  Intent,
-  StatusBadgeVariant,
-  WorkloadLogParams,
-  WorkloadLogResponse,
-  WorkloadStatus,
-} from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { WorkloadLogParams, WorkloadLogResponse } from '@/types/workloads';
 import { APIRequestError, getErrorMessage } from '@amdenterpriseai/utils/app';
 
 // Autoscaling constants
@@ -89,8 +93,9 @@ export type AIMServiceDisplayInfo = {
   title: string; // Human-readable title (e.g., "Llama 3.1 8B Instruct")
   canonicalName: string; // Canonical name (e.g., "meta-llama/Llama-3.1-8B")
   imageVersion: string; // Image version (e.g., "1.2.3")
-  resourceName: string; // Resource name (e.g., "aim-llama-2-7b-v2")
+  name: string; // Resource name (e.g., "aim-llama-2-7b-v2")
   metric: AIMMetric;
+  tags?: string[];
 };
 
 /**
@@ -107,24 +112,58 @@ export const resolveAIMServiceDisplay = (
 ): AIMServiceDisplayInfo => {
   const modelRef = aimService.status.resolvedModel?.name;
   const matchingAIM = modelRef
-    ? parsedAIMs?.find((aim) => aim.resourceName === modelRef)
+    ? parsedAIMs?.find((aim) => aim.model === modelRef)
     : undefined;
 
   const displayName =
-    matchingAIM?.resourceName ?? modelRef ?? aimService.metadata.name;
+    matchingAIM?.model ?? modelRef ?? aimService.metadata.name;
   const metric = [AIMMetric.Latency, AIMMetric.Throughput].includes(
     aimService.spec.overrides?.metric as AIMMetric,
   )
     ? (aimService.spec.overrides?.metric as AIMMetric)
     : AIMMetric.Default;
 
+  // Fine-tuned deployments aren't in the cluster catalog; the canonical and
+  // user-given name live on AIMService annotations.
+  const annotationCanonical =
+    aimService.metadata.annotations?.[AIM_CANONICAL_NAME_ANNOTATION];
+  const annotationTitle =
+    aimService.metadata.annotations?.[AIM_MODEL_NAME_LABEL];
+
   return {
-    title: matchingAIM?.title || displayName,
-    canonicalName: matchingAIM?.canonicalName || displayName,
+    title: matchingAIM?.title || annotationTitle || displayName,
+    canonicalName:
+      matchingAIM?.canonicalName || annotationCanonical || displayName,
     imageVersion: matchingAIM?.imageVersion || '',
-    resourceName: displayName,
+    name: displayName,
     metric,
+    tags: matchingAIM?.tags || [],
   };
+};
+
+/**
+ * Maps an AIM Service status to the catalog-level AIMWorkloadStatus
+ * used by AIM cards to display deployment state badges.
+ */
+const mapAIMServiceStatusToAIMWorkloadStatus = (
+  status: AIMServiceStatus,
+): AIMWorkloadStatus => {
+  switch (status) {
+    case AIMServiceStatus.RUNNING:
+      return AIMWorkloadStatus.DEPLOYED;
+    case AIMServiceStatus.PENDING:
+      return AIMWorkloadStatus.PENDING;
+    case AIMServiceStatus.STARTING:
+      return AIMWorkloadStatus.STARTING;
+    case AIMServiceStatus.DEGRADED:
+      return AIMWorkloadStatus.DEGRADED;
+    case AIMServiceStatus.FAILED:
+      return AIMWorkloadStatus.FAILED;
+    case AIMServiceStatus.DELETED:
+      return AIMWorkloadStatus.DELETED;
+    default:
+      return AIMWorkloadStatus.NOT_DEPLOYED;
+  }
 };
 
 /**
@@ -135,58 +174,47 @@ export const resolveAIMServiceDisplay = (
  * @returns {ParsedAIM} The parsed aim data with extracted description, version, tags, and status.
  */
 export const aimParser = (
-  aim: AIMClusterModel,
+  aim: AIMClusterModel | AIMModel,
   deployedServices?: AIMService[],
 ): ParsedAIM => {
   const imageMetadata = aim.status.imageMetadata;
   const model = imageMetadata.model;
-  const originalLabels = imageMetadata.originalLabels;
+  const oci = imageMetadata.oci;
 
   // Check if model has a 'preview' tag
   const isPreview = model.tags?.includes('preview') || false;
 
-  // Determine workload status based on deployed service
-  const _getWorkloadStatus = (_deployedService?: AIMService) => {
-    let workloadStatus = AIMWorkloadStatus.NOT_DEPLOYED;
-    if (_deployedService) {
-      const serviceStatus = _deployedService.status.status;
-      if (serviceStatus === AIMServiceStatus.RUNNING) {
-        workloadStatus = AIMWorkloadStatus.DEPLOYED;
-      } else if (
-        serviceStatus === AIMServiceStatus.PENDING ||
-        serviceStatus === AIMServiceStatus.STARTING
-      ) {
-        workloadStatus = AIMWorkloadStatus.PENDING;
-      } else if (serviceStatus === AIMServiceStatus.DEGRADED) {
-        workloadStatus = AIMWorkloadStatus.DEGRADED;
-      } else if (serviceStatus === AIMServiceStatus.FAILED) {
-        workloadStatus = AIMWorkloadStatus.FAILED;
-      }
-    }
-
-    return workloadStatus;
-  };
+  // Fine-tuned AIMModels have no spec.image, so status.imageMetadata is empty.
+  // Fall back to authoritative spec/labels so callers don't need to special-case.
+  // - canonicalName: spec.modelSources[0].modelId (the base model name)
+  // - title: the user-given fine-tune name from the model-name label, then metadata.name
+  const baseModelId =
+    'modelSources' in aim.spec
+      ? aim.spec.modelSources?.[0]?.modelId
+      : undefined;
+  const userGivenName = aim.metadata.labels?.[AIM_MODEL_NAME_LABEL];
 
   const parsedAim: ParsedAIM = {
-    anotations: aim.metadata.annotations,
-    resourceName: aim.resourceName,
+    annotations: aim.metadata.annotations,
     model: aim.metadata.name,
     imageReference: aim.spec.image,
     description: {
-      short: originalLabels.orgOpencontainersImageDescription || '',
-      full: originalLabels.comAmdAimDescriptionFull || '',
+      short: oci?.description || '',
+      full: model.descriptionFull || '',
     },
     imageVersion:
-      originalLabels.orgOpencontainersImageVersion ||
-      aim.metadata.annotations.aimEaiAmdComSourceTag ||
+      oci?.version ||
+      aim.metadata.annotations['aim.eai.amd.com/source-tag'] ||
       '',
-    title: model.title || originalLabels.comAmdAimTitle || '',
+    title: model.title || oci?.title || userGivenName || aim.metadata.name,
     tags: model.tags || [],
-    canonicalName: model.canonicalName || '',
+    canonicalName: model.canonicalName || baseModelId || '',
     status: aim.status.status,
     workloadStatuses:
       deployedServices && deployedServices.length > 0
-        ? deployedServices.map(_getWorkloadStatus)
+        ? deployedServices.map((s) =>
+            mapAIMServiceStatusToAIMWorkloadStatus(s.status.status),
+          )
         : [AIMWorkloadStatus.NOT_DEPLOYED],
     isPreview,
     isHfTokenRequired: model.hfTokenRequired === true,
@@ -205,37 +233,15 @@ export const aimParser = (
  * @returns {ParsedAIM} The parsed AIM data with extracted description, version, tags, and status.
  */
 export const historicalAimParser = (
-  aim: AIMClusterModel,
+  aim: AIMClusterModel | AIMModel,
   historicalService: AIMServiceHistoryResponse,
 ): ParsedAIM => {
   const imageMetadata = aim.status.imageMetadata;
   const model = imageMetadata.model;
-  const originalLabels = imageMetadata.originalLabels;
+  const oci = imageMetadata.oci;
 
   // Check if model has a 'preview' tag
   const isPreview = model.tags?.includes('preview') || false;
-
-  const _getWorkloadStatus = (serviceStatus: AIMServiceStatus) => {
-    let workloadStatus = AIMWorkloadStatus.NOT_DEPLOYED;
-    if (serviceStatus) {
-      if (serviceStatus === AIMServiceStatus.RUNNING) {
-        workloadStatus = AIMWorkloadStatus.DEPLOYED;
-      } else if (
-        serviceStatus === AIMServiceStatus.PENDING ||
-        serviceStatus === AIMServiceStatus.STARTING
-      ) {
-        workloadStatus = AIMWorkloadStatus.PENDING;
-      } else if (serviceStatus === AIMServiceStatus.DEGRADED) {
-        workloadStatus = AIMWorkloadStatus.DEGRADED;
-      } else if (serviceStatus === AIMServiceStatus.FAILED) {
-        workloadStatus = AIMWorkloadStatus.FAILED;
-      } else if (serviceStatus === AIMServiceStatus.DELETED) {
-        workloadStatus = AIMWorkloadStatus.DELETED;
-      }
-    }
-
-    return workloadStatus;
-  };
 
   const historicalDeployedService: AIMService = {
     id: historicalService.id,
@@ -251,7 +257,6 @@ export const historicalAimParser = (
     status: {
       status: historicalService.status,
     },
-    resourceName: historicalService.id,
     clusterAuthGroupId: null,
     endpoints: {
       internal: '',
@@ -274,23 +279,33 @@ export const historicalAimParser = (
   };
 
   const parsedAim: ParsedAIM = {
-    anotations: aim.metadata.annotations,
-    resourceName: aim.resourceName,
+    annotations: aim.metadata.annotations,
     model: aim.metadata.name,
     imageReference: aim.spec.image,
     description: {
-      short: originalLabels.orgOpencontainersImageDescription || '',
-      full: originalLabels.comAmdAimDescriptionFull || '',
+      short: oci?.description || '',
+      full: model.descriptionFull || '',
     },
     imageVersion:
-      originalLabels.orgOpencontainersImageVersion ||
-      aim.metadata.annotations.aimEaiAmdComSourceTag ||
+      oci?.version ||
+      aim.metadata.annotations['aim.eai.amd.com/source-tag'] ||
       '',
-    title: model.title || originalLabels.comAmdAimTitle || '',
+    title:
+      model.title ||
+      oci?.title ||
+      aim.metadata.labels?.[AIM_MODEL_NAME_LABEL] ||
+      aim.metadata.name,
     tags: model.tags || [],
-    canonicalName: model.canonicalName || '',
+    canonicalName:
+      model.canonicalName ||
+      ('modelSources' in aim.spec
+        ? aim.spec.modelSources?.[0]?.modelId
+        : undefined) ||
+      '',
     status: aim.status.status,
-    workloadStatuses: [_getWorkloadStatus(historicalService.status)],
+    workloadStatuses: [
+      mapAIMServiceStatusToAIMWorkloadStatus(historicalService.status),
+    ],
     isPreview,
     isHfTokenRequired: model.hfTokenRequired === true,
     deployedService: historicalDeployedService,
@@ -298,6 +313,15 @@ export const historicalAimParser = (
   };
 
   return parsedAim;
+};
+
+/** Profile resolved from an AIMClusterServiceTemplate for a deployed service. */
+export type AIMServiceProfile = {
+  metric?: string | null;
+  gpu?: string | null;
+  /** Maps from AIMClusterServiceTemplateProfileMetadata.gpuCount. */
+  templateGpuCount?: number | null;
+  precision?: string | null;
 };
 
 /**
@@ -320,7 +344,6 @@ export const getAimServices = async (
     });
 
     if (!response.ok) {
-      // If services can't be fetched, log but don't fail
       console.warn(
         'Failed to fetch AIM services, continuing without deployment status',
       );
@@ -399,10 +422,9 @@ export const getAimClusterModels = async (
     servicesByAimRef.set(key, [...existing, service]);
   });
 
-  // Parse AIMs and match with deployed services by resourceName
   return (
     aims.data?.map((aim) => {
-      const deployedServices = servicesByAimRef.get(aim.resourceName);
+      const deployedServices = servicesByAimRef.get(aim.metadata.name);
       return aimParser(aim, deployedServices);
     }) ?? []
   );
@@ -431,6 +453,22 @@ export const getAimService = async (
 
   const service = await response.json();
   return service;
+};
+
+export const getAimServiceReplicas = async (
+  namespace: string,
+  id: string,
+): Promise<AimServiceReplica[]> => {
+  const url = `/api/namespaces/${namespace}/aims/services/${id}/replicas`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(response);
+    throw new APIRequestError(
+      `Failed to fetch AIM service replicas: ${errorMessage}`,
+      response.status,
+    );
+  }
+  return (await response.json()).data ?? [];
 };
 
 /**
@@ -466,12 +504,12 @@ export const getAimServiceLogs = async (
     if (!pageToken.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(pageToken)) {
       pageToken = pageToken + 'Z';
     }
-    urlParams.append('page_token', pageToken);
+    urlParams.append('pageToken', pageToken);
   }
   if (params.level) urlParams.append('level', params.level);
   if (params.limit) urlParams.append('limit', params.limit.toString());
   if (params.direction) urlParams.append('direction', params.direction);
-  if (params.logType) urlParams.append('log_type', params.logType);
+  if (params.logType) urlParams.append('logType', params.logType);
 
   const response = await fetch(
     `/api/namespaces/${namespace}/aims/services/${serviceId}/logs?${urlParams.toString()}`,
@@ -489,7 +527,7 @@ export const getAimServiceLogs = async (
   return response.json();
 };
 
-export const getAimByResourceName = async (
+export const getAimClusterModel = async (
   resourceName: string,
 ): Promise<AIMClusterModel> => {
   if (!resourceName) {
@@ -515,6 +553,35 @@ export const getAimByResourceName = async (
   return aim;
 };
 
+export const getAimNamespaceModel = async (
+  resourceName: string,
+  namespace: string,
+): Promise<AIMModel> => {
+  if (!resourceName) {
+    throw new APIRequestError('No AIM model resource name provided', 422);
+  }
+
+  const response = await fetch(
+    `/api/namespaces/${namespace}/aims/models/${encodeURIComponent(resourceName)}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(response);
+    throw new APIRequestError(
+      `Failed to fetch AIM model: ${errorMessage}`,
+      response.status,
+    );
+  }
+
+  return await response.json();
+};
+
 /**
  * Fetches service templates for a specific AIM.
  * Service templates contain optimization profiles (latency/throughput) with GPU requirements.
@@ -523,14 +590,14 @@ export const getAimByResourceName = async (
  * @returns {Promise<AIMClusterServiceTemplate[]>} A promise that resolves to the list of service templates.
  * @throws {APIRequestError} If the API request fails.
  */
-export const getAimServiceTemplates = async (
+export const getAimClusterServiceTemplates = async (
   aimResourceName: string,
 ): Promise<AIMClusterServiceTemplate[]> => {
   if (!aimResourceName) {
     throw new APIRequestError('No AIM resource name provided', 422);
   }
 
-  const url = `/api/cluster/aims/templates?aim_resource_name=${encodeURIComponent(aimResourceName)}`;
+  const url = `/api/cluster/aims/templates?aimResourceName=${encodeURIComponent(aimResourceName)}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -552,17 +619,95 @@ export const getAimServiceTemplates = async (
 };
 
 /**
+ * Resolves hardware profile metadata for each AIM service by looking up its
+ * selected template via the appropriate template API.
+ *
+ * For cluster-scoped models: uses GET /cluster/aims/templates.
+ * For namespace-scoped fine-tuned models (label aiwb.apps.eai.amd.com/fine-tuned=true):
+ * uses GET /namespaces/{namespace}/models/{model}/templates.
+ *
+ * Groups services by model name to avoid redundant template fetches, then
+ * matches each service's resolvedTemplate.name to a template's metadata.name.
+ *
+ * @param services - Deployed AIM services to resolve profiles for.
+ * @returns Map from service ID to its resolved profile.
+ */
+export const fetchProfilesForServices = async (
+  services: AIMService[],
+): Promise<Map<string, AIMServiceProfile>> => {
+  // Track unique models with their fetch context (finetuned status + namespace).
+  const modelNameToServiceIds = new Map<string, string[]>();
+  const modelNameToContext = new Map<
+    string,
+    { isFinetuned: boolean; namespace: string }
+  >();
+
+  for (const service of services) {
+    const modelName = service.status.resolvedModel?.name;
+    if (!modelName || !service.id) continue;
+    if (!modelNameToServiceIds.has(modelName)) {
+      modelNameToServiceIds.set(modelName, []);
+      modelNameToContext.set(modelName, {
+        isFinetuned: service.metadata.labels[FINE_TUNED_LABEL] === 'true',
+        namespace: service.metadata.namespace,
+      });
+    }
+    modelNameToServiceIds.get(modelName)!.push(String(service.id));
+  }
+
+  const templatesByModel = new Map<string, AIMClusterServiceTemplate[]>();
+  await Promise.all(
+    Array.from(modelNameToServiceIds.keys()).map(async (modelName) => {
+      const context = modelNameToContext.get(modelName)!;
+      try {
+        const templates = context.isFinetuned
+          ? await getAimNamespaceServiceTemplates(context.namespace, modelName)
+          : await getAimClusterServiceTemplates(modelName);
+        templatesByModel.set(
+          modelName,
+          templates as AIMClusterServiceTemplate[],
+        );
+      } catch (error) {
+        console.warn(
+          `Failed to fetch templates for model "${modelName}":`,
+          error,
+        );
+        templatesByModel.set(modelName, []);
+      }
+    }),
+  );
+
+  const profileMap = new Map<string, AIMServiceProfile>();
+  for (const service of services) {
+    const modelName = service.status.resolvedModel?.name;
+    const templateName = service.status.resolvedTemplate?.name;
+    if (!service.id || !modelName || !templateName) continue;
+    const templates = templatesByModel.get(modelName) ?? [];
+    const template = templates.find((t) => t.metadata.name === templateName);
+    if (!template?.status.profile?.metadata) continue;
+    const meta = template.status.profile.metadata;
+    profileMap.set(String(service.id), {
+      metric: meta.metric ?? null,
+      gpu: meta.gpu ?? null,
+      templateGpuCount: meta.gpuCount ?? null,
+      precision: meta.precision ?? null,
+    });
+  }
+  return profileMap;
+};
+
+/**
  * Deploys an AIM by creating an AIMService.
  *
  * @param {string} namespace - The namespace (project) to deploy to.
  * @param {AIMDeployPayload} payload - The deployment configuration.
- * @returns {Promise<unknown>} A promise that resolves to the deployment result.
+ * @returns {Promise<AIMService>} A promise that resolves to the deployment result.
  * @throws {APIRequestError} If the API request fails.
  */
 export const deployAim = async (
   namespace: string,
   payload: AIMDeployPayload,
-): Promise<unknown> => {
+): Promise<AIMService> => {
   if (!namespace) {
     throw new APIRequestError('No namespace selected', 422);
   }
@@ -663,6 +808,50 @@ export const updateAimScalingPolicy = async (
 };
 
 /**
+ * Fetches namespace-scoped AIMServiceTemplate CRs for a fine-tuned AIMModel.
+ *
+ * Calls GET /namespaces/{namespace}/models/{modelId}/templates.
+ * Returns the full CRD structure; callers are responsible for reading
+ * the fields they need from metadata and spec.
+ *
+ * @param {string} namespace - The namespace (project) the AIMModel lives in.
+ * @param {string} modelId - The AIMModel CR name (resource name).
+ * @returns {Promise<AIMNamespaceServiceTemplate[]>} List of available deployment templates.
+ * @throws {APIRequestError} If the API request fails.
+ */
+export const getAimNamespaceServiceTemplates = async (
+  namespace: string,
+  modelId: string,
+): Promise<AIMNamespaceServiceTemplate[]> => {
+  if (!namespace) {
+    throw new APIRequestError('No namespace selected', 422);
+  }
+  if (!modelId) {
+    throw new APIRequestError('No model ID provided', 422);
+  }
+
+  const url = `/api/namespaces/${namespace}/models/${modelId}/templates`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(response);
+    throw new APIRequestError(
+      `Failed to fetch AIM service templates: ${errorMessage}`,
+      response.status,
+    );
+  }
+
+  const result = await response.json();
+  return result.data || [];
+};
+
+/**
  * Generates a Kubernetes HPA policy using OpenTelemetry metrics from vLLM.
  *
  * @param {Partial<AIMAutoscaling>} config - Autoscaling configuration parameters
@@ -720,27 +909,27 @@ export const getAIMServiceStatusVariants = (
   t: (key: string) => string,
 ): Record<AIMServiceStatus, StatusBadgeVariant> => ({
   [AIMServiceStatus.PENDING]: {
-    label: t(`status.${AIMServiceStatus.PENDING}`),
+    label: t('models:status.pending'),
     intent: Intent.PENDING,
   },
   [AIMServiceStatus.DEGRADED]: {
-    label: t(`status.${AIMServiceStatus.DEGRADED}`),
+    label: t('models:status.degraded'),
     intent: Intent.WARNING,
   },
   [AIMServiceStatus.RUNNING]: {
-    label: t(`status.${AIMServiceStatus.RUNNING}`),
+    label: t('models:status.running'),
     intent: Intent.SUCCESS,
   },
   [AIMServiceStatus.FAILED]: {
-    label: t(`status.${AIMServiceStatus.FAILED}`),
+    label: t('models:status.failed'),
     intent: Intent.DANGER,
   },
   [AIMServiceStatus.STARTING]: {
-    label: t(`status.${AIMServiceStatus.STARTING}`),
+    label: t('models:status.starting'),
     intent: Intent.PENDING,
   },
   [AIMServiceStatus.DELETED]: {
-    label: t(`status.${AIMServiceStatus.DELETED}`),
+    label: t('models:status.deleted'),
     intent: Intent.DANGER,
   },
 });
@@ -756,8 +945,9 @@ export const mapAIMServiceStatusToWorkloadStatus = (
 ): WorkloadStatus => {
   switch (status) {
     case AIMServiceStatus.PENDING:
-    case AIMServiceStatus.STARTING:
       return WorkloadStatus.PENDING;
+    case AIMServiceStatus.STARTING:
+      return WorkloadStatus.STARTING;
     case AIMServiceStatus.RUNNING:
       return WorkloadStatus.RUNNING;
     case AIMServiceStatus.DEGRADED:
@@ -786,7 +976,7 @@ export const transformToAggregatedAIMs = (
   const aggregated = aims.reduce(
     (result, aim) => {
       // Use the repository as the key to aggregate the AIMs
-      const key = aim.anotations.aimEaiAmdComSourceRepository;
+      const key = aim.annotations['aim.eai.amd.com/source-repository'];
 
       if (!result[key]) {
         result[key] = [];
@@ -836,6 +1026,7 @@ export const transformToAggregatedAIMs = (
       [AIMWorkloadStatus.DEPLOYED]: 0,
       [AIMWorkloadStatus.DEGRADED]: 0,
       [AIMWorkloadStatus.PENDING]: 0,
+      [AIMWorkloadStatus.STARTING]: 0,
       [AIMWorkloadStatus.FAILED]: 0,
       [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
       [AIMWorkloadStatus.DELETED]: 0,

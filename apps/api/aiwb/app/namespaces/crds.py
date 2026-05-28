@@ -4,7 +4,9 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import Field, computed_field
+
+from api_common.schemas import BaseModel
 
 from .constants import NAMESPACE_ID_LABEL
 
@@ -16,8 +18,6 @@ class Namespace(BaseModel):
     labels: dict[str, str] = Field(default_factory=dict, description="Namespace labels")
     annotations: dict[str, str] = Field(default_factory=dict, description="Namespace annotations")
     created_at: datetime | None = Field(None, description="Namespace creation timestamp")
-
-    model_config = {"from_attributes": True}
 
     @computed_field
     def id(self) -> str | None:

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { renderHook } from '@testing-library/react-hooks';
+import { renderHook } from '@testing-library/react';
 import { toast } from 'react-toastify';
 
 import { useSystemToast } from '@amdenterpriseai/hooks';

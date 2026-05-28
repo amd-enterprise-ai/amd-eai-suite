@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/silogen/agent/internal/messaging"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/silogen/agent/internal/workloads/common"
 )
@@ -90,7 +89,7 @@ func TestReconcile_HandlesDeletion(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 	assert.Len(t, mock.Published, 1)
 
-	msg, ok := mock.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := mock.Published[0].(common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-configmap", msg.Name)
 	assert.Equal(t, "Deleted", msg.Status)

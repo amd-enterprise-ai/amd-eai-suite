@@ -12,14 +12,11 @@ import {
 
 import { createProjectSecret, createSecret } from '@/services/app';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 
-import {
-  SecretScope,
-  SecretStatus,
-  SecretType,
-  SecretUseCase,
-} from '@amdenterpriseai/types';
+import { SecretScope } from '@/types/enums/secrets';
+import { SecretStatus, SecretType } from '@/types/enums/secrets';
+import { SecretUseCase } from '@amdenterpriseai/types';
 
 import { AddSecret } from '@/components/features/secrets/AddSecret';
 
@@ -74,6 +71,12 @@ vi.mock('@amdenterpriseai/hooks', () => ({
 vi.mock('@/services/app', () => ({
   createSecret: vi.fn(),
   createProjectSecret: vi.fn(),
+}));
+
+vi.mock('next-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
 }));
 
 // Test data
@@ -462,6 +465,7 @@ describe('AddSecret', () => {
                     status: project.status,
                     statusReason: project.statusReason,
                     clusterId: project.clusterId,
+                    gpuPreemption: project.gpuPreemption,
                   },
                   scope: SecretScope.PROJECT,
                   status: 'Synced' as any,
@@ -524,12 +528,12 @@ describe('AddSecret', () => {
 
     await waitFor(() => {
       expect(createSecret).toHaveBeenCalledWith({
-        project_ids: [],
+        projectIds: [],
         name: 'my-app-secrets',
         scope: SecretScope.ORGANIZATION,
         manifest: mockValidExternalSecretYAML,
         type: SecretType.EXTERNAL_SECRET,
-        use_case: 'Generic',
+        useCase: 'Generic',
       });
       expect(mockToast.success).toHaveBeenCalledWith(
         'form.add.notification.success',
@@ -565,9 +569,9 @@ describe('AddSecret', () => {
         name: 'my-app-secrets',
         manifest: mockValidExternalSecretYAML,
         type: SecretType.EXTERNAL_SECRET,
-        use_case: 'Generic',
+        useCase: 'Generic',
         scope: SecretScope.PROJECT,
-        project_ids: [project.id],
+        projectIds: [project.id],
       });
       expect(onClose).toHaveBeenCalled();
     });
@@ -606,12 +610,12 @@ describe('AddSecret', () => {
         name: 'my-app-secrets',
         manifest: mockValidExternalSecretYAML,
         type: SecretType.EXTERNAL_SECRET,
-        use_case: 'Generic',
+        useCase: 'Generic',
         scope: SecretScope.PROJECT,
-        project_ids: [projects[0].id],
+        projectIds: [projects[0].id],
       });
       const [, payload] = (createProjectSecret as Mock).mock.calls[0];
-      expect(payload.project_ids).toHaveLength(1);
+      expect(payload.projectIds).toHaveLength(1);
       expect(onCreateSuccess).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
     });
@@ -652,9 +656,9 @@ describe('AddSecret', () => {
         name: 'my-app-secrets',
         manifest: mockValidExternalSecretYAML,
         type: SecretType.EXTERNAL_SECRET,
-        use_case: 'Generic',
+        useCase: 'Generic',
         scope: SecretScope.PROJECT,
-        project_ids: [project.id],
+        projectIds: [project.id],
       });
       expect(onCreateSuccess).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -693,7 +697,7 @@ describe('AddSecret', () => {
     expect(onCreateSuccess).not.toHaveBeenCalled();
   });
 
-  it('shows projectIds error when project scope and no project selected', async () => {
+  it('blocks submit when project scope and no project selected', async () => {
     act(() => {
       render(
         <AddSecret
@@ -714,6 +718,51 @@ describe('AddSecret', () => {
     await waitFor(() => {
       expect(createSecret).not.toHaveBeenCalled();
       expect(createProjectSecret).not.toHaveBeenCalled();
+    });
+  });
+
+  // Integration: manifest error must appear even when projectIds is also invalid.
+  // Both issues together are asserted in __tests__/components/features/secrets/
+  // addSecretFormSchema.test.ts (HeroUI Select does not always expose projectIds
+  // field errors as queryable text).
+  it('reports manifest YAML errors together with project selection errors (SDA-3402)', async () => {
+    act(() => {
+      render(
+        <AddSecret
+          secrets={[]}
+          isOpen
+          projects={projects}
+          onClose={vi.fn()}
+          onCreateSuccess={vi.fn()}
+          defaultScope={SecretScope.PROJECT}
+          scopeSelectDisabled={false}
+          projectSelectDisabled={false}
+        />,
+        { wrapper },
+      );
+    });
+
+    await fireEvent.change(
+      screen.getByRole('textbox', {
+        name: /form.add.field.manifest.externalSecret.label/i,
+      }),
+      {
+        target: {
+          value: mockValidExternalSecretYAML.replace(
+            'apiVersion: external-secrets.io/v1beta1',
+            'apiVersion: external-secrets.com/v1alpha1',
+          ),
+        },
+      },
+    );
+    fireEvent.click(screen.getByText('form.add.action.add'));
+
+    await waitFor(() => {
+      expect(createSecret).not.toHaveBeenCalled();
+      expect(createProjectSecret).not.toHaveBeenCalled();
+      expect(
+        screen.getByText('form.add.field.manifest.error.yaml.incorrectGroup'),
+      ).toBeInTheDocument();
     });
   });
 
@@ -813,12 +862,12 @@ describe('AddSecret', () => {
 
       await waitFor(() => {
         expect(createSecret).toHaveBeenCalledWith({
-          project_ids: [],
+          projectIds: [],
           name: 'my-app-secrets',
           scope: SecretScope.ORGANIZATION,
           manifest: mockValidExternalSecretYAML,
           type: SecretType.EXTERNAL_SECRET,
-          use_case: SecretUseCase.S3,
+          useCase: SecretUseCase.S3,
         });
         expect(onClose).toHaveBeenCalled();
       });
@@ -897,9 +946,9 @@ describe('AddSecret', () => {
           name: 'my-app-secrets',
           manifest: mockValidExternalSecretYAML,
           type: SecretType.EXTERNAL_SECRET,
-          use_case: SecretUseCase.GENERIC,
+          useCase: SecretUseCase.GENERIC,
           scope: SecretScope.PROJECT,
-          project_ids: [project.id],
+          projectIds: [project.id],
         });
         expect(onClose).toHaveBeenCalled();
       });

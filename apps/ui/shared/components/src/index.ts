@@ -13,7 +13,6 @@ export * from './Dropdown';
 export * from './NestedDropdown';
 export * from './Filters';
 export * from './HeroMessage';
-export * from './HuggingFaceTokenSelector';
 export * from './InlineBadge';
 export * from './Input';
 export * from './ManagedForm';

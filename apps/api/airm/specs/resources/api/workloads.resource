@@ -27,9 +27,9 @@ Create workload
     ...
     ...    Args:
     ...    workload_data (dict): Workload submission parameters including:
-    ...    - chart_id: ID of the chart to use
+    ...    - chartId: ID of the chart to use
     ...    - model_id: Optional ID of the model to use
-    ...    - user_inputs: Optional user inputs to override chart defaults
+    ...    - userInputs: Optional user inputs to override chart defaults
     ...
     ...    Return:
     ...    response: API response containing the created workload
@@ -38,18 +38,18 @@ Create workload
     ...    HTTPError: If the API request fails
     [Arguments]             ${workload_data}        ${expected_status}=any
     Create api session    airm
-    ${chart_id}=            Get From Dictionary     ${workload_data}        chart_id
+    ${chart_id}=            Get From Dictionary     ${workload_data}        chartId
 
     ${endpoint}=            Service API Endpoint    airm    endpoint=charts/${chart_id}/submit
 
     ${workload_copy}=       Copy Dictionary         ${workload_data}
-    Remove From Dictionary                          ${workload_copy}        chart_id
+    Remove From Dictionary                          ${workload_copy}        chartId
 
-    ${user_inputs}=         Get From Dictionary     ${workload_copy}        user_inputs             default=None
+    ${user_inputs}=         Get From Dictionary     ${workload_copy}        userInputs             default=None
 
     IF    $user_inputs is not None and isinstance($user_inputs, str) and $user_inputs.startswith('{')
         ${user_inputs_dict}=    Evaluate                json.loads('''${user_inputs}''')                json
-        Set To Dictionary       ${workload_copy}        user_inputs=${user_inputs_dict}
+        Set To Dictionary       ${workload_copy}        userInputs=${user_inputs_dict}
     END
 
     Log                     POST ${endpoint}    DEBUG
@@ -85,9 +85,9 @@ Submit workload with manifest
         &{files}=               Create dictionary       manifest=${manifest_file}
 
         &{params}=              Create dictionary
-        ...                     project_id=${project_id}
-        ...                     workload_type=${workload_type}
-        ...                     display_name=${display_name}
+        ...                     projectId=${project_id}
+        ...                     workloadType=${workload_type}
+        ...                     displayName=${display_name}
 
         ${endpoint}=            Workloads endpoint
         Log                     POST ${endpoint} with manifest    DEBUG
@@ -96,7 +96,7 @@ Submit workload with manifest
         ${access_token}=        Authorization token
         &{headers}=             Create Dictionary       Authorization=Bearer ${access_token}
 
-        ${response}=            POST                    ${endpoint}             headers=${headers}      files=${files}          params=${params}                                expected_status=${expected_status}
+        ${response}=            POST                    ${endpoint}             headers=${headers}      files=${files}          params=${params}                                expected_status=${expected_status}    verify=${VERIFY_SSL}
         Log                     Response status: ${response.status_code}    DEBUG
         RETURN                  ${response}
     EXCEPT    HTTPError    AS    ${error}

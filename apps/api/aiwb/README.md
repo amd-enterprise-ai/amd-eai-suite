@@ -59,13 +59,17 @@ Deploy both services together for full integration of AI development tools with 
    - Initialize the workloads repository
    - Start Docker services
 
-2. **Run the API**:
+2. **Configure Kubernetes access**:
+
+   Make sure that you have a Kubernetes cluster configured and accessible. The API will attempt to connect to the cluster on startup. If `USE_LOCAL_KUBE_CONTEXT=true` which is set by default, it will use your local kubeconfig context.
+
+3. **Run the API**:
 
    ```bash
    make dev
    ```
 
-3. **Access the API**:
+4. **Access the API**:
    - API: http://localhost:8002
    - Swagger docs: http://localhost:8002/docs
 
@@ -83,13 +87,13 @@ make docker-down  # Stop and remove Docker services
 
 This project uses a hierarchical AI rules system to provide context to AI coding assistants (Cursor, Claude, GitHub Copilot).
 
-Rules are split across `AI_RULES.md` files at different levels:
+Rules are split across `AGENTS.md` files at different levels:
 
-- `/AI_RULES.md` - General (git, Jira, PRs)
-- `/apps/api/AI_RULES.md` - FastAPI (async, Pydantic, testing)
-- `/apps/api/aiwb/AI_RULES.md` - AIWB-specific (k8s-first, layers)
+- `/AGENTS.md` - General (git, Jira, PRs)
+- `/apps/api/AGENTS.md` - FastAPI (async, Pydantic, testing)
+- `/apps/api/aiwb/AGENTS.md` - AIWB-specific (k8s-first, layers)
 
-Run `make ai-rules` from the repo root to concatenate these into tool-specific files (`.cursorrules`, `CLAUDE.md`, `.github/copilot-instructions.md`). These generated files are gitignored.
+Cursor and Claude Code discover these files natively via nested directory lookup. Run `make ai-rules` from the repo root to generate `CLAUDE.md` symlinks and `.github/copilot-instructions.md`.
 
 ### Environment Variables
 
@@ -104,6 +108,10 @@ Create a `.env` file (copy from `.env.example`). Key configurations include:
 - **Keycloak/Auth**: OpenID Connect client credentials (required for user authentication)
 - **MinIO**: Object storage endpoint and credentials (for dataset and model storage)
 - **Kubernetes**: Cluster access configuration for workload deployment
+- **Cluster Auth**: Optional integration for AIM access control and API key management
+  - `CLUSTER_AUTH_ENABLED`: `true` or `false` (default: `true`)
+  - When `true` (default): A cluster-auth group is created for each AIM deployment and stamped as the `cluster-auth/allowed-group` annotation on the `AIMService` resource. The cluster-auth proxy uses this annotation to enforce that only API keys bound to the matching group can call the AIM's external endpoint. Requires `CLUSTER_AUTH_URL` and `CLUSTER_AUTH_ADMIN_TOKEN` to be set.
+  - When `false`: AIMs are deployed without access restrictions — any client can reach AIM inference endpoints. API key endpoints (`/namespaces/{ns}/api-keys`) return **503 Service Unavailable**.
 
 See `.env.example` for complete configuration options.
 

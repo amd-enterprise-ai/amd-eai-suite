@@ -5,7 +5,8 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { DebugInfo, Message } from '@amdenterpriseai/types';
+import { DebugInfo } from '@/types/chat';
+import { Message } from '@/types/chat';
 
 import { DebugInfoModal } from '@/components/features/chat/DebugInfoModal';
 import ProviderWrapper from '@/__tests__/ProviderWrapper';
@@ -31,11 +32,17 @@ vi.mock('@amdenterpriseai/components', () => ({
 
 // Mock the MemoizedChatMessage component
 vi.mock('@/components/features/chat/MemoizedChatMessage', () => ({
-  MemoizedChatMessage: ({ message }: { message: Message }) => (
-    <div data-testid="chat-message" data-role={message.role}>
-      {message.content}
-    </div>
-  ),
+  MemoizedChatMessage: ({ message }: { message: Message }) => {
+    const content =
+      typeof message.content === 'string'
+        ? message.content
+        : JSON.stringify(message.content);
+    return (
+      <div data-testid="chat-message" data-role={message.role}>
+        {content}
+      </div>
+    );
+  },
 }));
 
 // Mock HeroUI components

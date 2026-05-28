@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import Select, asc, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 
-from .schemas import FilterCondition, FilterOperator, PaginationConditions, SortCondition, SortDirection
+from api_common.collections import FilterCondition, FilterOperator, PaginationConditions, SortCondition, SortDirection
 
 
 def get_count_query[T](query: Select[T]) -> Select[int]:

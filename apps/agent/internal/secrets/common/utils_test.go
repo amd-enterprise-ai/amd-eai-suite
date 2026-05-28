@@ -8,7 +8,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/silogen/agent/internal/messaging"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,13 +34,11 @@ func TestBuildLabelSelector(t *testing.T) {
 	}
 }
 
-func strPtr(s string) *string { return &s }
-
 func TestGetSecretUseCaseFromLabels(t *testing.T) {
 	tests := []struct {
 		name     string
 		labels   map[string]string
-		expected *string
+		expected *SecretUseCase
 	}{
 		{
 			name:     "nil labels",
@@ -61,42 +58,42 @@ func TestGetSecretUseCaseFromLabels(t *testing.T) {
 		{
 			name:     "HuggingFace canonical casing",
 			labels:   map[string]string{UseCaseLabel: "HuggingFace"},
-			expected: strPtr("HuggingFace"),
+			expected: testutils.Ptr(SecretUseCase("HuggingFace")),
 		},
 		{
 			name:     "HuggingFace all lowercase",
 			labels:   map[string]string{UseCaseLabel: "huggingface"},
-			expected: strPtr("HuggingFace"),
+			expected: testutils.Ptr(SecretUseCase("HuggingFace")),
 		},
 		{
 			name:     "HuggingFace all uppercase",
 			labels:   map[string]string{UseCaseLabel: "HUGGINGFACE"},
-			expected: strPtr("HuggingFace"),
+			expected: testutils.Ptr(SecretUseCase("HuggingFace")),
 		},
 		{
 			name:     "S3 lowercase",
 			labels:   map[string]string{UseCaseLabel: "s3"},
-			expected: strPtr("S3"),
+			expected: testutils.Ptr(SecretUseCase("S3")),
 		},
 		{
 			name:     "Generic mixed case",
 			labels:   map[string]string{UseCaseLabel: "generic"},
-			expected: strPtr("Generic"),
+			expected: testutils.Ptr(SecretUseCase("Generic")),
 		},
 		{
 			name:     "Database uppercase",
 			labels:   map[string]string{UseCaseLabel: "DATABASE"},
-			expected: strPtr("Database"),
+			expected: testutils.Ptr(SecretUseCase("Database")),
 		},
 		{
 			name:     "ImagePullSecret lowercase",
 			labels:   map[string]string{UseCaseLabel: "imagepullsecret"},
-			expected: strPtr("ImagePullSecret"),
+			expected: testutils.Ptr(SecretUseCase("ImagePullSecret")),
 		},
 		{
 			name:     "unrecognized value passed through as-is",
 			labels:   map[string]string{UseCaseLabel: "CustomUseCase"},
-			expected: strPtr("CustomUseCase"),
+			expected: testutils.Ptr(SecretUseCase("CustomUseCase")),
 		},
 	}
 
@@ -117,7 +114,7 @@ func TestGetSecretScopeFromLabels(t *testing.T) {
 	tests := []struct {
 		name     string
 		labels   map[string]string
-		expected *messaging.SecretScope
+		expected *SecretScope
 	}{
 		{
 			name:     "nil labels",
@@ -134,8 +131,8 @@ func TestGetSecretScopeFromLabels(t *testing.T) {
 			labels: map[string]string{
 				ProjectSecretScopeLabel: "project",
 			},
-			expected: func() *messaging.SecretScope {
-				s := messaging.SecretScopeProject
+			expected: func() *SecretScope {
+				s := SecretScopeProject
 				return &s
 			}(),
 		},
@@ -144,8 +141,8 @@ func TestGetSecretScopeFromLabels(t *testing.T) {
 			labels: map[string]string{
 				ProjectSecretScopeLabel: "Project",
 			},
-			expected: func() *messaging.SecretScope {
-				s := messaging.SecretScopeProject
+			expected: func() *SecretScope {
+				s := AllSecretScopes[1]
 				return &s
 			}(),
 		},
@@ -154,8 +151,8 @@ func TestGetSecretScopeFromLabels(t *testing.T) {
 			labels: map[string]string{
 				ProjectSecretScopeLabel: "organization",
 			},
-			expected: func() *messaging.SecretScope {
-				s := messaging.SecretScopeOrganization
+			expected: func() *SecretScope {
+				s := AllSecretScopes[0]
 				return &s
 			}(),
 		},
@@ -164,8 +161,8 @@ func TestGetSecretScopeFromLabels(t *testing.T) {
 			labels: map[string]string{
 				ProjectSecretScopeLabel: "Organization",
 			},
-			expected: func() *messaging.SecretScope {
-				s := messaging.SecretScopeOrganization
+			expected: func() *SecretScope {
+				s := AllSecretScopes[0]
 				return &s
 			}(),
 		},
@@ -239,14 +236,14 @@ func TestHandleDeletion_PublishesAndRemovesFinalizer(t *testing.T) {
 	assert.NoError(t, err)
 
 	require.Len(t, pub.Published, 1)
-	msg, ok := pub.Published[0].(*messaging.ProjectSecretsUpdateMessage)
+	msg, ok := pub.Published[0].(*ProjectSecretsUpdateMessage)
 	require.True(t, ok)
 	assert.Equal(t, "secret-123", msg.ProjectSecretID)
-	assert.Equal(t, messaging.ProjectSecretStatusDeleted, msg.Status)
+	assert.Equal(t, ProjectSecretStatusDeleted, msg.Status)
 	require.NotNil(t, msg.StatusReason)
 	assert.Equal(t, "Secret deleted successfully", *msg.StatusReason)
 	require.NotNil(t, msg.SecretScope)
-	assert.Equal(t, messaging.SecretScopeProject, *msg.SecretScope)
+	assert.Equal(t, SecretScopeProject, *msg.SecretScope)
 
 	assert.False(t, controllerutil.ContainsFinalizer(secret, testFinalizer))
 }
@@ -321,10 +318,10 @@ func TestHandleDeletion_WithoutScope(t *testing.T) {
 	assert.NoError(t, err)
 
 	require.Len(t, pub.Published, 1)
-	msg, ok := pub.Published[0].(*messaging.ProjectSecretsUpdateMessage)
+	msg, ok := pub.Published[0].(*ProjectSecretsUpdateMessage)
 	require.True(t, ok)
 	assert.Equal(t, "secret-456", msg.ProjectSecretID)
-	assert.Equal(t, messaging.ProjectSecretStatusDeleted, msg.Status)
+	assert.Equal(t, ProjectSecretStatusDeleted, msg.Status)
 	assert.Nil(t, msg.SecretScope)
 
 	assert.False(t, controllerutil.ContainsFinalizer(secret, testFinalizer))

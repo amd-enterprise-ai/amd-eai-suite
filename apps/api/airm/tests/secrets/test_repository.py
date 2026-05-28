@@ -8,8 +8,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import ProjectSecretStatus, SecretKind, SecretScope
-from app.secrets.enums import SecretStatus, SecretUseCase
+from api_common.secrets import SecretUseCase
+from app.secrets.enums import ProjectSecretStatus, SecretKind, SecretScope, SecretStatus
 from app.secrets.models import OrganizationScopedSecret, ProjectScopedSecret
 from app.secrets.repository import (
     assign_organization_secret_to_projects,

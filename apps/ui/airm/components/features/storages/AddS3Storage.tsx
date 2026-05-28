@@ -13,16 +13,17 @@ import { createStorage } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { SecretStatus, SecretUseCase } from '@amdenterpriseai/types';
-import { StorageScope, StorageType } from '@amdenterpriseai/types';
+import { SecretStatus } from '@/types/enums/secrets';
+import { SecretUseCase } from '@amdenterpriseai/types';
+import { StorageScope, StorageType } from '@/types/enums/storages';
 import { FormField } from '@amdenterpriseai/types';
-import { Project } from '@amdenterpriseai/types';
-import { Secret, SecretsResponse } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import { Secret, SecretsResponse } from '@/types/secrets';
 import {
   AddS3StorageFormData,
   CreateStorageRequest,
   Storage,
-} from '@amdenterpriseai/types';
+} from '@/types/storages';
 
 import { DrawerForm } from '@amdenterpriseai/components';
 import { FormFieldComponent } from '@amdenterpriseai/components';
@@ -104,13 +105,13 @@ export const AddS3Storage: React.FC<Props> = ({
         type: StorageType.S3,
         name: data.name,
         spec: {
-          bucket_url: data?.bucketUrl,
-          access_key_name: data?.accessKeyName,
-          secret_key_name: data?.secretKeyName,
+          bucketUrl: data?.bucketUrl,
+          accessKeyName: data?.accessKeyName,
+          secretKeyName: data?.secretKeyName,
         },
-        secret_id: data.secretId,
+        secretId: data.secretId,
         scope: StorageScope.ORGANIZATION,
-        project_ids: project ? [project.id] : data.projectIds,
+        projectIds: project ? [project.id] : data.projectIds,
       });
     },
     [addStorage, project],

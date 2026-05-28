@@ -5,10 +5,8 @@
 import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import {
-  AssignStorageRequest,
-  CreateStorageRequest,
-} from '@amdenterpriseai/types';
+import { AssignStorageRequest } from '@/types/storages';
+import { CreateStorageRequest } from '@/types/storages';
 
 export const fetchStorages = async () => {
   const response = await fetch('/api/storages');

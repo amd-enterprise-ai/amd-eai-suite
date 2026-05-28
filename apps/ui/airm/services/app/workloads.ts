@@ -4,17 +4,8 @@
 
 import { getErrorMessage, APIRequestError } from '@amdenterpriseai/utils/app';
 
-import {
-  Workload,
-  WorkloadLogParams,
-  WorkloadLogResponse,
-} from '@amdenterpriseai/types';
+import { Workload } from '@/types/workloads';
 import { WorkloadGpuDevicesMetricsResponse } from '@/types/workloads';
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
-import {
-  MetricScalarResponse,
-  TimeSeriesResponse,
-} from '@amdenterpriseai/types';
 
 import { WorkloadMetricsDetails } from '@/types/workloads';
 
@@ -112,10 +103,10 @@ export const getWorkloadVramUtilization = (
   params: { start: string; end: string },
 ) => fetchGpuDeviceMetric(workloadId, 'vram-utilization', params);
 
-export const getWorkloadJunctionTemperature = (
+export const getWorkloadGpuUtilization = (
   workloadId: string,
   params: { start: string; end: string },
-) => fetchGpuDeviceMetric(workloadId, 'junction-temperature', params);
+) => fetchGpuDeviceMetric(workloadId, 'gpu-utilization', params);
 
 export const getWorkloadPowerUsage = (
   workloadId: string,

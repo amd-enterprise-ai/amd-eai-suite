@@ -62,8 +62,8 @@ def test_list_workloads_with_filters(mock_get_workloads: AsyncMock) -> None:
         response = client.get(
             "/v1/namespaces/test-namespace/workloads",
             params={
-                "workload_type": "INFERENCE",
-                "status_filter": "RUNNING",  # Single value, not list - FastAPI will handle it
+                "workloadType": "INFERENCE",
+                "statusFilter": "RUNNING",
             },
         )
 
@@ -420,7 +420,7 @@ def test_get_workload_success(mock_get: AsyncMock) -> None:
     data = response.json()
     assert data["id"] == str(workload_id)
     assert data["name"] == "test-workload"
-    assert data["display_name"] == "Test Workload"
+    assert data["displayName"] == "Test Workload"
     assert data["type"] == "INFERENCE"
     assert data["status"] == "Running"
     mock_get.assert_called_once()
@@ -765,7 +765,7 @@ def test_list_workloads_invalid_status_filter() -> None:
         response = client.get(
             "/v1/namespaces/test-namespace/workloads",
             params={
-                "status_filter": "INVALID_STATUS",
+                "statusFilter": "INVALID_STATUS",
             },
         )
 
@@ -873,7 +873,7 @@ def test_get_workload_logs_with_filters(mock_get_workload: AsyncMock, mock_get_l
                 "start": "2025-01-01T00:00:00Z",
                 "end": "2025-01-01T23:59:59Z",
                 "level": "error",
-                "log_type": "event",
+                "logType": "event",
                 "limit": 500,
             },
         )
@@ -908,14 +908,14 @@ def test_get_workload_logs_with_pagination(mock_get_workload: AsyncMock, mock_ge
             params={
                 "start": "2025-01-01T00:00:00Z",
                 "end": "2025-01-01T23:59:59Z",
-                "page_token": "2025-01-01T11:00:00Z",
+                "pageToken": "2025-01-01T11:00:00Z",
             },
         )
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["pagination"]["has_more"] is True
-    assert data["pagination"]["page_token"] == next_page_token
+    assert data["pagination"]["hasMore"] is True
+    assert data["pagination"]["pageToken"] == next_page_token
     mock_get_logs.assert_called_once()
 
 
@@ -984,8 +984,8 @@ def test_get_workload_logs_empty_results(mock_get_workload: AsyncMock, mock_get_
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert len(data["data"]) == 0
-    assert data["pagination"]["total_returned"] == 0
-    assert data["pagination"]["has_more"] is False
+    assert data["pagination"]["totalReturned"] == 0
+    assert data["pagination"]["hasMore"] is False
 
 
 # =============================================================================
@@ -1024,7 +1024,7 @@ def test_stream_workload_logs_success(mock_get_workload: AsyncMock, mock_stream:
     with TestClient(app) as client:
         response = client.get(
             f"/v1/namespaces/test-namespace/workloads/{workload_id}/logs/stream",
-            params={"start_time": "2025-01-01T00:00:00Z"},
+            params={"startTime": "2025-01-01T00:00:00Z"},
         )
 
     assert response.status_code == status.HTTP_200_OK
@@ -1055,7 +1055,7 @@ def test_stream_workload_logs_with_filters(mock_get_workload: AsyncMock, mock_st
     with TestClient(app) as client:
         response = client.get(
             f"/v1/namespaces/test-namespace/workloads/{workload_id}/logs/stream",
-            params={"level": "warning", "log_type": "event"},
+            params={"level": "warning", "logType": "event"},
         )
 
     assert response.status_code == status.HTTP_200_OK
@@ -1163,7 +1163,7 @@ def test_stream_workload_logs_invalid_start_time(mock_get_workload: AsyncMock) -
         # Invalid ISO format
         response = client.get(
             f"/v1/namespaces/test-namespace/workloads/{workload_id}/logs/stream",
-            params={"start_time": "invalid-date"},
+            params={"startTime": "invalid-date"},
         )
 
     # FastAPI returns 422 for validation errors

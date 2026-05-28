@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 import { WorkloadsResponse } from '@/lib/app/workloads';
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
-import { Workload } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -23,19 +22,10 @@ export const generateMockWorkspaceWorkloads = (
     updatedBy: 'system',
     displayName: '',
     name: '',
-    project: {
-      id: '',
-      name: 'demo-project',
-      description: 'Demo project',
-      status: ProjectStatus.READY,
-      statusReason: null,
-      clusterId: '',
-    },
     projectId: '',
     status,
     type,
     chartId: '',
-    modelId: null,
     datasetId: null,
     userInputs: {
       gpus: 1,
@@ -94,11 +84,6 @@ export const generateMockWorkspaceWorkloads = (
         .replace(/[-:.TZ]/g, '')
         .slice(0, 14)}`,
       name: `mw-dev-tracking-${name}-${Math.floor(Math.random() * 1000000000)}-${workloadId.slice(0, 4)}`,
-      project: {
-        ...template.project,
-        id: projectId,
-        clusterId,
-      },
       projectId,
       status,
       chartId,
@@ -127,8 +112,8 @@ export const generateMockWorkspaceWorkloads = (
         },
       },
       output: {
-        externalHost: `https://workloads.staging.silogen.ai/${projectId}/${userId}/${workloadId}/`,
-        internalHost: `mw-dev-tracking-${name}-${Math.floor(Math.random() * 1000000000)}-${workloadId.slice(0, 4)}.demo.svc.cluster.local/`,
+        externalHost: `https://workloads.example.com/${projectId}/${userId}/${workloadId}/`,
+        internalHost: `mw-tracking-${name}-${Math.floor(Math.random() * 1000000000)}-${workloadId.slice(0, 4)}.test.svc.cluster.local/`,
       },
     };
   });

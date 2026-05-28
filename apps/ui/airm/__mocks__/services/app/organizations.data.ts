@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Organization } from '@amdenterpriseai/types';
+import { Organization } from '@/types/organization';
 
 export const mockOrganization: Organization = {
   smtpEnabled: true,

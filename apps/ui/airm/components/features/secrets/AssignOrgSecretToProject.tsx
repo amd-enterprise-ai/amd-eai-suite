@@ -15,24 +15,25 @@ import { assignSecretToProject, fetchSecrets } from '@/services/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { FormField } from '@amdenterpriseai/types';
-import { Project } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
 import {
   AssignOrgSecretToProjectFormData,
-  Secret,
   SecretsResponse,
-} from '@amdenterpriseai/types';
+} from '@/types/secrets';
 
 import { DrawerForm } from '@amdenterpriseai/components';
 import { FormFieldComponent } from '@amdenterpriseai/components';
 
 import { z } from 'zod';
-import { SecretScope, SecretUseCase } from '@amdenterpriseai/types';
+import { SecretScope } from '@/types/enums/secrets';
+import { Secret } from '@/types/secrets';
+import { SecretUseCase } from '@amdenterpriseai/types';
 import { FormSelect } from '@amdenterpriseai/components';
 import { displayTimestamp } from '@amdenterpriseai/utils/app';
 import { SecretProjectAssignedTo } from './SecretProjectAssignedTo';
 import { NoDataDisplay } from '@amdenterpriseai/components';
 import { Status, StatusProps } from '@amdenterpriseai/components';
-import { getSecretStatusVariants } from '@amdenterpriseai/utils/app';
+import { getSecretStatusVariants } from '@/utils/secrets-status-variants';
 import { StatusError } from '@amdenterpriseai/components';
 
 interface Props {

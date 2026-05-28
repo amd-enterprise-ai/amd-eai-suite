@@ -2,8 +2,19 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Accordion, AccordionItem, useDisclosure } from '@heroui/react';
-import { IconCircleCheck } from '@tabler/icons-react';
+import {
+  Accordion,
+  AccordionItem,
+  Tooltip,
+  useDisclosure,
+} from '@heroui/react';
+import {
+  IconCircleCheck,
+  IconEye,
+  IconTrash,
+  IconEdit,
+  IconExternalLink,
+} from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -18,52 +29,59 @@ import { useSystemToast } from '@amdenterpriseai/hooks';
 import {
   deleteCluster as deleteClusterAPI,
   fetchClusters,
+  getWorkloadsStats as fetchWorkloadsStats,
 } from '@/services/app';
-import { getWorkloadsStats as fetchWorkloadsStats } from '@/services/app';
-import { getClusters } from '@/services/server';
-import { getWorkloadsStats } from '@/services/server';
+import { getClusters, getWorkloadsStats } from '@/services/server';
 
+import { doesClusterDataNeedToBeRefreshed } from '@/utils/clusters';
 import {
   airmMenuItems,
-  doesClusterDataNeedToBeRefreshed,
   getAuthRedirect,
   getFilteredData,
   dateComparator,
-} from '@amdenterpriseai/utils/app';
-import { APIRequestError } from '@amdenterpriseai/utils/app';
-import {
+  isHttpUrl,
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+  APIRequestError,
   formatGpuAllocation,
   formatCpuAllocation,
   formatMemoryAllocation,
+  DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA,
 } from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 
-import { Cluster, ClustersResponse } from '@amdenterpriseai/types';
-import { TableColumns } from '@amdenterpriseai/types';
-import { CustomComparatorConfig } from '@amdenterpriseai/types';
-import { ClusterStatus } from '@amdenterpriseai/types';
+import { Cluster, ClustersResponse } from '@/types/clusters';
+import {
+  TableColumns,
+  CustomComparatorConfig,
+  FilterComponentType,
+  ClientSideDataFilter,
+  FilterValueMap,
+} from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
 import {
   ClusterTableField,
   PendingClusterTableField,
-} from '@amdenterpriseai/types';
-import { FilterComponentType } from '@amdenterpriseai/types';
-import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import { WorkloadsStats } from '@amdenterpriseai/types';
+} from '@/types/enums/cluster-table-fields';
+import { WorkloadsStats } from '@/types/workloads';
 
 import { ClustersStats, EditCluster } from '@/components/features/clusters';
 import ConnectClusterModal from '@/components/features/clusters/ConnectClusterModal';
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
-import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 import {
+  AirmDocsPage,
+  airmDocumentationMapping,
+  ActionButton,
   StatusDisplay,
   NoDataDisplay,
   DateDisplay,
+  RelevantDocs,
+  ActionsToolbar,
+  ConfirmationModal,
+  ClientSideDataTable,
+  Status,
 } from '@amdenterpriseai/components';
-import { getClusterStatusVariants } from '@amdenterpriseai/utils/app';
-import { Status } from '@amdenterpriseai/components';
+
+import { getClusterStatusVariants } from '@/utils/clusters-status-variants';
 
 const activeClusterCustomComparators: CustomComparatorConfig<
   Cluster,
@@ -108,7 +126,10 @@ interface Props {
   workloadsStats: WorkloadsStats;
 }
 
-const ClustersPage = ({ clusters, workloadsStats }: Props) => {
+const ClustersPage: React.FC<Props> & WithDocumentationLink = ({
+  clusters,
+  workloadsStats,
+}: Props) => {
   const { t } = useTranslation('clusters');
   const { toast } = useSystemToast();
   const { isAdministrator } = useAccessControl();
@@ -255,33 +276,73 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
     },
   };
 
-  const actions = [
-    {
-      key: 'edit',
-      className: 'text-danger',
-      onPress: (c: Cluster) => {
-        setClusterBeingEdited(c);
-        onEditClusterOpen();
-      },
-      label: t('list.actions.edit.label'),
+  const openClusterDetails = useCallback(
+    (id: string) => {
+      router.push(`/clusters/${id}`);
     },
-    {
-      key: 'delete',
-      className: 'text-danger',
-      color: 'danger',
-      onPress: (c: Cluster) => {
-        setClusterBeingDeleted(c);
-        onDeleteClusterModalOpen();
+    [router],
+  );
+
+  const actions = useMemo(
+    () => [
+      {
+        key: 'openDetails',
+        onPress: (c: Cluster) => openClusterDetails(c.id),
+        label: t('list.actions.openDetails.label'),
+        startContent: <IconEye />,
       },
-      label: t('list.actions.delete.label'),
-    },
-  ];
+      {
+        key: 'edit',
+        onPress: (c: Cluster) => {
+          setClusterBeingEdited(c);
+          onEditClusterOpen();
+        },
+        label: t('list.actions.edit.label'),
+        startContent: <IconEdit />,
+        isDisabled: !isAdministrator,
+      },
+      {
+        key: 'viewInAiwb',
+        onPress: (c: Cluster) => {
+          if (c.workbenchBaseUrl && isHttpUrl(c.workbenchBaseUrl)) {
+            window.open(c.workbenchBaseUrl, '_blank', 'noopener,noreferrer');
+          }
+        },
+        label: t('list.actions.viewInAiwb.label'),
+        startContent: <IconExternalLink />,
+        isDisabled: (c: Cluster) =>
+          !c.workbenchBaseUrl || !isHttpUrl(c.workbenchBaseUrl),
+        showDivider: true,
+      },
+
+      {
+        key: 'delete',
+        className: 'text-danger',
+        color: 'danger',
+        startContent: <IconTrash />,
+        onPress: (c: Cluster) => {
+          setClusterBeingDeleted(c);
+          onDeleteClusterModalOpen();
+        },
+        label: t('list.actions.delete.label'),
+        isDisabled: !isAdministrator,
+      },
+    ],
+    [
+      isAdministrator,
+      onEditClusterOpen,
+      onDeleteClusterModalOpen,
+      openClusterDetails,
+      t,
+    ],
+  );
 
   const pendingClustersActions = [
     {
       key: 'delete',
       className: 'text-danger',
       color: 'danger',
+      startContent: <IconTrash />,
       onPress: (c: Cluster) => {
         setClusterBeingDeleted(c);
         onDeleteClusterModalOpen();
@@ -318,10 +379,6 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
     [setFilters],
   );
 
-  const handleRowPressed = (id: string) => {
-    router.push(`/clusters/${id}`);
-  };
-
   const filterConfig = useMemo(
     () => ({
       search: {
@@ -357,14 +414,20 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
         updatedTimestamp={clustersUpdatedAt}
         isRefreshing={isFetchingClusters}
         endContent={
-          isAdministrator ? (
-            <ActionButton
-              aria-label={t('actions.connect') || ''}
-              onPress={onAddClusterModalOpen}
-            >
-              {t('actions.connect')}
-            </ActionButton>
-          ) : undefined
+          <Tooltip
+            content={t('actions.connect.tooltip')}
+            isDisabled={isAdministrator}
+          >
+            <span>
+              <ActionButton
+                aria-label={t('actions.connect.label') || ''}
+                onPress={onAddClusterModalOpen}
+                isDisabled={!isAdministrator}
+              >
+                {t('actions.connect.label')}
+              </ActionButton>
+            </span>
+          </Tooltip>
         }
       />
       <ClustersStats
@@ -391,8 +454,8 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
             customRenderers={activeClusterCustomRenderers}
             customComparator={activeClusterCustomComparators}
             idKey={'id'}
-            rowActions={isAdministrator ? actions : undefined}
-            onRowPressed={handleRowPressed}
+            rowActions={actions}
+            onRowPressed={openClusterDetails}
           />
         </AccordionItem>
         {isAdministrator && pendingClusterData.length > 0 ? (
@@ -448,9 +511,12 @@ const ClustersPage = ({ clusters, workloadsStats }: Props) => {
         }
         onClose={onDeleteClusterModalOpenChange}
       />
+      <RelevantDocs docs={airmDocumentationMapping[AirmDocsPage.CLUSTERS]} />
     </div>
   );
 };
+
+ClustersPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/clusters/overview.html`;
 
 export default ClustersPage;
 

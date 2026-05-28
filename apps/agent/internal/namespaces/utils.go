@@ -6,6 +6,9 @@ package namespaces
 
 import (
 	"context"
+	"strconv"
+	"strings"
+	"time"
 
 	agent "github.com/silogen/agent/internal/common"
 	"github.com/silogen/agent/internal/messaging"
@@ -18,6 +21,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+type namespaceStatusEvent struct {
+	NamespaceName string
+	ProjectID     string
+	Status        NamespaceStatus
+	GpuPreemption *GpuPreemptionStatus
+}
+
 func extractProjectIDFromNamespace(ns *corev1.Namespace) string {
 	if ns == nil || ns.Labels == nil {
 		return ""
@@ -26,20 +36,20 @@ func extractProjectIDFromNamespace(ns *corev1.Namespace) string {
 }
 
 // mapK8sPhaseToNamespaceStatus maps Kubernetes namespace phase to NamespaceStatus.
-func mapK8sPhaseToNamespaceStatus(phase string) messaging.NamespaceStatus {
+func mapK8sPhaseToNamespaceStatus(phase string) NamespaceStatus {
 	if phase == "" {
-		return messaging.NamespaceStatusFailed
+		return NamespaceStatusFailed
 	}
 
 	switch phase {
 	case "Active":
-		return messaging.NamespaceStatusActive
+		return NamespaceStatusActive
 	case "Terminating":
-		return messaging.NamespaceStatusTerminating
+		return NamespaceStatusTerminating
 	case "Pending":
-		return messaging.NamespaceStatusPending
+		return NamespaceStatusPending
 	default:
-		return messaging.NamespaceStatusFailed
+		return NamespaceStatusFailed
 	}
 }
 
@@ -57,19 +67,19 @@ func BuildNamespaceManifest(name, projectID string) *corev1.Namespace {
 }
 
 // GetNamespaceStatusReason returns a human-readable reason for the namespace status.
-func GetNamespaceStatusReason(status messaging.NamespaceStatus) string {
+func GetNamespaceStatusReason(status NamespaceStatus) string {
 	switch status {
-	case messaging.NamespaceStatusDeleted:
+	case NamespaceStatusDeleted:
 		return "Namespace has been deleted"
-	case messaging.NamespaceStatusActive:
+	case NamespaceStatusActive:
 		return "Namespace is active"
-	case messaging.NamespaceStatusTerminating:
+	case NamespaceStatusTerminating:
 		return "Namespace is terminating"
-	case messaging.NamespaceStatusPending:
+	case NamespaceStatusPending:
 		return "Namespace is pending"
-	case messaging.NamespaceStatusDeleteFailed:
+	case NamespaceStatusDeleteFailed:
 		return "Namespace deletion failed"
-	case messaging.NamespaceStatusFailed:
+	case NamespaceStatusFailed:
 		return "Unknown namespace phase: Unknown"
 	default:
 		return "Unknown namespace status"
@@ -95,50 +105,126 @@ func HandleDeletion(
 		projectID = labels[agent.ProjectIDLabel]
 	}
 
-	if err := publishNamespaceStatus(ctx, publisher, obj.GetName(), projectID, messaging.NamespaceStatusTerminating); err != nil {
+	event := namespaceStatusEvent{
+		NamespaceName: obj.GetName(),
+		ProjectID:     projectID,
+		Status:        NamespaceStatusTerminating,
+	}
+	if err := publishNamespaceStatus(ctx, publisher, event); err != nil {
 		return err
 	}
 
 	return agent.RemoveFinalizer(ctx, c, obj, namespaceFinalizer)
 }
 
+func gpuPreemptionStatusFromNamespace(ctx context.Context, ns *corev1.Namespace) *GpuPreemptionStatus {
+	log := ctrl.LoggerFrom(ctx)
+	s := &GpuPreemptionStatus{}
+	if ns == nil || ns.Annotations == nil {
+		return s
+	}
+	ann := ns.Annotations
+	if v, ok := ann[KaiwoGpuPreemptionEnabledKey]; ok {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			s.Enabled = enabled
+		} else {
+			log.Info("ignoring unparseable gpu-preemption.enabled annotation",
+				"namespace", ns.Name, "value", v)
+		}
+	}
+	if v, ok := ann[KaiwoGpuPreemptionThresholdKey]; ok {
+		if n, err := strconv.Atoi(v); err != nil {
+			log.Info("ignoring unparseable gpu-preemption.threshold annotation",
+				"namespace", ns.Name, "value", v)
+		} else {
+			s.Threshold = &n
+		}
+	}
+	if v, ok := ann[KaiwoGpuPreemptionGracePeriodKey]; ok {
+		if d, err := time.ParseDuration(v); err != nil {
+			log.Info("ignoring unparseable gpu-preemption.grace-period annotation (expected Go duration e.g. 1800s)",
+				"namespace", ns.Name, "value", v)
+		} else {
+			seconds := int(d / time.Second)
+			s.GracePeriod = &seconds
+		}
+	}
+	if v, ok := ann[KaiwoGpuPreemptionPolicyKey]; ok {
+		var matched *GpuPreemptionPolicy
+		for _, candidate := range AllGpuPreemptionPolicies {
+			if strings.EqualFold(v, string(candidate)) {
+				matched = &candidate
+				break
+			}
+		}
+		if matched != nil {
+			s.Policy = matched
+		} else {
+			log.Info("ignoring unrecognized gpu-preemption.policy annotation (must be OnPressure or Always)",
+				"namespace", ns.Name, "value", v)
+		}
+	}
+	return s
+}
+
+func mergeKaiwoAnnotations(existing, manifestAnnotations map[string]string) map[string]string {
+	const kaiwoPrefix = "kaiwo.silogen.ai/"
+	out := make(map[string]string)
+	for k, v := range existing {
+		out[k] = v
+	}
+	for k, v := range manifestAnnotations {
+		if strings.HasPrefix(k, kaiwoPrefix) {
+			out[k] = v
+		}
+	}
+	for k := range existing {
+		if strings.HasPrefix(k, kaiwoPrefix) {
+			if _, ok := manifestAnnotations[k]; !ok {
+				delete(out, k)
+			}
+		}
+	}
+	return out
+}
+
 func publishNamespaceStatus(
 	ctx context.Context,
 	publisher messaging.MessagePublisher,
-	namespaceName, projectID string,
-	status messaging.NamespaceStatus,
+	event namespaceStatusEvent,
 ) error {
 	log := ctrl.LoggerFrom(ctx)
-	if projectID == "" {
-		msg := &messaging.UnmanagedNamespaceMessage{
+	if event.ProjectID == "" {
+		msg := &UnmanagedNamespaceMessage{
 			MessageType:     messaging.MessageTypeUnmanagedNamespace,
-			NamespaceName:   namespaceName,
-			NamespaceStatus: status,
+			NamespaceName:   event.NamespaceName,
+			NamespaceStatus: event.Status,
 		}
 		if err := publisher.Publish(ctx, msg); err != nil {
 			return err
 		}
 		log.Info("published unmanaged namespace status",
-			"namespace", namespaceName,
-			"status", status,
+			"namespace", event.NamespaceName,
+			"status", event.Status,
 		)
 		return nil
 	}
 
-	reason := GetNamespaceStatusReason(status)
-	msg := &messaging.ProjectNamespaceStatusMessage{
-		MessageType:  messaging.MessageTypeProjectNamespaceStatus,
-		ProjectID:    projectID,
-		Status:       status,
-		StatusReason: &reason,
+	reason := GetNamespaceStatusReason(event.Status)
+	msg := &ProjectNamespaceStatusMessage{
+		MessageType:   messaging.MessageTypeProjectNamespaceStatus,
+		ProjectID:     event.ProjectID,
+		Status:        event.Status,
+		StatusReason:  &reason,
+		GpuPreemption: event.GpuPreemption,
 	}
 	if err := publisher.Publish(ctx, msg); err != nil {
 		return err
 	}
 	log.Info("published namespace status",
-		"namespace", namespaceName,
-		"project_id", projectID,
-		"status", status,
+		"namespace", event.NamespaceName,
+		"project_id", event.ProjectID,
+		"status", event.Status,
 	)
 	return nil
 }
@@ -159,7 +245,7 @@ func handleDeleted(ctx context.Context, publisher messaging.MessagePublisher, na
 func publishNamespaceDeletedMessage(ctx context.Context, publisher messaging.MessagePublisher, namespaceName string) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	msg := &messaging.NamespaceDeletedMessage{
+	msg := &NamespaceDeletedMessage{
 		MessageType:   messaging.MessageTypeNamespaceDeleted,
 		NamespaceName: namespaceName,
 	}

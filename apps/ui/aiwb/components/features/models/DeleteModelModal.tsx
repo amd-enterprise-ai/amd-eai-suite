@@ -2,63 +2,55 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from 'react';
-
 import { useTranslation } from 'next-i18next';
 
-import { Model } from '@amdenterpriseai/types';
+import { Model } from '@/types/models';
 
 import { ConfirmationModal } from '@amdenterpriseai/components';
 
 interface DeleteModelModalProps {
   isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  onConfirmAction: ({ id }: { id: string }) => void;
+  onClose: () => void;
+  onConfirmAction: ({ name }: { name: string }) => void;
   model: Model | undefined;
+  hasActiveDeployments: boolean;
+  loading: boolean;
 }
 
 export default function DeleteModelModal({
   isOpen,
-  onOpenChange,
+  onClose,
   onConfirmAction,
   model,
+  hasActiveDeployments,
+  loading,
 }: DeleteModelModalProps) {
   const { t } = useTranslation('models', { keyPrefix: 'customModels' });
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Reset loading state when modal is closed
-  useEffect(() => {
-    if (!isOpen) {
-      setIsLoading(false);
-    }
-  }, [isOpen]);
 
   if (!model) return null;
 
   const handleConfirm = () => {
-    if (isLoading) return; // Prevent multiple clicks
-
-    setIsLoading(true);
-    onConfirmAction({ id: model.id });
-    onOpenChange(false);
+    if (loading || !model.resourceName) return;
+    onConfirmAction({ name: model.resourceName });
   };
 
-  const handleClose = () => {
-    setIsLoading(false);
-    onOpenChange(false);
-  };
+  const description = hasActiveDeployments
+    ? t('list.actions.delete.confirmation.conflictDescription', {
+        name: model.name || '',
+      })
+    : t('list.actions.delete.confirmation.description', {
+        name: model.name || '',
+      });
 
   return (
     <ConfirmationModal
       confirmationButtonColor="danger"
-      description={t('list.actions.delete.confirmation.description', {
-        name: model.name || '',
-      })}
+      description={description}
       title={t('list.actions.delete.confirmation.title')}
       isOpen={isOpen}
-      loading={isLoading}
+      loading={loading}
       onConfirm={handleConfirm}
-      onClose={handleClose}
+      onClose={onClose}
     />
   );
 }

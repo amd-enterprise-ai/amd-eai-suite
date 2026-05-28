@@ -45,13 +45,13 @@ describe('GET /api/clusters/[id]/nodes/[nodeId]/metrics/gpu-utilization/memory-u
 
   it('proxies to the backend memory-utilization endpoint and returns data', async () => {
     const mockData = {
-      gpu_devices: [
+      gpuDevices: [
         {
-          gpu_uuid: 'uuid-1',
-          gpu_id: '0',
+          gpuUuid: 'uuid-1',
+          gpuId: '0',
           hostname: NODE_ID,
           metric: {
-            series_label: 'vram_utilization_pct',
+            seriesLabel: 'vramUtilizationPct',
             values: [{ timestamp: START, value: 55 }],
           },
         },

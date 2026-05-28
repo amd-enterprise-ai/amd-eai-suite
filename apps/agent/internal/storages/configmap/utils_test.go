@@ -8,7 +8,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/silogen/agent/internal/messaging"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,10 +71,10 @@ func TestHandleDeletion_PublishesAndRemovesFinalizer(t *testing.T) {
 	assert.NoError(t, err)
 
 	require.Len(t, pub.Published, 1)
-	msg, ok := pub.Published[0].(*messaging.ProjectStorageUpdateMessage)
+	msg, ok := pub.Published[0].(*ProjectStorageUpdateMessage)
 	require.True(t, ok)
 	assert.Equal(t, "storage-123", msg.ProjectStorageID)
-	assert.Equal(t, messaging.ConfigMapStatusDeleted, msg.Status)
+	assert.Equal(t, ConfigMapStatusDeleted, msg.Status)
 	require.NotNil(t, msg.StatusReason)
 	assert.Equal(t, "ConfigMap deleted.", *msg.StatusReason)
 

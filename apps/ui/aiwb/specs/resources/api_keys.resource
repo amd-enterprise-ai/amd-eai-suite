@@ -22,7 +22,6 @@ Initialize API Key Suite
     [Documentation]    Generates a unique API key name prefix for this suite run
     ...                and initializes project tracking.
 
-    Initialize Project Tracking
     ${epoch}=    Get Current Date    result_format=epoch
     ${suffix}=    Evaluate    int(${epoch})
     Set Suite Variable    ${TEST_API_KEY_NAME}    e2e-key-${suffix}
@@ -33,8 +32,9 @@ Initialize API Key Suite
 
 User is on API keys page
     [Documentation]    Navigates to the API Keys page via the sidebar link.
+    ...                Expects ${TEST_PROJECT} to be set.
 
-    Navigate to API keys page
+    Navigate to API keys page    ${TEST_PROJECT}[name]
 
 # =============================================================================
 # When keywords (actions)

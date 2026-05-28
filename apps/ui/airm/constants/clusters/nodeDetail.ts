@@ -44,8 +44,5 @@ export const GPU_LINE_CHART_COLORS: AvailableChartColorsKeys[] = [
   'darkgray',
 ];
 
-export const GPU_BAR_CHART_COLORS: AvailableChartColorsKeys[] =
-  GPU_LINE_CHART_COLORS;
-
 export const MAX_POWER_USAGE_INTERVALS = 12;
 export const MAX_TEMPERATURE_INTERVALS = 12;

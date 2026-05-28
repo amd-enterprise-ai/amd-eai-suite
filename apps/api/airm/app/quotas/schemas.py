@@ -4,10 +4,11 @@
 
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
-from ..messaging.schemas import QuotaStatus
-from ..utilities.schema import BaseEntityPublic
+from api_common.schemas import BaseEntityPublic, BaseModel
+
+from .enums import QuotaStatus
 
 
 class QuotaBase(BaseModel):
@@ -16,24 +17,16 @@ class QuotaBase(BaseModel):
     ephemeral_storage_bytes: int = Field(description="The amount of ephemeral storage assigned in the quota.")
     gpu_count: int = Field(description="The number of GPUs assigned in the quota.")
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class QuotaCreate(QuotaBase):
     cluster_id: UUID = Field(description="The ID of the cluster.")
     project_id: UUID = Field(description="The ID of the project.")
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class QuotaUpdate(QuotaBase):
-    pass
-
     model_config = ConfigDict(extra="forbid")
 
 
 class QuotaResponse(QuotaBase, BaseEntityPublic):
     status: QuotaStatus = Field(description="The status of the quota.")
     status_reason: str | None = Field(None, description="The reason for the status of the quota, if any.")
-
-    model_config = ConfigDict(from_attributes=True)

@@ -8,10 +8,8 @@ import { Trans, useTranslation } from 'next-i18next';
 
 import { fetchClusterKubeConfig } from '@/services/app';
 
-import {
-  Cluster,
-  ClusterKubeConfig as ClusterKubeConfigType,
-} from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ClusterKubeConfig as ClusterKubeConfigType } from '@/types/clusters';
 
 import { DrawerDisplay } from '@amdenterpriseai/components';
 

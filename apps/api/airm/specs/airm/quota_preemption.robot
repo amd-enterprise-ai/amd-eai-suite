@@ -29,9 +29,7 @@ Resource            resources/api/common.resource
 Resource            resources/authorization.resource
 Library             Collections
 Library             Process
-Test Setup          Run keywords
-...                 Initialize project tracking    AND
-...                 Initialize Workload Tracking
+Test Setup          Initialize Workload Tracking
 Test Teardown       Clean up quota preemption test resources
 
 

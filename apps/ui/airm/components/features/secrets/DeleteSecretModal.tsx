@@ -7,7 +7,8 @@ import { useTranslation } from 'next-i18next';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 import { deleteProjectSecret, deleteSecret } from '@/services/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
-import { BaseSecret, Secret } from '@amdenterpriseai/types';
+import { BaseSecret } from '@/types/secrets';
+import { Secret } from '@/types/secrets';
 import { ConfirmationModal } from '@amdenterpriseai/components';
 
 interface Props {
@@ -42,14 +43,11 @@ export default function DeleteSecretModal({
     },
     onSuccess: () => {
       toast.success(t(`form.${formKey}.notification.success`));
-      queryClient.invalidateQueries({ queryKey: ['secrets'] });
-      if (projectId) {
-        queryClient.invalidateQueries({
-          queryKey: ['projectSecrets', projectId],
+      queryClient
+        .invalidateQueries({ queryKey: queryKeyToInvalidate })
+        .then(() => {
+          onOpenChange(false);
         });
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeyToInvalidate });
-      onOpenChange(false);
     },
     onError: (error) => {
       toast.error(

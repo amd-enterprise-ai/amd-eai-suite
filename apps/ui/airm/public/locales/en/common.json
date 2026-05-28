@@ -93,7 +93,8 @@
       "close": "Close ,enu",
       "themeToggle": "Toggle light/dark mode",
       "theme": "Theme: {{theme}}",
-      "logout": "Logout"
+      "logout": "Logout",
+      "reportIssue": "Report issue"
     }
   },
   "actions": {

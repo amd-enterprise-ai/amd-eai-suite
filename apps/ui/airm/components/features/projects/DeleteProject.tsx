@@ -16,7 +16,7 @@ import { deleteProject as deleteProjectAPI } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { Project } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
 
 import { ConfirmationModal } from '@amdenterpriseai/components';
 import { ActionButton } from '@amdenterpriseai/components';

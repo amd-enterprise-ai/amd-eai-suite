@@ -2,15 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  ClusterNode,
-  ClusterStatus,
-  ProjectBasicInfo,
-  ProjectStatus,
-  WorkloadStatus,
-  WorkloadType,
-} from '@amdenterpriseai/types';
-import { QuotaResource } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { ClusterNode } from '@/types/clusters';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { ProjectStatus } from '@/types/enums/projects';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { GPU_PREEMPTION_DISABLED, ProjectBasicInfo } from '@/types/projects';
+import { QuotaResource } from '@/types/enums/quotas';
 
 import type { NodeGpuUtilizationResponse } from '@/types/clusters';
 import type { NodePowerUsageResponse } from '@/types/clusters';
@@ -88,18 +86,18 @@ function generateGpuDeviceMetricResponse(
   const {
     deviceCount = 0,
     valuesPerDevice = 2,
-    seriesLabel = 'gpu_activity_pct',
+    seriesLabel = 'gpuActivityPct',
     baseValue = 50,
     fluctuation = 10,
   } = options;
 
   const now = new Date();
-  const gpu_devices = Array.from({ length: deviceCount }, (_, i) => ({
-    gpu_uuid: `uuid-${i}`,
-    gpu_id: String(i),
+  const gpuDevices = Array.from({ length: deviceCount }, (_, i) => ({
+    gpuUuid: `uuid-${i}`,
+    gpuId: String(i),
     hostname: `node-${Math.floor(i / 8) + 1}`,
     metric: {
-      series_label: seriesLabel,
+      seriesLabel: seriesLabel,
       values: Array.from({ length: valuesPerDevice }, (_, vi) => ({
         timestamp: new Date(
           now.getTime() - (valuesPerDevice - 1 - vi) * 60_000,
@@ -112,7 +110,7 @@ function generateGpuDeviceMetricResponse(
   }));
 
   return {
-    gpu_devices,
+    gpuDevices,
     range: {
       start: new Date(now.getTime() - 3_600_000).toISOString(),
       end: now.toISOString(),
@@ -127,7 +125,7 @@ export function generateNodeGpuUtilizationMock(
   return generateGpuDeviceMetricResponse({
     deviceCount,
     valuesPerDevice,
-    seriesLabel: 'gpu_activity_pct',
+    seriesLabel: 'gpuActivityPct',
     baseValue: 50,
     fluctuation: 20,
   });
@@ -140,7 +138,7 @@ export function generateNodePowerUsageMock(
   return generateGpuDeviceMetricResponse({
     deviceCount,
     valuesPerDevice,
-    seriesLabel: 'power_watts',
+    seriesLabel: 'powerWatts',
     baseValue: 19,
     fluctuation: 5,
   });
@@ -153,7 +151,7 @@ export function generateNodePcieBandwidthMock(
   return generateGpuDeviceMetricResponse({
     deviceCount,
     valuesPerDevice,
-    seriesLabel: 'pcie_bandwidth',
+    seriesLabel: 'pcieBandwidth',
     baseValue: 50_000_000,
     fluctuation: 30_000_000,
   });
@@ -212,5 +210,6 @@ export const generateClusterProjectsMock = (n: number): ProjectBasicInfo[] => {
     status: ProjectStatus.READY,
     statusReason: null,
     clusterId: 'cluster-1',
+    gpuPreemption: GPU_PREEMPTION_DISABLED,
   }));
 };

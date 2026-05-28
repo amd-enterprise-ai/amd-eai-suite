@@ -4,7 +4,7 @@
 
 import { useTranslation } from 'next-i18next';
 
-import { Workload } from '@amdenterpriseai/types';
+import { Workload } from '@/types/workloads';
 
 import { WorkloadWithMetrics } from '@/types/workloads';
 

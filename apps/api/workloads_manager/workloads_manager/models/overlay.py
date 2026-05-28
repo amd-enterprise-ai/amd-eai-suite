@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
+from pydantic.alias_generators import to_camel
 
 
 class OverlayType(StrEnum):
@@ -22,7 +23,7 @@ class OverlayData(BaseModel):
     """Data structure for overlay files."""
 
     model: str | None = Field(None, description="Model identifier")
-    model_id: str | None = Field(None, alias="modelId", description="Alternative model identifier")
+    model_id: str | None = Field(None, alias=to_camel("model_id"), description="Alternative model identifier")
 
     @property
     def canonical_name(self) -> str | None:

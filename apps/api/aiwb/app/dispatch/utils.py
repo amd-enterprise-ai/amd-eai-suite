@@ -4,6 +4,8 @@
 
 """Utility functions for dispatch operations."""
 
+from uuid import UUID
+
 from kubernetes_asyncio import client
 from loguru import logger
 
@@ -50,6 +52,15 @@ async def get_resource_version(group: str, plural: str) -> str | None:
             logger.debug(f"CRD {plural}.{group} not found")
         else:
             logger.exception(f"Error checking CRD {plural}.{group}")
+        return None
+
+
+def parse_uuid(value: str | None) -> UUID | None:
+    if not value:
+        return None
+    try:
+        return UUID(value)
+    except ValueError:
         return None
 
 

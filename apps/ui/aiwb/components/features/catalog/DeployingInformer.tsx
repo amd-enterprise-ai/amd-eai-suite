@@ -6,30 +6,23 @@ import { Card, CardBody, CardFooter, CardHeader, Divider } from '@heroui/react';
 import { IconExternalLink } from '@tabler/icons-react';
 import { ActionButton } from '@amdenterpriseai/components';
 import type { TFunction } from 'next-i18next';
-import router from 'next/router';
 import { useCallback } from 'react';
 
 interface Props {
   name: string;
   isDeployed: boolean;
-  isModelDeployment: boolean;
   workloadId: string;
   workloadData: any;
   t: TFunction;
 }
 
 const DeployingInformer = (props: Props) => {
-  const { name, isDeployed, isModelDeployment, workloadId, workloadData, t } =
-    props;
+  const { name, isDeployed, workloadId, workloadData, t } = props;
   const handleLaunch = useCallback((): void => {
     if (!workloadId) return;
-    if (isModelDeployment) {
-      router.push(`/chat/?workload=${workloadId}`);
-      return;
-    }
     const workloadURL = workloadData?.endpoints?.external;
     if (workloadURL) window.open(workloadURL, '_blank');
-  }, [isModelDeployment, workloadId, workloadData]);
+  }, [workloadId, workloadData]);
 
   return (
     <div className="flex flex-col gap-4 mt-4">

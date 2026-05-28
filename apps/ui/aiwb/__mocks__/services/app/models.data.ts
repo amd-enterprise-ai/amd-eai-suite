@@ -2,64 +2,42 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Model, ModelOnboardingStatus } from '@amdenterpriseai/types';
+import {
+  AIM_MODEL_NAME_LABEL,
+  AIM_MODEL_WORKLOAD_ID_LABEL,
+} from '@/types/aims';
+import { AIMModelResponse } from '@/types/models';
+
+const makeModel = (
+  n: number,
+  extra?: Partial<AIMModelResponse>,
+): AIMModelResponse => ({
+  metadata: {
+    name: `wb-finetune-cr-${n}`, // K8s auto-generated resource name
+    creationTimestamp: '2026-01-01T00:00:00Z',
+    labels: {
+      [AIM_MODEL_WORKLOAD_ID_LABEL]: String(n),
+      [AIM_MODEL_NAME_LABEL]: `model-${n}`, // user-chosen display name
+    },
+  },
+  spec: {
+    image: 'amdenterpriseai/aim-base:0.10',
+    modelSources: [
+      { modelId: `org/model-${n}`, sourceUri: `s3://bucket/model-${n}` },
+    ],
+  },
+  status: { status: 'Ready' },
+  ...extra,
+});
 
 /**
- * Mock data for models to be used in tests
+ * Mock data matching the AIMModelResponse shape returned by GET /namespaces/{ns}/aims/models.
  */
-export const mockModels: Model[] = [
-  {
-    id: '1',
-    name: 'model-1',
-    createdAt: '2023-01-01T00:00:00Z',
-    modelWeightsPath: '/dev/null',
-    createdBy: 'Test',
-    onboardingStatus: ModelOnboardingStatus.READY,
-    canonicalName: 'org/model-1',
-  },
-  {
-    id: '2',
-    name: 'model-2',
-    createdAt: '2023-01-02T00:00:00Z',
-    modelWeightsPath: '/dev/null',
-    createdBy: 'Test',
-    onboardingStatus: ModelOnboardingStatus.PENDING,
-    canonicalName: 'org/model-2',
-  },
-  {
-    id: '3',
-    name: 'model-3',
-    createdAt: '2023-01-02T00:00:00Z',
-    modelWeightsPath: '/dev/null',
-    createdBy: 'Test',
-    canonicalName: 'org/model-3',
-    onboardingStatus: ModelOnboardingStatus.READY,
-  },
-  {
-    id: '4',
-    name: 'model-4',
-    createdAt: '2023-01-02T00:00:00Z',
-    modelWeightsPath: '/dev/null',
-    createdBy: 'Test',
-    canonicalName: 'org/model-4',
-    onboardingStatus: ModelOnboardingStatus.FAILED,
-  },
-  {
-    id: '5',
-    name: 'model-5',
-    createdAt: '2023-01-01T00:00:00Z',
-    modelWeightsPath: '/dev/null',
-    createdBy: 'Test',
-    onboardingStatus: ModelOnboardingStatus.READY,
-    canonicalName: 'org/model-5',
-  },
-  {
-    id: '6',
-    name: 'model-6',
-    createdAt: '2023-01-01T00:00:00Z',
-    modelWeightsPath: '/dev/null',
-    createdBy: 'Test',
-    onboardingStatus: ModelOnboardingStatus.READY,
-    canonicalName: 'org/model-6',
-  },
+export const mockModels: AIMModelResponse[] = [
+  makeModel(1),
+  makeModel(2, { status: { status: 'NotReady' } }),
+  makeModel(3),
+  makeModel(4, { status: { status: 'NotReady' } }),
+  makeModel(5),
+  makeModel(6),
 ];

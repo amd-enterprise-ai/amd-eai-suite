@@ -6,12 +6,17 @@
   "types": "./src/index.ts",
   "sideEffects": ["**/*.css"],
   "scripts": {
-    "build:styles": "postcss ./src/styles.css -o ./dist/index.css",
     "build:components": "tsc",
-    "dev:styles": "postcss ./src/styles.css -o ./dist/index.css --watch",
+    "build:styles": "postcss ./src/styles.css -o ./dist/index.css",
+    "check-types": "pnpm run typecheck",
     "dev:components": "tsc --watch",
-    "check-types": "tsc --noEmit",
-    "ladle": "ladle serve"
+    "dev:styles": "postcss ./src/styles.css -o ./dist/index.css --watch",
+    "format:fix": "biome format --write .",
+    "ladle": "ladle serve",
+    "lint": "biome lint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@amdenterpriseai/assets": "workspace:*",
@@ -30,17 +35,25 @@
   },
   "devDependencies": {
     "@amdenterpriseai/tailwind-config": "workspace:*",
+    "@tanstack/react-query": "*",
+    "@testing-library/jest-dom": "*",
+    "@testing-library/react": "*",
+    "@testing-library/user-event": "*",
     "@ladle/react": "*",
     "@svgr/webpack": "*",
     "@tailwindcss/postcss": "*",
     "@tailwindcss/typography": "*",
     "@types/react": "*",
     "@vitejs/plugin-react": "*",
+    "@vitest/coverage-v8": "*",
+    "jsdom": "*",
+    "next-auth": "*",
     "postcss": "*",
     "postcss-cli": "*",
     "tailwindcss": "*",
     "typescript": "5.9.2",
-    "vite": "*"
+    "vite": "*",
+    "vitest": "*"
   },
   "exports": {
     "./styles.css": "./dist/index.css",

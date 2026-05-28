@@ -12,9 +12,9 @@ import { getFilteredData } from '@amdenterpriseai/utils/app';
 import { ActionItem, TableColumns } from '@amdenterpriseai/types';
 import { SecretsTableField } from '@amdenterpriseai/types';
 import { ClientSideDataFilter } from '@amdenterpriseai/types';
-import { Secret } from '@amdenterpriseai/types';
+import { Secret } from '@/types/secrets';
 
-import { SecretStatus } from '@amdenterpriseai/types';
+import { SecretStatus } from '@/types/enums/secrets';
 
 import { ClientSideDataTable } from '@amdenterpriseai/components';
 import {
@@ -25,7 +25,7 @@ import {
 
 import { StatusError } from '@amdenterpriseai/components';
 import SecretProjectAssignedTo from './SecretProjectAssignedTo';
-import { getSecretStatusVariants } from '@amdenterpriseai/utils/app';
+import { getSecretStatusVariants } from '@/utils/secrets-status-variants';
 
 interface Props {
   filters?: ClientSideDataFilter<Secret>[];

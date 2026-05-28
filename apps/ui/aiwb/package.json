@@ -18,12 +18,6 @@
     "test:ci": "vitest run --silent",
     "coverage": "vitest run --coverage"
   },
-  "pnpm": {
-    "overrides": {
-      "motion-dom": "12.8.0",
-      "motion-utils": "12.7.5"
-    }
-  },
   "dependencies": {
     "@amdenterpriseai/assets": "workspace:*",
     "@amdenterpriseai/components": "workspace:*",
@@ -68,7 +62,6 @@
     "@tailwindcss/typography": "*",
     "@testing-library/jest-dom": "*",
     "@testing-library/react": "*",
-    "@testing-library/react-hooks": "*",
     "@testing-library/user-event": "*",
     "@types/jsdom": "*",
     "@types/jsonwebtoken": "*",

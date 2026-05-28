@@ -24,6 +24,21 @@ vi.mock('@amdenterpriseai/hooks', () => ({
   }),
 }));
 
+vi.mock('@amdenterpriseai/components', () => ({
+  ClientSideDataTable: ({ data }: { data: { name: string }[] }) => (
+    <div data-testid="replicas-table">
+      {data.map((r) => (
+        <div key={r.name} data-testid={`replica-${r.name}`}>
+          {r.name}
+        </div>
+      ))}
+    </div>
+  ),
+  DateDisplay: ({ date }: { date: string }) => <span>{date}</span>,
+  NoDataDisplay: () => <span data-testid="no-data">—</span>,
+  StatusDisplay: ({ type }: { type: string }) => <span>{type}</span>,
+}));
+
 vi.mock('@/lib/app/aims', () => ({
   updateWorkloadScaling: vi.fn(),
   updateAimScalingPolicy: vi.fn(),
@@ -55,7 +70,7 @@ vi.mock('@/lib/app/aims', () => ({
 // Mock DeploymentSettingsDrawer
 vi.mock('@/components/features/workloads/DeploymentSettingsDrawer', () => ({
   DeploymentSettingsDrawer: vi.fn(
-    ({ isOpen, onClose, id, namespace, initialValues }) => (
+    ({ isOpen, onClose, onSuccess, id, namespace, initialValues }) => (
       <div data-testid="deployment-settings-drawer">
         <div data-testid="drawer-is-open">{isOpen ? 'open' : 'closed'}</div>
         <div data-testid="drawer-workload-id">{id}</div>
@@ -67,6 +82,12 @@ vi.mock('@/components/features/workloads/DeploymentSettingsDrawer', () => ({
         </div>
         <button data-testid="close-drawer" onClick={onClose}>
           Close
+        </button>
+        <button
+          data-testid="save-settings"
+          onClick={() => onSuccess?.(initialValues)}
+        >
+          Save
         </button>
       </div>
     ),
@@ -427,6 +448,30 @@ describe('ScalingStatusCard', () => {
         targetValue: 10,
       });
     });
+
+    it('calls onSettingsSaved with all form values when drawer saves', () => {
+      render(
+        <ScalingStatusCard
+          spec={mockSpec}
+          onSettingsSaved={mockOnSettingsSaved}
+        />,
+        { wrapper },
+      );
+
+      const settingsButton = screen.getByText('actions.settings');
+      fireEvent.click(settingsButton);
+      const saveButton = screen.getByTestId('save-settings');
+      fireEvent.click(saveButton);
+
+      expect(mockOnSettingsSaved).toHaveBeenCalledWith({
+        minReplicas: 1,
+        maxReplicas: 5,
+        metricQuery: 'vllm:num_requests_running',
+        operationOverTime: 'avg',
+        targetType: 'Value',
+        targetValue: 10,
+      });
+    });
   });
 
   describe('Different Replica Configurations', () => {
@@ -474,6 +519,120 @@ describe('ScalingStatusCard', () => {
       );
       expect(initialValues.minReplicas).toBe(3);
       expect(initialValues.maxReplicas).toBe(3);
+    });
+  });
+
+  describe('Replicas Accordion', () => {
+    const mockReplicas = [
+      {
+        metadata: {
+          name: 'pod-abc-1',
+          creationTimestamp: '2024-01-01T00:00:00Z',
+        },
+        status: { phase: 'Running', containerStatuses: [{ ready: true }] },
+        spec: {
+          containers: [{ resources: { limits: { 'amd.com/gpu': '2' } } }],
+        },
+      },
+      {
+        metadata: { name: 'pod-abc-2' },
+        status: { phase: 'Pending', containerStatuses: [{ ready: false }] },
+        spec: { containers: [{ resources: { limits: {} } }] },
+      },
+    ];
+
+    it('does not show chevron when replicas prop is not provided', () => {
+      render(
+        <ScalingStatusCard
+          spec={mockSpec}
+          onSettingsSaved={mockOnSettingsSaved}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.queryByRole('button', { name: 'replicas.toggle' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows chevron when replicas prop is provided', () => {
+      render(
+        <ScalingStatusCard
+          spec={mockSpec}
+          replicas={mockReplicas}
+          onSettingsSaved={mockOnSettingsSaved}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'replicas.toggle' }),
+      ).toBeInTheDocument();
+    });
+
+    it('accordion is collapsed by default', () => {
+      render(
+        <ScalingStatusCard
+          spec={mockSpec}
+          replicas={mockReplicas}
+          onSettingsSaved={mockOnSettingsSaved}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'replicas.toggle' }),
+      ).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('clicking chevron expands the replicas table', () => {
+      render(
+        <ScalingStatusCard
+          spec={mockSpec}
+          replicas={mockReplicas}
+          onSettingsSaved={mockOnSettingsSaved}
+        />,
+        { wrapper },
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'replicas.toggle' }));
+
+      expect(
+        screen.getByRole('button', { name: 'replicas.toggle' }),
+      ).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('clicking chevron again collapses the table', () => {
+      render(
+        <ScalingStatusCard
+          spec={mockSpec}
+          replicas={mockReplicas}
+          onSettingsSaved={mockOnSettingsSaved}
+        />,
+        { wrapper },
+      );
+
+      const toggle = screen.getByRole('button', { name: 'replicas.toggle' });
+      fireEvent.click(toggle);
+      fireEvent.click(toggle);
+
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('shows replica names in the table after expanding', () => {
+      render(
+        <ScalingStatusCard
+          spec={mockSpec}
+          replicas={mockReplicas}
+          onSettingsSaved={mockOnSettingsSaved}
+        />,
+        { wrapper },
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'replicas.toggle' }));
+
+      expect(screen.getByTestId('replica-pod-abc-1')).toBeInTheDocument();
+      expect(screen.getByTestId('replica-pod-abc-2')).toBeInTheDocument();
     });
   });
 });

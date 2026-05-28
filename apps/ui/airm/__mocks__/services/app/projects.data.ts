@@ -2,15 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { QuotaResource, QuotaStatus } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { ProjectStatus } from '@/types/enums/projects';
+import { QuotaResource, QuotaStatus } from '@/types/enums/quotas';
 import {
+  GPU_PREEMPTION_DISABLED,
   Project,
   ProjectBasicInfo,
   ProjectWithResourceAllocation,
   ProjectsResponse,
-} from '@amdenterpriseai/types';
+} from '@/types/projects';
 
 /**
  * Basic project info matching the API structure when embedded in workloads.
@@ -23,6 +24,7 @@ export const mockProject1: ProjectBasicInfo = {
   clusterId: 'cluster-1',
   status: ProjectStatus.READY,
   statusReason: null,
+  gpuPreemption: GPU_PREEMPTION_DISABLED,
 };
 
 export const mockProject2: ProjectBasicInfo = {
@@ -32,6 +34,7 @@ export const mockProject2: ProjectBasicInfo = {
   clusterId: 'cluster-2',
   status: ProjectStatus.READY,
   statusReason: null,
+  gpuPreemption: GPU_PREEMPTION_DISABLED,
 };
 
 /**
@@ -55,10 +58,11 @@ export const mockFullProject1: Project = {
   cluster: {
     id: 'cluster-1',
     name: 'Test Cluster',
-    workloadsBaseUrl: 'https://test-cluster.example.com',
+    workbenchBaseUrl: 'https://test-cluster.example.com',
     lastHeartbeatAt: '2024-01-01T00:00:00Z',
     status: ClusterStatus.HEALTHY,
   },
+  gpuPreemption: GPU_PREEMPTION_DISABLED,
 };
 
 export const mockFullProject2: Project = {
@@ -78,10 +82,11 @@ export const mockFullProject2: Project = {
   cluster: {
     id: 'cluster-2',
     name: 'Dev Cluster',
-    workloadsBaseUrl: 'https://dev-cluster.example.com',
+    workbenchBaseUrl: 'https://dev-cluster.example.com',
     lastHeartbeatAt: '2024-01-01T00:00:00Z',
     status: ClusterStatus.HEALTHY,
   },
+  gpuPreemption: GPU_PREEMPTION_DISABLED,
 };
 
 /**

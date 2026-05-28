@@ -6,11 +6,8 @@ import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { UserRole } from '@amdenterpriseai/types';
-import {
-  InviteUserRequest,
-  UpdateUserRequest,
-  UserWithProjects,
-} from '@amdenterpriseai/types';
+import { UpdateUserRequest } from '@/types/users';
+import { InviteUserRequest, UserWithProjects } from '@/types/users';
 
 export const fetchUsers = async () => {
   const response = await fetch('/api/users');
@@ -128,8 +125,8 @@ export const updateUser = async (data: UpdateUserRequest) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      first_name: data.firstName,
-      last_name: data.lastName,
+      firstName: data.firstName,
+      lastName: data.lastName,
     }),
   });
   if (!response.ok) {

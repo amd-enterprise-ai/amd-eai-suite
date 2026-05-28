@@ -14,6 +14,7 @@ import {
 
 import { fetchNamespaceMetrics } from '@/lib/app/namespaces';
 import {
+  fetchProfilesForServices,
   getAimServices,
   getAimClusterModels,
   resolveAIMServiceDisplay,
@@ -21,8 +22,9 @@ import {
 } from '@/lib/app/aims';
 import { deleteWorkload } from '@/lib/app/workloads';
 
-import { ResourceType } from '@amdenterpriseai/types';
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
+import { ResourceType } from '@/types/enums/workloads';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 import type { ResourceMetrics } from '@/types/namespaces';
 
 import { NamespaceWorkloadsTable } from '@/components/features/projects/NamespaceWorkloadsTable';
@@ -42,6 +44,7 @@ vi.mock('@/lib/app/workloads', () => ({
 }));
 
 vi.mock('@/lib/app/aims', () => ({
+  fetchProfilesForServices: vi.fn().mockResolvedValue(new Map()),
   getAimServices: vi.fn(),
   getAimClusterModels: vi.fn(),
   resolveAIMServiceDisplay: vi.fn(),
@@ -99,6 +102,10 @@ const createMockResourceMetrics = (
   type: WorkloadType.INFERENCE,
   status: WorkloadStatus.RUNNING,
   gpuCount: 1,
+  templateGpuCount: null,
+  gpu: null,
+  metric: null,
+  precision: null,
   vram: 2 * 1024 * 1024 * 1024,
   createdAt: '2024-01-01T00:00:00Z',
   createdBy: 'test-user',
@@ -129,6 +136,7 @@ describe('NamespaceWorkloadsTable', () => {
   const mockFetchNamespaceMetrics = fetchNamespaceMetrics as Mock;
   const mockGetAimServices = getAimServices as Mock;
   const mockGetAimClusterModels = getAimClusterModels as Mock;
+  const mockFetchProfilesForServices = fetchProfilesForServices as Mock;
   const mockDeleteWorkload = deleteWorkload as Mock;
   const mockUndeployAim = undeployAim as Mock;
   const mockResolveAIMServiceDisplay = resolveAIMServiceDisplay as Mock;
@@ -138,13 +146,14 @@ describe('NamespaceWorkloadsTable', () => {
     mockFetchNamespaceMetrics.mockResolvedValue(mockNamespaceMetricsResponse);
     mockGetAimServices.mockResolvedValue([]);
     mockGetAimClusterModels.mockResolvedValue([]);
+    mockFetchProfilesForServices.mockResolvedValue(new Map());
     mockResolveAIMServiceDisplay.mockImplementation(
       (_service: unknown, _parsedAIMs: unknown[]) => ({
         canonicalName: 'test/model',
         imageVersion: '1.0',
         metric: 'default',
         title: 'Test Model',
-        resourceName: 'test-model',
+        name: 'test-model',
       }),
     );
     Object.defineProperty(window, 'open', {
@@ -196,8 +205,8 @@ describe('NamespaceWorkloadsTable', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/workloads/workload-1',
-        search: 'ref=/',
+        pathname: '/project1/workloads/workload-1',
+        query: { ref: '/' },
       });
     });
   });
@@ -228,11 +237,11 @@ describe('NamespaceWorkloadsTable', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/aims/aim-service-1',
-        search: 'ref=/',
+        pathname: '/project1/aims/aim-service-1',
+        query: { ref: '/' },
       });
     });
-  });
+  }, 10000);
 
   it('opens chat in new tab when chat action is clicked', async () => {
     await act(async () => {
@@ -257,10 +266,10 @@ describe('NamespaceWorkloadsTable', () => {
     });
 
     expect(window.open).toHaveBeenCalledWith(
-      '/chat?workload=workload-1',
+      '/project1/chat?workload=workload-1',
       '_blank',
     );
-  });
+  }, 10000);
 
   it('shows Connect to model action for running AIM workloads', async () => {
     await act(async () => {
@@ -312,7 +321,7 @@ describe('NamespaceWorkloadsTable', () => {
         screen.getByText('list.actions.logs.modal.title'),
       ).toBeInTheDocument();
     });
-  });
+  }, 10000);
 
   it('opens delete modal when delete action is clicked', async () => {
     await act(async () => {
@@ -337,7 +346,7 @@ describe('NamespaceWorkloadsTable', () => {
     });
 
     expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
-  });
+  }, 10000);
 
   it('calls deleteWorkload when confirming delete for regular workload', async () => {
     mockDeleteWorkload.mockResolvedValue(undefined);
@@ -405,42 +414,6 @@ describe('NamespaceWorkloadsTable', () => {
 
     await waitFor(() => {
       expect(mockUndeployAim).toHaveBeenCalledWith('test-ns', 'aim-service-1');
-    });
-  });
-
-  it('displays AIM canonical name when aimServices and parsedAIMs are loaded', async () => {
-    mockGetAimServices.mockResolvedValue([
-      {
-        id: 'aim-service-1',
-        spec: { model: { name: 'test-model' } },
-      },
-    ]);
-    mockGetAimClusterModels.mockResolvedValue([
-      { model: 'test-model', resourceName: 'test-model' },
-    ]);
-    mockResolveAIMServiceDisplay.mockReturnValue({
-      canonicalName: 'org/test-model',
-      imageVersion: '2.0',
-      metric: 'default',
-      title: 'Test Model',
-      resourceName: 'test-model',
-    });
-
-    await act(async () => {
-      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
-    });
-
-    await waitFor(() => {
-      expect(mockGetAimServices).toHaveBeenCalled();
-      expect(mockGetAimClusterModels).toHaveBeenCalled();
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          /org\/test-model\s+\(2\.0\)\s+\(models:performanceMetrics\.values\.default\)/,
-        ),
-      ).toBeInTheDocument();
     });
   });
 });

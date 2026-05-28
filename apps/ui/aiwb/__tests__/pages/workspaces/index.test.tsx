@@ -22,9 +22,10 @@ import {
 
 import { generateMockWorkspaceWorkloads } from '@/__mocks__/utils/workloads-mock';
 
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 
-import WorkspacesPage from '@/pages/workspaces';
+import WorkspacesPage from '@/pages/[project]/workspaces';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock, vi } from 'vitest';
@@ -34,6 +35,11 @@ vi.mock('@/lib/app/workloads', async (importOriginal) => ({
   getCatalogItems: vi.fn(),
   listWorkloads: vi.fn(),
   deleteWorkload: vi.fn(),
+}));
+
+// Mock RequestSoftware to avoid loading its bg.svg asset in jsdom
+vi.mock('@/components/shared/RequestSoftware/RequestSoftware', () => ({
+  RequestSoftware: () => <div data-testid="request-software" />,
 }));
 
 const mockSession = {

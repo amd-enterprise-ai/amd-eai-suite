@@ -9,8 +9,9 @@ from sqlalchemy import ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..messaging.schemas import NamespaceStatus
-from ..utilities.models import BaseEntity
+from api_common.models import BaseEntity
+
+from .enums import NamespaceStatus
 
 
 class Namespace(BaseEntity):

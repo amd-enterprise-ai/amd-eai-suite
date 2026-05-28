@@ -13,13 +13,14 @@ import {
 import { getWorkloadLogs } from '@/lib/app/workloads';
 import { getAimServiceLogs } from '@/lib/app/aims';
 
-import { WorkloadStatus, LogLevel } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { LogLevel } from '@/types/enums/workloads';
 import {
   Workload,
   LogEntry,
   WorkloadLogResponse,
   WorkloadLogPagination,
-} from '@amdenterpriseai/types';
+} from '@/types/workloads';
 
 import WorkloadLogs, {
   LogSource,

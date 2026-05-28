@@ -13,19 +13,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.messaging.schemas import (
-    AutoDiscoveredSecretMessage,
-    ExternalSecretManifest,
-    KubernetesMetadata,
-    ProjectSecretsCreateMessage,
-    ProjectSecretStatus,
-    ProjectSecretsUpdateMessage,
-    SecretKind,
-    SecretScope,
-)
+from api_common.exceptions import ConflictException, NotFoundException, ValidationException
+from api_common.secrets import SecretUseCase
 from app.projects.enums import ProjectStatus
 from app.secrets.constants import PROJECT_SECRET_ID_LABEL, PROJECT_SECRET_SCOPE_LABEL, PROJECT_SECRET_USE_CASE_LABEL
-from app.secrets.enums import SecretStatus, SecretUseCase
+from app.secrets.enums import ProjectSecretStatus, SecretKind, SecretScope, SecretStatus
+from app.secrets.messaging import (
+    AutoDiscoveredSecretMessage,
+    ExternalSecretManifest,
+    ProjectSecretsCreateMessage,
+    ProjectSecretsUpdateMessage,
+)
 from app.secrets.models import OrganizationScopedSecret, ProjectScopedSecret
 from app.secrets.models import Secret as SecretModel
 
@@ -50,7 +48,7 @@ from app.secrets.service import (
     update_project_secret_status,
 )
 from app.storages.models import ProjectStorage
-from app.utilities.exceptions import ConflictException, NotFoundException, ValidationException
+from app.utilities.messaging import KubernetesMetadata
 from tests import factory  # type: ignore[attr-defined]
 
 

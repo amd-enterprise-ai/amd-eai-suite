@@ -7,12 +7,13 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import NotFoundException, ValidationException
+
 from ..messaging.sender import MessageSender, get_message_sender
 from ..projects.repository import get_project_by_id
 from ..projects.schemas import ProjectAssignments
 from ..storages.repository import get_storage_by_secret_id
 from ..utilities.database import get_session
-from ..utilities.exceptions import NotFoundException, ValidationException
 from ..utilities.security import (
     ensure_platform_administrator,
     get_user_email,

@@ -16,29 +16,29 @@ import { getProjects } from '@/services/server';
 import { getSecrets } from '@/services/server';
 import { getStorages } from '@/services/server';
 
-import {
-  DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA,
-  doesProjectDataNeedToBeRefreshed,
-} from '@amdenterpriseai/utils/app';
+import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
+import { doesProjectDataNeedToBeRefreshed } from '@/utils/projects';
 import { getFilteredData } from '@amdenterpriseai/utils/app';
-import { doesSecretDataNeedToBeRefreshed } from '@amdenterpriseai/utils/app';
-import { doesStorageDataNeedToBeRefreshed } from '@amdenterpriseai/utils/app';
+import { doesSecretDataNeedToBeRefreshed } from '@/utils/secrets';
+import { doesStorageDataNeedToBeRefreshed } from '@/utils/storages';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 
-import { ProjectStatus, SecretScope } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { SecretScope } from '@/types/enums/secrets';
 import { SecretUseCase } from '@amdenterpriseai/types';
-import {
-  ProjectStorageStatus,
-  StorageStatus,
-  StorageType,
-} from '@amdenterpriseai/types';
+import { ProjectStorageStatus, StorageType } from '@/types/enums/storages';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
+import { StorageStatus } from '@/types/enums/storages';
 import {
   ProjectWithResourceAllocation,
   ProjectsResponse,
-} from '@amdenterpriseai/types';
-import { Secret, SecretsResponse } from '@amdenterpriseai/types';
-import { Storage, StoragesResponse } from '@amdenterpriseai/types';
+} from '@/types/projects';
+import { Secret, SecretsResponse } from '@/types/secrets';
+import { Storage, StoragesResponse } from '@/types/storages';
 
 import { AddSecret } from '@/components/features/secrets';
 import {
@@ -49,6 +49,11 @@ import {
 } from '@/components/features/storages';
 import { StoragesFilter } from '@/components/features/storages';
 import AddStorageButton from '@/components/features/storages/AddStorageButton';
+import {
+  RelevantDocs,
+  AirmDocsPage,
+  airmDocumentationMapping,
+} from '@amdenterpriseai/components';
 
 interface Props {
   projects: ProjectWithResourceAllocation[];
@@ -56,7 +61,11 @@ interface Props {
   storages: Storage[];
 }
 
-const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
+const StoragesPage: React.FC<Props> & WithDocumentationLink = ({
+  projects,
+  secrets,
+  storages,
+}) => {
   const { t } = useTranslation('storages');
   const {
     isOpen: isAddStorageFormOpen,
@@ -203,7 +212,7 @@ const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
   );
 
   return (
-    <>
+    <div className="inline-flex flex-col w-full h-full max-h-full">
       <div className="flex items-center justify-between pb-4">
         <StoragesFilter
           onFilterChange={handleFilterChange}
@@ -268,9 +277,12 @@ const StoragesPage: React.FC<Props> = ({ projects, secrets, storages }) => {
         isStoragesLoading={isStoragesLoading}
         actions={actions}
       />
-    </>
+      <RelevantDocs docs={airmDocumentationMapping[AirmDocsPage.STORAGE]} />
+    </div>
   );
 };
+
+StoragesPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/storage/overview.html`;
 
 export default StoragesPage;
 

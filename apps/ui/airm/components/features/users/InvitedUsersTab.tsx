@@ -18,9 +18,9 @@ import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { TableColumns } from '@amdenterpriseai/types';
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { InvitedUserTableField } from '@amdenterpriseai/types';
+import { InvitedUserTableField } from '@/types/enums/invited-user-table-fields';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import { InvitedUser, InvitedUsersResponse } from '@amdenterpriseai/types';
+import { InvitedUser, InvitedUsersResponse } from '@/types/users';
 
 import { InviteUserButton } from '@/components/features/users/InviteUserButton';
 import { ConfirmationModal } from '@amdenterpriseai/components';

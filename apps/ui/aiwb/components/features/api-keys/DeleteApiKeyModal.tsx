@@ -4,7 +4,7 @@
 
 import { useTranslation } from 'next-i18next';
 
-import { ApiKey } from '@amdenterpriseai/types';
+import { ApiKey } from '@/types/api-keys';
 
 import { ConfirmationModal } from '@amdenterpriseai/components';
 

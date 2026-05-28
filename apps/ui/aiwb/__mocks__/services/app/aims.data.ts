@@ -25,11 +25,11 @@ export const mockAims: ParsedAIM[] = [
     isPreview: false,
     isHfTokenRequired: true,
     model: 'aim-llama-2-7b-v2',
-    resourceName: 'aim-llama-2-7b-v2',
-    anotations: {
-      aimEaiAmdComSourceRegistry: 'docker.io',
-      aimEaiAmdComSourceRepository: 'amdenterpriseai/aim-meta-llama-llama-2-7b',
-      aimEaiAmdComSourceTag: '2.0.1',
+    annotations: {
+      'aim.eai.amd.com/source-registry': 'docker.io',
+      'aim.eai.amd.com/source-repository':
+        'amdenterpriseai/aim-meta-llama-llama-2-7b',
+      'aim.eai.amd.com/source-tag': '2.0.1',
     },
     imageReference: 'docker.io/amdenterpriseai/aim-meta-llama-llama-2-7b:2.0.1',
     deployedService: {
@@ -63,7 +63,6 @@ export const mockAims: ParsedAIM[] = [
           path: '/test-namespace/service-1',
         },
       },
-      resourceName: 'llama-2-7b-service',
       clusterAuthGroupId: null,
       endpoints: {
         internal: 'http://llama-2-7b-service.test-namespace.svc.cluster.local',
@@ -102,7 +101,6 @@ export const mockAims: ParsedAIM[] = [
             path: '/test-namespace/service-1',
           },
         },
-        resourceName: 'llama-2-7b-service',
         clusterAuthGroupId: null,
         endpoints: {
           internal:
@@ -126,11 +124,11 @@ export const mockAims: ParsedAIM[] = [
     isPreview: false,
     isHfTokenRequired: true,
     model: 'aim-llama-2-7b-v1',
-    resourceName: 'aim-llama-2-7b-v1',
-    anotations: {
-      aimEaiAmdComSourceRegistry: 'docker.io',
-      aimEaiAmdComSourceRepository: 'amdenterpriseai/aim-meta-llama-llama-2-7b',
-      aimEaiAmdComSourceTag: '1.5.0',
+    annotations: {
+      'aim.eai.amd.com/source-registry': 'docker.io',
+      'aim.eai.amd.com/source-repository':
+        'amdenterpriseai/aim-meta-llama-llama-2-7b',
+      'aim.eai.amd.com/source-tag': '1.5.0',
     },
     imageReference: 'docker.io/amdenterpriseai/aim-meta-llama-llama-2-7b:1.5.0',
     deployedServices: [],
@@ -149,12 +147,11 @@ export const mockAims: ParsedAIM[] = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-stable-diffusion-xl',
-    resourceName: 'aim-stable-diffusion-xl',
-    anotations: {
-      aimEaiAmdComSourceRegistry: 'docker.io',
-      aimEaiAmdComSourceRepository:
+    annotations: {
+      'aim.eai.amd.com/source-registry': 'docker.io',
+      'aim.eai.amd.com/source-repository':
         'amdenterpriseai/aim-stabilityai-stable-diffusion-xl',
-      aimEaiAmdComSourceTag: '1.0.0',
+      'aim.eai.amd.com/source-tag': '1.0.0',
     },
     imageReference:
       'docker.io/amdenterpriseai/aim-stabilityai-stable-diffusion-xl:1.0.0',
@@ -174,11 +171,11 @@ export const mockAims: ParsedAIM[] = [
     isPreview: true,
     isHfTokenRequired: false,
     model: 'aim-detection-model',
-    resourceName: 'aim-detection-model',
-    anotations: {
-      aimEaiAmdComSourceRegistry: 'docker.io',
-      aimEaiAmdComSourceRepository: 'amdenterpriseai/aim-detection-model',
-      aimEaiAmdComSourceTag: '2.0.0-preview',
+    annotations: {
+      'aim.eai.amd.com/source-registry': 'docker.io',
+      'aim.eai.amd.com/source-repository':
+        'amdenterpriseai/aim-detection-model',
+      'aim.eai.amd.com/source-tag': '2.0.0-preview',
     },
     imageReference:
       'docker.io/amdenterpriseai/aim-detection-model:2.0.0-preview',
@@ -210,7 +207,6 @@ export const mockAims: ParsedAIM[] = [
       status: {
         status: AIMServiceStatus.PENDING,
       },
-      resourceName: 'detection-model-service',
       clusterAuthGroupId: null,
       endpoints: {
         internal: '',
@@ -246,7 +242,6 @@ export const mockAims: ParsedAIM[] = [
         status: {
           status: AIMServiceStatus.PENDING,
         },
-        resourceName: 'detection-model-service',
         clusterAuthGroupId: null,
         endpoints: {
           internal: '',
@@ -272,6 +267,7 @@ export const mockAggregatedAims: AggregatedAIM[] = [
       [AIMWorkloadStatus.DEPLOYED]: 1,
       [AIMWorkloadStatus.DEGRADED]: 0,
       [AIMWorkloadStatus.PENDING]: 0,
+      [AIMWorkloadStatus.STARTING]: 0,
       [AIMWorkloadStatus.FAILED]: 0,
       [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
       [AIMWorkloadStatus.DELETED]: 0,
@@ -300,6 +296,7 @@ export const mockAggregatedAims: AggregatedAIM[] = [
         [AIMWorkloadStatus.DEPLOYED]: 0,
         [AIMWorkloadStatus.DEGRADED]: 0,
         [AIMWorkloadStatus.PENDING]: 0,
+        [AIMWorkloadStatus.STARTING]: 0,
         [AIMWorkloadStatus.FAILED]: 0,
         [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
         [AIMWorkloadStatus.DELETED]: 0,
@@ -329,6 +326,7 @@ export const mockAggregatedAims: AggregatedAIM[] = [
         [AIMWorkloadStatus.DEPLOYED]: 0,
         [AIMWorkloadStatus.DEGRADED]: 0,
         [AIMWorkloadStatus.PENDING]: 1,
+        [AIMWorkloadStatus.STARTING]: 0,
         [AIMWorkloadStatus.FAILED]: 0,
         [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
         [AIMWorkloadStatus.DELETED]: 0,
@@ -385,7 +383,6 @@ const mockMultiDeployParsedAims = [
             path: '/test-namespace/service-1',
           },
         },
-        resourceName: 'llama-deployment-1',
         clusterAuthGroupId: null,
         endpoints: {
           internal:
@@ -424,7 +421,6 @@ const mockMultiDeployParsedAims = [
             path: '/test-namespace/service-2',
           },
         },
-        resourceName: 'llama-deployment-2',
         clusterAuthGroupId: null,
         endpoints: {
           internal:
@@ -446,6 +442,7 @@ export const mockAggregatedAimWithMultipleDeployments: AggregatedAIM = {
     [AIMWorkloadStatus.DEPLOYED]: 1,
     [AIMWorkloadStatus.DEGRADED]: 0,
     [AIMWorkloadStatus.PENDING]: 1,
+    [AIMWorkloadStatus.STARTING]: 0,
     [AIMWorkloadStatus.FAILED]: 0,
     [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
     [AIMWorkloadStatus.DELETED]: 0,
@@ -479,11 +476,11 @@ const mockUnsupportedParsedAims = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-unsupported-model',
-    resourceName: 'aim-unsupported-model',
-    anotations: {
-      aimEaiAmdComSourceRegistry: 'docker.io',
-      aimEaiAmdComSourceRepository: 'amdenterpriseai/aim-unsupported-model',
-      aimEaiAmdComSourceTag: '1.0.0',
+    annotations: {
+      'aim.eai.amd.com/source-registry': 'docker.io',
+      'aim.eai.amd.com/source-repository':
+        'amdenterpriseai/aim-unsupported-model',
+      'aim.eai.amd.com/source-tag': '1.0.0',
     },
     imageReference: 'docker.io/amdenterpriseai/aim-unsupported-model:1.0.0',
     deployedServices: [],
@@ -499,6 +496,7 @@ export const mockUnsupportedAggregatedAim: AggregatedAIM = {
     [AIMWorkloadStatus.DEPLOYED]: 0,
     [AIMWorkloadStatus.DEGRADED]: 0,
     [AIMWorkloadStatus.PENDING]: 0,
+    [AIMWorkloadStatus.STARTING]: 0,
     [AIMWorkloadStatus.FAILED]: 0,
     [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
     [AIMWorkloadStatus.DELETED]: 0,
@@ -532,11 +530,11 @@ const mockMixedSupportParsedAims = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-mixed-v2',
-    resourceName: 'aim-mixed-v2',
-    anotations: {
-      aimEaiAmdComSourceRegistry: 'docker.io',
-      aimEaiAmdComSourceRepository: 'amdenterpriseai/aim-mixed-support-model',
-      aimEaiAmdComSourceTag: '2.0.0',
+    annotations: {
+      'aim.eai.amd.com/source-registry': 'docker.io',
+      'aim.eai.amd.com/source-repository':
+        'amdenterpriseai/aim-mixed-support-model',
+      'aim.eai.amd.com/source-tag': '2.0.0',
     },
     imageReference: 'docker.io/amdenterpriseai/aim-mixed-support-model:2.0.0',
     deployedServices: [],
@@ -556,11 +554,11 @@ const mockMixedSupportParsedAims = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-mixed-v1',
-    resourceName: 'aim-mixed-v1',
-    anotations: {
-      aimEaiAmdComSourceRegistry: 'docker.io',
-      aimEaiAmdComSourceRepository: 'amdenterpriseai/aim-mixed-support-model',
-      aimEaiAmdComSourceTag: '1.0.0',
+    annotations: {
+      'aim.eai.amd.com/source-registry': 'docker.io',
+      'aim.eai.amd.com/source-repository':
+        'amdenterpriseai/aim-mixed-support-model',
+      'aim.eai.amd.com/source-tag': '1.0.0',
     },
     imageReference: 'docker.io/amdenterpriseai/aim-mixed-support-model:1.0.0',
     deployedServices: [],
@@ -576,6 +574,7 @@ export const mockMixedSupportAggregatedAim: AggregatedAIM = {
     [AIMWorkloadStatus.DEPLOYED]: 0,
     [AIMWorkloadStatus.DEGRADED]: 0,
     [AIMWorkloadStatus.PENDING]: 0,
+    [AIMWorkloadStatus.STARTING]: 0,
     [AIMWorkloadStatus.FAILED]: 0,
     [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
     [AIMWorkloadStatus.DELETED]: 0,
@@ -590,6 +589,128 @@ export const mockMixedSupportAggregatedAim: AggregatedAIM = {
     description: {
       short: 'A mixed support model',
       full: 'Some versions of this model are supported, others are not.',
+    },
+  },
+};
+
+const mockStartingParsedAims = [
+  {
+    description: {
+      short: 'A starting model deployment',
+      full: 'This model is currently starting up.',
+    },
+    title: 'Starting Model',
+    imageVersion: '1.0.0',
+    canonicalName: 'test/starting-model',
+    tags: ['llm'],
+    status: AIMStatus.READY,
+    workloadStatuses: [AIMWorkloadStatus.STARTING],
+    isPreview: false,
+    isHfTokenRequired: false,
+    model: 'aim-starting-model',
+    annotations: {
+      'aim.eai.amd.com/source-registry': 'docker.io',
+      'aim.eai.amd.com/source-repository': 'amdenterpriseai/aim-starting-model',
+      'aim.eai.amd.com/source-tag': '1.0.0',
+    },
+    imageReference: 'docker.io/amdenterpriseai/aim-starting-model:1.0.0',
+    deployedService: {
+      id: 'service-starting',
+      metadata: {
+        name: 'starting-model-service',
+        namespace: 'test-namespace',
+        uid: 'uid-starting',
+        labels: {},
+        annotations: {},
+        creationTimestamp: '2023-01-04T00:00:00Z',
+        ownerReferences: [],
+      },
+      spec: {
+        model: {
+          name: 'aim-starting-model',
+        },
+        replicas: 1,
+        overrides: {},
+        cacheModel: true,
+        routing: {
+          annotations: {},
+          enabled: true,
+        },
+        runtimeConfigName: 'default-runtime',
+        template: {},
+      },
+      status: {
+        status: AIMServiceStatus.STARTING,
+      },
+      clusterAuthGroupId: null,
+      endpoints: {
+        internal: '',
+        external: '',
+      },
+    },
+    deployedServices: [
+      {
+        id: 'service-starting',
+        metadata: {
+          name: 'starting-model-service',
+          namespace: 'test-namespace',
+          uid: 'uid-starting',
+          labels: {},
+          annotations: {},
+          creationTimestamp: '2023-01-04T00:00:00Z',
+          ownerReferences: [],
+        },
+        spec: {
+          model: {
+            name: 'aim-starting-model',
+          },
+          replicas: 1,
+          overrides: {},
+          cacheModel: true,
+          routing: {
+            annotations: {},
+            enabled: true,
+          },
+          runtimeConfigName: 'default-runtime',
+          template: {},
+        },
+        status: {
+          status: AIMServiceStatus.STARTING,
+        },
+        clusterAuthGroupId: null,
+        endpoints: {
+          internal: '',
+          external: '',
+        },
+      },
+    ],
+    isLatest: true,
+  },
+];
+export const mockAggregatedAimWithStarting: AggregatedAIM = {
+  repository: 'amdenterpriseai/aim-starting-model',
+  isSupported: true,
+  parsedAIMs: mockStartingParsedAims,
+  latestAim: mockStartingParsedAims[0],
+  deploymentCounts: {
+    [AIMWorkloadStatus.DEPLOYED]: 0,
+    [AIMWorkloadStatus.DEGRADED]: 0,
+    [AIMWorkloadStatus.PENDING]: 0,
+    [AIMWorkloadStatus.STARTING]: 1,
+    [AIMWorkloadStatus.FAILED]: 0,
+    [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
+    [AIMWorkloadStatus.DELETED]: 0,
+  },
+  aggregated: {
+    title: 'Starting Model',
+    aiLabName: 'test',
+    canonicalName: 'test/starting-model',
+    latestImageVersion: '1.0.0',
+    isHfTokenRequired: false,
+    tags: ['llm'],
+    description: {
+      short: 'A starting model deployment',
+      full: 'This model is currently starting up.',
     },
   },
 };

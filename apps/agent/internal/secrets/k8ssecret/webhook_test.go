@@ -14,12 +14,9 @@ import (
 	secretcommon "github.com/silogen/agent/internal/secrets/common"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -85,28 +82,18 @@ func createSecret(namespace string, labels map[string]string) *corev1.Secret {
 
 func createAdmissionRequest(secret *corev1.Secret, oldSecret *corev1.Secret) admission.Request {
 	raw, _ := json.Marshal(secret)
-
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID("test-uid-12345"),
-			Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"},
-			Namespace: secret.Namespace,
-			Name:      secret.Name,
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo: authenticationv1.UserInfo{
-				Username: "test-user@example.com",
-			},
-		},
-	}
-
+	var oldRaw []byte
 	if oldSecret != nil {
-		oldRaw, _ := json.Marshal(oldSecret)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldSecret)
 	}
-
-	return req
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"},
+		secret.Namespace,
+		secret.Name,
+		raw,
+		oldRaw,
+		"test-user@example.com",
+	)
 }
 
 func TestSecretWebhook(t *testing.T) {
@@ -232,6 +219,32 @@ func TestSecretWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, s.expectedPatches)
 		})
 	}
+}
+
+func TestSecretWebhook_PreservesUnknownTopLevelFields(t *testing.T) {
+	ns := createNamespace("airm-test", "project-123")
+	wh := setupTestWebhook(ns)
+	secret := createSecret("airm-test", nil)
+
+	raw := testutils.AddUnknownKeyToJSON(t, secret)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"},
+		secret.Namespace, secret.Name, raw, nil, "test-user@example.com",
+	)
+	resp := wh.Handle(context.Background(), req)
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:                 "project-123",
+			secretcommon.ProjectSecretIDLabel:    testutils.UUIDMatcher,
+			secretcommon.ProjectSecretScopeLabel: secretcommon.ProjectSecretScopeProject,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      "test-user@example.com",
+		}),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
 }
 
 func TestSecretWebhook_NamespaceNotFound(t *testing.T) {

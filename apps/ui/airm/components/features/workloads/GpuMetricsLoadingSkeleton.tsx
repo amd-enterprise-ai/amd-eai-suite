@@ -31,12 +31,13 @@ export const GpuMetricsLoadingSkeleton: React.FC = () => {
               showYAxis
             />
             <StatsWithLineChart
-              title={t('details.fields.junctionTemperature')}
-              tooltip={t('details.fields.junctionTemperatureTooltip')}
+              title={t('details.fields.gpuUtilization')}
+              tooltip={t('details.fields.gpuUtilizationTooltip')}
               data={[]}
-              dataFormatter={(v) => `${Number(v).toFixed(1)}°C`}
+              dataFormatter={(v) => `${Number(v).toFixed(0)}%`}
+              showValueAsPercentage
               isLoading
-              colors={['amber' as AvailableChartColorsKeys]}
+              colors={['emerald' as AvailableChartColorsKeys]}
               showYAxis
             />
             <StatsWithLineChart

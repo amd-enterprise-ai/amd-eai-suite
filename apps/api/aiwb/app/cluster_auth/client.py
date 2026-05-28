@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import httpx
-from fastapi import Request
 from loguru import logger
 
 from .config import CLUSTER_AUTH_ADMIN_TOKEN, CLUSTER_AUTH_URL
@@ -223,24 +222,3 @@ def init_cluster_auth_client() -> ClusterAuthClient:
     client = ClusterAuthClient(base_url=CLUSTER_AUTH_URL, admin_token=CLUSTER_AUTH_ADMIN_TOKEN)
     logger.info(f"Connected to cluster-auth service at {CLUSTER_AUTH_URL}")
     return client
-
-
-def get_cluster_auth_client(request: Request) -> ClusterAuthClient:
-    """
-    FastAPI dependency to get the initialized cluster-auth client from app.state.
-
-    Args:
-        request: FastAPI request object
-
-    Returns:
-        ClusterAuthClient instance
-
-    Raises:
-        RuntimeError: If the client is not initialized
-    """
-    if not hasattr(request.app.state, "cluster_auth_client") or request.app.state.cluster_auth_client is None:
-        logger.error("Cluster-auth client not initialized in app.state. Check cluster-auth configuration.")
-        raise RuntimeError(
-            "Cluster-auth client not available. cluster-auth service may not be configured or initialization failed."
-        )
-    return request.app.state.cluster_auth_client

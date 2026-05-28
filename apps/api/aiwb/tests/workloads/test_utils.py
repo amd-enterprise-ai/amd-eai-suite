@@ -13,7 +13,6 @@ from app.workloads.constants import (
     CHART_ID_LABEL,
     DATASET_ID_LABEL,
     DISPLAY_NAME_LABEL,
-    MODEL_ID_LABEL,
     WORKLOAD_ID_LABEL,
     WORKLOAD_TYPE_LABEL,
 )
@@ -76,32 +75,15 @@ def test_generate_workload_name_with_underscores() -> None:
     assert "_" not in name
 
 
-def test_generate_display_name_with_model() -> None:
-    """Test display name generation when workload has a model."""
-    mock_workload = MagicMock(spec=Workload)
-    workload_id = uuid4()
-    mock_workload.id = workload_id
-    mock_workload.chart.name = "inference-chart"
-    mock_workload.model.name = "llama3-8b"
-
-    display_name = generate_display_name(mock_workload)
-
-    # Should include chart name, model name, and UUID prefix
-    uuid_prefix = str(workload_id)[:8]
-    assert display_name == f"inference-chart-llama3-8b-{uuid_prefix}"
-
-
-def test_generate_display_name_without_model() -> None:
-    """Test display name generation when workload has no model."""
+def test_generate_display_name() -> None:
+    """Display name is formed from the chart name and the workload UUID prefix."""
     mock_workload = MagicMock(spec=Workload)
     workload_id = uuid4()
     mock_workload.id = workload_id
     mock_workload.chart.name = "workspace-chart"
-    mock_workload.model = None
 
     display_name = generate_display_name(mock_workload)
 
-    # Should include chart name and UUID prefix only
     uuid_prefix = str(workload_id)[:8]
     assert display_name == f"workspace-chart-{uuid_prefix}"
 
@@ -334,7 +316,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -386,7 +367,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -419,7 +399,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -457,7 +436,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -493,7 +471,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -529,7 +506,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -553,8 +529,8 @@ spec:
 
 
 @pytest.mark.asyncio
-async def test_apply_manifest_conditional_model_dataset_labels() -> None:
-    """Test model/dataset labels only added when IDs provided."""
+async def test_apply_manifest_conditional_dataset_label() -> None:
+    """Dataset label is only stamped when a dataset_id is present on the workload."""
     manifest = """
 apiVersion: apps/v1
 kind: Deployment
@@ -568,7 +544,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = uuid4()
     workload.dataset_id = uuid4()
 
     mock_kube_client = AsyncMock()
@@ -582,10 +557,7 @@ spec:
     with patch("app.workloads.utils.get_dynamic_client", spec=get_dynamic_client, return_value=mock_dynamic_client):
         await apply_manifest(mock_kube_client, manifest, workload, "test-namespace", "test-user@example.com")
 
-    # Verify model and dataset labels were injected
     call_args = mock_api_resource.create.call_args
-    assert MODEL_ID_LABEL in call_args.kwargs["body"]["metadata"]["labels"]
-    assert call_args.kwargs["body"]["metadata"]["labels"][MODEL_ID_LABEL] == str(workload.model_id)
     assert DATASET_ID_LABEL in call_args.kwargs["body"]["metadata"]["labels"]
     assert call_args.kwargs["body"]["metadata"]["labels"][DATASET_ID_LABEL] == str(workload.dataset_id)
 
@@ -607,7 +579,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -646,7 +617,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -676,7 +646,6 @@ async def test_apply_manifest_invalid_yaml() -> None:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -704,7 +673,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -739,7 +707,6 @@ spec:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -768,7 +735,6 @@ async def test_apply_manifest_empty_yaml() -> None:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     mock_kube_client = AsyncMock()
@@ -952,14 +918,15 @@ def test_derive_job_status_none() -> None:
 
 
 @pytest.mark.parametrize(
-    "conditions, active, succeeded, failed, expected",
+    "conditions, active, ready, succeeded, failed, expected",
     [
-        ([make_condition("Failed", "True")], None, None, None, WorkloadStatus.FAILED),
-        ([make_condition("FailureTarget", "True")], None, None, None, WorkloadStatus.FAILED),
-        ([make_condition("Complete", "True")], None, None, None, WorkloadStatus.COMPLETE),
-        ([make_condition("Suspended", "True")], None, None, None, WorkloadStatus.PENDING),
+        ([make_condition("Failed", "True")], None, None, None, None, WorkloadStatus.FAILED),
+        ([make_condition("FailureTarget", "True")], None, None, None, None, WorkloadStatus.FAILED),
+        ([make_condition("Complete", "True")], None, None, None, None, WorkloadStatus.COMPLETE),
+        ([make_condition("Suspended", "True")], None, None, None, None, WorkloadStatus.PENDING),
         (
             [make_condition("Complete", "True"), make_condition("Failed", "True")],
+            None,
             None,
             None,
             None,
@@ -970,18 +937,23 @@ def test_derive_job_status_none() -> None:
             None,
             None,
             None,
+            None,
             WorkloadStatus.COMPLETE,
         ),
-        ([make_condition("Failed", "False")], 1, None, None, WorkloadStatus.RUNNING),
-        ([make_condition("Complete", "False")], None, 2, None, WorkloadStatus.COMPLETE),
-        ([make_condition("Complete", "False")], None, None, 1, WorkloadStatus.FAILED),
-        (None, 1, None, None, WorkloadStatus.RUNNING),
-        (None, None, 1, None, WorkloadStatus.COMPLETE),
-        (None, None, None, 1, WorkloadStatus.FAILED),
-        (None, 2, 1, 1, WorkloadStatus.RUNNING),
-        (None, 0, 0, 0, WorkloadStatus.PENDING),
-        (None, None, None, None, WorkloadStatus.PENDING),
-        ([], None, None, None, WorkloadStatus.PENDING),
+        ([make_condition("Failed", "False")], 1, 1, None, None, WorkloadStatus.RUNNING),
+        ([make_condition("Failed", "False")], 1, 0, None, None, WorkloadStatus.PENDING),
+        ([make_condition("Complete", "False")], None, None, 2, None, WorkloadStatus.COMPLETE),
+        ([make_condition("Complete", "False")], None, None, None, 1, WorkloadStatus.FAILED),
+        (None, 1, 1, None, None, WorkloadStatus.RUNNING),
+        (None, 1, None, None, None, WorkloadStatus.PENDING),
+        (None, 1, 0, None, None, WorkloadStatus.PENDING),
+        (None, None, None, 1, None, WorkloadStatus.COMPLETE),
+        (None, None, None, None, 1, WorkloadStatus.FAILED),
+        (None, 2, 2, 1, 1, WorkloadStatus.RUNNING),
+        (None, 2, 0, 1, 1, WorkloadStatus.PENDING),
+        (None, 0, 0, 0, 0, WorkloadStatus.PENDING),
+        (None, None, None, None, None, WorkloadStatus.PENDING),
+        ([], None, None, None, None, WorkloadStatus.PENDING),
     ],
     ids=[
         "failed_condition",
@@ -990,13 +962,17 @@ def test_derive_job_status_none() -> None:
         "suspended_condition",
         "failed_beats_complete",
         "complete_beats_suspended",
-        "condition_false_active_pods",
+        "condition_false_active_and_ready",
+        "condition_false_active_not_ready",
         "condition_false_succeeded_pods",
         "condition_false_failed_pods",
-        "no_conditions_active",
+        "no_conditions_active_and_ready",
+        "no_conditions_active_ready_none",
+        "no_conditions_active_not_ready",
         "no_conditions_succeeded",
         "no_conditions_failed",
-        "active_beats_succeeded_and_failed",
+        "active_and_ready_beats_succeeded_and_failed",
+        "active_not_ready_is_pending",
         "all_counters_zero",
         "all_counters_none",
         "empty_conditions_no_counters",
@@ -1005,12 +981,15 @@ def test_derive_job_status_none() -> None:
 def test_derive_job_status(
     conditions: list[MagicMock] | None,
     active: int | None,
+    ready: int | None,
     succeeded: int | None,
     failed: int | None,
     expected: WorkloadStatus,
 ) -> None:
     assert (
-        derive_job_status(make_job_status(conditions=conditions, active=active, succeeded=succeeded, failed=failed))
+        derive_job_status(
+            make_job_status(conditions=conditions, active=active, ready=ready, succeeded=succeeded, failed=failed)
+        )
         == expected
     )
 

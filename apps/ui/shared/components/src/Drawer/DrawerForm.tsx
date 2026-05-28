@@ -22,7 +22,7 @@ import { ActionButton, CloseButton } from '../Buttons';
 import ManagedForm from '../ManagedForm/ManagedForm';
 import { BACKDROP, CLASSES, MOTION_PROPS } from './constants';
 
-import { ZodType } from 'zod';
+import { type ZodType, type ZodTypeDef } from 'zod';
 
 interface Props<T extends FieldValues> {
   isOpen?: boolean;
@@ -40,8 +40,8 @@ interface Props<T extends FieldValues> {
   onFormFailure?: (errors: FieldErrors<T>, data: T) => void;
   renderFields: (form: UseFormReturn<T>) => React.ReactNode;
   defaultValues?: DefaultValues<T>;
-  validationSchema: ZodType<T>;
-  resolver?: (schema: ZodType<T>) => Resolver<T>;
+  validationSchema: ZodType<T, ZodTypeDef, unknown>;
+  resolver?: (schema: ZodType<T, ZodTypeDef, unknown>) => Resolver<T>;
 }
 
 export const DrawerForm = <T extends FieldValues>({

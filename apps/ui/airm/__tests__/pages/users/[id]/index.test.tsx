@@ -12,10 +12,10 @@ import {
 
 import { updateUser } from '@/services/app';
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { QuotaStatus } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { QuotaStatus } from '@/types/enums/quotas';
 import { UserRole } from '@amdenterpriseai/types';
-import { User, Users, UserWithProjects } from '@amdenterpriseai/types';
+import { User, Users, UserWithProjects } from '@/types/users';
 
 import UserPage from '@/pages/users/[id]';
 

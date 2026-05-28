@@ -28,6 +28,7 @@ interface Props {
   namespace: string;
   workloadId: string;
   timeRange: TimeRange;
+  podName?: string;
 }
 
 const defaultTransform = (v: number) => Math.round(v);
@@ -37,6 +38,7 @@ export const ScalarMetricCard: React.FC<Props> = ({
   namespace,
   workloadId,
   timeRange,
+  podName,
 }) => {
   const { t } = useTranslation('workloads');
   const { activeProject } = useProject();
@@ -50,6 +52,7 @@ export const ScalarMetricCard: React.FC<Props> = ({
       workloadId,
       'metrics',
       metric,
+      podName,
       {
         start: timeRange.start.toISOString(),
         end: timeRange.end.toISOString(),
@@ -62,6 +65,7 @@ export const ScalarMetricCard: React.FC<Props> = ({
         start: timeRange.start,
         end: timeRange.end,
         metric,
+        podName,
       }),
   });
 

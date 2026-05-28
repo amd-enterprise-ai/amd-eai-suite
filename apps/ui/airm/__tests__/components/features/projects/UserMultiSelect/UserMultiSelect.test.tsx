@@ -12,7 +12,8 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { UserMultiSelect } from '@/components/features/projects/UserMultiSelect';
-import { User, InvitedUser } from '@amdenterpriseai/types';
+import { User } from '@/types/users';
+import { InvitedUser } from '@/types/users';
 import { UserRole } from '@amdenterpriseai/types';
 
 // Mock debounce to execute immediately for testing purposes

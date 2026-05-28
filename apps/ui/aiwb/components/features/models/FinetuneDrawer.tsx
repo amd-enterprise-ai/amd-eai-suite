@@ -18,22 +18,25 @@ import { useTranslation } from 'next-i18next';
 
 import { getDatasets } from '@/lib/app/datasets';
 import { getModels } from '@/lib/app/models';
+import { listWorkloads } from '@/lib/app/workloads';
 import { useProject } from '@/contexts/ProjectContext';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 
 import { createHuggingFaceSecretRequest } from '@/lib/app/huggingface-secret';
-import { DEFAULT_FINETUNE_PARAMS } from '@/enums/finetune';
 
-import { Dataset, DatasetType } from '@amdenterpriseai/types';
+import { Dataset } from '@/types/datasets';
+import { DatasetType } from '@/types/datasets';
 import { SecretUseCase } from '@amdenterpriseai/types';
-import { Model, ModelFinetuneParams } from '@amdenterpriseai/types';
+import { AIM_MODEL_NAME_LABEL } from '@/types/aims';
+import { FinetunableModel, Model, ModelFinetuneParams } from '@/types/models';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 
 import {
   FormInput,
   FormNumberInput,
   FormSelect,
 } from '@amdenterpriseai/components';
-import { HuggingFaceTokenSelector } from '@amdenterpriseai/components';
 import { DrawerForm } from '@amdenterpriseai/components';
 
 import { debounce } from 'lodash';
@@ -41,14 +44,24 @@ import { z } from 'zod';
 import { SecretResponseData } from '@/types/secrets';
 import { createProjectSecret, fetchProjectSecrets } from '@/lib/app/secrets';
 import { validateHuggingFaceTokenFields } from '@/lib/app/huggingface-secret';
+import { HuggingFaceTokenSelector } from '@/components/shared/HuggingFaceTokenSelector';
 
 interface FinetuneDrawerProps {
   isOpen: boolean;
   model: Model | undefined;
-  finetunableModels: string[];
+  finetunableModels: FinetunableModel[];
   onOpenChange: () => void;
   onConfirmAction: (param: { id: string; params: ModelFinetuneParams }) => void;
 }
+
+const getRecipeGpuCount = (
+  finetunableModels: FinetunableModel[],
+  canonicalName: string | undefined,
+  model: Model | undefined,
+): number | undefined =>
+  finetunableModels.find(
+    (m) => m.canonicalName === (canonicalName || model?.canonicalName),
+  )?.gpuCount || undefined;
 
 const FinetuneDrawer = ({
   isOpen,
@@ -113,12 +126,35 @@ const FinetuneDrawer = ({
     async (name: string, resolve: (result: boolean) => void) => {
       setUniqueCheckInProgress(true);
       try {
-        const modelsWithName = await queryClient.fetchQuery({
-          queryKey: ['project', activeProject, 'models', { name }],
-          queryFn: (): Promise<Model[]> => getModels(activeProject!, { name }),
-          staleTime: 0,
-        });
-        resolve(modelsWithName.length === 0);
+        const [models, workloadsResponse] = await Promise.all([
+          queryClient.fetchQuery({
+            queryKey: ['project', activeProject, 'models', 'name-check'],
+            queryFn: () => getModels(activeProject!),
+            staleTime: 0,
+          }),
+          queryClient.fetchQuery({
+            queryKey: ['project', activeProject, 'workloads', 'name-check'],
+            queryFn: () =>
+              listWorkloads(activeProject!, {
+                type: [WorkloadType.FINE_TUNING],
+                status: [
+                  WorkloadStatus.PENDING,
+                  WorkloadStatus.STARTING,
+                  WorkloadStatus.RUNNING,
+                ],
+              }),
+            staleTime: 0,
+          }),
+        ]);
+
+        const completedModelExists = models.some(
+          (m) => m.metadata?.labels?.[AIM_MODEL_NAME_LABEL] === name,
+        );
+        const inProgressJobExists = workloadsResponse.data.some(
+          (w) => w.displayName === name,
+        );
+
+        resolve(!completedModelExists && !inProgressJobExists);
       } catch (error) {
         console.error('Error checking model name availability:', error);
         resolve(true);
@@ -182,7 +218,15 @@ const FinetuneDrawer = ({
           if (data.selectedToken || model?.modelWeightsPath) return;
           validateHuggingFaceTokenFields(data, ctx, tHf);
         }),
-    [t, tHf, validateModelName, model?.modelWeightsPath, projectSecrets],
+    [
+      t,
+      tHf,
+      validateModelName,
+      model?.modelWeightsPath,
+      model?.canonicalName,
+      finetunableModels,
+      projectSecrets,
+    ],
   );
 
   const formDefaultValues = useMemo(
@@ -208,15 +252,9 @@ const FinetuneDrawer = ({
       const finetuneParams: ModelFinetuneParams = {
         name: data.name as string,
         datasetId: data.datasetId as string,
-        epochs: data.epochs
-          ? parseInt(data.epochs as string, 10)
-          : DEFAULT_FINETUNE_PARAMS.epochs,
-        learningRate: data.learningRate
-          ? parseFloat(data.learningRate as string)
-          : DEFAULT_FINETUNE_PARAMS.learningRate,
-        batchSize: data.batchSize
-          ? parseInt(data.batchSize as string, 10)
-          : DEFAULT_FINETUNE_PARAMS.batchSize,
+        epochs: data.epochs,
+        learningRate: data.learningRate,
+        batchSize: data.batchSize,
       };
 
       if (hfTokenSecretName) {
@@ -224,7 +262,10 @@ const FinetuneDrawer = ({
       }
 
       onConfirmAction({
-        id: model ? model.id : encodeURIComponent(data.canonicalName),
+        id:
+          model?.id ??
+          model?.resourceName ??
+          encodeURIComponent(data.canonicalName),
         params: finetuneParams,
       });
       onOpenChange();
@@ -240,17 +281,12 @@ const FinetuneDrawer = ({
     const isNewToken = !data.selectedToken && data.tokenName && data.token;
 
     if (isNewToken) {
-      const secretRequestWithProjectIds = createHuggingFaceSecretRequest(
+      const request = createHuggingFaceSecretRequest(
         data.tokenName!,
         data.token!,
-        [activeProject!],
       );
 
-      // Remove project_ids since createProjectSecret handles the project association
-      const { project_ids: _project_ids, ...secretRequest } =
-        secretRequestWithProjectIds;
-
-      createSecretMutation.mutateAsync(secretRequest as any, {
+      createSecretMutation.mutateAsync(request as any, {
         onSuccess: (createdSecret: SecretResponseData) => {
           if (!createdSecret || !createdSecret.metadata.name) {
             toast.error(
@@ -304,20 +340,35 @@ const FinetuneDrawer = ({
           <FormSelect
             form={form}
             disallowEmptySelection
-            isDisabled={!!model}
+            isDisabled={!!model || finetunableModels.length === 0}
             isRequired
             name="canonicalName"
             label={t('list.actions.finetune.modal.baseModel.label')}
             placeholder={
               model
                 ? model.name
-                : t('list.actions.finetune.modal.baseModel.placeholder')
+                : finetunableModels.length === 0
+                  ? t(
+                      'list.actions.finetune.modal.baseModel.noCompatibleRecipes',
+                    )
+                  : t('list.actions.finetune.modal.baseModel.placeholder')
             }
             data-testid="baseModelSelect"
+            onSelectionChange={() => {
+              form.setValue('batchSize', undefined, { shouldValidate: true });
+            }}
           >
-            {finetunableModels.map((model: string) => (
-              <SelectItem key={model} data-testid={`model-select-${model}`}>
-                {model}
+            {finetunableModels.map((finetunableModel: FinetunableModel) => (
+              <SelectItem
+                key={finetunableModel.canonicalName}
+                data-testid={`model-select-${finetunableModel.canonicalName}`}
+                description={
+                  finetunableModel.compatibleAcceleratorNames.length > 0
+                    ? finetunableModel.compatibleAcceleratorNames.join(', ')
+                    : undefined
+                }
+              >
+                {finetunableModel.canonicalName}
               </SelectItem>
             ))}
           </FormSelect>
@@ -396,7 +447,20 @@ const FinetuneDrawer = ({
                 description={t(
                   'list.actions.finetune.modal.batchSize.description',
                 )}
-                minValue={1}
+                isDisabled={
+                  !(form.watch('canonicalName') || model?.canonicalName)
+                }
+                value={form.watch('batchSize') ?? NaN}
+                step={getRecipeGpuCount(
+                  finetunableModels,
+                  form.watch('canonicalName'),
+                  model,
+                )}
+                minValue={getRecipeGpuCount(
+                  finetunableModels,
+                  form.watch('canonicalName'),
+                  model,
+                )}
                 maxValue={128}
                 isClearable
               />

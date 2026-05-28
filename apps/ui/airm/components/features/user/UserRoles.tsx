@@ -18,7 +18,7 @@ import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { UserRole } from '@amdenterpriseai/types';
 import { FormField } from '@amdenterpriseai/types';
-import { AssignUserRoleFormData, User } from '@amdenterpriseai/types';
+import { AssignUserRoleFormData, User } from '@/types/users';
 
 import { DrawerForm } from '@amdenterpriseai/components';
 import { FormFieldComponent } from '@amdenterpriseai/components';

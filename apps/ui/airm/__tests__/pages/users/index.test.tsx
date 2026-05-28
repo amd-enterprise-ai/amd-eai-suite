@@ -12,7 +12,7 @@ import {
 } from '@testing-library/react';
 import router from 'next/router';
 import { deleteUser, resendInvitation } from '@/services/app';
-import { UsersResponse, InvitedUsersResponse } from '@amdenterpriseai/types';
+import { UsersResponse, InvitedUsersResponse } from '@/types/users';
 import UsersPage from '@/pages/users';
 import wrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';

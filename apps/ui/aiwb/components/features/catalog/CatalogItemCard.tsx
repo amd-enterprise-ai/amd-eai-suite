@@ -8,7 +8,7 @@ import { TruncatedTagsRow } from '@/components/shared/TruncatedTagsRow';
 
 import { useTranslation } from 'next-i18next';
 
-import { CatalogItem } from '@amdenterpriseai/types';
+import { CatalogItem } from '@/types/catalog';
 import { Color } from '@amdenterpriseai/types';
 import { ActionItem } from '@amdenterpriseai/types';
 
@@ -50,6 +50,7 @@ export const CatalogItemCard = ({
   return (
     <Card
       className="w-full min-w-0 dark:bg-default-100/50 p-1"
+      data-testid="workspace-card"
       key={item.id}
       shadow="sm"
       radius="md"

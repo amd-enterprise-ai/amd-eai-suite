@@ -13,7 +13,7 @@ import { createRef } from 'react';
 
 import { StepModalHandle, StepModalStep } from '@amdenterpriseai/types';
 
-import { StepModal } from '../../../../components/shared/StepModal/StepModal';
+import { StepModal } from '@/src/StepModal/StepModal';
 
 describe('StepModal', () => {
   const steps: StepModalStep[] = [

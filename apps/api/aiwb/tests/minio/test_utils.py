@@ -14,9 +14,8 @@ from fastapi import UploadFile
 from minio import Minio
 from minio.error import S3Error
 
-from api_common.exceptions import ExternalServiceError, ForbiddenException, NotFoundException
+from api_common.exceptions import ExternalServiceError, ForbiddenException
 from app.datasets.utils import (
-    download_from_s3,
     sync_dataset_to_s3,
     verify_s3_sync,
 )
@@ -168,48 +167,8 @@ async def test_sync_dataset_to_s3_s3_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_download_from_s3_success() -> None:
-    dataset = MagicMock()
-    dataset.id = "test-id"
-    dataset.path = "datasets/test-id.jsonl"
-
-    mock_client = MagicMock(spec=MinioClient)
-    mock_client.download_object.return_value = b'{"text": "test"}\n{"text": "test2"}'
-
-    file_name, content = await download_from_s3(dataset, mock_client)
-
-    mock_client.download_object.assert_called_once_with(
-        bucket_name="default-bucket", object_name="datasets/test-id.jsonl"
-    )
-    assert file_name == "test-id.jsonl"
-    assert content == b'{"text": "test"}\n{"text": "test2"}'
-
-
-@pytest.mark.asyncio
-async def test_download_from_s3_error() -> None:
-    dataset = MagicMock()
-    dataset.id = "test-id"
-    dataset.path = "datasets/test-id.jsonl"
-
-    mock_client = MagicMock(spec=MinioClient)
-    s3_error = S3Error(
-        code="NoSuchKey",
-        message="The specified key does not exist",
-        resource="/bucket/datasets/test-id.jsonl",
-        request_id="request123",
-        host_id="host123",
-        response="response",
-    )
-    mock_client.download_object.side_effect = s3_error
-
-    with patch("app.minio.config.MINIO_BUCKET", "bucket"):
-        with pytest.raises(NotFoundException):
-            await download_from_s3(dataset, mock_client)
-
-
-@pytest.mark.asyncio
-async def test_sync_and_download_success(mock_s3_object: MagicMock, mock_minio_instance: MagicMock) -> None:
-    """Test full sync and download flow."""
+async def test_sync_success(mock_s3_object: MagicMock, mock_minio_instance: MagicMock) -> None:
+    """Test upload flow."""
     # Set path to match expected S3 structure
     mock_s3_object.path = "datasets/test-id.jsonl"
 
@@ -230,14 +189,3 @@ async def test_sync_and_download_success(mock_s3_object: MagicMock, mock_minio_i
     assert call_args["bucket_name"] == "default-bucket"
     assert call_args["object_name"] == "datasets/test-id.jsonl"
     assert path == "default-bucket/datasets/test-id.jsonl"
-
-    # Test download
-    mock_minio_instance.download_object.return_value = content
-    file_name, file_content = await download_from_s3(mock_s3_object, mock_minio_instance)
-
-    mock_minio_instance.download_object.assert_called_once()
-    call_args = mock_minio_instance.download_object.call_args[1]
-    assert call_args["bucket_name"] == "default-bucket"
-    assert call_args["object_name"] == "datasets/test-id.jsonl"
-    assert file_name == "test-id.jsonl"
-    assert file_content == content

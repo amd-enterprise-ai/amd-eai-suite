@@ -18,7 +18,7 @@ from api_common.exceptions import NotFoundException, ValidationException
 from ..overlays.repository import list_overlays
 from .config import CHAT_TIMEOUT, DEFAULT_CHAT_PATH
 from .enums import WorkloadStatus, WorkloadType
-from .gateway import delete_workload_resources
+from .gateway import delete_workload_resources, get_workload_canonical_name
 from .models import Workload
 from .repository import get_workload_by_id, get_workloads, update_workload_status
 from .schemas import WorkloadResponse
@@ -47,22 +47,17 @@ async def delete_workload_components(namespace: str, workload_id: UUID, session:
 async def is_workload_chattable(session: AsyncSession, workload: Workload) -> bool:
     """Check if a workload can be used for chat.
 
-    A workload is chattable if it's running and has a model with chat capability
-    defined in its overlays (metadata.labels.chat: true).
+    A workload is chattable if it's running and its primary K8s resource carries
+    a canonical-name label whose overlay declares chat capability
+    (metadata.labels.chat: true).
     """
     if workload.status != WorkloadStatus.RUNNING:
         return False
 
-    # Must have an associated model
-    if not workload.model_id:
-        return False
-
-    # Get canonical name from the joined model relationship
-    canonical_name = workload.model.canonical_name if workload.model else None
+    canonical_name = await get_workload_canonical_name(workload.id, workload.namespace)
     if not canonical_name:
         return False
 
-    # Check overlays for chat capability
     overlays = await list_overlays(session, chart_id=workload.chart_id, canonical_name=canonical_name)
 
     for overlay in overlays:

@@ -11,10 +11,7 @@ import {
   getProjects,
 } from '@/services/server';
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { proxyRequest } from '@amdenterpriseai/utils/server';
 
 vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
@@ -22,7 +19,6 @@ vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
     await importOriginal<typeof import('@amdenterpriseai/utils/app')>();
   return {
     ...actual,
-    convertSnakeToCamel: vi.fn((data) => ({ ...data, camelized: true })),
     getErrorMessage: vi.fn(async () => 'error message'),
   };
 });
@@ -43,8 +39,8 @@ afterEach(() => {
 });
 
 describe('getProjects', () => {
-  it('returns camelized projects on success', async () => {
-    const mockJson = { data: [{ id: 1 }], test: 'snake_case' };
+  it('returns projects on success', async () => {
+    const mockJson = { data: [{ id: 1 }], test: 'value' };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(mockJson),
@@ -59,8 +55,6 @@ describe('getProjects', () => {
         }),
       }),
     );
-    expect(convertSnakeToCamel).toHaveBeenCalledWith(mockJson);
-    // Check for a property that exists on ProjectWithUserCount, e.g. 'id'
     expect(result.data[0].id).toBe(1);
   });
 
@@ -78,7 +72,7 @@ describe('getProjects', () => {
 });
 
 describe('getProject', () => {
-  it('returns camelized project on success', async () => {
+  it('returns project on success', async () => {
     const mockJson = { id: '123', name: 'Test Project' };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -94,7 +88,6 @@ describe('getProject', () => {
         }),
       }),
     );
-    expect(convertSnakeToCamel).toHaveBeenCalledWith(mockJson);
     expect(result.id).toBe('123');
   });
 
@@ -124,7 +117,7 @@ describe('addUserToProject', () => {
         headers: expect.objectContaining({
           Authorization: 'Bearer token',
         }),
-        body: JSON.stringify({ user_ids: ['u1'] }),
+        body: JSON.stringify({ userIds: ['u1'] }),
       }),
     );
     expect(result).toBe(mockResponse);

@@ -10,7 +10,7 @@ import { getCurrentUserOrganizationDetails } from '@/services/server';
 import { authOptions } from '@amdenterpriseai/utils/server';
 import { handleError } from '@amdenterpriseai/utils/server';
 
-import { Organization } from '@amdenterpriseai/types';
+import { Organization } from '@/types/organization';
 
 export async function GET() {
   const session = await getServerSession(authOptions);

@@ -16,7 +16,7 @@ import {
   getDatasets,
 } from '@/lib/app/datasets';
 
-import DatasetsPage from '@/pages/datasets';
+import DatasetsPage from '@/pages/[project]/datasets';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock, vi } from 'vitest';

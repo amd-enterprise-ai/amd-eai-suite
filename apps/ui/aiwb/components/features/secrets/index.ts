@@ -5,4 +5,3 @@
 export * from './AddSecret';
 export * from './DeleteSecretModal';
 export * from './SecretsTable';
-export * from './AddProjectSecretButton';

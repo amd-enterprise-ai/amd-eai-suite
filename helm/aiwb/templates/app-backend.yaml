@@ -58,7 +58,7 @@ spec:
             - sh
             - -c
             - cp /code/migrations/* /mnt/code/migrations/
-          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
@@ -89,7 +89,7 @@ spec:
               name: aiwb-migration-volume
               readOnly: true
         - name: charts-registration
-          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           command: ["uv", "run", "register-charts"]
           env:
@@ -112,7 +112,7 @@ spec:
       - name: aiwb
         securityContext:
           {{- toYaml .Values.backend.securityContext | nindent 10 }}
-        image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+        image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
         ports:
         - name: http
@@ -174,6 +174,8 @@ spec:
           value: "60"
 
         # ClusterAuth configuration
+        - name: CLUSTER_AUTH_ENABLED
+          value: {{ .Values.clusterAuth.enabled | quote }}
         - name: CLUSTER_AUTH_URL
           value: {{ .Values.clusterAuth.url | quote }}
         - name: CLUSTER_AUTH_ADMIN_TOKEN

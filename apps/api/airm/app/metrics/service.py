@@ -13,14 +13,15 @@ from loguru import logger
 from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..messaging.schemas import WorkloadStatus
+from api_common.collections import FilterCondition, PaginationConditions, SortCondition
+
 from ..projects.models import Project
 from ..projects.models import Project as ProjectModel
 from ..projects.repository import get_projects
-from ..projects.schemas import ProjectResponse
+from ..projects.utils import map_to_project_response
 from ..quotas.repository import get_quotas
-from ..utilities.collections.schemas import FilterCondition, PaginationConditions, SortCondition
 from ..utilities.prometheus_instrumentation import ALLOCATED_GPU_VRAM_METRIC_LABEL, ALLOCATED_GPUS_METRIC_LABEL
+from ..workloads.enums import WorkloadStatus
 from ..workloads.repository import (
     get_average_pending_time_for_workloads_in_project_created_between,
     get_workload_counts_with_status_by_project_id,
@@ -33,9 +34,10 @@ from .constants import (
     ALLOCATED_GPU_VRAM_SERIES_LABEL,
     ALLOCATED_GPUS_SERIES_LABEL,
     CLUSTER_NAME_METRIC_LABEL,
+    GPU_AVERAGE_PACKAGE_POWER_METRIC,
     GPU_CLOCK_METRIC,
     GPU_CLOCK_TYPE_LABEL,
-    GPU_CLOCK_TYPE_SYSTEM,
+    GPU_CLOCK_TYPE_SYSTEM_REGEX,
     GPU_GFX_ACTIVITY_METRIC,
     GPU_ID_METRIC_LABEL,
     GPU_JUNCTION_TEMPERATURE_METRIC,
@@ -285,7 +287,7 @@ async def get_current_utilization(session: AsyncSession, prometheus_client: Prom
         total_pending_workloads_count=total_pending_workloads_count,
         utilization_by_project=[
             UtilizationByProject(
-                project=ProjectResponse.model_validate(project),
+                project=map_to_project_response(project),
                 allocated_gpus_count=allocated_gpu_counts_by_project.get(project.id, 0),
                 utilized_gpus_count=utilization_by_project_id.get(str(project.id), 0),
                 running_workloads_count=workload_counts_by_project.get((project.id, WorkloadStatus.RUNNING), 0),
@@ -297,7 +299,7 @@ async def get_current_utilization(session: AsyncSession, prometheus_client: Prom
 
 
 async def __get_utilized_gpu_count_by_project(prometheus_client: PrometheusConnect) -> dict[str, int]:
-    # Query the most recent GPU utilization snapshot per project using an instant query.
+    # Query the most recent GPU utilization snapshot per project
     results = await a_custom_query(
         client=prometheus_client,
         query=f"""
@@ -436,12 +438,11 @@ async def _get_gpu_device_utilization_by_workload_id_with_filter(
     Helper function to get GPU device utilization by workload ID with a custom Prometheus filter.
     Returns a snapshot of the count of utilized GPUs for each workload matching the filter.
     """
-    lookback = get_aggregation_lookback_for_metrics()
     results = await a_custom_query(
         client=prometheus_client,
         query=f"""
 count by ({WORKLOAD_ID}) (
-  max_over_time({GPU_GFX_ACTIVITY_METRIC}{{{prometheus_filter}}}[{lookback}:])
+  {GPU_GFX_ACTIVITY_METRIC}{{{prometheus_filter}}}
 )
 """,
     )
@@ -458,14 +459,13 @@ async def _get_gpu_memory_utilization_by_workload_id_with_filter(
 ) -> dict[str, float]:
     """
     Helper function to get GPU memory utilization by workload ID with a custom Prometheus filter.
-    Returns a snapshot of the average utilized VRAM for each workload matching the filter.
+    Returns a snapshot of the current utilized VRAM for each workload matching the filter.
     """
-    lookback = get_aggregation_lookback_for_metrics()
     results = await a_custom_query(
         client=prometheus_client,
         query=f"""
 sum by ({WORKLOAD_ID}) (
-  avg_over_time(gpu_used_vram{{{prometheus_filter}}}[{lookback}:])
+  gpu_used_vram{{{prometheus_filter}}}
 )
 """,
     )
@@ -481,8 +481,7 @@ async def get_gpu_and_node_counts_for_workload(
     workload_id: UUID, prometheus_client: PrometheusConnect
 ) -> tuple[int, int]:
     """
-    Returns (gpu_devices_in_use, nodes_in_use) for a single workload using
-    Prometheus instant (point-in-time) queries.
+    Returns (gpu_devices_in_use, nodes_in_use) for a single workload
     """
     wid_filter = f'{WORKLOAD_ID}="{workload_id}"'
 
@@ -505,7 +504,7 @@ async def get_gpu_and_node_counts_for_workload(
 async def get_node_names_for_workload(workload_id: UUID, prometheus_client: PrometheusConnect) -> list[str]:
     """
     Returns the list of node hostnames (Prometheus label 'hostname') that have
-    GPU activity for the given workload at the current time (instant query).
+    GPU activity for the given workload at the current time
     """
     wid_filter = f'{WORKLOAD_ID}="{workload_id}"'
     results = await a_custom_query(
@@ -598,7 +597,10 @@ async def get_workloads_metrics_by_project(
         workload_metrics.append(WorkloadWithMetrics.model_validate(workload_dict))
 
     return WorkloadsWithMetrics(
-        data=workload_metrics, total=count, page=pagination_params.page, page_size=pagination_params.page_size
+        data=workload_metrics,
+        total=count,
+        page=pagination_params.page,
+        page_size=pagination_params.page_size,
     )
 
 
@@ -633,7 +635,10 @@ async def get_workloads_metrics_by_cluster(
         workload_metrics.append(WorkloadWithMetrics.model_validate(workload_dict))
 
     return WorkloadsWithMetrics(
-        data=workload_metrics, total=count, page=pagination_params.page, page_size=pagination_params.page_size
+        data=workload_metrics,
+        total=count,
+        page=pagination_params.page,
+        page_size=pagination_params.page_size,
     )
 
 
@@ -715,7 +720,7 @@ async def _get_gpu_device_single_metric_for_workload(
     step: int | None = None,
 ) -> GpuDeviceSingleMetricResponse:
     """
-    Returns per-GPU device timeseries for a single metric (vram_utilization, junction_temperature, or power_usage).
+    Returns per-GPU device timeseries for a single metric (vram_utilization, gpu_utilization, or power_usage).
     """
     wid = str(workload_id)
     query_step = step if step else get_step_for_range_query(start, end)
@@ -730,15 +735,19 @@ avg by ({group_by}) (avg_over_time(gpu_used_vram{{{wid_filter}}}[{lookback}]))
 avg by ({group_by}) (gpu_total_vram{{{wid_filter}}})
 * 100
 """
-        series_label = "vram_utilization_pct"
-    elif metric_kind == WorkloadDeviceMetricKind.JUNCTION_TEMPERATURE:
-        query = build_workload_device_query(
-            wid, "gpu_junction_temperature", "avg", use_lookback=True, lookback=lookback
-        )
-        series_label = "junction_temperature_celsius"
+        series_label = "vramUtilizationPct"
+    elif metric_kind == WorkloadDeviceMetricKind.GPU_UTILIZATION:
+        query = build_workload_device_query(wid, GPU_GFX_ACTIVITY_METRIC, "avg", use_lookback=True, lookback=lookback)
+        series_label = "gpuActivityPct"
     elif metric_kind == WorkloadDeviceMetricKind.POWER_USAGE:
-        query = build_workload_device_query(wid, GPU_PACKAGE_POWER_METRIC, "max", use_lookback=True, lookback=lookback)
-        series_label = "power_watts"
+        package_power = build_workload_device_query(
+            wid, GPU_PACKAGE_POWER_METRIC, "max", use_lookback=True, lookback=lookback
+        )
+        avg_package_power = build_workload_device_query(
+            wid, GPU_AVERAGE_PACKAGE_POWER_METRIC, "max", use_lookback=True, lookback=lookback
+        )
+        query = f"{package_power} or {avg_package_power}"
+        series_label = "powerWatts"
     else:
         raise ValueError(f"Unknown metric_kind: {metric_kind}")
 
@@ -778,16 +787,16 @@ async def get_gpu_device_vram_utilization_for_workload(
     )
 
 
-async def get_gpu_device_junction_temperature_for_workload(
+async def get_gpu_device_gpu_utilization_for_workload(
     workload_id: UUID,
     prometheus_client: PrometheusConnect,
     start: datetime,
     end: datetime,
     step: int | None = None,
 ) -> GpuDeviceSingleMetricResponse:
-    """Returns per-GPU junction temperature (Celsius) timeseries for the given workload."""
+    """Returns per-GPU core activity (gpu_gfx_activity %) timeseries for the given workload."""
     return await _get_gpu_device_single_metric_for_workload(
-        workload_id, prometheus_client, start, end, metric_kind=WorkloadDeviceMetricKind.JUNCTION_TEMPERATURE, step=step
+        workload_id, prometheus_client, start, end, metric_kind=WorkloadDeviceMetricKind.GPU_UTILIZATION, step=step
     )
 
 
@@ -805,8 +814,6 @@ async def get_gpu_device_power_usage_for_workload(
 
 
 async def _get_node_gpu_single_metric(
-    node_name: str,
-    cluster_name: str,
     prometheus_client: PrometheusConnect,
     start: datetime,
     end: datetime,
@@ -850,9 +857,7 @@ async def get_node_gpu_utilization(
     lookback = get_aggregation_lookback_for_metrics(query_step)
 
     query = build_node_device_query(node_name, cluster_name, GPU_GFX_ACTIVITY_METRIC, "avg", lookback)
-    return await _get_node_gpu_single_metric(
-        node_name, cluster_name, prometheus_client, start, end, query, "gpu_activity_pct", query_step
-    )
+    return await _get_node_gpu_single_metric(prometheus_client, start, end, query, "gpuActivityPct", query_step)
 
 
 async def get_node_gpu_vram_utilization(
@@ -874,9 +879,7 @@ avg by ({group_by}) (avg_over_time({GPU_USED_VRAM_METRIC}{{{node_filter}}}[{look
 avg by ({group_by}) ({GPU_TOTAL_VRAM_METRIC}{{{node_filter}}})
 * 100
 """
-    return await _get_node_gpu_single_metric(
-        node_name, cluster_name, prometheus_client, start, end, query, "vram_utilization_pct", query_step
-    )
+    return await _get_node_gpu_single_metric(prometheus_client, start, end, query, "vramUtilizationPct", query_step)
 
 
 async def get_node_gpu_clock_speed(
@@ -896,11 +899,9 @@ async def get_node_gpu_clock_speed(
         GPU_CLOCK_METRIC,
         "avg",
         lookback,
-        extra_filters={GPU_CLOCK_TYPE_LABEL: GPU_CLOCK_TYPE_SYSTEM},
+        extra_regex_filters={GPU_CLOCK_TYPE_LABEL: GPU_CLOCK_TYPE_SYSTEM_REGEX},
     )
-    return await _get_node_gpu_single_metric(
-        node_name, cluster_name, prometheus_client, start, end, query, "clock_speed_mhz", query_step
-    )
+    return await _get_node_gpu_single_metric(prometheus_client, start, end, query, "clockSpeedMhz", query_step)
 
 
 async def get_node_power_usage(
@@ -915,7 +916,11 @@ async def get_node_power_usage(
     query_step = step if step else get_step_for_range_query(start, end)
     lookback = get_aggregation_lookback_for_metrics(query_step)
 
-    query = build_node_device_query(node_name, cluster_name, GPU_PACKAGE_POWER_METRIC, "max", lookback)
+    package_power = build_node_device_query(node_name, cluster_name, GPU_PACKAGE_POWER_METRIC, "max", lookback)
+    avg_package_power = build_node_device_query(
+        node_name, cluster_name, GPU_AVERAGE_PACKAGE_POWER_METRIC, "max", lookback
+    )
+    query = f"{package_power} or {avg_package_power}"
 
     result = await a_custom_query_range(
         client=prometheus_client,
@@ -930,7 +935,7 @@ async def get_node_power_usage(
             gpu_uuid=gpu_uuid,
             gpu_id=gpu_id,
             hostname=hostname,
-            metric=DeviceMetricTimeseries(series_label="power_watts", values=values),
+            metric=DeviceMetricTimeseries(series_label="powerWatts", values=values),
         )
         for (gpu_uuid, hostname, gpu_id), values in sorted(by_device.items())
     ]
@@ -954,7 +959,7 @@ async def get_node_gpu_junction_temperature(
 
     query = build_node_device_query(node_name, cluster_name, GPU_JUNCTION_TEMPERATURE_METRIC, "max", lookback)
     return await _get_node_gpu_single_metric(
-        node_name, cluster_name, prometheus_client, start, end, query, "junction_temperature_celsius", query_step
+        prometheus_client, start, end, query, "junctionTemperatureCelsius", query_step
     )
 
 
@@ -972,7 +977,7 @@ async def get_node_gpu_memory_temperature(
 
     query = build_node_device_query(node_name, cluster_name, GPU_MEMORY_TEMPERATURE_METRIC, "max", lookback)
     return await _get_node_gpu_single_metric(
-        node_name, cluster_name, prometheus_client, start, end, query, "memory_temperature_celsius", query_step
+        prometheus_client, start, end, query, "memoryTemperatureCelsius", query_step
     )
 
 
@@ -1007,7 +1012,7 @@ async def get_pcie_bandwidth_timeseries_for_node(
             gpu_uuid=gpu_uuid,
             gpu_id=gpu_id,
             hostname=hostname,
-            metric=DeviceMetricTimeseries(series_label="pcie_bandwidth", values=values),
+            metric=DeviceMetricTimeseries(series_label="pcieBandwidth", values=values),
         )
         for (gpu_uuid, hostname, gpu_id), values in sorted(by_device.items())
     ]
@@ -1061,7 +1066,7 @@ async def get_pcie_efficiency_timeseries_for_node(
                 gpu_uuid=gpu_uuid,
                 gpu_id=gpu_id,
                 hostname=hostname,
-                metric=DeviceMetricTimeseries(series_label="pcie_efficiency", values=values),
+                metric=DeviceMetricTimeseries(series_label="pcieEfficiency", values=values),
             )
         )
     return GpuDeviceSingleMetricResponse(
@@ -1077,6 +1082,9 @@ async def get_node_gpu_devices_with_metrics(
     prometheus_client: PrometheusConnect,
 ) -> NodeGpuDevicesResponse:
     """Returns the latest snapshot metrics for each GPU device on the given cluster node."""
+    package_power = build_node_instant_query(node_name, cluster_name, GPU_PACKAGE_POWER_METRIC)
+    avg_package_power = build_node_instant_query(node_name, cluster_name, GPU_AVERAGE_PACKAGE_POWER_METRIC)
+    power_query = f"{package_power} or {avg_package_power}"
     temp_results, power_results, vram_util_results = await asyncio.gather(
         a_custom_query(
             client=prometheus_client,
@@ -1084,7 +1092,7 @@ async def get_node_gpu_devices_with_metrics(
         ),
         a_custom_query(
             client=prometheus_client,
-            query=build_node_instant_query(node_name, cluster_name, GPU_PACKAGE_POWER_METRIC),
+            query=power_query,
         ),
         a_custom_query(
             client=prometheus_client,
@@ -1106,7 +1114,7 @@ async def get_workloads_on_node_with_gpu_devices(
     node_name: str,
     cluster_name: str,
     prometheus_client: PrometheusConnect,
-) -> tuple[list[str], dict[str, list[WorkloadGpuDevice]]]:
+) -> dict[str, list[WorkloadGpuDevice]]:
     """
     Single query to get all workloads with GPU activity in the cluster, then filters
     to workloads present on the specified node. Returns the workload IDs on the node
@@ -1136,10 +1144,7 @@ async def get_workloads_on_node_with_gpu_devices(
             seen[wid].add((hostname, gpu_id))
             devices_by_workload[wid].append(WorkloadGpuDevice(gpu_id=gpu_id, hostname=hostname))
 
-    node_workload_ids = list(workloads_on_node)
-    node_devices = {wid: devices_by_workload[wid] for wid in node_workload_ids}
-
-    return node_workload_ids, node_devices
+    return {wid: devices_by_workload[wid] for wid in workloads_on_node}
 
 
 async def get_workloads_metrics_by_node(
@@ -1153,13 +1158,11 @@ async def get_workloads_metrics_by_node(
     Returns workloads that have GPU activity on the specified node, enriched with
     GPU device details and VRAM usage across the entire cluster.
     """
-    workload_id_strings, gpu_devices_by_workload = await get_workloads_on_node_with_gpu_devices(
-        node_name, cluster_name, prometheus_client
-    )
-    if not workload_id_strings:
+    gpu_devices_by_workload = await get_workloads_on_node_with_gpu_devices(node_name, cluster_name, prometheus_client)
+    if len(gpu_devices_by_workload) == 0:
         return NodeWorkloadsWithMetrics(data=[])
 
-    workload_uuids = [UUID(wid) for wid in workload_id_strings]
+    workload_uuids = [UUID(wid) for wid in gpu_devices_by_workload.keys()]
 
     workloads, workload_vram_usage = await asyncio.gather(
         get_workloads_by_ids_in_cluster(session, workload_uuids, cluster_id),

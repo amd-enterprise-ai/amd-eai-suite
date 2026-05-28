@@ -24,12 +24,10 @@ import {
 import { generateMockStorages } from '@/__mocks__/utils/storages-mock';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { SecretStatus } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { SecretStatus } from '@/types/enums/secrets';
 
 import SecretsPage, { getServerSideProps } from '@/pages/secrets';
-
-import { AssignSecret } from '@/components/features/secrets';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { cloneDeep } from 'lodash';
@@ -49,6 +47,16 @@ vi.mock('@/services/server', () => ({
   getSecrets: vi.fn(),
   getStorages: vi.fn(),
 }));
+
+const mockAssignSecret = vi.hoisted(() => vi.fn());
+vi.mock('@/components/features/secrets', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/components/features/secrets')>();
+  return {
+    ...actual,
+    AssignSecret: mockAssignSecret,
+  };
+});
 
 describe('secrets page', async () => {
   it('should not crash the page', async () => {
@@ -363,11 +371,10 @@ describe('secrets page', async () => {
     });
 
     await waitFor(() => {
-      expect(AssignSecret).toBeCalledWith(
+      expect(mockAssignSecret.mock.lastCall?.[0]).toEqual(
         expect.objectContaining({
           isOpen: true,
         }),
-        expect.anything(),
       );
     });
   });
@@ -407,15 +414,6 @@ describe('secrets page', async () => {
     mockProjects[0].status = ProjectStatus.READY;
     mockProjects[1].status = ProjectStatus.PENDING;
 
-    vi.mock('@/components/features/secrets', async (importOriginal) => {
-      const actual =
-        await importOriginal<typeof import('@/components/features/secrets')>();
-      return {
-        ...actual,
-        AssignSecret: vi.fn(),
-      };
-    });
-
     act(() => {
       render(
         <SecretsPage
@@ -429,11 +427,10 @@ describe('secrets page', async () => {
       );
     });
 
-    expect(AssignSecret).toHaveBeenCalledWith(
+    expect(mockAssignSecret.mock.lastCall?.[0]).toEqual(
       expect.objectContaining({
         disabledProjectIds: expect.arrayContaining(['2']),
       }),
-      expect.anything(),
     );
   });
 

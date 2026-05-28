@@ -125,7 +125,7 @@ describe('fetchNodeGpuUtilization', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: mockJson.mockResolvedValue({
-        gpu_devices: [],
+        gpuDevices: [],
         range: { start: '2025-01-01T00:00:00Z', end: '2025-01-01T01:00:00Z' },
       }),
     });
@@ -144,7 +144,7 @@ describe('fetchNodeGpuUtilization', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: mockJson.mockResolvedValue({
-        gpu_devices: [],
+        gpuDevices: [],
         range: { start: '2025-01-01T00:00:00Z', end: '2025-01-01T01:00:00Z' },
       }),
     });
@@ -161,13 +161,13 @@ describe('fetchNodeGpuUtilization', () => {
 });
 
 const nodeMetricRawResponse = {
-  gpu_devices: [
+  gpuDevices: [
     {
-      gpu_uuid: 'uuid-1',
-      gpu_id: '0',
+      gpuUuid: 'uuid-1',
+      gpuId: '0',
       hostname: 'node-1',
       metric: {
-        series_label: 'vram_utilization_pct',
+        seriesLabel: 'vramUtilizationPct',
         values: [{ timestamp: '2024-01-01T00:00:00Z', value: 42 }],
       },
     },
@@ -237,13 +237,13 @@ describe('fetchNodeGpuClockSpeed', () => {
   const end = new Date('2024-01-01T01:00:00Z');
 
   const clockRawResponse = {
-    gpu_devices: [
+    gpuDevices: [
       {
-        gpu_uuid: 'uuid-1',
-        gpu_id: '0',
+        gpuUuid: 'uuid-1',
+        gpuId: '0',
         hostname: 'node-1',
         metric: {
-          series_label: 'clock_speed_mhz',
+          seriesLabel: 'clockSpeedMhz',
           values: [{ timestamp: '2024-01-01T00:00:00Z', value: 1800 }],
         },
       },
@@ -300,7 +300,7 @@ describe('fetchNodePowerUsage', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: mockJson.mockResolvedValue({
-        gpu_devices: [],
+        gpuDevices: [],
         range: { start: '2025-01-01T00:00:00Z', end: '2025-01-01T01:00:00Z' },
       }),
     });
@@ -324,7 +324,7 @@ describe('fetchNodePowerUsage', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: mockJson.mockResolvedValue({
-        gpu_devices: [],
+        gpuDevices: [],
         range: { start: '2025-01-01T00:00:00Z', end: '2025-01-01T01:00:00Z' },
       }),
     });
@@ -351,7 +351,7 @@ describe('fetchNodeGpuJunctionTemperature', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: mockJson.mockResolvedValue({
-        gpu_devices: [],
+        gpuDevices: [],
         range: { start: '2025-01-01T00:00:00Z', end: '2025-01-01T01:00:00Z' },
       }),
     });
@@ -375,7 +375,7 @@ describe('fetchNodeGpuJunctionTemperature', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: mockJson.mockResolvedValue({
-        gpu_devices: [],
+        gpuDevices: [],
         range: { start: '2025-01-01T00:00:00Z', end: '2025-01-01T01:00:00Z' },
       }),
     });
@@ -390,13 +390,13 @@ describe('fetchNodeGpuJunctionTemperature', () => {
 
   it('returns normalized data when response is ok', async () => {
     const rawResponse = {
-      gpu_devices: [
+      gpuDevices: [
         {
-          gpu_uuid: 'uuid-1',
-          gpu_id: '0',
+          gpuUuid: 'uuid-1',
+          gpuId: '0',
           hostname: 'node-1',
           metric: {
-            series_label: 'junction_temperature_celsius',
+            seriesLabel: 'junctionTemperatureCelsius',
             values: [{ timestamp: '2025-01-01T00:00:00Z', value: 72.5 }],
           },
         },
@@ -413,11 +413,11 @@ describe('fetchNodeGpuJunctionTemperature', () => {
 
     const res = await fetchNodeGpuJunctionTemperature('c1', 'n1', start, end);
 
-    expect(res.gpu_devices).toHaveLength(1);
-    expect(res.gpu_devices[0].metric.series_label).toBe(
-      'junction_temperature_celsius',
+    expect(res.gpuDevices).toHaveLength(1);
+    expect(res.gpuDevices[0].metric.seriesLabel).toBe(
+      'junctionTemperatureCelsius',
     );
-    expect(res.gpu_devices[0].metric.values[0].value).toBe(72.5);
+    expect(res.gpuDevices[0].metric.values[0].value).toBe(72.5);
   });
 
   it('throws error when response is not ok', async () => {
@@ -434,7 +434,7 @@ describe('fetchNodeGpuMemoryTemperature', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: mockJson.mockResolvedValue({
-        gpu_devices: [],
+        gpuDevices: [],
         range: { start: '2025-01-01T00:00:00Z', end: '2025-01-01T01:00:00Z' },
       }),
     });
@@ -458,7 +458,7 @@ describe('fetchNodeGpuMemoryTemperature', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: mockJson.mockResolvedValue({
-        gpu_devices: [],
+        gpuDevices: [],
         range: { start: '2025-01-01T00:00:00Z', end: '2025-01-01T01:00:00Z' },
       }),
     });
@@ -473,13 +473,13 @@ describe('fetchNodeGpuMemoryTemperature', () => {
 
   it('returns normalized data when response is ok', async () => {
     const rawResponse = {
-      gpu_devices: [
+      gpuDevices: [
         {
-          gpu_uuid: 'uuid-1',
-          gpu_id: '0',
+          gpuUuid: 'uuid-1',
+          gpuId: '0',
           hostname: 'node-1',
           metric: {
-            series_label: 'memory_temperature_celsius',
+            seriesLabel: 'memoryTemperatureCelsius',
             values: [{ timestamp: '2025-01-01T00:00:00Z', value: 65.5 }],
           },
         },
@@ -496,11 +496,11 @@ describe('fetchNodeGpuMemoryTemperature', () => {
 
     const res = await fetchNodeGpuMemoryTemperature('c1', 'n1', start, end);
 
-    expect(res.gpu_devices).toHaveLength(1);
-    expect(res.gpu_devices[0].metric.series_label).toBe(
-      'memory_temperature_celsius',
+    expect(res.gpuDevices).toHaveLength(1);
+    expect(res.gpuDevices[0].metric.seriesLabel).toBe(
+      'memoryTemperatureCelsius',
     );
-    expect(res.gpu_devices[0].metric.values[0].value).toBe(65.5);
+    expect(res.gpuDevices[0].metric.values[0].value).toBe(65.5);
   });
 
   it('throws error when response is not ok', async () => {

@@ -2,32 +2,45 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useState } from 'react';
+import { Card, CardBody, CardHeader } from '@heroui/react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'next-i18next';
 
 import type { AvailableChartColorsKeys } from '@amdenterpriseai/types';
-
+import type { TimeRange } from '@amdenterpriseai/types';
 import { BarChart } from '@amdenterpriseai/components';
 import { DynamicValueLegend } from '@amdenterpriseai/components';
 
+import { fetchNodePowerUsage } from '@/services/app';
+import { mergeGpuDeviceTimeseriesToChartData } from '@/utils/node-gpu-utilization';
+import {
+  getClusterNodeTimeRangeQueryKeyPrefix,
+  filterGpuDevicesBySelection,
+  getGpuChartCategories,
+  getGpuChartColors,
+} from '@/utils/cluster-nodes';
+
 interface Props {
-  data: Record<string, string | number | null>[];
-  categories: string[];
-  colors: AvailableChartColorsKeys[];
-  isLoading: boolean;
-  showNoData: boolean;
-  noDataMessage: string;
-  loadingText: string;
+  clusterId: string;
+  nodeId: string;
+  timeRange: TimeRange;
+  selectedGpuDevices: Set<string>;
+  gpuColorMap: Map<string, number>;
+  isDevicesLoading: boolean;
 }
 
+const translationKeySet = ['clusters', 'common'] as const;
+
 export const NodeGpuPowerUsageChart: React.FC<Props> = ({
-  data,
-  categories,
-  colors,
-  isLoading,
-  showNoData,
-  noDataMessage,
-  loadingText,
+  clusterId,
+  nodeId,
+  timeRange,
+  selectedGpuDevices,
+  gpuColorMap,
+  isDevicesLoading,
 }) => {
+  const { t } = useTranslation(translationKeySet);
   const [hoveredChartPoint, setHoveredChartPoint] = useState<Record<
     string,
     unknown
@@ -36,52 +49,99 @@ export const NodeGpuPowerUsageChart: React.FC<Props> = ({
     undefined,
   );
 
-  if (showNoData) {
-    return <p className="text-default-500 text-sm">{noDataMessage}</p>;
-  }
+  const powerUsageQuery = useQuery({
+    queryKey: [
+      ...getClusterNodeTimeRangeQueryKeyPrefix(clusterId, nodeId, timeRange),
+      'power-usage',
+    ],
+    queryFn: () =>
+      fetchNodePowerUsage(clusterId, nodeId, timeRange.start, timeRange.end),
+  });
+
+  const devicesToShow = useMemo(
+    () =>
+      filterGpuDevicesBySelection(
+        powerUsageQuery.data?.gpuDevices ?? [],
+        selectedGpuDevices,
+      ),
+    [powerUsageQuery.data?.gpuDevices, selectedGpuDevices],
+  );
+
+  const chartData = useMemo(
+    () => mergeGpuDeviceTimeseriesToChartData(devicesToShow),
+    [devicesToShow],
+  );
+
+  const chartCategories = useMemo(
+    () => getGpuChartCategories(devicesToShow),
+    [devicesToShow],
+  );
+
+  const chartColors = useMemo(
+    () => getGpuChartColors(devicesToShow, gpuColorMap),
+    [devicesToShow, gpuColorMap],
+  );
+
+  const isLoading = powerUsageQuery.isLoading || isDevicesLoading;
+  const showNoData = !powerUsageQuery.isLoading && devicesToShow.length === 0;
 
   return (
-    <>
-      <BarChart
-        data={data}
-        index="date"
-        categories={categories}
-        colors={colors}
-        valueFormatter={(v: number) =>
-          `${Number.isInteger(v) ? v : v.toFixed(2)}W`
-        }
-        allowDecimals={false}
-        showLegend={false}
-        showYAxis={true}
-        className="h-72"
-        activeLegendProp={activeLegendGpu}
-        tooltipCallback={({ active, payload }) => {
-          setHoveredChartPoint(
-            active && payload?.length
-              ? (payload[0].payload as Record<string, unknown>)
-              : null,
-          );
-        }}
-        isLoading={isLoading}
-        loadingText={loadingText}
-      />
-      {(isLoading || categories.length > 0) && (
-        <DynamicValueLegend
-          categories={categories}
-          colors={colors}
-          data={data as Record<string, unknown>[]}
-          unit="W"
-          isLoading={isLoading}
-          valueFormatter={(v) => `${Number(v).toFixed(2)}W`}
-          displayPoint={hoveredChartPoint}
-          activeCategory={activeLegendGpu}
-          onCategoryClick={(category) =>
-            setActiveLegendGpu((prev) =>
-              prev === category ? undefined : category,
-            )
-          }
-        />
-      )}
-    </>
+    <Card className="border border-default-200 shadow-sm rounded-sm dark:bg-default-100 min-h-[120px]">
+      <CardHeader className="pb-2">
+        <span className="text-sm font-semibold text-foreground">
+          {t('clusters:nodes.detail.deviceMetrics.gpuPowerConsumption.title')}
+        </span>
+      </CardHeader>
+      <CardBody className="pt-0 mt-4">
+        {showNoData ? (
+          <p className="text-default-500 text-sm">
+            {t('clusters:nodes.detail.deviceMetrics.noPowerData')}
+          </p>
+        ) : (
+          <>
+            <BarChart
+              data={chartData}
+              index="date"
+              categories={chartCategories}
+              colors={chartColors as AvailableChartColorsKeys[]}
+              valueFormatter={(v: number) =>
+                `${Number.isInteger(v) ? v : v.toFixed(2)}W`
+              }
+              allowDecimals={false}
+              showLegend={false}
+              showYAxis={true}
+              className="h-72"
+              activeLegendProp={activeLegendGpu}
+              tooltipCallback={({ active, payload }) => {
+                setHoveredChartPoint(
+                  active && payload?.length
+                    ? (payload[0].payload as Record<string, unknown>)
+                    : null,
+                );
+              }}
+              isLoading={isLoading}
+              loadingText={t('common:loading')}
+            />
+            {(isLoading || chartCategories.length > 0) && (
+              <DynamicValueLegend
+                categories={chartCategories}
+                colors={chartColors as AvailableChartColorsKeys[]}
+                data={chartData as Record<string, unknown>[]}
+                unit="W"
+                isLoading={isLoading}
+                valueFormatter={(v) => `${Number(v).toFixed(2)}W`}
+                displayPoint={hoveredChartPoint}
+                activeCategory={activeLegendGpu}
+                onCategoryClick={(category) =>
+                  setActiveLegendGpu((prev) =>
+                    prev === category ? undefined : category,
+                  )
+                }
+              />
+            )}
+          </>
+        )}
+      </CardBody>
+    </Card>
   );
 };

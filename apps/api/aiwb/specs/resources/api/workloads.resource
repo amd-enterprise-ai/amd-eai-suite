@@ -37,13 +37,13 @@ Get AIWB workload
 Get AIWB workloads
     [Documentation]    List workloads in namespace via AIWB API
     ...    Uses: GET /namespaces/{namespace}/workloads
-    ...    Optional filters: workload_type, status_filter
+    ...    Optional filters: workloadType, statusFilter
     [Arguments]    ${namespace}    ${workload_type}=${None}    ${status_filter}=${None}    ${expected_status}=any
     Create api session    aiwb
     ${params}=    Create Dictionary
 
-    IF    "${workload_type}" != "${None}"    Set To Dictionary    ${params}    workload_type=${workload_type}
-    IF    "${status_filter}" != "${None}"    Set To Dictionary    ${params}    status_filter=${status_filter}
+    IF    "${workload_type}" != "${None}"    Set To Dictionary    ${params}    workloadType=${workload_type}
+    IF    "${status_filter}" != "${None}"    Set To Dictionary    ${params}    statusFilter=${status_filter}
 
     ${endpoint}=    AIWB Workloads endpoint    ${namespace}
     Log    GET ${endpoint} with params: ${params}    DEBUG

@@ -13,18 +13,40 @@ import {
 import router from 'next/router';
 
 import { deleteCluster, fetchClusters } from '@/services/app';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 import { gigabytesToBytes } from '@amdenterpriseai/utils/app';
 
-import { Cluster, ClustersResponse } from '@amdenterpriseai/types';
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { WorkloadsStats } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ClustersResponse } from '@/types/clusters';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { WorkloadsStats } from '@/types/workloads';
 
 import ClusterPage from '@/pages/clusters';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
+
+vi.mock('@/hooks/useAccessControl', () => ({
+  useAccessControl: vi.fn(),
+}));
+
+const adminAccessControl = {
+  isRoleManagementEnabled: true,
+  isInviteEnabled: true,
+  isAdministrator: true,
+  smtpEnabled: true,
+  isTempPasswordRequired: false,
+};
+
+const nonAdminAccessControl = {
+  isRoleManagementEnabled: false,
+  isInviteEnabled: false,
+  isAdministrator: false,
+  smtpEnabled: false,
+  isTempPasswordRequired: false,
+};
 
 const extraClusterInfo = {
   lastHeartbeatAt: '2025-03-11T23:24:03.733668Z',
@@ -53,6 +75,7 @@ const extraClusterInfo = {
   gpuAllocationPercentage: 18.75,
   cpuAllocationPercentage: 27.08,
   memoryAllocationPercentage: 20.0,
+  workbenchBaseUrl: 'https://workbench.example.com',
 };
 
 const generateMockClusters = (
@@ -86,6 +109,10 @@ vi.mock('@/services/app', async (importOriginal) => ({
 }));
 
 describe('clusters', () => {
+  beforeEach(() => {
+    vi.mocked(useAccessControl).mockReturnValue(adminAccessControl);
+  });
+
   it('should not crash the page', async () => {
     let _container: HTMLElement | null = null;
     await act(() => {
@@ -206,7 +233,8 @@ describe('clusters', () => {
     vi.useRealTimers();
   });
 
-  it('should call deleteClusterAPI if the delete dropdown is clicked and confirmed', async () => {
+  it('should show delete action as disabled for non-administrators', async () => {
+    vi.mocked(useAccessControl).mockReturnValue(nonAdminAccessControl);
     const mockClusters = generateMockClusters(5, ClusterStatus.HEALTHY);
     await act(() => {
       render(
@@ -221,28 +249,19 @@ describe('clusters', () => {
     await act(() => {
       const dropDowns = screen.getAllByLabelText('list.actions.label');
       expect(dropDowns).toHaveLength(5);
-      // Click the dropdown on cluster 4
       fireEvent.click(dropDowns[3]);
     });
 
-    await act(() => {
-      // Click the delete button
-      fireEvent.click(screen.getByText('list.actions.delete.label'));
-    });
-    await act(() => {
-      // Confirm the deletion
-      fireEvent.click(screen.getByText('actions.confirm.title'));
-    });
-
     await waitFor(() => {
-      expect(vi.mocked(deleteCluster)).toHaveBeenCalledWith(
-        '4',
-        expect.any(Object),
-      );
+      const deleteButton = screen.getByText('list.actions.delete.label');
+      expect(
+        deleteButton.closest('[data-disabled="true"]'),
+      ).toBeInTheDocument();
     });
   });
 
-  it('should call bring up edit drawer form for edit', async () => {
+  it('should show edit action as disabled for non-administrators', async () => {
+    vi.mocked(useAccessControl).mockReturnValue(nonAdminAccessControl);
     const mockClusters = generateMockClusters(5, ClusterStatus.HEALTHY);
     await act(() => {
       render(
@@ -257,17 +276,12 @@ describe('clusters', () => {
     await act(() => {
       const dropDowns = screen.getAllByLabelText('list.actions.label');
       expect(dropDowns).toHaveLength(5);
-      // Click the dropdown on cluster 4
       fireEvent.click(dropDowns[3]);
     });
 
-    await act(() => {
-      // Click the edit button
-      fireEvent.click(screen.getByText('list.actions.edit.label'));
-    });
-
     await waitFor(() => {
-      expect(screen.getByText('form.edit.title')).toBeInTheDocument();
+      const editButton = screen.getByText('list.actions.edit.label');
+      expect(editButton.closest('[data-disabled="true"]')).toBeInTheDocument();
     });
   });
 
@@ -296,7 +310,202 @@ describe('clusters', () => {
     expect(mockRouterPush).toHaveBeenCalledWith('/clusters/2');
   });
 
-  it('show delete a row from the pending clusters table if the actions performed and confirmed', async () => {
+  it('should not show pending clusters table for non-administrators', async () => {
+    vi.mocked(useAccessControl).mockReturnValue(nonAdminAccessControl);
+    const mockClusters = generateMockClusters(2, ClusterStatus.VERIFYING);
+    mockClusters[1].status = ClusterStatus.HEALTHY;
+
+    await act(() => {
+      render(
+        <ClusterPage
+          clusters={{ ...mockClustersResponse, data: mockClusters }}
+          workloadsStats={mockWorkloadsStats}
+        />,
+        { wrapper },
+      );
+    });
+
+    expect(screen.queryByText('list.pending.title')).not.toBeInTheDocument();
+  });
+
+  it('should navigate to cluster details when "Open details" action is clicked', async () => {
+    const mockClusters = generateMockClusters(5, ClusterStatus.HEALTHY);
+    const mockRouterPush = vi.fn();
+    vi.spyOn(router, 'push').mockImplementation(mockRouterPush);
+
+    await act(() => {
+      render(
+        <ClusterPage
+          clusters={{ ...mockClustersResponse, data: mockClusters }}
+          workloadsStats={mockWorkloadsStats}
+        />,
+        { wrapper },
+      );
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[2]);
+    });
+
+    await act(() => {
+      fireEvent.click(screen.getByText('list.actions.openDetails.label'));
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledWith('/clusters/3');
+  });
+
+  it('should open external URL when "View in AI Workbench" action is clicked', async () => {
+    const mockClusters = generateMockClusters(5, ClusterStatus.HEALTHY);
+    const mockWindowOpen = vi.fn();
+    vi.spyOn(window, 'open').mockImplementation(mockWindowOpen);
+
+    await act(() => {
+      render(
+        <ClusterPage
+          clusters={{ ...mockClustersResponse, data: mockClusters }}
+          workloadsStats={mockWorkloadsStats}
+        />,
+        { wrapper },
+      );
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[0]);
+    });
+
+    await act(() => {
+      fireEvent.click(screen.getByText('list.actions.viewInAiwb.label'));
+    });
+
+    expect(mockWindowOpen).toHaveBeenCalledWith(
+      'https://workbench.example.com',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
+  it('should show "View in AI Workbench" action as disabled when workbenchBaseUrl is missing', async () => {
+    const mockClusters = generateMockClusters(5, ClusterStatus.HEALTHY);
+    mockClusters[0].workbenchBaseUrl = undefined;
+
+    await act(() => {
+      render(
+        <ClusterPage
+          clusters={{ ...mockClustersResponse, data: mockClusters }}
+          workloadsStats={mockWorkloadsStats}
+        />,
+        { wrapper },
+      );
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[0]);
+    });
+
+    await waitFor(() => {
+      const viewInAiwbButton = screen.getByText(
+        'list.actions.viewInAiwb.label',
+      );
+      expect(
+        viewInAiwbButton.closest('[data-disabled="true"]'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('should show "View in AI Workbench" action as disabled when workbenchBaseUrl has invalid scheme', async () => {
+    const mockClusters = generateMockClusters(5, ClusterStatus.HEALTHY);
+    mockClusters[0].workbenchBaseUrl = 'ftp://invalid.example.com';
+
+    await act(() => {
+      render(
+        <ClusterPage
+          clusters={{ ...mockClustersResponse, data: mockClusters }}
+          workloadsStats={mockWorkloadsStats}
+        />,
+        { wrapper },
+      );
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[0]);
+    });
+
+    await waitFor(() => {
+      const viewInAiwbButton = screen.getByText(
+        'list.actions.viewInAiwb.label',
+      );
+      expect(
+        viewInAiwbButton.closest('[data-disabled="true"]'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('should call deleteCluster API when delete action is clicked and confirmed by administrator', async () => {
+    const mockClusters = generateMockClusters(5, ClusterStatus.HEALTHY);
+    await act(() => {
+      render(
+        <ClusterPage
+          clusters={{ ...mockClustersResponse, data: mockClusters }}
+          workloadsStats={mockWorkloadsStats}
+        />,
+        { wrapper },
+      );
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      expect(dropDowns).toHaveLength(5);
+      fireEvent.click(dropDowns[3]);
+    });
+
+    await act(() => {
+      fireEvent.click(screen.getByText('list.actions.delete.label'));
+    });
+
+    await act(() => {
+      fireEvent.click(screen.getByText('actions.confirm.title'));
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(deleteCluster)).toHaveBeenCalledWith(
+        '4',
+        expect.any(Object),
+      );
+    });
+  });
+
+  it('should open edit drawer form when edit action is clicked by administrator', async () => {
+    const mockClusters = generateMockClusters(5, ClusterStatus.HEALTHY);
+    await act(() => {
+      render(
+        <ClusterPage
+          clusters={{ ...mockClustersResponse, data: mockClusters }}
+          workloadsStats={mockWorkloadsStats}
+        />,
+        { wrapper },
+      );
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      expect(dropDowns).toHaveLength(5);
+      fireEvent.click(dropDowns[3]);
+    });
+
+    await act(() => {
+      fireEvent.click(screen.getByText('list.actions.edit.label'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('form.edit.title')).toBeInTheDocument();
+    });
+  });
+
+  it('should show pending clusters table for administrators', async () => {
     const mockClusters = generateMockClusters(2, ClusterStatus.VERIFYING);
     mockClusters[1].status = ClusterStatus.HEALTHY;
 
@@ -311,28 +520,5 @@ describe('clusters', () => {
     });
 
     expect(screen.queryByText('list.pending.title')).toBeInTheDocument();
-
-    await act(() => {
-      const dropDowns = screen.getAllByLabelText('list.actions.label');
-      expect(dropDowns).toHaveLength(2);
-      // Click the dropdown on cluster 2 - the cluster in the pending clusters table
-      fireEvent.click(dropDowns[1]);
-    });
-
-    await act(() => {
-      // Click the delete button
-      fireEvent.click(screen.getByText('list.actions.delete.label'));
-    });
-    await act(() => {
-      // Confirm the deletion
-      fireEvent.click(screen.getByText('actions.confirm.title'));
-    });
-
-    await waitFor(() => {
-      expect(vi.mocked(deleteCluster)).toHaveBeenCalledWith(
-        '1',
-        expect.any(Object),
-      );
-    });
   });
 });

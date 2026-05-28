@@ -5,12 +5,10 @@ import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import {
-  FilterComponentType,
-  SecretScope,
-  SecretType,
-} from '@amdenterpriseai/types';
+import { FilterComponentType } from '@amdenterpriseai/types';
+import { SecretType } from '@/types/enums/secrets';
 import { FilterValueMap } from '@amdenterpriseai/types';
+import { SecretScope } from '@/types/enums/secrets';
 
 import { ActionsToolbar } from '@amdenterpriseai/components';
 

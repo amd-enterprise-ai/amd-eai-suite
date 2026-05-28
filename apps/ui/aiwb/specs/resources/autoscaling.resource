@@ -19,6 +19,20 @@ Resource            pages/autoscaling_page.resource
 # Given keywords (preconditions)
 # =============================================================================
 
+Deploy AIM with autoscaling and wait until running
+    [Documentation]    Deploys an AIM with autoscaling and waits until it reaches Running state.
+    ...                Use this over "AIM is deployed with autoscaling" when the test needs
+    ...                live replica data, which only loads once the service is Running.
+    [Arguments]    ${min_replicas}=1    ${max_replicas}=3    ${metric}=running_requests    ${target_value}=10
+
+    AIM is deployed with autoscaling    min_replicas=${min_replicas}    max_replicas=${max_replicas}    metric=${metric}    target_value=${target_value}
+    Wait for AIM workload to be running
+
+An AIM with autoscaling is running
+    [Documentation]    Deploys an AIM with default autoscaling settings and waits until running.
+
+    Deploy AIM with autoscaling and wait until running
+
 Project for deployed AIM is selected
     [Documentation]    Selects the project that owns the deployed AIM.
     ...                Extracts the project name from TEST_PROJECT and selects it via the toolbar.
@@ -40,6 +54,12 @@ User opens autoscaling settings
 
     Click settings button on scaling card
     Wait for deployment settings drawer
+
+User expands replicas list on autoscaling card
+    [Documentation]    Clicks the chevron toggle on the autoscaling card to expand the replica list.
+
+    Click replicas toggle button
+    Wait for replicas table
 
 # =============================================================================
 # Then keywords (verification)
@@ -94,3 +114,15 @@ Deployment settings drawer should be open
     Wait for deployment settings drawer
     ${has_toggle}=    Check deployment settings drawer has autoscaling toggle
     Should Be True    ${has_toggle}    msg=Settings drawer should contain the autoscaling toggle
+
+Replicas list should be visible
+    [Documentation]    Verifies that the replicas table is visible on the autoscaling card.
+
+    ${visible}=    Check replicas table visible
+    Should Be True    ${visible}    msg=Replicas table should be visible after expanding
+
+Replicas list should show at least one replica
+    [Documentation]    Verifies that the replicas table contains at least one replica row.
+
+    ${count}=    Get replica row count
+    Should Be True    ${count} > 0    msg=Replicas list should show at least one replica row

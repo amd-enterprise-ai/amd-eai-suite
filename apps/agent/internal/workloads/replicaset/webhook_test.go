@@ -13,13 +13,10 @@ import (
 	agent "github.com/silogen/agent/internal/common"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -87,23 +84,18 @@ func createReplicaSet(namespace string, labels map[string]string) *appsv1.Replic
 
 func createAdmissionRequest(rs *appsv1.ReplicaSet, oldRS *appsv1.ReplicaSet) admission.Request {
 	raw, _ := json.Marshal(rs)
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID("test-uid-12345"),
-			Kind:      metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"},
-			Namespace: rs.Namespace,
-			Name:      rs.Name,
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo:  authenticationv1.UserInfo{Username: "test-user@example.com"},
-		},
-	}
+	var oldRaw []byte
 	if oldRS != nil {
-		oldRaw, _ := json.Marshal(oldRS)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldRS)
 	}
-	return req
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"},
+		rs.Namespace,
+		rs.Name,
+		raw,
+		oldRaw,
+		"test-user@example.com",
+	)
 }
 
 func TestReplicaSetWebhook(t *testing.T) {
@@ -246,6 +238,35 @@ func TestReplicaSetWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, s.expectedPatches)
 		})
 	}
+}
+
+func TestReplicaSetWebhook_PreservesUnknownSpecFields(t *testing.T) {
+	ns := createNamespace("airm-test", "project-123")
+	wh := setupTestWebhook(ns)
+	rs := createReplicaSet("airm-test", nil)
+
+	raw := testutils.AddUnknownKeyToJSON(t, rs)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"},
+		rs.Namespace, rs.Name, raw, nil, "test-user@example.com",
+	)
+	resp := wh.Handle(context.Background(), req)
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    "project-123",
+			common.KueueNameLabel:   "airm-test",
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      "test-user@example.com",
+		}),
+		testutils.AddPodTemplateLabelMatching(testutils.LabelSegmentWorkloadID, testutils.UUIDMatcher),
+		testutils.AddPodTemplateLabelMatching(testutils.LabelSegmentComponentID, testutils.UUIDMatcher),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
 }
 
 func TestReplicaSetWebhook_NamespaceNotFound(t *testing.T) {

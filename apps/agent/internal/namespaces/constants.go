@@ -12,4 +12,9 @@ const (
 	namespaceFinalizer = "airm.silogen.ai/namespace-finalizer"
 
 	KueueManagedLabel = "kueue-managed"
+
+	KaiwoGpuPreemptionEnabledKey     = "kaiwo.silogen.ai/gpu-preemption.enabled"
+	KaiwoGpuPreemptionThresholdKey   = "kaiwo.silogen.ai/gpu-preemption.threshold"
+	KaiwoGpuPreemptionGracePeriodKey = "kaiwo.silogen.ai/gpu-preemption.grace-period"
+	KaiwoGpuPreemptionPolicyKey      = "kaiwo.silogen.ai/gpu-preemption.policy"
 )

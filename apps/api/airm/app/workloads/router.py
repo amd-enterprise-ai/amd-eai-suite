@@ -7,14 +7,17 @@ from uuid import UUID
 import yaml
 from fastapi import APIRouter, Depends, File, Path, Query, UploadFile, status
 from prometheus_api_client import PrometheusConnect
+from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from api_common.exceptions import NotFoundException, UnhealthyException, ValidationException
 
 from ..clusters.schemas import ClusterResponse, ClusterStatus
 from ..clusters.service import get_accessible_clusters
 from ..messaging.sender import MessageSender, get_message_sender
 from ..metrics.schemas import GpuDeviceSingleMetricResponse, MetricsTimeRange
 from ..metrics.service import (
-    get_gpu_device_junction_temperature_for_workload,
+    get_gpu_device_gpu_utilization_for_workload,
     get_gpu_device_power_usage_for_workload,
     get_gpu_device_vram_utilization_for_workload,
     get_prometheus_client,
@@ -23,7 +26,6 @@ from ..projects.models import Project
 from ..users.models import User
 from ..utilities.database import get_session
 from ..utilities.enums import Roles
-from ..utilities.exceptions import NotFoundException, UnhealthyException, ValidationException
 from ..utilities.security import (
     BearerToken,
     auth_token_claimset,
@@ -73,13 +75,18 @@ async def submit_workload(
     token: str = Depends(BearerToken),
     project: Project = Depends(validate_and_get_project_from_query),
     manifest: UploadFile = File(..., description="The YAML file to be uploaded."),
-    workload_type: WorkloadType = Query(WorkloadType.CUSTOM, description="Type of workload being submitted."),
+    workload_type: WorkloadType = Query(
+        WorkloadType.CUSTOM,
+        description="Type of workload being submitted.",
+        alias=to_camel("workload_type"),
+    ),
     display_name: str = Query(
         ...,
         description="display name for the workload.",
         min_length=2,
         max_length=256,
         pattern=r"^[a-zA-Z0-9 _\-\.,:\(\)\[\]\+@#]+$",  # Allow alphanumeric, spaces, and some special characters
+        alias=to_camel("display_name"),
     ),
 ) -> WorkloadResponse:
     if manifest.size > 2 * 1024 * 1024:
@@ -174,23 +181,23 @@ async def get_workload_gpu_device_vram_utilization(
 
 
 @router.get(
-    "/workloads/{workload_id}/metrics/gpu-devices/junction-temperature",
-    operation_id="get_workload_gpu_device_junction_temperature",
-    summary="Get per-GPU junction temperature for a workload",
+    "/workloads/{workload_id}/metrics/gpu-devices/gpu-utilization",
+    operation_id="get_workload_gpu_device_gpu_utilization",
+    summary="Get per-GPU utilization for a workload",
     description="""
-        Retrieve junction temperature (Celsius) over time for each GPU device of a workload.
+        Retrieve GPU core activity percentage over time for each GPU device of a workload.
         Platform administrators can access any workload; regular users only workloads in projects they belong to.
     """,
     status_code=status.HTTP_200_OK,
     response_model=GpuDeviceSingleMetricResponse,
 )
-async def get_workload_gpu_device_junction_temperature(
+async def get_workload_gpu_device_gpu_utilization(
     workload_id: UUID = Path(description="The ID of the workload"),
     time_range: MetricsTimeRange = Depends(),
     prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
     _: None = Depends(ensure_user_can_view_workload),
 ) -> GpuDeviceSingleMetricResponse:
-    return await get_gpu_device_junction_temperature_for_workload(
+    return await get_gpu_device_gpu_utilization_for_workload(
         workload_id, prometheus_client, start=time_range.start, end=time_range.end, step=time_range.step
     )
 
@@ -279,7 +286,11 @@ async def get_workload(
     response_model=Workloads,
 )
 async def get_workloads(
-    project_id: UUID | None = Query(None, description="The ID of the project for which to retrieve workloads"),
+    project_id: UUID | None = Query(
+        None,
+        description="The ID of the project for which to retrieve workloads",
+        alias=to_camel("project_id"),
+    ),
     session: AsyncSession = Depends(get_session),
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
 ) -> Workloads:

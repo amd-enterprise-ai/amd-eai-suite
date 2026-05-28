@@ -14,23 +14,27 @@ import { getSecrets } from '@/services/server';
 import { getStorages } from '@/services/server';
 
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
-import { doesStorageDataNeedToBeRefreshed } from '@amdenterpriseai/utils/app';
+import { doesStorageDataNeedToBeRefreshed } from '@/utils/storages';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 import {
   doesSecretDataNeedToBeRefreshed,
   isSecretActioning,
-} from '@amdenterpriseai/utils/app';
+} from '@/utils/secrets';
 
 import {
   ActionFieldHintType,
   ClientSideDataFilter,
   FilterValueMap,
 } from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { ProjectSecretStatus, SecretScope } from '@amdenterpriseai/types';
-import { Project } from '@amdenterpriseai/types';
-import { Secret, SecretsResponse } from '@amdenterpriseai/types';
-import { StoragesResponse } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { ProjectSecretStatus, SecretScope } from '@/types/enums/secrets';
+import { Project } from '@/types/projects';
+import { Secret, SecretsResponse } from '@/types/secrets';
+import { StoragesResponse } from '@/types/storages';
 
 import {
   AddSecret,
@@ -39,6 +43,11 @@ import {
 } from '@/components/features/secrets';
 import DeleteSecretModal from '@/components/features/secrets/DeleteSecretModal';
 import { ActionButton } from '@amdenterpriseai/components';
+import {
+  RelevantDocs,
+  AirmDocsPage,
+  airmDocumentationMapping,
+} from '@amdenterpriseai/components';
 import { fetchSecrets } from '@/services/app';
 import { SecretsFilter } from '@/components/features/secrets';
 
@@ -48,7 +57,11 @@ interface Props {
   storages: StoragesResponse;
 }
 
-const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
+const SecretsPage: React.FC<Props> & WithDocumentationLink = ({
+  projects,
+  secrets,
+  storages,
+}) => {
   const { t } = useTranslation('secrets');
 
   // Additional modals for Resource Manager
@@ -223,7 +236,7 @@ const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
   );
 
   return (
-    <>
+    <div className="inline-flex flex-col w-full h-full max-h-full">
       <SecretsFilter
         onFilterChange={handleFilterChange}
         onRefresh={refetchSecrets}
@@ -270,9 +283,12 @@ const SecretsPage: React.FC<Props> = ({ projects, secrets, storages }) => {
         secret={targetSecret}
         queryKeyToInvalidate={['secrets']}
       />
-    </>
+      <RelevantDocs docs={airmDocumentationMapping[AirmDocsPage.SECRETS]} />
+    </div>
   );
 };
+
+SecretsPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/secrets/overview.html`;
 
 export default SecretsPage;
 

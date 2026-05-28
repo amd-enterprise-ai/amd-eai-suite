@@ -30,10 +30,10 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from testcontainers.postgres import PostgresContainer
 from testcontainers.rabbitmq import RabbitMqContainer
 
-import app.utilities.database as db_module
+import api_common.database as common_db
+from api_common.database import create_engine
+from api_common.models import BaseEntity
 from app import app  # type: ignore
-from app.utilities.database import create_engine
-from app.utilities.models import BaseEntity
 from app.utilities.security import (
     Roles,
     create_logged_in_user_in_system,
@@ -417,8 +417,8 @@ async def db_session(db_config):
 
     engine = create_async_engine(database_url, echo=False, poolclass=NullPool)
     session_local = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db_module.engine = engine
-    db_module.session_maker = session_local
+    common_db.engine = engine
+    common_db.session_maker = session_local
 
     async with test_session_scope(session_local) as session:
         yield session

@@ -3,9 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 import { Tooltip, useDisclosure } from '@heroui/react';
-import { IconAlertTriangle } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconExternalLink,
+  IconEye,
+  IconTrash,
+} from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
 import router from 'next/router';
@@ -24,18 +29,20 @@ import {
   formatCpuAllocation,
   formatMemoryAllocation,
 } from '@amdenterpriseai/utils/app';
+import { isHttpUrl, stripTrailingSlashes } from '@amdenterpriseai/utils/app';
 
-import { ProjectsResponse, TableColumns } from '@amdenterpriseai/types';
+import { TableColumns } from '@amdenterpriseai/types';
+import { ProjectsResponse } from '@/types/projects';
 import { CustomComparatorConfig } from '@amdenterpriseai/types';
-import { ProjectTableField } from '@amdenterpriseai/types';
-import { ProjectWithResourceAllocation } from '@amdenterpriseai/types';
+import { ProjectTableField } from '@/types/enums/project-table-fields';
+import { ProjectWithResourceAllocation } from '@/types/projects';
 
 import { ConfirmationModal } from '@amdenterpriseai/components';
 import { ClientSideDataTable } from '@amdenterpriseai/components';
 import { StatusDisplay } from '@amdenterpriseai/components';
 
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { getProjectStatusVariants } from '@amdenterpriseai/utils/app';
+import { ProjectStatus } from '@/types/enums/projects';
+import { getProjectStatusVariants } from '@/utils/projects-status-variants';
 
 import { StatusError } from '@amdenterpriseai/components';
 
@@ -90,32 +97,61 @@ export const ProjectTable: React.FC<Props> = ({ projects }) => {
       if (isAdministrator) return false;
       return !userProjects?.data.some((p) => p.id === project.id);
     },
-    [userProjects, isAdministrator],
+    [userProjects?.data, isAdministrator],
   );
 
   const [targetProject, setTargetProject] =
     useState<ProjectWithResourceAllocation | null>(null);
 
-  const actions = [
-    {
-      key: 'edit',
-      onPress: (p: ProjectWithResourceAllocation) => {
-        router.push(`/projects/${p.id}`);
+  const {
+    isOpen: isDeleteModalOpen,
+    onOpen: onDeleteModalOpen,
+    onOpenChange: onDeleteModalOpenChange,
+  } = useDisclosure();
+
+  const openProjectDetails = useCallback((id: string) => {
+    router.push(`/projects/${id}`);
+  }, []);
+
+  const actions = useMemo(
+    () => [
+      {
+        key: 'openDetails',
+        onPress: (p: ProjectWithResourceAllocation) => openProjectDetails(p.id),
+        label: t('list.projects.actions.openDetails.label'),
+        startContent: <IconEye />,
       },
-      label: t('list.projects.actions.edit.label'),
-    },
-    {
-      key: 'delete',
-      className: 'text-danger',
-      color: 'danger',
-      onPress: (p: ProjectWithResourceAllocation) => {
-        setTargetProject(p);
-        onDeleteModalOpen();
+      {
+        key: 'viewInAiwb',
+        onPress: (p: ProjectWithResourceAllocation) => {
+          window.open(
+            `${stripTrailingSlashes(p.cluster!.workbenchBaseUrl!)}/${p.name}`,
+            '_blank',
+            'noopener,noreferrer',
+          );
+        },
+        label: t('list.projects.actions.viewInAiwb.label'),
+        startContent: <IconExternalLink />,
+        isDisabled: (p: ProjectWithResourceAllocation) =>
+          !p.cluster?.workbenchBaseUrl ||
+          !isHttpUrl(p.cluster.workbenchBaseUrl),
+        showDivider: true,
       },
-      isDisabled: !isAdministrator,
-      label: t('list.projects.actions.delete.label'),
-    },
-  ];
+      {
+        key: 'delete',
+        className: 'text-danger',
+        color: 'danger',
+        onPress: (p: ProjectWithResourceAllocation) => {
+          setTargetProject(p);
+          onDeleteModalOpen();
+        },
+        isDisabled: !isAdministrator,
+        label: t('list.projects.actions.delete.label'),
+        startContent: <IconTrash />,
+      },
+    ],
+    [isAdministrator, onDeleteModalOpen, openProjectDetails, t],
+  );
 
   const customRenderers: Partial<
     Record<
@@ -203,11 +239,6 @@ export const ProjectTable: React.FC<Props> = ({ projects }) => {
     },
   };
 
-  const {
-    isOpen: isDeleteModalOpen,
-    onOpen: onDeleteModalOpen,
-    onOpenChange: onDeleteModalOpenChange,
-  } = useDisclosure();
   const queryClient = useQueryClient();
   const { toast } = useSystemToast();
 

@@ -17,7 +17,6 @@ async def apply_test_manifest(manifest: str) -> tuple[list[dict], MagicMock]:
     workload.chart_id = uuid4()
     workload.type = WorkloadType.INFERENCE
     workload.display_name = "test-workload"
-    workload.model_id = None
     workload.dataset_id = None
 
     api_resource = MagicMock(namespaced=True, create=MagicMock())
@@ -52,12 +51,14 @@ def make_deployment_status(
 def make_job_status(
     conditions: list[MagicMock] | None = None,
     active: int | None = None,
+    ready: int | None = None,
     succeeded: int | None = None,
     failed: int | None = None,
 ) -> MagicMock:
     status = MagicMock()
     status.conditions = conditions
     status.active = active
+    status.ready = ready
     status.succeeded = succeeded
     status.failed = failed
     return status

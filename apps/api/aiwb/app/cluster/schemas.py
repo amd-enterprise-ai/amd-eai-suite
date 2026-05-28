@@ -4,7 +4,9 @@
 
 """Cluster resource schemas for AIWB API."""
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from api_common.schemas import BaseModel
 
 
 class AvailableResources(BaseModel):

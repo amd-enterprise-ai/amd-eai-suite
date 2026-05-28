@@ -9,18 +9,78 @@ import { SessionProvider } from 'next-auth/react';
 import { appWithTranslation } from 'next-i18next';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 import { AppProps } from 'next/app';
+import { useRouter } from 'next/router';
 
 import nextI18NextConfig from '../next-i18next.config.js';
 
+import { useMemo } from 'react';
+
 import { AppLayout } from '@amdenterpriseai/layouts';
-import { PageErrorHandler } from '@/components/shared/PageErrorHandler/PageErrorHandler';
 import { SystemToastContainer } from '@amdenterpriseai/components';
-import { ProjectProvider } from '@/contexts/ProjectContext';
+import { useAirmLinkMenuItem } from '@/hooks/useAirmLinkMenuItem';
+import { PageErrorHandler } from '@/components/shared/PageErrorHandler/PageErrorHandler';
+import { ProjectProvider, useProject } from '@/contexts/ProjectContext';
 
 import '@/styles/globals.css';
 import '@/styles/toastify.css';
 import { aiWorkbenchMenuItems } from '@amdenterpriseai/utils/app';
-import { ProjectSelect, ProjectSelectPrompt } from '@/components/ProjectSelect';
+import { WithDocumentationLink } from '@amdenterpriseai/utils/app';
+import {
+  ProjectSelect,
+  ProjectSelectPrompt,
+} from '@/components/shared/ProjectSelect';
+
+function AppContent({
+  Component,
+  pageProps,
+}: {
+  Component: AppProps['Component'] & WithDocumentationLink;
+  pageProps: Record<string, unknown>;
+}) {
+  const router = useRouter();
+  const additionalMenuItems = useAirmLinkMenuItem();
+  const { clusterAuthEnabled } = useProject();
+  const project = router.query.project as string | undefined;
+  const isRootPage = !project;
+
+  const menuItems = useMemo(
+    () =>
+      clusterAuthEnabled
+        ? aiWorkbenchMenuItems
+        : aiWorkbenchMenuItems.filter((item) => item.href !== '/api-keys'),
+    [clusterAuthEnabled],
+  );
+
+  return (
+    <HeroUIProvider disableRipple>
+      <NextThemesProvider
+        disableTransitionOnChange
+        attribute="class"
+        defaultTheme="dark"
+      >
+        <SystemToastContainer />
+        <AppLayout
+          pageBreadcrumb={
+            pageProps?.pageBreadcrumb as AppProps['pageProps']['pageBreadcrumb']
+          }
+          menuItems={menuItems}
+          toolbarEndContent={<ProjectSelect />}
+          appTitle="sections.aiWorkbench.title"
+          documentationHref={Component.documentationLink}
+          additionalMenuItems={additionalMenuItems}
+          projectPrefix={project}
+        >
+          <PageErrorHandler
+            projectRequired={!isRootPage}
+            noActiveProjectComponent={<ProjectSelectPrompt />}
+          >
+            <Component {...pageProps} />
+          </PageErrorHandler>
+        </AppLayout>
+      </NextThemesProvider>
+    </HeroUIProvider>
+  );
+}
 
 function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
   const queryClient = new QueryClient();
@@ -29,28 +89,7 @@ function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
     <SessionProvider session={session} refetchInterval={10 * 60}>
       <QueryClientProvider client={queryClient}>
         <ProjectProvider>
-          <HeroUIProvider disableRipple>
-            <NextThemesProvider
-              disableTransitionOnChange
-              attribute="class"
-              defaultTheme="dark"
-            >
-              <SystemToastContainer />
-              <AppLayout
-                pageBreadcrumb={pageProps?.pageBreadcrumb}
-                menuItems={aiWorkbenchMenuItems}
-                toolbarEndContent={<ProjectSelect />}
-                appTitle={'sections.aiWorkbench.title'}
-              >
-                <PageErrorHandler
-                  projectRequired={true}
-                  noActiveProjectComponent={<ProjectSelectPrompt />}
-                >
-                  <Component {...pageProps} />
-                </PageErrorHandler>
-              </AppLayout>
-            </NextThemesProvider>
-          </HeroUIProvider>
+          <AppContent Component={Component} pageProps={pageProps} />
         </ProjectProvider>
       </QueryClientProvider>
     </SessionProvider>

@@ -4,7 +4,13 @@
 
 package messaging
 
-import amqp "github.com/rabbitmq/amqp091-go"
+import (
+	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+const BrokerConnectionTimeout = 15 * time.Second
 
 type QueueConfig struct {
 	Durable    bool

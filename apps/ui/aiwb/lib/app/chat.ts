@@ -2,16 +2,19 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { AIMServiceStatus, ParsedAIM } from '@/types/aims';
+import { ParsedAIM } from '@/types/aims';
 import { ChattableResponse, ChatWorkloadType } from '@/types/chat';
-import {
-  ProjectStatus,
-  Workload,
-  WorkloadStatus,
-  WorkloadType,
-} from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { AIMServiceStatus } from '@/types/aims';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { Workload } from '@/types/workloads';
 import { APIRequestError, getErrorMessage } from '@amdenterpriseai/utils/app';
-import { getAimClusterModels, resolveAIMServiceDisplay } from './aims';
+import {
+  fetchProfilesForServices,
+  getAimClusterModels,
+  getAimServices,
+  resolveAIMServiceDisplay,
+} from './aims';
 
 const convertAIMServiceStatus = (aimServiceStatus: AIMServiceStatus) => {
   if (aimServiceStatus === AIMServiceStatus.RUNNING) {
@@ -32,6 +35,9 @@ const convertAIMServiceStatus = (aimServiceStatus: AIMServiceStatus) => {
 export type WorkloadDisplayInfo = {
   imageVersion: string;
   metric: string;
+  gpu?: string | null;
+  templateGpuCount?: number | null;
+  precision?: string | null;
 };
 
 export type ChattableWorkloadsResult = {
@@ -46,22 +52,25 @@ export const listChattableWorkloads = async (
     throw new APIRequestError(`No project selected`, 422);
   }
 
-  const response = await fetch(`/api/namespaces/${projectId}/chattable`, {
-    method: 'GET',
-  });
+  const [chattableRes, aimServices] = await Promise.all([
+    fetch(`/api/namespaces/${projectId}/chattable`, { method: 'GET' }),
+    getAimServices(projectId).catch(() => []),
+  ]);
 
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
+  if (!chattableRes.ok) {
+    const errorMessage = await getErrorMessage(chattableRes);
     throw new APIRequestError(
       `Failed to list chattable workloads: ${errorMessage}`,
-      response.status,
+      chattableRes.status,
     );
   }
 
-  const chattableList = (await response.json()) as ChattableResponse;
+  const chattableList = (await chattableRes.json()) as ChattableResponse;
+
+  const profileByServiceId = await fetchProfilesForServices(aimServices);
 
   // Fetch ParsedAIMs to resolve display names (canonical names)
-  let parsedAIMs: ParsedAIM[] | undefined = undefined;
+  let parsedAIMs: ParsedAIM[] | undefined;
   try {
     parsedAIMs = await getAimClusterModels(projectId);
   } catch (error) {
@@ -89,20 +98,13 @@ export const listChattableWorkloads = async (
         id: s.id as string,
         aimId: modelRef,
         type: WorkloadType.INFERENCE,
+        tags: displayInfo.tags,
         name: modelRef || s.metadata.name,
         displayName,
         createdBy: '',
         createdAt: s.metadata.creationTimestamp,
         updatedAt: s.metadata.creationTimestamp,
         status: convertAIMServiceStatus(s.status.status),
-        project: {
-          id: s.metadata.namespace,
-          name: s.metadata.namespace,
-          description: '',
-          status: ProjectStatus.READY,
-          statusReason: null,
-          clusterId: '',
-        },
         output: {
           internalHost: s.endpoints.internal,
           externalHost: s.endpoints.external,
@@ -112,17 +114,37 @@ export const listChattableWorkloads = async (
     ...chattableList.workloads,
   ];
 
+  for (const s of chattableList.aimServices) {
+    const id = s.id as string;
+    const existing = workloadDisplayInfo[id];
+    if (!existing) continue;
+    const profile = profileByServiceId.get(id);
+    if (!profile) continue;
+    workloadDisplayInfo[id] = {
+      ...existing,
+      ...(profile.metric != null && profile.metric !== ''
+        ? { metric: profile.metric }
+        : {}),
+      ...(profile.gpu != null && profile.gpu !== ''
+        ? { gpu: profile.gpu }
+        : {}),
+      ...(profile.templateGpuCount != null
+        ? { templateGpuCount: profile.templateGpuCount }
+        : {}),
+      ...(profile.precision != null && profile.precision !== ''
+        ? { precision: profile.precision }
+        : {}),
+    };
+  }
+
   return {
     workloads: chattableWorkloads,
     workloadDisplayInfo,
   };
 };
 
-import {
-  ChatBody,
-  INFERENCE_CHUNK_DELIMITER,
-  InferenceChunk,
-} from '@amdenterpriseai/types';
+import { ChatBody } from '@/types/chat';
+import { INFERENCE_CHUNK_DELIMITER, InferenceChunk } from '@/types/chat';
 import { MutableRefObject } from 'react';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 

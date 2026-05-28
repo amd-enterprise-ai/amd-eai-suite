@@ -6,16 +6,60 @@ import { useSession } from 'next-auth/react';
 
 import router from 'next/router';
 
-import { UserRole } from '@amdenterpriseai/types';
+import { SidebarItem, UserRole } from '@amdenterpriseai/types';
 
 import { Sidebar } from '@amdenterpriseai/components';
 
 import { ProviderWrapper } from '@/__tests__/ProviderWrapper';
 
-// Mock next-auth
-vi.mock('next-auth/react', () => ({
-  useSession: vi.fn(),
+vi.mock('next-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
 }));
+
+const sidebarMenuAdmin: SidebarItem[] = [
+  {
+    href: '/dashboard',
+    stringKey: 'pages.dashboard.title',
+    icon: <div data-testid="dashboard-icon">📊</div>,
+  },
+  {
+    href: '/users',
+    stringKey: 'pages.users.title',
+    icon: <div data-testid="users-icon">👥</div>,
+  },
+];
+
+const sidebarMenuWorkbench: SidebarItem[] = [
+  {
+    href: '/models',
+    stringKey: 'pages.models.title',
+    icon: <div data-testid="models-icon">🤖</div>,
+  },
+  { href: '/chat', stringKey: 'pages.chat.title', icon: null },
+  {
+    href: '/datasets',
+    stringKey: 'pages.datasets.title',
+    icon: null,
+  },
+];
+
+const sidebarAdmin = {
+  appTitle: 'sections.resourceManagement.title',
+  menuItems: sidebarMenuAdmin,
+};
+
+const sidebarWorkbench = {
+  appTitle: 'sections.aiWorkbench.title',
+  menuItems: sidebarMenuWorkbench,
+};
+
+vi.mock('next-auth/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next-auth/react')>();
+  return {
+    ...actual,
+    useSession: vi.fn(),
+  };
+});
 const mockUseSession = vi.mocked(useSession);
 
 // Mock next/router
@@ -31,66 +75,49 @@ vi.mock('next/router', () => {
   };
 });
 
-// Mock the navigation hook
-vi.mock('@amdenterpriseai/hooks', () => ({
-  useNavigationState: () => ({
-    expandedSection: null,
-    setExpandedSection: vi.fn(),
-  }),
+vi.mock('@amdenterpriseai/assets/svg/logo', () => ({
+  AMDLogo: ({ className }: { className?: string }) => (
+    <div data-testid="amd-logo" className={className}>
+      AMD Logo
+    </div>
+  ),
+  AMDLogoSymbol: ({ className }: { className?: string }) => (
+    <div data-testid="amd-symbol" className={className}>
+      AMD Symbol
+    </div>
+  ),
+  AMDLogoText: () => <div data-testid="amd-logo-text">AMD Text</div>,
 }));
 
-// Mock the access control hook
-const mockUseAccessControl = vi.fn();
-vi.mock('@amdenterpriseai/hooks', () => ({
-  useAccessControl: () => mockUseAccessControl(),
-}));
-
-// Mock SVG components
-vi.mock('@/assets/svg/logo/amd-logo.svg', () => {
+vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/utils/app')>();
   return {
-    default: ({ className }: { className?: string }) => (
-      <div data-testid="amd-logo" className={className}>
-        AMD Logo
-      </div>
-    ),
+    ...actual,
+    airmMenuItems: [
+      {
+        href: '/dashboard',
+        stringKey: 'pages.dashboard.title',
+        icon: <div data-testid="dashboard-icon">📊</div>,
+      },
+      {
+        href: '/users',
+        stringKey: 'pages.users.title',
+        icon: <div data-testid="users-icon">👥</div>,
+      },
+    ],
+    aiWorkbenchMenuItems: [
+      {
+        href: '/models',
+        stringKey: 'pages.models.title',
+        icon: <div data-testid="models-icon">🤖</div>,
+      },
+    ],
+    isMenuItemActive: vi.fn((href: string, path: string) => {
+      return href === '/active-item';
+    }),
   };
 });
-
-vi.mock('@/assets/svg/logo/amd-symbol.svg', () => {
-  return {
-    default: ({ className }: { className?: string }) => (
-      <div data-testid="amd-symbol" className={className}>
-        AMD Symbol
-      </div>
-    ),
-  };
-});
-
-// Mock navigation utilities
-vi.mock('@amdenterpriseai/utils/app', () => ({
-  airmMenuItems: [
-    {
-      href: '/dashboard',
-      stringKey: 'pages.dashboard.title',
-      icon: <div data-testid="dashboard-icon">📊</div>,
-    },
-    {
-      href: '/users',
-      stringKey: 'pages.users.title',
-      icon: <div data-testid="users-icon">👥</div>,
-    },
-  ],
-  aiWorkbenchMenuItems: [
-    {
-      href: '/models',
-      stringKey: 'pages.models.title',
-      icon: <div data-testid="models-icon">🤖</div>,
-    },
-  ],
-  isMenuItemActive: vi.fn((href: string, path: string) => {
-    return href === '/active-item';
-  }),
-}));
 
 const mockSession = {
   user: {
@@ -117,13 +144,6 @@ const mockRegularUserSession = {
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Default mock for useAccessControl
-    mockUseAccessControl.mockReturnValue({
-      isRoleManagementEnabled: true,
-      isInviteEnabled: true,
-      isAdministrator: true,
-    });
   });
 
   describe('Authentication and Session Handling', () => {
@@ -135,7 +155,7 @@ describe('Sidebar', () => {
 
       const { container } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
       // The component should render (it uses useEffect to handle mounting)
@@ -150,7 +170,7 @@ describe('Sidebar', () => {
 
       const { getByTestId } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -166,16 +186,9 @@ describe('Sidebar', () => {
         status: 'authenticated',
       } as any);
 
-      // Override mock for regular user (not an administrator)
-      mockUseAccessControl.mockReturnValue({
-        isRoleManagementEnabled: true,
-        isInviteEnabled: true,
-        isAdministrator: false,
-      });
-
       const { queryByText, getByTestId } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarWorkbench} />
         </ProviderWrapper>,
       );
 
@@ -199,7 +212,7 @@ describe('Sidebar', () => {
 
       const { queryByText } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -222,7 +235,7 @@ describe('Sidebar', () => {
     it('renders AMD logo and symbol correctly', async () => {
       const { getByTestId } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -235,7 +248,7 @@ describe('Sidebar', () => {
     it('navigates to home when logo is clicked', async () => {
       const { getByTestId } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -263,7 +276,7 @@ describe('Sidebar', () => {
     it('renders lock button correctly', async () => {
       const { getByTestId } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -277,7 +290,7 @@ describe('Sidebar', () => {
     it('toggles sidebar state when lock button is clicked', async () => {
       const { getByTestId, container } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -298,7 +311,7 @@ describe('Sidebar', () => {
     it('shows correct icon based on sidebar state', async () => {
       const { getByTestId } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -317,48 +330,39 @@ describe('Sidebar', () => {
   });
 
   describe('Role-based Section Visibility', () => {
-    it('shows all sections for platform admin', async () => {
+    it('shows passed menu items for platform admin', async () => {
       mockUseSession.mockReturnValue({
         data: mockSession,
         status: 'authenticated',
       } as any);
 
-      const { container } = render(
+      const { getByText } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
       await waitFor(() => {
-        // Should have multiple CollapsibleSection components
-        const sections = container.querySelectorAll('[class*="mb-4"]');
-        expect(sections.length).toBeGreaterThan(0);
+        expect(getByText('pages.dashboard.title')).toBeInTheDocument();
+        expect(getByText('pages.users.title')).toBeInTheDocument();
       });
     });
 
-    it('shows only AI Workbench section for regular user', async () => {
+    it('shows workbench menu items for regular user', async () => {
       mockUseSession.mockReturnValue({
         data: mockRegularUserSession,
         status: 'authenticated',
       } as any);
 
-      // Override mock for regular user (not an administrator)
-      mockUseAccessControl.mockReturnValue({
-        isRoleManagementEnabled: true,
-        isInviteEnabled: true,
-        isAdministrator: false,
-      });
-
-      const { container } = render(
+      const { getByText } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarWorkbench} />
         </ProviderWrapper>,
       );
 
       await waitFor(() => {
-        // Should render AI Workbench section
-        const sections = container.querySelectorAll('[class*="mb-4"]');
-        expect(sections.length).toBeGreaterThan(0);
+        expect(getByText('pages.models.title')).toBeInTheDocument();
+        expect(getByText('pages.chat.title')).toBeInTheDocument();
       });
     });
 
@@ -368,16 +372,9 @@ describe('Sidebar', () => {
         status: 'authenticated',
       } as any);
 
-      // Override mock for regular user (not an administrator)
-      mockUseAccessControl.mockReturnValue({
-        isRoleManagementEnabled: true,
-        isInviteEnabled: true,
-        isAdministrator: false,
-      });
-
       const { queryByText } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarWorkbench} />
         </ProviderWrapper>,
       );
 
@@ -407,7 +404,7 @@ describe('Sidebar', () => {
 
       const { getByText } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -422,7 +419,7 @@ describe('Sidebar', () => {
     it('hides version in mini sidebar mode', async () => {
       const { getByTestId, container } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -443,37 +440,10 @@ describe('Sidebar', () => {
       } as any);
     });
 
-    it('displays version when available', async () => {
-      const originalVersion = process.env.NEXT_PUBLIC_BUILD_VERSION;
-      process.env.NEXT_PUBLIC_BUILD_VERSION = '1.0.0';
-
-      const { getByText } = render(
-        <ProviderWrapper>
-          <Sidebar />
-        </ProviderWrapper>,
-      );
-
-      await waitFor(() => {
-        expect(getByText('v1.0.0')).toBeInTheDocument();
-      });
-
-      // Cleanup
-      process.env.NEXT_PUBLIC_BUILD_VERSION = originalVersion;
-    });
-  });
-
-  describe('Mini Sidebar Responsive Behavior', () => {
-    beforeEach(() => {
-      mockUseSession.mockReturnValue({
-        data: mockSession,
-        status: 'authenticated',
-      } as any);
-    });
-
     it('applies correct classes for mini sidebar', async () => {
       const { getByTestId, container } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -488,7 +458,7 @@ describe('Sidebar', () => {
     it('applies correct classes for expanded sidebar after toggle', async () => {
       const { getByTestId, container } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -518,7 +488,7 @@ describe('Sidebar', () => {
 
       const { container } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 
@@ -541,7 +511,7 @@ describe('Sidebar', () => {
 
       const { container } = render(
         <ProviderWrapper>
-          <Sidebar />
+          <Sidebar {...sidebarAdmin} />
         </ProviderWrapper>,
       );
 

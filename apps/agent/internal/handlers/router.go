@@ -50,6 +50,9 @@ func (r *Router) Handle(ctx context.Context, msg *messaging.RawMessage) error {
 	case messaging.MessageTypeProjectNamespaceDelete:
 		return r.namespace.HandleDelete(ctx, msg)
 
+	case messaging.MessageTypeProjectNamespaceUpdate:
+		return r.namespace.HandleUpdate(ctx, msg)
+
 	case messaging.MessageTypeClusterQuotasAllocationMessage:
 		return r.quota.HandleUpdate(ctx, msg)
 

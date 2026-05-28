@@ -12,13 +12,10 @@ import (
 	agent "github.com/silogen/agent/internal/common"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -29,7 +26,6 @@ import (
 const (
 	testNamespace = "test-ns"
 	testProjectID = "project-123"
-	testUID       = "test-uid-12345"
 	testUsername  = "test-user@example.com"
 )
 
@@ -94,28 +90,18 @@ func createStatefulSet(labels map[string]string) *appsv1.StatefulSet {
 
 func createAdmissionRequest(statefulSet *appsv1.StatefulSet, oldStatefulSet *appsv1.StatefulSet) admission.Request {
 	raw, _ := json.Marshal(statefulSet)
-
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID(testUID),
-			Kind:      metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "StatefulSet"},
-			Namespace: testNamespace,
-			Name:      statefulSet.Name,
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo: authenticationv1.UserInfo{
-				Username: testUsername,
-			},
-		},
-	}
-
+	var oldRaw []byte
 	if oldStatefulSet != nil {
-		oldRaw, _ := json.Marshal(oldStatefulSet)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldStatefulSet)
 	}
-
-	return req
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "StatefulSet"},
+		testNamespace,
+		statefulSet.Name,
+		raw,
+		oldRaw,
+		testUsername,
+	)
 }
 
 func TestStatefulSetWebhook(t *testing.T) {
@@ -249,6 +235,35 @@ func TestStatefulSetWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, s.expectedPatches)
 		})
 	}
+}
+
+func TestStatefulSetWebhook_PreservesUnknownSpecFields(t *testing.T) {
+	ns := createNamespace(map[string]string{agent.ProjectIDLabel: testProjectID})
+	wh := setupWebhook(ns)
+	sts := createStatefulSet(nil)
+
+	raw := testutils.AddUnknownKeyToJSON(t, sts)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "StatefulSet"},
+		testNamespace, sts.Name, raw, nil, testUsername,
+	)
+	resp := wh.Handle(context.Background(), req)
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    testProjectID,
+			common.KueueNameLabel:   testNamespace,
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      testUsername,
+		}),
+		testutils.AddPodTemplateLabelMatching(testutils.LabelSegmentWorkloadID, testutils.UUIDMatcher),
+		testutils.AddPodTemplateLabelMatching(testutils.LabelSegmentComponentID, testutils.UUIDMatcher),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
 }
 
 func TestStatefulSetWebhook_NamespaceNotFound(t *testing.T) {

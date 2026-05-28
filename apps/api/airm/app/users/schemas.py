@@ -5,10 +5,11 @@
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, Field
+
+from api_common.schemas import BaseEntityPublic, BaseModel
 
 from ..utilities.enums import Roles
-from ..utilities.schema import BaseEntityPublic
 
 
 class UserBase(BaseEntityPublic):

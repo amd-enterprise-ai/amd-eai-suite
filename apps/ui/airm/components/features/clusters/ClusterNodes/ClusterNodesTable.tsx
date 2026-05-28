@@ -10,10 +10,10 @@ import { displayFixedNumber } from '@amdenterpriseai/utils/app';
 
 import { getNodeDisplayStatus } from '@/utils/node-status';
 
-import { ClusterNode } from '@amdenterpriseai/types';
+import { ClusterNode } from '@/types/clusters';
 import { TableColumns } from '@amdenterpriseai/types';
 import { CustomComparatorConfig } from '@amdenterpriseai/types';
-import { ClusterNodesTableField } from '@amdenterpriseai/types';
+import { ClusterNodesTableField } from '@/types/enums/cluster-nodes-table-field';
 
 import { ClientSideDataTable } from '@amdenterpriseai/components';
 

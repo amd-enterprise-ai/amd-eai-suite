@@ -4,12 +4,12 @@
 
 import { act, render, screen } from '@testing-library/react';
 
-import { generateClustersMock } from '../../../../__mocks__/utils/cluster-mock';
+import { generateClustersMock } from '@/__mocks__/utils/cluster-mock';
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { QuotaResource } from '@amdenterpriseai/types';
-import { WorkloadStatus } from '@amdenterpriseai/types';
-import { WorkloadStatusStatsResponse } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { QuotaResource } from '@/types/enums/quotas';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
 
 import { ClusterStats } from '@/components/features/clusters';
 

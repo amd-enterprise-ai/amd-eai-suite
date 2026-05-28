@@ -4,10 +4,11 @@
 
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import Field, HttpUrl
+
+from api_common.schemas import BaseEntityPublic, BaseModel
 
 from ..projects.schemas import ProjectAssignment
-from ..utilities.schema import BaseEntityPublic
 from .enums import StorageScope, StorageStatus, StorageType
 
 
@@ -28,14 +29,10 @@ class BaseStorage(BaseModel):
     scope: StorageScope = Field(description="The scope of the secret")
     secret_id: UUID = Field(description="The ID of the secret that holds the credentials for this storage.")
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class StorageResponse(BaseStorage, BaseEntityPublic):
     status: StorageStatus = Field(description="The status of the storage")
     status_reason: str | None = Field(None, description="Details if any about the status")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class StorageWithProjects(StorageResponse):

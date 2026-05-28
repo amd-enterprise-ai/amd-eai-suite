@@ -11,13 +11,11 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { AssignOrgSecretToProject } from '@/components/features/secrets';
-import {
-  SecretScope,
-  SecretUseCase,
-  SecretStatus,
-} from '@amdenterpriseai/types';
-import { Project } from '@amdenterpriseai/types';
-import { Secret } from '@amdenterpriseai/types';
+import { SecretScope } from '@/types/enums/secrets';
+import { SecretStatus } from '@/types/enums/secrets';
+import { SecretUseCase } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import { Secret } from '@/types/secrets';
 import {
   generateMockProjectSecretsWithParentSecret,
   generateMockSecrets,

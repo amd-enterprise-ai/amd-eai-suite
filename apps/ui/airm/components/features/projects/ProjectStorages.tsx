@@ -8,15 +8,15 @@ import { useTranslation } from 'next-i18next';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { ProjectStorageStatus } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { ProjectStorageStatus } from '@/types/enums/storages';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import { ProjectWithMembers } from '@amdenterpriseai/types';
+import { ProjectWithMembers } from '@/types/projects';
 import {
   ProjectStoragesResponse,
   ProjectStorageWithParentStorage,
   Storage,
-} from '@amdenterpriseai/types';
+} from '@/types/storages';
 
 import { ActionsToolbar } from '@amdenterpriseai/components';
 
@@ -25,11 +25,11 @@ import AssignStorageButton from '../storages/AssignStorageButton';
 import ProjectStoragesTable from './ProjectStoragesTable';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProjectStorages } from '@/services/app';
-import { doesProjectStorageDataNeedToBeRefreshed } from '@amdenterpriseai/utils/app';
+import { doesProjectStorageDataNeedToBeRefreshed } from '@/utils/storages';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 import { StatusError } from '@amdenterpriseai/components';
 import { Status, StatusProps } from '@amdenterpriseai/components';
-import { getProjectStatusVariants } from '@amdenterpriseai/utils/app';
+import { getProjectStatusVariants } from '@/utils/projects-status-variants';
 
 interface Props {
   project: ProjectWithMembers;

@@ -4,9 +4,9 @@
 
 *** Settings ***
 Library     Process
-Library     ../libraries/TestRunId.py
-Library     ../libraries/StringUtils.py
-Library     ../libraries/KubeConnection.py
+Library     TestRunId
+Library     StringUtils
+Library     KubeConnection
 Library     DateTime
 Library     Collections
 Library     OperatingSystem
@@ -47,8 +47,8 @@ Service endpoint
 
 Get Domain From Cluster
     [Documentation]    Retrieves the base domain from the cluster by reading the Gateway listener hostname.
-    ...                The Gateway defines listeners with hostnames like *.app-dev.silogen.ai.
-    ...                Returns the domain (e.g., app-dev.silogen.ai) or None if not found.
+    ...                The Gateway defines listeners with hostnames like *.example.com.
+    ...                Returns the domain (e.g., example.com) or None if not found.
     ...                Result is cached in a suite variable after first successful lookup.
 
     # Return cached domain if already resolved
@@ -58,7 +58,7 @@ Get Domain From Cluster
     END
 
     TRY
-        # Get domain from the Gateway's HTTPS listener hostname (e.g., *.app-dev.silogen.ai)
+        # Get domain from the Gateway's HTTPS listener hostname (e.g., *.example.com)
         ${result}=    Run Process    kubectl    get    gateway    https
         ...          -n    kgateway-system    -o    jsonpath\={.spec.listeners[0].hostname}    timeout=10s
 

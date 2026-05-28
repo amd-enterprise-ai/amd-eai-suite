@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DEFAULT_SETTINGS, InferenceSettings } from '@amdenterpriseai/types';
+import { DEFAULT_SETTINGS, InferenceSettings } from '@/types/models';
 
 const STORAGE_KEY = 'chatSettings';
 

@@ -22,8 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/silogen/agent/internal/messaging"
 )
 
 func setupReconciler(node client.Object) *NodeReconciler {
@@ -71,7 +69,7 @@ func TestReconcile_NodeUpdate(t *testing.T) {
 
 	mockPub := reconciler.Publisher.(*testutils.MockPublisher)
 	require.Len(t, mockPub.Published, 1)
-	msg, ok := mockPub.Published[0].(*messaging.ClusterNodeUpdateMessage)
+	msg, ok := mockPub.Published[0].(*ClusterNodeUpdateMessage)
 	require.True(t, ok)
 	assert.Equal(t, "test-node", msg.ClusterNode.Name)
 }
@@ -104,7 +102,7 @@ func TestReconcile_NodePendingDeletion(t *testing.T) {
 
 	mockPub := reconciler.Publisher.(*testutils.MockPublisher)
 	require.Len(t, mockPub.Published, 1)
-	msg, ok := mockPub.Published[0].(*messaging.ClusterNodeDeleteMessage)
+	msg, ok := mockPub.Published[0].(*ClusterNodeDeleteMessage)
 	require.True(t, ok)
 	assert.Equal(t, "test-node", msg.Name)
 }
@@ -122,7 +120,7 @@ func TestReconcile_NodeDeleted(t *testing.T) {
 
 	mockPub := reconciler.Publisher.(*testutils.MockPublisher)
 	require.Len(t, mockPub.Published, 1)
-	msg, ok := mockPub.Published[0].(*messaging.ClusterNodeDeleteMessage)
+	msg, ok := mockPub.Published[0].(*ClusterNodeDeleteMessage)
 	require.True(t, ok)
 	assert.Equal(t, "test-node", msg.Name)
 }

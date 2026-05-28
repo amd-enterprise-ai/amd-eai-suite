@@ -10,9 +10,10 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import BigInteger, Integer, SmallInteger
 
+from api_common.models import BaseEntity
+
 from ..clusters.models import Cluster
-from ..messaging.schemas import QuotaStatus
-from ..utilities.models import BaseEntity
+from .enums import QuotaStatus
 
 
 class Quota(BaseEntity):

@@ -54,14 +54,14 @@ func TestSecretHandler_HandleCreate_KubernetesSecret(t *testing.T) {
 
 	handler := NewSecretHandler(clientset, dynamicClient, publisher, logger)
 
-	manifest := &messaging.KubernetesSecretManifest{
+	manifest := &common.KubernetesSecretManifest{
 		Type: "Opaque",
-		Metadata: &messaging.SecretManifestMetadata{
+		Metadata: &common.SecretManifestMetadata{
 			Name:      "test-secret",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
 				common.ProjectSecretIDLabel:    "550e8400-e29b-41d4-a716-446655440000",
-				common.ProjectSecretScopeLabel: string(messaging.SecretScopeProject),
+				common.ProjectSecretScopeLabel: string(common.SecretScopeProject),
 			},
 		},
 		StringData: map[string]string{
@@ -72,8 +72,8 @@ func TestSecretHandler_HandleCreate_KubernetesSecret(t *testing.T) {
 
 	manifestJSON, _ := json.Marshal(manifest)
 
-	createMsg := messaging.ProjectSecretsCreateMessage{
-		SecretType: messaging.SecretKindKubernetesSecret,
+	createMsg := common.ProjectSecretsCreateMessage{
+		SecretType: common.SecretKindKubernetesSecret,
 		Manifest:   manifestJSON,
 	}
 
@@ -136,14 +136,14 @@ func TestSecretHandler_HandleCreate_AlreadyExists(t *testing.T) {
 	_, err = clientset.CoreV1().Secrets("test-namespace").Create(context.Background(), existingSecret, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	manifest := &messaging.KubernetesSecretManifest{
+	manifest := &common.KubernetesSecretManifest{
 		Type: "Opaque",
-		Metadata: &messaging.SecretManifestMetadata{
+		Metadata: &common.SecretManifestMetadata{
 			Name:      "test-secret",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
 				common.ProjectSecretIDLabel:    "550e8400-e29b-41d4-a716-446655440000",
-				common.ProjectSecretScopeLabel: string(messaging.SecretScopeProject),
+				common.ProjectSecretScopeLabel: string(common.SecretScopeProject),
 			},
 		},
 		StringData: map[string]string{
@@ -154,8 +154,8 @@ func TestSecretHandler_HandleCreate_AlreadyExists(t *testing.T) {
 
 	manifestJSON, _ := json.Marshal(manifest)
 
-	createMsg := messaging.ProjectSecretsCreateMessage{
-		SecretType: messaging.SecretKindKubernetesSecret,
+	createMsg := common.ProjectSecretsCreateMessage{
+		SecretType: common.SecretKindKubernetesSecret,
 		Manifest:   manifestJSON,
 	}
 
@@ -188,8 +188,8 @@ func TestSecretHandler_HandleCreate_MinimalManifest(t *testing.T) {
 
 	handler := NewSecretHandler(clientset, dynamicClient, publisher, logger)
 
-	manifest := &messaging.KubernetesSecretManifest{
-		Metadata: &messaging.SecretManifestMetadata{
+	manifest := &common.KubernetesSecretManifest{
+		Metadata: &common.SecretManifestMetadata{
 			Name:      "test-secret",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
@@ -201,8 +201,8 @@ func TestSecretHandler_HandleCreate_MinimalManifest(t *testing.T) {
 	manifestJSON, err := json.Marshal(manifest)
 	require.NoError(t, err)
 
-	createMsg := messaging.ProjectSecretsCreateMessage{
-		SecretType: messaging.SecretKindKubernetesSecret,
+	createMsg := common.ProjectSecretsCreateMessage{
+		SecretType: common.SecretKindKubernetesSecret,
 		Manifest:   manifestJSON,
 	}
 
@@ -235,8 +235,8 @@ func TestSecretHandler_HandleCreate_UnsupportedSecretType(t *testing.T) {
 
 	handler := NewSecretHandler(clientset, dynamicClient, publisher, logger)
 
-	manifest := &messaging.KubernetesSecretManifest{
-		Metadata: &messaging.SecretManifestMetadata{
+	manifest := &common.KubernetesSecretManifest{
+		Metadata: &common.SecretManifestMetadata{
 			Name:      "test-secret",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
@@ -246,7 +246,7 @@ func TestSecretHandler_HandleCreate_UnsupportedSecretType(t *testing.T) {
 	}
 	manifestJSON, _ := json.Marshal(manifest)
 
-	createMsg := messaging.ProjectSecretsCreateMessage{
+	createMsg := common.ProjectSecretsCreateMessage{
 		SecretType: "UnsupportedType",
 		Manifest:   manifestJSON,
 	}
@@ -316,11 +316,11 @@ func TestSecretHandler_HandleDelete_KubernetesSecret(t *testing.T) {
 		return true, nil, nil
 	})
 
-	deleteMsg := messaging.ProjectSecretsDeleteMessage{
+	deleteMsg := common.ProjectSecretsDeleteMessage{
 		ProjectSecretID: "550e8400-e29b-41d4-a716-446655440000",
 		ProjectName:     "test-namespace",
-		SecretType:      messaging.SecretKindKubernetesSecret,
-		SecretScope:     messaging.SecretScopeProject,
+		SecretType:      common.SecretKindKubernetesSecret,
+		SecretScope:     common.SecretScopeProject,
 	}
 
 	payload, _ := json.Marshal(deleteMsg)
@@ -353,11 +353,11 @@ func TestSecretHandler_HandleDelete_SecretNotFound(t *testing.T) {
 		metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	deleteMsg := messaging.ProjectSecretsDeleteMessage{
+	deleteMsg := common.ProjectSecretsDeleteMessage{
 		ProjectSecretID: "550e8400-e29b-41d4-a716-446655440000",
 		ProjectName:     "test-namespace",
-		SecretType:      messaging.SecretKindKubernetesSecret,
-		SecretScope:     messaging.SecretScopeProject,
+		SecretType:      common.SecretKindKubernetesSecret,
+		SecretScope:     common.SecretScopeProject,
 	}
 
 	payload, _ := json.Marshal(deleteMsg)
@@ -372,9 +372,9 @@ func TestSecretHandler_HandleDelete_SecretNotFound(t *testing.T) {
 
 	// Should publish DELETED status
 	require.Len(t, publisher.Published, 1)
-	msg, ok := publisher.Published[0].(*messaging.ProjectSecretsUpdateMessage)
+	msg, ok := publisher.Published[0].(*common.ProjectSecretsUpdateMessage)
 	require.True(t, ok)
-	assert.Equal(t, messaging.ProjectSecretStatusDeleted, msg.Status)
+	assert.Equal(t, common.ProjectSecretStatusDeleted, msg.Status)
 	assert.Contains(t, *msg.StatusReason, "No secrets found")
 }
 
@@ -387,11 +387,11 @@ func TestSecretHandler_HandleDelete_UnsupportedSecretType(t *testing.T) {
 
 	handler := NewSecretHandler(clientset, dynamicClient, publisher, logger)
 
-	deleteMsg := messaging.ProjectSecretsDeleteMessage{
+	deleteMsg := common.ProjectSecretsDeleteMessage{
 		ProjectSecretID: "550e8400-e29b-41d4-a716-446655440000",
 		ProjectName:     "test-namespace",
 		SecretType:      "UnsupportedType",
-		SecretScope:     messaging.SecretScopeProject,
+		SecretScope:     common.SecretScopeProject,
 	}
 
 	payload, _ := json.Marshal(deleteMsg)

@@ -13,9 +13,9 @@ import pytest
 from fastapi import UploadFile
 from minio.error import S3Error
 
-from api_common.exceptions import ExternalServiceError, ForbiddenException, NotFoundException, ValidationException
+from api_common.exceptions import ExternalServiceError, ForbiddenException, ValidationException
 from app.datasets.models import Dataset
-from app.datasets.utils import download_from_s3, sync_dataset_to_s3, validate_jsonl, verify_s3_sync
+from app.datasets.utils import sync_dataset_to_s3, validate_jsonl, verify_s3_sync
 from app.minio import MinioClient
 
 
@@ -90,48 +90,6 @@ async def test_sync_s3_error() -> None:
             await sync_dataset_to_s3(dataset, file, mock_client)
 
 
-@pytest.mark.asyncio
-async def test_download_success() -> None:
-    """Test successful downloading of a dataset from S3."""
-    dataset = MagicMock(spec=Dataset)
-    dataset.id = "test-id"
-    dataset.path = "datasets/test-id.jsonl"
-
-    mock_client = MagicMock(spec=MinioClient)
-    mock_client.download_object.return_value = b'{"text": "test"}\n{"text": "test2"}'
-
-    file_name, content = await download_from_s3(dataset, mock_client)
-
-    mock_client.download_object.assert_called_once_with(
-        bucket_name="default-bucket", object_name="datasets/test-id.jsonl"
-    )
-    assert file_name == "test-id.jsonl"
-    assert content == b'{"text": "test"}\n{"text": "test2"}'
-
-
-@pytest.mark.asyncio
-async def test_download_error() -> None:
-    """Test handling of S3Error during dataset download."""
-    dataset = MagicMock(spec=Dataset)
-    dataset.id = "test-id"
-    dataset.path = "datasets/test-id.jsonl"
-
-    mock_client = MagicMock(spec=MinioClient)
-    s3_error = S3Error(
-        code="NoSuchKey",
-        message="The specified key does not exist",
-        resource="/bucket/datasets/test-id.jsonl",
-        request_id="request123",
-        host_id="host123",
-        response="response",
-    )
-    mock_client.download_object.side_effect = s3_error
-
-    with patch("app.minio.config.MINIO_BUCKET", "bucket"):
-        with pytest.raises(NotFoundException):  # NoSuchKey maps to NotFoundException
-            await download_from_s3(dataset, mock_client)
-
-
 def test_valid_file():
     """Test validation of a valid JSONL file."""
     file_content = b'{"text": "test"}\n{"text": "test2"}'
@@ -188,18 +146,6 @@ async def test_upload_and_download_flow(mock_dataset: MagicMock) -> None:
     assert call_args["bucket_name"] == "default-bucket"
     assert call_args["object_name"] == "datasets/test-id.jsonl"
     assert path == "default-bucket/datasets/test-id.jsonl"
-
-    # Download test
-    mock_minio_instance.download_object.return_value = content
-    file_name, file_content = await download_from_s3(mock_dataset, mock_minio_instance)
-
-    # Verify download was called with correct parameters
-    mock_minio_instance.download_object.assert_called_once()
-    call_args = mock_minio_instance.download_object.call_args[1]
-    assert call_args["bucket_name"] == "default-bucket"
-    assert call_args["object_name"] == "datasets/test-id.jsonl"
-    assert file_name == "test-id.jsonl"
-    assert file_content == content
 
 
 if __name__ == "__main__":

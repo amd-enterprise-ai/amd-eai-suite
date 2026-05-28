@@ -11,3 +11,8 @@ class ProjectStatus(StrEnum):
     PARTIALLY_READY = "PartiallyReady"
     READY = "Ready"
     DELETING = "Deleting"
+
+
+class GpuPreemptionPolicy(StrEnum):
+    ON_PRESSURE = "OnPressure"
+    ALWAYS = "Always"

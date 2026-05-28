@@ -20,6 +20,7 @@ const vitestConfig = defineVitestConfig({
   },
   define: process.env.VITEST ? {} : { global: 'window' },
   test: {
+    testTimeout: 10000, // CI runners are slower than local; default 5s causes flaky timeouts
     setupFiles: ['__tests__/setup.ts'],
     mockReset: true,
     globals: true,

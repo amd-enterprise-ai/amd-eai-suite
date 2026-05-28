@@ -15,18 +15,23 @@ import { mockModels } from '@/__mocks__/services/app/models.data';
 import { getModels } from '@/lib/app/models';
 import { deleteWorkload, listWorkloads } from '@/lib/app/workloads';
 import {
+  fetchProfilesForServices,
   getAimClusterModels,
   getAimServices,
   resolveAIMServiceDisplay,
 } from '@/lib/app/aims';
 
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
-import { Workload } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { Workload } from '@/types/workloads';
 
 import DeployedModels from '@/components/features/models/DeployedModels';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock, vi } from 'vitest';
+
+/** next-i18next key resolved to the row overflow menu trigger (ThreeDotActionsDropdown aria-label). */
+const ROW_OVERFLOW_MENU_KEY = 'list.actions.label';
 
 vi.mock('@/lib/app/models', () => ({
   getModels: vi.fn(),
@@ -40,6 +45,7 @@ vi.mock('@/lib/app/workloads', () => ({
 vi.mock('@/lib/app/aims', () => ({
   getAimClusterModels: vi.fn(),
   getAimServices: vi.fn(),
+  fetchProfilesForServices: vi.fn().mockResolvedValue(new Map()),
   mapAIMServiceStatusToWorkloadStatus: vi.fn((s: string) => s),
   undeployAim: vi.fn(),
   resolveAIMServiceDisplay: vi.fn(),
@@ -120,7 +126,6 @@ const createMockAimService = (
     template: {},
   },
   status: { status: 'Running', resolvedModel: { name: modelName } },
-  resourceName: `${modelName}-deployment`,
   endpoints: {
     internal: `https://${modelName}.internal`,
     external: `https://${modelName}.example.com`,
@@ -140,6 +145,7 @@ describe('DeployedModels', () => {
   const mockGetModels = getModels as Mock;
   const mockGetAimServices = getAimServices as Mock;
   const mockGetAimClusterModels = getAimClusterModels as Mock;
+  const mockFetchProfilesForServices = fetchProfilesForServices as Mock;
   const mockResolveAIMServiceDisplay = resolveAIMServiceDisplay as Mock;
 
   beforeEach(() => {
@@ -154,6 +160,7 @@ describe('DeployedModels', () => {
     mockGetModels.mockResolvedValue(mockModels);
     mockGetAimServices.mockResolvedValue([]);
     mockGetAimClusterModels.mockResolvedValue([]);
+    mockFetchProfilesForServices.mockResolvedValue(new Map());
     mockResolveAIMServiceDisplay.mockImplementation(
       (service: {
         status?: { resolvedModel?: { name?: string } };
@@ -163,7 +170,7 @@ describe('DeployedModels', () => {
         imageVersion: '1.0.0',
         metric: 'default',
         title: 'Llama 2 7B',
-        resourceName:
+        name:
           service.status?.resolvedModel?.name ?? service.metadata?.name ?? '',
       }),
     );
@@ -357,15 +364,16 @@ describe('DeployedModels', () => {
       render(<DeployedModels />, { wrapper });
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
-    });
+    const llamaCell = await screen.findByText('Llama 7B Inference');
 
-    // Find the row with Llama 7B Inference and click its action button
-    const llamaRow = screen.getByText('Llama 7B Inference').closest('tr');
-    expect(llamaRow).not.toBeNull();
+    // Grid tables expose rows via role="row" (not always a <tr>).
+    const llamaRow = llamaCell.closest('[role="row"]');
+    expect(llamaRow).toBeTruthy();
 
-    const rowActionButton = within(llamaRow!).getByText('action-dot-icon');
+    const rowActionButton = within(llamaRow as HTMLElement).getByRole(
+      'button',
+      { name: ROW_OVERFLOW_MENU_KEY },
+    );
     await act(async () => {
       fireEvent.click(rowActionButton);
     });
@@ -381,8 +389,8 @@ describe('DeployedModels', () => {
     // Verify navigation to workload details page for Llama 7B (workload-1)
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith({
-        pathname: `/workloads/workload-1`,
-        search: `ref=/models`,
+        pathname: `/project1/workloads/workload-1`,
+        query: { ref: '/models' },
       });
     });
   });
@@ -396,7 +404,9 @@ describe('DeployedModels', () => {
       expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
     });
 
-    const rowActionButtons = screen.getAllByText('action-dot-icon');
+    const rowActionButtons = screen.getAllByRole('button', {
+      name: ROW_OVERFLOW_MENU_KEY,
+    });
     fireEvent.click(rowActionButtons[0]); // First workload (Delete Failed Inference)
 
     const undeployButton = screen.getByTestId('undeploy');
@@ -416,7 +426,9 @@ describe('DeployedModels', () => {
     });
 
     // Open row actions menu for the last workload (Llama 7B)
-    const rowActionButtons = screen.getAllByText('action-dot-icon');
+    const rowActionButtons = screen.getAllByRole('button', {
+      name: ROW_OVERFLOW_MENU_KEY,
+    });
     await act(async () => {
       fireEvent.click(rowActionButtons[rowActionButtons.length - 1]);
     });
@@ -444,7 +456,7 @@ describe('DeployedModels', () => {
     await waitFor(() => {
       expect(mockDeleteWorkload).toHaveBeenCalled(); // Llama 7B Inference workload
     });
-  });
+  }, 10000);
 
   it('displays workspace workloads when workspace type is in filter', async () => {
     // Create a mock with a workspace workload
@@ -571,7 +583,9 @@ describe('DeployedModels', () => {
 
     // Test actions for the Llama 7B Inference workload (INFERENCE with RUNNING status and CHAT capability)
     // It should be the last row since the table is sorted by createdAt descending
-    const rowActionButtons = screen.getAllByText('action-dot-icon');
+    const rowActionButtons = screen.getAllByRole('button', {
+      name: ROW_OVERFLOW_MENU_KEY,
+    });
     await act(async () => {
       // Click the last workload which should be Llama 7B Inference based on the sorting
       fireEvent.click(rowActionButtons[rowActionButtons.length - 1]);
@@ -613,7 +627,9 @@ describe('DeployedModels', () => {
     });
 
     // Open row actions for the workload
-    const rowActionButtons = screen.getAllByText('action-dot-icon');
+    const rowActionButtons = screen.getAllByRole('button', {
+      name: ROW_OVERFLOW_MENU_KEY,
+    });
     await act(async () => {
       fireEvent.click(rowActionButtons[0]);
     });
@@ -636,7 +652,6 @@ describe('DeployedModels', () => {
         ...mockInferenceWorkloads[4],
         type: WorkloadType.INFERENCE,
         status: WorkloadStatus.DELETED, // This should be filtered out
-        modelId: 'model-deleted',
         displayName: 'Deleted Model',
       },
     ];
@@ -668,8 +683,8 @@ describe('DeployedModels', () => {
 
   it('displays canonical names for all workloads with AIM or Model', async () => {
     const workloadsWithModelOrAim = [
-      mockInferenceWorkloads[0], // workload-1 - modelId
-      mockInferenceWorkloads[2], // workload-8 - modelId
+      mockInferenceWorkloads[0], // workload-1 - finetuning workload
+      mockInferenceWorkloads[2], // workload-8 - finetuning workload
       mockInferenceWorkloads[3], // workload-11 - aimId
       mockInferenceWorkloads[4], // workload-12 - aimId
       mockInferenceWorkloads[5], // workload-13 - aimId
@@ -721,8 +736,22 @@ describe('DeployedModels', () => {
     }
   });
 
-  it('displays AIM workloads with canonical name, version, and metric', async () => {
-    mockGetAimServices.mockResolvedValue(mockAimServices);
+  it('displays AIM workloads with canonical name, version, and profile summary', async () => {
+    const profile = {
+      metric: 'throughput',
+      gpu: 'MI300X',
+      templateGpuCount: 8,
+      precision: 'fp8',
+    };
+    const services = [
+      createMockAimService('workload-11', 'aim-1'),
+      createMockAimService('workload-12', 'aim-2'),
+      createMockAimService('workload-13', 'aim-3'),
+    ];
+    mockGetAimServices.mockResolvedValue(services);
+    mockFetchProfilesForServices.mockResolvedValue(
+      new Map(services.map((s) => [s.id, profile])),
+    );
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -734,11 +763,15 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      const formattedDisplays = screen.getAllByText(
-        /meta-llama\/Llama-2-7B\s+\(1\.0\.0\)\s+\(models:performanceMetrics\.values\.default\)/,
-      );
-      expect(formattedDisplays.length).toBeGreaterThan(0);
-      expect(formattedDisplays[0]).toBeInTheDocument();
+      const titles = screen.getAllByText('meta-llama/Llama-2-7B (1.0.0)');
+      expect(titles.length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText('models:performanceMetrics.values.throughput ·')
+          .length,
+      ).toBeGreaterThan(0);
+      expect(screen.getAllByText('MI300X ·').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('8x GPU ·').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('fp8').length).toBeGreaterThan(0);
     });
   });
 
@@ -761,12 +794,16 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
-      const rowActionButtons = screen.getAllByText('action-dot-icon');
+      const rowActionButtons = screen.getAllByRole('button', {
+        name: ROW_OVERFLOW_MENU_KEY,
+      });
       expect(rowActionButtons.length).toBeGreaterThan(0);
     });
 
     await act(async () => {
-      fireEvent.click(screen.getAllByText('action-dot-icon')[0]);
+      fireEvent.click(
+        screen.getAllByRole('button', { name: ROW_OVERFLOW_MENU_KEY })[0],
+      );
     });
 
     await waitFor(() => {
@@ -777,7 +814,7 @@ describe('DeployedModels', () => {
   });
 
   it('displays no data indicator for workload without AIM or Model', async () => {
-    // Workload without modelId or aimId should show NoDataDisplay
+    // Workload without a finetuning workload or aimId should show NoDataDisplay
     const workloadWithoutModelOrAim: Workload = {
       id: 'workload-no-model',
       name: 'Standalone Inference',

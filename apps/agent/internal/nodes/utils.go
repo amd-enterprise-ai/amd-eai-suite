@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/silogen/agent/internal/messaging"
+	"github.com/silogen/agent/internal/common"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -57,7 +57,7 @@ func getNodeStatus(node *corev1.Node) (string, bool) {
 	return combinedStatus, isReady
 }
 
-func getGPUInfo(node *corev1.Node) *messaging.GPUInformation {
+func getGPUInfo(node *corev1.Node) *GPUInformation {
 	gpuCapacity, exists := node.Status.Capacity[GPUCapacityKey]
 	if !exists {
 		return nil
@@ -97,10 +97,10 @@ func getGPUInfo(node *corev1.Node) *messaging.GPUInformation {
 		vramBytes = parseGPUVRAM(val)
 	}
 
-	return &messaging.GPUInformation{
+	return &GPUInformation{
 		Count:              int32(gpuCount),
 		GPUType:            gpuType,
-		Vendor:             messaging.GPUVendorAMD,
+		Vendor:             common.GPUVendorAMD,
 		VRAMBytesPerDevice: vramBytes,
 		ProductName:        productName,
 	}
@@ -152,7 +152,7 @@ func parseGPUVRAM(vramStr string) int64 {
 }
 
 // mapNodeToClusterNode converts a Kubernetes Node to a ClusterNode message
-func mapNodeToClusterNode(node *corev1.Node) messaging.ClusterNode {
+func mapNodeToClusterNode(node *corev1.Node) ClusterNode {
 
 	cpuMilliCores := node.Status.Allocatable.Cpu().MilliValue()
 
@@ -162,7 +162,7 @@ func mapNodeToClusterNode(node *corev1.Node) messaging.ClusterNode {
 
 	status, isReady := getNodeStatus(node)
 
-	return messaging.ClusterNode{
+	return ClusterNode{
 		Name:                  node.Name,
 		CPUMilliCores:         cpuMilliCores,
 		MemoryBytes:           memoryBytes,

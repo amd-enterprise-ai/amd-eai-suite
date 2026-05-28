@@ -4,11 +4,10 @@
 
 import { useTranslation } from 'next-i18next';
 
-import { TimeRangePeriod } from '@amdenterpriseai/types';
+import { TimeRangePeriod, TimeRange } from '@amdenterpriseai/types';
 import { useMemo } from 'react';
 import {
   getTickGap,
-  getCurrentTimeRange,
   transformTimeSeriesDataToChartData,
 } from '@amdenterpriseai/utils/app';
 import { Card, CardBody, CardHeader, Tooltip } from '@heroui/react';
@@ -18,12 +17,14 @@ import { TimeSeriesResponse } from '@amdenterpriseai/types';
 import { getInferenceRequests } from '@/lib/app/metrics';
 import { useQuery } from '@tanstack/react-query';
 import { useProject } from '@/contexts/ProjectContext';
-import { InferenceMetricsColors } from '@amdenterpriseai/types';
+import { InferenceMetricsColors } from '@/types/enums/inference-metrics';
 
 interface Props {
   namespace: string;
   workloadId: string;
+  timeRange: TimeRange;
   timePeriod: TimeRangePeriod;
+  podName?: string;
 }
 
 const WAITING_REQUESTS_COLOR = InferenceMetricsColors.WAITING_REQUESTS;
@@ -32,7 +33,9 @@ const RUNNING_REQUESTS_COLOR = InferenceMetricsColors.RUNNING_REQUESTS;
 export const InferenceRequestsCard: React.FC<Props> = ({
   namespace,
   workloadId,
+  timeRange,
   timePeriod,
+  podName,
 }) => {
   const { t } = useTranslation('workloads');
   const { activeProject } = useProject();
@@ -46,17 +49,20 @@ export const InferenceRequestsCard: React.FC<Props> = ({
         workloadId,
         'metrics',
         'inferenceRequests',
-        timePeriod,
+        podName,
+        {
+          start: timeRange.start.toISOString(),
+          end: timeRange.end.toISOString(),
+        },
       ],
-      queryFn: () => {
-        const { start, end } = getCurrentTimeRange(timePeriod);
-        return getInferenceRequests({
+      queryFn: () =>
+        getInferenceRequests({
           workloadId,
           namespace,
-          start,
-          end,
-        });
-      },
+          start: timeRange.start,
+          end: timeRange.end,
+          podName,
+        }),
     });
 
   const inferenceRequestsChartData = useMemo(() => {

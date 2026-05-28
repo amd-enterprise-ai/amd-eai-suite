@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { fetchOrganization } from '@/services/app';
-import { Organization } from '@amdenterpriseai/types';
+import { Organization } from '@/types/organization';
 import { UserRole } from '@amdenterpriseai/types';
 
 /**

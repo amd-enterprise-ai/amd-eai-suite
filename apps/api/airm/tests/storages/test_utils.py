@@ -9,11 +9,12 @@ import pytest
 import yaml
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import ConfigMapStatus, ProjectSecretStatus, ProjectStorageStatus
+from api_common.exceptions import ValidationException
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
+from app.secrets.enums import ProjectSecretStatus
 from app.secrets.models import OrganizationSecretAssignment
-from app.storages.enums import StorageStatus
+from app.storages.enums import ProjectStorageStatus, StorageStatus
 from app.storages.models import ProjectStorage, ProjectStorageConfigmap
 from app.storages.utils import (
     _build_storage_info_configmap_manifest,
@@ -21,7 +22,7 @@ from app.storages.utils import (
     resolve_storage_status,
     verify_projects_ready,
 )
-from app.utilities.exceptions import ValidationException
+from app.workloads.enums import ConfigMapStatus
 from tests import factory  # type: ignore[attr-defined]
 
 
@@ -313,6 +314,13 @@ async def test_resolve_project_storage_composite_status(
             StorageStatus.UNASSIGNED,
             [ProjectStorageStatus.SYNCED, ProjectStorageStatus.PENDING],
             StorageStatus.PARTIALLY_SYNCED,
+            None,
+        ),
+        # All PENDING → PENDING
+        (
+            StorageStatus.SYNCED,
+            [ProjectStorageStatus.PENDING],
+            StorageStatus.PENDING,
             None,
         ),
         # Fallback: no rule matched → SYNCED_ERROR

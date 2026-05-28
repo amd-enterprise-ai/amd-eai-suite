@@ -9,5 +9,7 @@ import os
 # ============================================================================
 # Cluster Auth Service Configuration
 # ============================================================================
+CLUSTER_AUTH_ENABLED = os.getenv("CLUSTER_AUTH_ENABLED", "true").lower() == "true"
+# These are only used when CLUSTER_AUTH_ENABLED=true. No need to set them when disabled.
 CLUSTER_AUTH_URL = os.getenv("CLUSTER_AUTH_URL", "http://localhost:48012")
 CLUSTER_AUTH_ADMIN_TOKEN = os.getenv("CLUSTER_AUTH_ADMIN_TOKEN", "")

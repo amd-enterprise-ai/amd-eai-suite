@@ -9,7 +9,7 @@ helmGlobals:
   chartHome: ../../../helm/airm/charts
 
 helmCharts:
-  - name: agent
+  - name: airm-agent
     releaseName: airm
     valuesFile: values.yaml
     namespace: airm

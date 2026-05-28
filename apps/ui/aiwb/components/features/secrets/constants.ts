@@ -7,7 +7,7 @@ export const EXTERNAL_SECRETS_KIND = 'ExternalSecret';
 export const KUBERNETES_SECRETS_VERSION = 'v1';
 export const KUBERNETES_SECRETS_KIND = 'Secret';
 
-/** Annotation key for submitter (camelCase as returned by API). */
-export const SUBMITTER_ANNOTATION_KEY = 'airmSilogenAiSubmitter';
+/** Annotation key for submitter (raw K8s annotation key, not camelCase). */
+export const SUBMITTER_ANNOTATION_KEY = 'airm.silogen.ai/submitter';
 
 export const nameRegex = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;

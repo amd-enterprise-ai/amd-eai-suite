@@ -563,16 +563,32 @@ describe('AIMConnectModal', () => {
   });
 
   describe('URL Toggle Switch', () => {
-    const aimWithAuthGroup = {
+    const aimWithExternalUrl = {
       ...mockAimWithService,
       deployedService: {
         ...mockAimWithService.deployedService!,
-        clusterAuthGroupId: 'test-group-id',
+        endpoints: {
+          external: 'https://api.example.com/test-namespace/service-1',
+          internal:
+            'http://llama-2-7b-service.test-namespace.svc.cluster.local',
+        },
       },
     };
 
-    it('renders the internal URL switch when clusterAuthGroupId is present', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithAuthGroup} />);
+    const aimWithoutExternalUrl = {
+      ...mockAimWithService,
+      deployedService: {
+        ...mockAimWithService.deployedService!,
+        endpoints: {
+          external: undefined,
+          internal:
+            'http://llama-2-7b-service.test-namespace.svc.cluster.local',
+        },
+      },
+    };
+
+    it('renders the internal URL switch when external URL exists', () => {
+      render(<AIMConnectModal {...defaultProps} aim={aimWithExternalUrl} />);
 
       const switchElement = screen.getByTestId('switch');
       expect(switchElement).toBeInTheDocument();
@@ -581,14 +597,14 @@ describe('AIMConnectModal', () => {
       );
     });
 
-    it('hides the internal URL switch when clusterAuthGroupId is missing', () => {
-      render(<AIMConnectModal {...defaultProps} />);
+    it('hides the internal URL switch when there is no external URL', () => {
+      render(<AIMConnectModal {...defaultProps} aim={aimWithoutExternalUrl} />);
 
       expect(screen.queryByTestId('switch')).not.toBeInTheDocument();
     });
 
     it('switch is unchecked by default (external URL)', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithAuthGroup} />);
+      render(<AIMConnectModal {...defaultProps} aim={aimWithExternalUrl} />);
 
       const switchInput = screen.getByTestId('switch-input');
       expect(switchInput).not.toBeChecked();

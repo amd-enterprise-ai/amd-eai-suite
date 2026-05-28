@@ -2,11 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  WorkloadStatus,
-  WorkloadType,
-  ResourceType,
-} from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus, ResourceType } from '@/types/enums/workloads';
 
 export interface ResourceMetrics {
   id: string;
@@ -15,6 +12,10 @@ export interface ResourceMetrics {
   type: WorkloadType;
   status: WorkloadStatus;
   gpuCount: number | null;
+  templateGpuCount: number | null;
+  gpu: string | null;
+  metric: string | null;
+  precision: string | null;
   vram: number | null;
   createdAt: string | null;
   createdBy: string | null;

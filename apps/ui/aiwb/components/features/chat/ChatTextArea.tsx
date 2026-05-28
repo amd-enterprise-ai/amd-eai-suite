@@ -6,6 +6,7 @@ import {
   IconArrowDown,
   IconPlayerPlay,
   IconPlayerStop,
+  IconPaperclip,
 } from '@tabler/icons-react';
 import { MutableRefObject } from 'react';
 
@@ -14,6 +15,7 @@ import { Button } from '@heroui/react';
 
 interface Props {
   content: string;
+  enableImageInput: boolean;
   handleChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   setIsTyping: (isTyping: boolean) => void;
@@ -25,10 +27,14 @@ interface Props {
   handleStopConversation: () => void;
   showScrollDownButton: boolean;
   onScrollDownClick: () => void;
+  onAttachImage?: () => void;
+  hasAttachedImages?: boolean;
+  isDragOver?: boolean;
 }
 
 export const ChatTextArea = ({
   content,
+  enableImageInput,
   handleChange,
   handleKeyDown,
   setIsTyping,
@@ -40,8 +46,12 @@ export const ChatTextArea = ({
   handleStopConversation,
   showScrollDownButton,
   onScrollDownClick,
+  onAttachImage,
+  hasAttachedImages,
+  isDragOver,
 }: Props) => {
   const { t } = useTranslation('chat');
+
   return (
     <div className="w-full">
       <div className="relative flex flex-row justify-center items-center">
@@ -51,7 +61,7 @@ export const ChatTextArea = ({
           data-testid="chat-input"
           ref={textareaRef}
           disabled={disabled}
-          className="py-4 w-full max-h-[110px] md:max-h-[200px] lg:max-h-[400px] shadow-lg focus:ring-0 border-0 outline-none bg-default-100 disabled:hover:bg-default-200/75 rounded-3xl resize-none pl-6 pr-20 text-default-800"
+          className="py-4 w-full max-h-27.5 md:max-h-50 lg:max-h-100 shadow-lg focus:ring-0 border-0 outline-none bg-default-100 disabled:hover:bg-default-200/75 rounded-3xl resize-none pl-6 pr-32 text-default-800"
           style={{
             resize: 'none',
             bottom: `${textareaRef?.current?.scrollHeight}px`,
@@ -62,9 +72,11 @@ export const ChatTextArea = ({
             }`,
           }}
           placeholder={
-            disabled
-              ? t('chatInput.placeholderDisabled')
-              : t('chatInput.placeholder')
+            isDragOver
+              ? ''
+              : disabled
+                ? t('chatInput.placeholderDisabled')
+                : t('chatInput.placeholder')
           }
           value={content}
           rows={1}
@@ -73,6 +85,28 @@ export const ChatTextArea = ({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
         />
+
+        {/* Attach Image Button */}
+        {onAttachImage &&
+          !messageIsStreaming &&
+          !disabled &&
+          enableImageInput && (
+            <Button
+              id="attach-image-button"
+              className={`absolute right-16 ${hasAttachedImages ? 'text-success' : ''}`}
+              color={hasAttachedImages ? 'success' : 'default'}
+              isIconOnly
+              radius="full"
+              disabled={disabled}
+              onPress={onAttachImage}
+              data-testid="attach-image-button"
+              variant="light"
+              title={t('chatInput.attachImage')}
+              aria-label={t('chatInput.attachImage')}
+            >
+              <IconPaperclip size={18} />
+            </Button>
+          )}
 
         {!messageIsStreaming && (
           <Button

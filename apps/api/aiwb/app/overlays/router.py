@@ -3,18 +3,20 @@
 # SPDX-License-Identifier: MIT
 
 from textwrap import dedent
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from pydantic.alias_generators import to_camel
 from sqlalchemy.orm import Session
 
 from api_common.auth.security import get_user_email
 from api_common.database import get_session
 from api_common.exceptions import NotFoundException, ValidationException
-from api_common.schemas import DeleteBatchRequest, ListResponse
+from api_common.schemas import DeleteBatchRequest, ListResponse, QueryParam
 
 from .repository import delete_overlays, list_overlays
-from .schemas import OverlayResponse, OverlayUpdate
+from .schemas import OverlayListQuery, OverlayResponse, OverlayUpdate
 from .service import create_overlay, delete_overlay_by_id_service, get_overlay_by_id, parse_overlay_file, update_overlay
 
 router = APIRouter(tags=["Overlays"])
@@ -23,6 +25,7 @@ router = APIRouter(tags=["Overlays"])
 @router.post(
     "/overlays",
     response_model=OverlayResponse,
+    status_code=status.HTTP_201_CREATED,
     summary="Create model deployment overlay",
     description=dedent("""
         Create YAML overlay for customizing AI model deployments on Helm charts.
@@ -31,10 +34,13 @@ router = APIRouter(tags=["Overlays"])
     """),
 )
 async def create_overlay_endpoint(
-    chart_id: UUID = Form(description="The ID of an existing Chart."),
-    overlay_file: UploadFile = File(description="YAML file containing the model overlay"),
+    chart_id: UUID = Form(alias=to_camel("chart_id"), description="The ID of an existing Chart."),
+    overlay_file: UploadFile = File(
+        alias=to_camel("overlay_file"), description="YAML file containing the model overlay"
+    ),
     canonical_name: str | None = Form(
         None,
+        alias=to_camel("canonical_name"),
         description="Optional canonical name to associate the overlay with a model type, for example 'meta-llama/Llama-3.1-8B'.",
         examples=["meta-llama/Llama-3.1-8B"],
     ),
@@ -64,10 +70,13 @@ async def create_overlay_endpoint(
 )
 async def update_overlay_endpoint(
     overlay_id: UUID,
-    chart_id: UUID = Form(None, description="The ID of an existing Chart."),
-    overlay_file: UploadFile | None = File(None, description="YAML file containing the model overlay"),
+    chart_id: UUID = Form(None, alias=to_camel("chart_id"), description="The ID of an existing Chart."),
+    overlay_file: UploadFile | None = File(
+        None, alias=to_camel("overlay_file"), description="YAML file containing the model overlay"
+    ),
     canonical_name: str | None = Form(
         None,
+        alias=to_camel("canonical_name"),
         description="Optional canonical name to associate the overlay with a model type, for example 'meta-llama/Llama-3.1-8B'.",
         examples=["meta-llama/Llama-3.1-8B"],
     ),
@@ -78,10 +87,16 @@ async def update_overlay_endpoint(
     if overlay_file:
         overlay_data = await parse_overlay_file(overlay_file)
     if not overlay_data and not chart_id and not canonical_name:
-        raise ValidationException("Either 'overlay_file' or 'chart_id' or 'canonical_name' must be provided")
-    overlay_update = OverlayUpdate(
-        chart_id=chart_id, overlay=overlay_data, canonical_name=canonical_name, updated_by=updater
-    )
+        raise ValidationException("Either 'overlayFile' or 'chartId' or 'canonicalName' must be provided")
+
+    update_kwargs: dict[str, Any] = {"updated_by": updater}
+    if chart_id is not None:
+        update_kwargs["chart_id"] = chart_id
+    if overlay_data is not None:
+        update_kwargs["overlay"] = overlay_data
+    if canonical_name is not None:
+        update_kwargs["canonical_name"] = canonical_name
+    overlay_update = OverlayUpdate(**update_kwargs)
 
     overlay = await update_overlay(
         session=session,
@@ -102,11 +117,7 @@ async def update_overlay_endpoint(
     """),
 )
 async def list_overlays_endpoint(
-    chart_id: UUID | None = Query(None, description="Optionally filter by chart ID"),
-    canonical_name: str | None = Query(
-        None,
-        description="Optionally filter by overlays compatible to models with a specific canonical name. This also includes overlays with no canonical name specified.",
-    ),
+    query: QueryParam[OverlayListQuery],
     session: Session = Depends(get_session),
 ) -> ListResponse[OverlayResponse]:
     """
@@ -114,8 +125,8 @@ async def list_overlays_endpoint(
     """
     items = await list_overlays(
         session=session,
-        chart_id=chart_id,
-        canonical_name=canonical_name,
+        chart_id=query.chart_id,
+        canonical_name=query.canonical_name,
     )
     return ListResponse(data=items)
 

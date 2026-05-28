@@ -26,7 +26,7 @@ Finetune model
     ...                Uses namespace-based endpoint pattern: /namespaces/{namespace}/models/{model_id}/finetune
     ...
     ...                Args:
-    ...                model_id: Model ID or canonical name (e.g., UUID or "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+    ...                model_id: Model ID or canonical name (e.g., UUID or "meta-llama/Llama-3.2-1B-Instruct")
     ...                finetune_data: Dictionary with finetuning parameters
     ...                expected_status: Expected HTTP status code (default: any)
     ...                namespace: Namespace for the request
@@ -40,10 +40,10 @@ Finetune model
 
     ${endpoint}=            Finetune endpoint       ${model_id}             ${namespace}
 
-    # Build query parameters if display_name is provided
+    # Build query parameters if displayName is provided
     ${params}=              Create Dictionary
     IF    $display_name is not None
-        Set To Dictionary   ${params}               display_name=${display_name}
+        Set To Dictionary   ${params}               displayName=${display_name}
     END
 
     Log                     POST ${endpoint}        DEBUG

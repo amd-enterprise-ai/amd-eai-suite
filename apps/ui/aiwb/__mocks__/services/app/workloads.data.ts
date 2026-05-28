@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { WorkloadStatus, WorkloadType, LogLevel } from '@amdenterpriseai/types';
-import { Workload, LogEntry } from '@amdenterpriseai/types';
-import { mockProject1, mockProject2 } from './projects.data';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus, LogLevel } from '@/types/enums/workloads';
+import { Workload, LogEntry } from '@/types/workloads';
 
 /**
  * Mock log entries for testing workload logs
@@ -38,8 +38,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'test-user',
     chartId: 'chart-1',
     type: WorkloadType.INFERENCE,
-    project: mockProject1,
-    modelId: 'model-1',
     createdAt: '2023-01-01T00:00:00Z',
     updatedAt: '2023-01-01T01:00:00Z',
     updatedBy: 'test-user',
@@ -60,8 +58,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'test-user',
     chartId: 'chart-2',
     type: WorkloadType.INFERENCE,
-    project: mockProject1,
-    modelId: 'model-2',
     createdAt: '2023-01-02T00:00:00Z',
     updatedAt: '2023-01-02T01:00:00Z',
     updatedBy: 'test-user',
@@ -78,7 +74,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'test-user',
     chartId: 'chart-3',
     type: WorkloadType.WORKSPACE,
-    project: mockProject2,
     createdAt: '2023-01-03T00:00:00Z',
     updatedAt: '2023-01-03T01:00:00Z',
     updatedBy: 'test-user',
@@ -99,7 +94,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'test-user',
     chartId: 'chart-4',
     type: WorkloadType.FINE_TUNING,
-    project: mockProject1,
     createdAt: '2023-01-04T00:00:00Z',
     updatedAt: '2023-01-04T01:00:00Z',
     updatedBy: 'test-user',
@@ -116,7 +110,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'test-user',
     chartId: 'chart-5',
     type: WorkloadType.INFERENCE,
-    project: mockProject1,
     createdAt: '2023-01-05T00:00:00Z',
     updatedAt: '2023-01-05T01:00:00Z',
     updatedBy: 'test-user',
@@ -133,8 +126,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'user-2',
     chartId: 'chart-6',
     type: WorkloadType.FINE_TUNING,
-    project: mockProject1,
-    modelId: 'model-3',
     datasetId: 'dataset-1',
     createdAt: '2023-01-06T00:00:00Z',
     updatedAt: '2023-01-06T01:00:00Z',
@@ -155,8 +146,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'user-3',
     chartId: 'chart-7',
     type: WorkloadType.WORKSPACE,
-    project: mockProject2,
-    modelId: 'model-1',
     createdAt: '2023-01-07T00:00:00Z',
     updatedAt: '2023-01-07T01:00:00Z',
     updatedBy: 'user-3',
@@ -177,8 +166,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'user-2',
     chartId: 'chart-8',
     type: WorkloadType.INFERENCE,
-    project: mockProject1,
-    modelId: 'model-2',
     createdAt: '2023-01-08T00:00:00Z',
     updatedAt: '2023-01-08T01:00:00Z',
     updatedBy: 'user-2',
@@ -198,8 +185,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'user-1',
     chartId: 'chart-9',
     type: WorkloadType.FINE_TUNING,
-    project: mockProject2,
-    modelId: 'model-3',
     createdAt: '2023-01-09T00:00:00Z',
     updatedAt: '2023-01-09T01:00:00Z',
     updatedBy: 'user-1',
@@ -216,8 +201,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'user-3',
     chartId: 'chart-10',
     type: WorkloadType.FINE_TUNING,
-    project: mockProject1,
-    modelId: 'model-1',
     createdAt: '2023-01-10T00:00:00Z',
     updatedAt: '2023-01-10T01:00:00Z',
     updatedBy: 'user-3',
@@ -241,8 +224,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'test-user',
     chartId: 'chart-11',
     type: WorkloadType.INFERENCE,
-    project: mockProject1,
-    modelId: 'model-4',
     aimId: 'aim-1',
     clusterAuthGroupId: 'auth-group-1',
     createdAt: '2023-01-11T00:00:00Z',
@@ -265,8 +246,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'test-user',
     chartId: 'chart-12',
     type: WorkloadType.INFERENCE,
-    project: mockProject1,
-    modelId: 'model-5',
     aimId: 'aim-2',
     clusterAuthGroupId: 'auth-group-2',
     createdAt: '2023-01-12T00:00:00Z',
@@ -289,8 +268,6 @@ export const mockWorkloads: Workload[] = [
     createdBy: 'test-user',
     chartId: 'chart-13',
     type: WorkloadType.INFERENCE,
-    project: mockProject1,
-    modelId: 'model-6',
     aimId: 'aim-3',
     clusterAuthGroupId: 'auth-group-3',
     createdAt: '2023-01-13T00:00:00Z',

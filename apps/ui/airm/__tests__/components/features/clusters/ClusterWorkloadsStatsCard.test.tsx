@@ -4,7 +4,7 @@
 
 import { render, screen } from '@testing-library/react';
 
-import { WorkloadStatus } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 
 import { ClusterWorkloadsStatsCard } from '@/components/features/clusters';
 

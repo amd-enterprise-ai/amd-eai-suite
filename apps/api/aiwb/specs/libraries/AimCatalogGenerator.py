@@ -22,7 +22,6 @@ models are tested (one name per line, matched against model_name).
 import os
 import re
 import subprocess
-import traceback
 from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
@@ -98,9 +97,6 @@ class AimCatalogGenerator:
         self.test_mode = test_mode
         self.current_suite = None
         self.models = []
-        self._api_base_url = None
-        self._api_headers = {}
-        self._templates_gpu_map = None
 
         if model_config_file and model_config_file.lower() not in ("api", "none"):
             self.name_filter = self._load_model_names(model_config_file)
@@ -110,34 +106,70 @@ class AimCatalogGenerator:
             logger.info("No name filter — will use all models from API")
 
     @staticmethod
-    def _load_model_names(file_path):
+    def _load_model_names(source):
         """
-        Load model names from a plain text file.
+        Load model names from a file path or an inline comma-separated list.
 
-        Expected format: one model name per line.
-        Lines starting with # are comments. Blank lines are ignored.
+        If source is a path to an existing file, reads one model name per line
+        (lines starting with # are comments, blank lines are ignored).
+
+        Otherwise, source is treated as a comma-separated inline list of model
+        names or docker image refs — useful for passing via --variable flag:
+            --variable "AIM_CATALOG_FILTER:ghcr.io/silogen/aim-openai-gpt-oss-20b:0.11.0"
+            --variable "AIM_CATALOG_FILTER:openai/gpt-oss-20b,openai/gpt-oss-120b"
 
         Args:
-            file_path: Path to the text file
+            source: File path or comma-separated inline model spec
 
         Returns:
-            Set of model name strings
+            Ordered list of model name strings (source order, duplicates removed)
 
         Raises:
-            FileNotFoundError: If the file does not exist
+            FileNotFoundError: If source looks like a file path but the file does not exist
         """
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Model name filter file not found: {file_path}")
+        path = Path(source)
+        if path.exists():
+            names = []
+            seen = set()
+            with open(path) as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#") and stripped not in seen:
+                        names.append(stripped)
+                        seen.add(stripped)
+            return names
 
-        names = set()
-        with open(path) as f:
-            for line in f:
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#"):
-                    names.add(stripped)
+        # .txt files that don't exist on disk are almost certainly mistyped paths.
+        if source.endswith(".txt"):
+            raise FileNotFoundError(f"Model name filter file not found: {source}")
 
+        # Treat as inline comma-separated model names or docker image refs.
+        logger.info(f"AIM_CATALOG_FILTER '{source}' is not a file path, treating as inline model spec")
+        names = []
+        seen = set()
+        for name in source.split(","):
+            stripped = name.strip()
+            if stripped and stripped not in seen:
+                names.append(stripped)
+                seen.add(stripped)
         return names
+
+    @staticmethod
+    def _parse_image_ref(image_ref):
+        """
+        Parse a docker image reference into (image_name, version).
+
+        Strips the registry prefix and extracts the image name and tag.
+        Works with any registry prefix (ghcr.io/silogen/, amdenterpriseai/, etc.)
+
+        Examples:
+            "ghcr.io/silogen/aim-foo:0.11.0"  -> ("aim-foo", "0.11.0")
+            "amdenterpriseai/aim-foo:0.10.0"   -> ("aim-foo", "0.10.0")
+            "aim-foo:0.11.0"                   -> ("aim-foo", "0.11.0")
+        """
+        path, _, version = image_ref.rpartition(":")
+        image_name = path.split("/")[-1]
+        return image_name, version
 
     def _resolve_api_url(self):
         """
@@ -189,7 +221,19 @@ class AimCatalogGenerator:
         )
 
     def _discover_url_from_cluster(self):
-        """Discover AIWB API URL from the cluster Gateway hostname."""
+        """Discover AIWB API URL from the cluster.
+
+        When running inside a Kubernetes pod, uses the internal service DNS which
+        avoids routing through the external Gateway (unreachable from in-cluster).
+        When running locally, discovers the external URL via the Gateway hostname.
+        """
+        # Running inside K8s: use internal service DNS directly
+        if os.path.exists("/var/run/secrets/kubernetes.io/serviceaccount/token"):
+            url = "http://aiwb-api.aiwb.svc.cluster.local:8080"
+            logger.info(f"Running in-cluster, using internal service DNS: {url}")
+            return url
+
+        # Running locally: discover external URL via kgateway hostname
         try:
             result = subprocess.run(
                 [
@@ -281,8 +325,9 @@ class AimCatalogGenerator:
         Authenticates using kubectl OIDC token if available.
 
         Args:
-            name_filter: Optional set of model names. When provided, only
-                        models whose model_name is in this set are returned.
+            name_filter: Optional ordered list of model names. When provided, only
+                        models whose model_name is in this list are returned,
+                        sorted by their position in the list.
                         Unmatched names are logged as warnings.
 
         Returns:
@@ -290,20 +335,23 @@ class AimCatalogGenerator:
         """
         import requests  # noqa: PLC0415
 
-        self._api_base_url = self._resolve_api_url()
-        url = f"{self._api_base_url}/v1/cluster/aims/models"
+        base_url = self._resolve_api_url()
+        url = f"{base_url}/v1/cluster/aims/models"
 
         logger.info(f"Discovering AIMs from cluster API: {url}")
 
+        headers = {}
         token = self._get_auth_token()
         if token:
-            self._api_headers = {"Authorization": f"Bearer {token}"}
+            headers["Authorization"] = f"Bearer {token}"
             logger.debug("Using OIDC bearer token for API authentication")
-        else:
-            self._api_headers = {}
+
+        # Respect VERIFY_SSL env var (shared with Robot Framework resources via endpoints.resource).
+        # Defaults to False to handle MITM proxies common in corporate dev environments.
+        verify_ssl = os.environ.get("VERIFY_SSL", "FALSE").upper() != "FALSE"
 
         try:
-            response = requests.get(url, headers=self._api_headers, timeout=30)
+            response = requests.get(url, headers=headers, timeout=90, verify=verify_ssl)
             response.raise_for_status()
         except requests.RequestException as e:
             raise RuntimeError(f"Failed to fetch AIMs from cluster API ({url}): {e}") from e
@@ -330,6 +378,9 @@ class AimCatalogGenerator:
                 f"(image={model['image_name']}, gpus={model['gpu_count']}, hf_token={model['requires_hf_token']})"
             )
 
+        # Keep pre-dedup list for image-ref matching (which must pin exact versions)
+        all_models = list(models)
+
         # Version filtering vs dedup:
         # - Specific version/range: skip dedup, return all models matching the filter
         # - "latest" or unset: deduplicate by image_name, keeping highest version
@@ -341,14 +392,40 @@ class AimCatalogGenerator:
         else:
             models = self._deduplicate_models(models)
 
-        # Apply name filter if provided
+        # Apply name filter if provided, preserving config file order.
+        # Entries can be HF model names (e.g. "deepseek-ai/DeepSeek-R1") or
+        # docker image refs with a version tag (e.g. "ghcr.io/silogen/aim-foo:0.11.0").
+        # Image refs are matched by image_name + version against the undeduped list,
+        # so the exact pinned version is used regardless of what dedup would pick.
         if name_filter:
-            matched_names = {m["model_name"] for m in models}
-            unmatched = name_filter - matched_names
-            for name in sorted(unmatched):
-                logger.warn(f"Name filter entry not found in API results: {name}")
+            deduped_by_hf_name = {m["model_name"]: m for m in models}
+            all_by_image_version = {(m["image_name"], m["version"]): m for m in all_models}
 
-            models = [m for m in models if m["model_name"] in name_filter]
+            result = []
+            seen_image_names = set()
+            unmatched = []
+
+            for entry in name_filter:
+                if ":" in entry:
+                    image_name, version = self._parse_image_ref(entry)
+                    model = all_by_image_version.get((image_name, version))
+                    if model and model["image_name"] not in seen_image_names:
+                        result.append(model)
+                        seen_image_names.add(model["image_name"])
+                    elif model is None:
+                        unmatched.append(entry)
+                else:
+                    model = deduped_by_hf_name.get(entry)
+                    if model and model["image_name"] not in seen_image_names:
+                        result.append(model)
+                        seen_image_names.add(model["image_name"])
+                    elif model is None:
+                        unmatched.append(entry)
+
+            for entry in sorted(unmatched):
+                logger.warn(f"Filter entry not found in API results: {entry}")
+
+            models = result
             logger.info(f"Name filter: kept {len(models)} models matching filter")
 
         logger.info(f"Discovered {len(models)} Ready AIMs from cluster API")
@@ -383,14 +460,9 @@ class AimCatalogGenerator:
         # image_name: short name extracted from docker image or resource_name
         image_name = self._extract_image_name(docker_image, resource_name)
 
-        # gpu_count: prefer AIMClusterServiceTemplate, fall back to recommendedDeployments
-        gpu_count = self._get_templates_gpu_count(resource_name)
-        if gpu_count > 0:
-            logger.debug(f"GPU count for '{resource_name}': {gpu_count} (from templates)")
-        else:
-            recommended = model_meta.get("recommendedDeployments", model_meta.get("recommended_deployments", []))
-            gpu_count = self._extract_gpu_count(recommended)
-            logger.debug(f"GPU count for '{resource_name}': {gpu_count} (from recommendedDeployments)")
+        # gpu_count: from recommendedDeployments
+        recommended = model_meta.get("recommendedDeployments", model_meta.get("recommended_deployments", []))
+        gpu_count = self._extract_gpu_count(recommended)
 
         # requires_hf_token
         hf_required = model_meta.get("hfTokenRequired", model_meta.get("hf_token_required"))
@@ -468,74 +540,6 @@ class AimCatalogGenerator:
                         continue
 
         return min(gpu_counts) if gpu_counts else 1
-
-    def _get_templates_gpu_count(self, aim_resource_name):
-        """
-        Look up GPU count for an AIM from the cached templates map.
-
-        On first call for a given AIM, fetches templates from the API and
-        caches the result. Subsequent calls for the same AIM reuse the
-        cached value to avoid redundant HTTP requests.
-
-        Args:
-            aim_resource_name: The AIM resource name to look up
-
-        Returns:
-            Integer GPU count from templates, or 0 if unavailable
-        """
-        if self._templates_gpu_map is None:
-            self._templates_gpu_map = {}
-
-        if aim_resource_name not in self._templates_gpu_map:
-            self._templates_gpu_map[aim_resource_name] = self._fetch_templates_gpu_count(aim_resource_name)
-
-        return self._templates_gpu_map[aim_resource_name]
-
-    def _fetch_templates_gpu_count(self, aim_resource_name):
-        """
-        Fetch GPU count from AIMClusterServiceTemplate resources.
-
-        Calls the templates API endpoint and extracts the minimum GPU count
-        across all templates for the given model.
-
-        Args:
-            aim_resource_name: The AIM resource name to query templates for
-
-        Returns:
-            Integer GPU count from templates, or 0 if unavailable
-        """
-        if not self._api_base_url:
-            return 0
-
-        import requests  # noqa: PLC0415
-
-        url = f"{self._api_base_url}/v1/cluster/aims/templates"
-        try:
-            response = requests.get(
-                url,
-                headers=self._api_headers,
-                params={"aim_resource_name": aim_resource_name},
-                timeout=30,
-            )
-            response.raise_for_status()
-            templates = response.json().get("data", [])
-        except (requests.RequestException, ValueError) as e:
-            logger.debug(f"Could not fetch templates for '{aim_resource_name}': {e}\n{traceback.format_exc()}")
-            return 0
-
-        if not templates:
-            return 0
-
-        gpu_counts = []
-        for template in templates:
-            try:
-                count = int(template["spec"]["hardware"]["gpu"]["requests"])
-                if count > 0:
-                    gpu_counts.append(count)
-            except (KeyError, TypeError, ValueError):
-                continue
-
-        return min(gpu_counts) if gpu_counts else 0
 
     @staticmethod
     def _extract_version(docker_image):
@@ -720,6 +724,22 @@ class AimCatalogGenerator:
             logger.debug(f"Skipping test generation for suite '{data.name}' (not aim_catalog)")
             return
 
+        # Allow --variable AIM_CATALOG_FILTER and TEST_MODE to override constructor args.
+        # This lets arguments.txt carry a safe default listener while callers switch
+        # sources via --variable instead of --listener.
+        catalog_source = self._get_variable(data, "AIM_CATALOG_FILTER")
+        if catalog_source:
+            logger.info(f"AIM_CATALOG_FILTER variable overrides constructor: {catalog_source}")
+            if catalog_source.lower() not in ("api", "none"):
+                self.name_filter = self._load_model_names(catalog_source)
+                logger.info(f"Loaded {len(self.name_filter)} model names from {catalog_source}")
+            else:
+                self.name_filter = None
+
+        test_mode_var = self._get_variable(data, "TEST_MODE")
+        if test_mode_var:
+            self.test_mode = test_mode_var
+
         # Discover models from API (with optional name filter)
         logger.info("Discovering AIMs from cluster API...")
         self.models = self._load_models_from_api(name_filter=self.name_filter)
@@ -892,7 +912,7 @@ class AimCatalogGenerator:
         # Call test template from resource file
         tc.body.create_keyword(
             name="Test Template: Deploy AIM Model",
-            args=[image_name, model["requires_hf_token"]],
+            args=[model["docker_image"], model["requires_hf_token"]],
         )
 
     def _create_running_state_test(self, suite, model, common_tags):
@@ -909,7 +929,7 @@ class AimCatalogGenerator:
 
         tc.body.create_keyword(
             name="Test Template: Verify AIM Running State",
-            args=[image_name],
+            args=[model["docker_image"]],
         )
 
     def _create_inference_test(self, suite, model, common_tags):
@@ -926,7 +946,7 @@ class AimCatalogGenerator:
 
         tc.body.create_keyword(
             name="Test Template: Run AIM Inference",
-            args=[image_name],
+            args=[model["docker_image"]],
         )
 
     def _create_metrics_test(self, suite, model, common_tags):
@@ -943,7 +963,7 @@ class AimCatalogGenerator:
 
         tc.body.create_keyword(
             name="Test Template: Verify AIM Metrics",
-            args=[image_name],
+            args=[model["docker_image"]],
         )
 
     def _create_undeploy_test(self, suite, model, common_tags):
@@ -960,7 +980,7 @@ class AimCatalogGenerator:
 
         tc.body.create_keyword(
             name="Test Template: Undeploy AIM Model",
-            args=[image_name],
+            args=[model["docker_image"]],
         )
 
     # Library keywords (utility methods that can be called from Robot tests)

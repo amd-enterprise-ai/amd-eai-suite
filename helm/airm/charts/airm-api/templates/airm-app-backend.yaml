@@ -53,6 +53,8 @@ spec:
               value: "{{ .Values.airm.postgresql.host }}"
             - name: DATABASE_PORT
               value: "{{ .Values.airm.postgresql.port }}"
+            - name: DATABASE_NAME
+              value: "{{ .Values.airm.postgresql.database }}"
             - name: DATABASE_USER
               valueFrom:
                 secretKeyRef:
@@ -97,7 +99,7 @@ spec:
                   name: "{{ .Values.airm.keycloak.adminClientSecretName }}"
             - name: PROMETHEUS_URL
               value: "{{ .Values.airm.prometheus.url }}"
-          image: "{{ .Values.airm.backend.image.repository }}:{{ .Values.airm.backend.image.tag }}"
+          image: "{{ .Values.airm.backend.image.repository }}:{{ .Values.airm.backend.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.airm.backend.image.pullPolicy }}
           livenessProbe:
             failureThreshold: 3
@@ -142,7 +144,7 @@ spec:
             - sh
             - -c
             - cp /code/migrations/* /mnt/code/migrations/
-          image: "{{ .Values.airm.backend.image.repository }}:{{ .Values.airm.backend.image.tag }}"
+          image: "{{ .Values.airm.backend.image.repository }}:{{ .Values.airm.backend.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.airm.backend.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -159,7 +161,7 @@ spec:
         - name: liquibase-migrate
           command:
             - liquibase
-            - --url=jdbc:postgresql://{{ .Values.airm.postgresql.host }}:{{ .Values.airm.postgresql.port }}/airm
+            - --url=jdbc:postgresql://{{ .Values.airm.postgresql.host }}:{{ .Values.airm.postgresql.port }}/{{ .Values.airm.postgresql.database }}
             - --username=$(DATABASE_USER)
             - --password=$(DATABASE_PASSWORD)
             - --logLevel=INFO

@@ -13,13 +13,13 @@ import {
 import { deleteProject, fetchSubmittableProjects } from '@/services/app';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 import { gigabytesToBytes } from '@amdenterpriseai/utils/app';
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { ProjectTableField } from '@amdenterpriseai/types';
-import { QuotaResource, QuotaStatus } from '@amdenterpriseai/types';
-import { ProjectWithResourceAllocation } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { ProjectTableField } from '@/types/enums/project-table-fields';
+import { QuotaResource, QuotaStatus } from '@/types/enums/quotas';
+import { ProjectWithResourceAllocation } from '@/types/projects';
 
 import ProjectTable from '@/components/features/projects/ProjectTable';
 
@@ -60,6 +60,15 @@ const cluster = {
   id: 'cluster1',
   name: 'Cluster 1',
   status: ClusterStatus.HEALTHY,
+  workbenchBaseUrl: 'https://workbench.example.com',
+  ...extraClusterInfo,
+};
+
+const clusterWithoutWorkbench = {
+  id: 'cluster2',
+  name: 'Cluster 2',
+  status: ClusterStatus.HEALTHY,
+  workbenchBaseUrl: undefined,
   ...extraClusterInfo,
 };
 
@@ -182,6 +191,152 @@ describe('ProjectTable', () => {
         expect.any(Object),
       );
     });
+  });
+
+  it('should open workbench URL in new window when viewInAiwb is clicked', async () => {
+    const windowOpenSpy = vi
+      .spyOn(window, 'open')
+      .mockImplementation(() => null);
+
+    await act(async () => {
+      render(<ProjectTable projects={mockProjects} />, {
+        wrapper,
+      });
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[0]);
+    });
+
+    await act(() => {
+      fireEvent.click(
+        screen.getByText('list.projects.actions.viewInAiwb.label'),
+      );
+    });
+
+    expect(windowOpenSpy).toHaveBeenCalledWith(
+      `${cluster.workbenchBaseUrl}/${mockProjects[0].name}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+
+    windowOpenSpy.mockRestore();
+  });
+
+  it('should strip trailing slashes from workbench URL to avoid double-slash', async () => {
+    const windowOpenSpy = vi
+      .spyOn(window, 'open')
+      .mockImplementation(() => null);
+    const clusterWithTrailingSlash = {
+      ...cluster,
+      workbenchBaseUrl: 'https://workbench.example.com/',
+    };
+    const projectsWithTrailingSlash: ProjectWithResourceAllocation[] = [
+      {
+        ...mockProjects[0],
+        cluster: clusterWithTrailingSlash,
+      },
+    ];
+
+    await act(async () => {
+      render(<ProjectTable projects={projectsWithTrailingSlash} />, {
+        wrapper,
+      });
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[0]);
+    });
+
+    await act(() => {
+      fireEvent.click(
+        screen.getByText('list.projects.actions.viewInAiwb.label'),
+      );
+    });
+
+    expect(windowOpenSpy).toHaveBeenCalledWith(
+      `https://workbench.example.com/${mockProjects[0].name}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+
+    windowOpenSpy.mockRestore();
+  });
+
+  it('should disable viewInAiwb when workbenchBaseUrl is not available', async () => {
+    const projectsWithoutWorkbench: ProjectWithResourceAllocation[] = [
+      {
+        ...mockProjects[0],
+        cluster: clusterWithoutWorkbench,
+      },
+    ];
+
+    await act(async () => {
+      render(<ProjectTable projects={projectsWithoutWorkbench} />, {
+        wrapper,
+      });
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[0]);
+    });
+
+    const viewInAiwbItem = screen.getByText(
+      'list.projects.actions.viewInAiwb.label',
+    );
+    expect(
+      viewInAiwbItem.closest('[data-disabled="true"]'),
+    ).toBeInTheDocument();
+  });
+
+  it('should disable viewInAiwb when workbenchBaseUrl has invalid scheme', async () => {
+    const projectsWithInvalidUrl: ProjectWithResourceAllocation[] = [
+      {
+        ...mockProjects[0],
+        cluster: {
+          ...cluster,
+          workbenchBaseUrl: 'ftp://invalid.example.com',
+        },
+      },
+    ];
+
+    await act(async () => {
+      render(<ProjectTable projects={projectsWithInvalidUrl} />, {
+        wrapper,
+      });
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[0]);
+    });
+
+    const viewInAiwbItem = screen.getByText(
+      'list.projects.actions.viewInAiwb.label',
+    );
+    expect(
+      viewInAiwbItem.closest('[data-disabled="true"]'),
+    ).toBeInTheDocument();
+  });
+
+  it('should render openDetails action in dropdown menu', async () => {
+    await act(async () => {
+      render(<ProjectTable projects={mockProjects} />, {
+        wrapper,
+      });
+    });
+
+    await act(() => {
+      const dropDowns = screen.getAllByLabelText('list.actions.label');
+      fireEvent.click(dropDowns[0]);
+    });
+
+    expect(
+      screen.getByText('list.projects.actions.openDetails.label'),
+    ).toBeInTheDocument();
   });
 });
 

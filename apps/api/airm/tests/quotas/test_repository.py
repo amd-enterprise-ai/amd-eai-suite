@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import QuotaStatus
+from app.quotas.enums import QuotaStatus
 from app.quotas.repository import (
     create_quota,
     get_quotas,

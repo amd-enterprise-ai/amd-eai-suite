@@ -9,9 +9,9 @@ import {
   fetchClusterWorkloadsStatusStats,
 } from '@/services/app';
 
-import { Cluster } from '@amdenterpriseai/types';
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { WorkloadStatusStatsResponse } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
 
 import ClusterWorkloadsPage from '@/pages/clusters/[id]/workloads';
 

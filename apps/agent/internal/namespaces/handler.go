@@ -7,7 +7,6 @@ package namespaces
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -16,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	agent "github.com/silogen/agent/internal/common"
 	"github.com/silogen/agent/internal/messaging"
 )
 
@@ -56,7 +56,7 @@ func (h *NamespaceHandler) HandleCreate(ctx context.Context, msg *messaging.RawM
 			"project_id", projectID,
 			"reason", reason,
 		)
-		h.publishStatus(ctx, projectID, messaging.NamespaceStatusFailed, reason)
+		h.publishStatus(ctx, projectID, NamespaceStatusFailed, reason)
 		return fmt.Errorf("failed to create namespace: %w", err)
 	}
 
@@ -95,7 +95,7 @@ func (h *NamespaceHandler) HandleDelete(ctx context.Context, msg *messaging.RawM
 			"expected_project_id", projectID,
 			"actual_project_id", extractProjectIDFromNamespace(ns),
 		)
-		h.publishStatus(ctx, projectID, messaging.NamespaceStatusDeleted, "Namespace project_id label mismatch")
+		h.publishStatus(ctx, projectID, NamespaceStatusDeleted, "Namespace project_id label mismatch")
 		return nil
 	}
 
@@ -115,7 +115,7 @@ func (h *NamespaceHandler) HandleDelete(ctx context.Context, msg *messaging.RawM
 
 // parseCreateMessage unmarshals the create message and extracts namespace and project ID.
 func parseCreateMessage(msg *messaging.RawMessage) (*corev1.Namespace, string, error) {
-	var createMsg messaging.ProjectNamespaceCreateMessage
+	var createMsg ProjectNamespaceCreateMessage
 	if err := json.Unmarshal(msg.Payload, &createMsg); err != nil {
 		return nil, "", fmt.Errorf("failed to parse create message: %w", err)
 	}
@@ -131,7 +131,7 @@ func parseCreateMessage(msg *messaging.RawMessage) (*corev1.Namespace, string, e
 
 // parseDeleteMessage unmarshals the delete message and extracts namespace name and project ID.
 func parseDeleteMessage(msg *messaging.RawMessage) (name, projectID string, err error) {
-	var deleteMsg messaging.ProjectNamespaceDeleteMessage
+	var deleteMsg ProjectNamespaceDeleteMessage
 	if unmarshalErr := json.Unmarshal(msg.Payload, &deleteMsg); unmarshalErr != nil {
 		return "", "", fmt.Errorf("failed to parse delete message: %w", unmarshalErr)
 	}
@@ -154,7 +154,7 @@ func (h *NamespaceHandler) handleGetNamespaceError(ctx context.Context, err erro
 			"namespace", namespaceName,
 			"project_id", projectID,
 		)
-		h.publishStatus(ctx, projectID, messaging.NamespaceStatusDeleted, "Namespace not found")
+		h.publishStatus(ctx, projectID, NamespaceStatusDeleted, "Namespace not found")
 		return nil
 	}
 
@@ -169,7 +169,7 @@ func (h *NamespaceHandler) handleDeleteNamespaceError(ctx context.Context, err e
 			"namespace", namespaceName,
 			"project_id", projectID,
 		)
-		h.publishStatus(ctx, projectID, messaging.NamespaceStatusDeleted, "Namespace already deleted")
+		h.publishStatus(ctx, projectID, NamespaceStatusDeleted, "Namespace already deleted")
 		return nil
 	}
 
@@ -179,13 +179,13 @@ func (h *NamespaceHandler) handleDeleteNamespaceError(ctx context.Context, err e
 	)
 
 	reason := fmt.Sprintf("Failed to delete namespace: %v", err)
-	h.publishStatus(ctx, projectID, messaging.NamespaceStatusDeleteFailed, reason)
+	h.publishStatus(ctx, projectID, NamespaceStatusDeleteFailed, reason)
 	return fmt.Errorf("failed to delete namespace: %w", err)
 }
 
 // publishStatus is a helper to publish namespace status messages.
-func (h *NamespaceHandler) publishStatus(ctx context.Context, projectID string, status messaging.NamespaceStatus, reason string) {
-	statusMsg := &messaging.ProjectNamespaceStatusMessage{
+func (h *NamespaceHandler) publishStatus(ctx context.Context, projectID string, status NamespaceStatus, reason string) {
+	statusMsg := &ProjectNamespaceStatusMessage{
 		MessageType:  messaging.MessageTypeProjectNamespaceStatus,
 		ProjectID:    projectID,
 		Status:       status,
@@ -196,6 +196,70 @@ func (h *NamespaceHandler) publishStatus(ctx context.Context, projectID string, 
 	}
 }
 
-func (h *NamespaceHandler) HandleUpdate(_ context.Context, _ *messaging.RawMessage) error {
-	return errors.New("update operation not supported")
+func (h *NamespaceHandler) HandleUpdate(ctx context.Context, msg *messaging.RawMessage) error {
+	incomingNs, projectID, err := parseUpdateMessage(msg)
+	if err != nil {
+		h.logger.Error(err, "failed to parse namespace update message", "payload", string(msg.Payload))
+		return err
+	}
+
+	h.logger.Info("processing namespace update",
+		"namespace", incomingNs.Name,
+		"project_id", projectID,
+	)
+
+	ns, err := h.clientset.CoreV1().Namespaces().Get(ctx, incomingNs.Name, metav1.GetOptions{})
+	if err != nil {
+		return h.handleGetNamespaceError(ctx, err, incomingNs.Name, projectID)
+	}
+
+	if err = validateProjectIDLabel(ns, projectID); err != nil {
+		h.logger.Info("WARN: namespace project_id label mismatch on update",
+			"namespace", incomingNs.Name,
+			"expected_project_id", projectID,
+			"actual_project_id", extractProjectIDFromNamespace(ns),
+		)
+		h.publishStatus(ctx, projectID, NamespaceStatusFailed, "Namespace project_id label mismatch")
+		return nil
+	}
+
+	ns.Annotations = mergeKaiwoAnnotations(ns.Annotations, incomingNs.Annotations)
+	_, err = h.clientset.CoreV1().Namespaces().Update(ctx, ns, metav1.UpdateOptions{})
+	if err != nil {
+		reason := fmt.Sprintf("Failed to update namespace annotations: %v", err)
+		h.logger.Error(err, "failed to update namespace annotations",
+			"namespace", incomingNs.Name,
+			"project_id", projectID,
+		)
+		h.publishStatus(ctx, projectID, NamespaceStatusFailed, reason)
+		return fmt.Errorf("failed to update namespace annotations: %w", err)
+	}
+
+	h.logger.Info("namespace annotations updated",
+		"namespace", incomingNs.Name,
+		"project_id", projectID,
+	)
+	return nil
+}
+
+func parseUpdateMessage(msg *messaging.RawMessage) (*corev1.Namespace, string, error) {
+	var updateMsg ProjectNamespaceUpdateMessage
+	if err := json.Unmarshal(msg.Payload, &updateMsg); err != nil {
+		return nil, "", fmt.Errorf("failed to parse namespace update message: %w", err)
+	}
+	if len(updateMsg.NamespaceManifest) == 0 {
+		return nil, "", fmt.Errorf("namespace update message missing namespace_manifest")
+	}
+	var ns corev1.Namespace
+	if err := json.Unmarshal(updateMsg.NamespaceManifest, &ns); err != nil {
+		return nil, "", fmt.Errorf("failed to parse namespace update manifest: %w", err)
+	}
+	if ns.Name == "" {
+		return nil, "", fmt.Errorf("namespace update manifest missing metadata.name")
+	}
+	projectID := extractProjectIDFromNamespace(&ns)
+	if projectID == "" {
+		return nil, "", fmt.Errorf("namespace update manifest missing %s label", agent.ProjectIDLabel)
+	}
+	return &ns, projectID, nil
 }

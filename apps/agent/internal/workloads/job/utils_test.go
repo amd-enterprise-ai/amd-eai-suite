@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	batchv1 "k8s.io/api/batch/v1"
 
+	"github.com/silogen/agent/internal/testutils"
 	"github.com/silogen/agent/internal/workloads/common"
 )
 
@@ -24,7 +25,7 @@ func TestGetStatus(t *testing.T) {
 			name: "suspended",
 			job: &batchv1.Job{
 				Spec: batchv1.JobSpec{
-					Suspend: ptr(true),
+					Suspend: testutils.Ptr(true),
 				},
 			},
 			expectedStatus: common.StatusSuspended,
@@ -44,7 +45,7 @@ func TestGetStatus(t *testing.T) {
 			name: "complete (succeeded >= completions)",
 			job: &batchv1.Job{
 				Spec: batchv1.JobSpec{
-					Completions: ptr(int32(2)),
+					Completions: testutils.Ptr(int32(2)),
 				},
 				Status: batchv1.JobStatus{
 					Succeeded: 2,
@@ -79,5 +80,3 @@ func TestGetStatus(t *testing.T) {
 		})
 	}
 }
-
-func ptr[T any](v T) *T { return &v }

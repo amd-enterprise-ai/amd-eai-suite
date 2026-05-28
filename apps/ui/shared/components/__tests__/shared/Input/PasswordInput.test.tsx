@@ -42,19 +42,22 @@ vi.mock('@heroui/react', async () => {
   };
 });
 
-// Mock icons
-vi.mock('@tabler/icons-react', () => ({
-  IconEye: (props: any) => (
-    <svg data-testid="icon-eye" aria-label="Show password" {...props}>
-      <title>Show password</title>
-    </svg>
-  ),
-  IconEyeOff: (props: any) => (
-    <svg data-testid="icon-eye-off" aria-label="Hide password" {...props}>
-      <title>Hide password</title>
-    </svg>
-  ),
-}));
+vi.mock('@tabler/icons-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tabler/icons-react')>();
+  return {
+    ...actual,
+    IconEye: (props: any) => (
+      <svg data-testid="icon-eye" aria-label="Show password" {...props}>
+        <title>Show password</title>
+      </svg>
+    ),
+    IconEyeOff: (props: any) => (
+      <svg data-testid="icon-eye-off" aria-label="Hide password" {...props}>
+        <title>Hide password</title>
+      </svg>
+    ),
+  };
+});
 
 describe('PasswordInput', () => {
   beforeEach(() => {

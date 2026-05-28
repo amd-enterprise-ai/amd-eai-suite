@@ -214,11 +214,14 @@
         }
       },
       "actions": {
+        "openDetails": {
+          "label": "Open details"
+        },
+        "viewInAiwb": {
+          "label": "View in AI Workbench"
+        },
         "delete": {
           "label": "Delete"
-        },
-        "edit": {
-          "label": "View and Edit"
         }
       }
     },
@@ -242,7 +245,7 @@
         "name": {
           "label": "Name",
           "placeholder": "Eg. project-name",
-          "description": "Provide a unique name for the project. Only lowercase letters, numbers and hyphens are allowed.",
+          "description": "Provide a unique name for the project (namespace). Only lowercase letters, numbers and hyphens are allowed.",
           "validation": {
             "unique": "A project with the same name already exists.",
             "format": "A project name can only consist of lowercase characters, numbers and '-' character (and not start or end with '-').",
@@ -263,6 +266,31 @@
           "validation": {
             "required": "Please enter a description for the project.",
             "length": "The description must be between 2 and 1024 characters."
+          }
+        },
+        "preemption": {
+          "sectionTitle": "Workload pre-emption",
+          "tooltip": "When enabled, idle workloads in this project may be preempted according to the policy and thresholds you set.",
+          "tooltipTriggerAria": "More information about workload pre-emption",
+          "toggle": "Enable idle workload pre-emption",
+          "policy": {
+            "label": "Pre-emption policy",
+            "placeholder": "Select a policy",
+            "onPressure": "During GPU pressure",
+            "always": "Always active"
+          },
+          "threshold": {
+            "label": "GPU activity threshold"
+          },
+          "gracePeriod": {
+            "label": "Idle timer",
+            "suffix": "min",
+            "description": "Must be at least 15 minutes."
+          },
+          "validation": {
+            "policyRequired": "Select a pre-emption policy.",
+            "thresholdRange": "Enter an integer between 0 and 100.",
+            "graceMin": "Idle timer must be at least 15 minutes."
           }
         }
       },
@@ -303,10 +331,17 @@
             "required": "Please enter a description for the project.",
             "length": "The description must be between 2 and 1024 characters."
           }
+        },
+        "preemption": {
+          "readonly": {
+            "enabled": "On",
+            "disabled": "Off",
+            "bannerDescriptionDisabled": "When turned on, idle workloads in this project can be preempted according to the policy and thresholds set by a project administrator."
+          }
         }
       },
       "guaranteedQuota": {
-        "info": "Define a quota below to guarantee a fixed amount of compute resources for the assigned project. Setting a quota category to 0 means no resources are guaranteed exclusively for that project — its workloads will still use any available resource.  Even with a quota in place, workloads may temporarily exceed their quota if additional resources are available.",
+        "info": "Define a quota below to guarantee a fixed amount of compute resources for the assigned project. Setting a quota category to 0 means no resources are guaranteed exclusively for that project \u2014 its workloads will still use any available resource.  Even with a quota in place, workloads may temporarily exceed their quota if additional resources are available.",
         "groups": {
           "resource": "Resource",
           "allocation": "Guaranteed Allocation",
@@ -418,8 +453,14 @@
   },
   "dashboard": {
     "action": {
-      "projectSettings": "Project settings",
-      "manageSecrets": "Manage Secrets"
+      "label": "Actions",
+      "editSettings": "Edit settings",
+      "viewInAiwb": "View in AI Workbench",
+      "delete": "Delete",
+      "teamMemberAlert": {
+        "title": "Limited permissions",
+        "description": "Team Members can only view the project and its resources"
+      }
     },
     "overview": {
       "title": "Overview",

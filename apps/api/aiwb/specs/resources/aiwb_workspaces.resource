@@ -10,7 +10,7 @@ Documentation       High-level workspace testing keywords.
 Resource            api/workspaces.resource
 Resource            api/workloads.resource
 Resource            resources/airm_projects.resource
-Resource            resources/common/resource_tracking.resource
+Resource            resources/resource_tracking.resource
 Resource            resources/common/resource_lifecycle.resource
 Resource            aiwb_common.resource
 Library             Collections
@@ -20,7 +20,7 @@ Library             RequestsLibrary
 
 *** Variables ***
 ${TEST_WORKSPACE_ID}        ${None}
-@{CREATED_WORKLOAD_IDS}     # List to track created workspace IDs for cleanup (workspaces are workloads)
+# CREATED_WORKLOAD_IDS is lazy-initialized by Track Workload For Cleanup (workspaces are workloads)
 
 
 *** Keywords ***
@@ -38,8 +38,8 @@ JupyterLab workspace is deployed
     ${workspace_data}=    Create Dictionary
     ...    image=${workspace_image}
     ...    gpus=${gpus}
-    ...    memory_per_gpu=128
-    ...    cpu_per_gpu=4
+    ...    memoryPerGpu=128
+    ...    cpuPerGpu=4
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -53,8 +53,7 @@ JupyterLab workspace is deployed
     ${workspace_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_WORKSPACE_ID}    ${workspace_id}
 
-    Append To List    ${CREATED_WORKLOAD_IDS}    ${workspace_id}
-    Log    Added workspace ${workspace_id} to cleanup list    DEBUG
+    Track Workload For Cleanup    ${workspace_id}
 
     Log    Created JupyterLab workspace ${workspace_id} with name: ${display_name}    INFO
 
@@ -77,8 +76,8 @@ MLflow workspace is deployed
 
     ${workspace_data}=    Create Dictionary
     ...    gpus=0
-    ...    memory_per_gpu=20
-    ...    cpu_per_gpu=1
+    ...    memoryPerGpu=20
+    ...    cpuPerGpu=1
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -92,8 +91,7 @@ MLflow workspace is deployed
     ${workspace_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_WORKSPACE_ID}    ${workspace_id}
 
-    Append To List    ${CREATED_WORKLOAD_IDS}    ${workspace_id}
-    Log    Added workspace ${workspace_id} to cleanup list    DEBUG
+    Track Workload For Cleanup    ${workspace_id}
 
     Log    Created MLflow workspace ${workspace_id} with name: ${display_name}    INFO
 
@@ -111,8 +109,8 @@ VSCode workspace is deployed
     ${workspace_data}=    Create Dictionary
     ...    image=${workspace_image}
     ...    gpus=${gpus}
-    ...    memory_per_gpu=128
-    ...    cpu_per_gpu=4
+    ...    memoryPerGpu=128
+    ...    cpuPerGpu=4
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -126,8 +124,7 @@ VSCode workspace is deployed
     ${workspace_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_WORKSPACE_ID}    ${workspace_id}
 
-    Append To List    ${CREATED_WORKLOAD_IDS}    ${workspace_id}
-    Log    Added workspace ${workspace_id} to cleanup list    DEBUG
+    Track Workload For Cleanup    ${workspace_id}
 
     Log    Created VSCode workspace ${workspace_id} with name: ${display_name}    INFO
 
@@ -145,8 +142,8 @@ ComfyUI workspace is deployed
     ${workspace_data}=    Create Dictionary
     ...    image=${workspace_image}
     ...    gpus=${gpus}
-    ...    memory_per_gpu=128
-    ...    cpu_per_gpu=4
+    ...    memoryPerGpu=128
+    ...    cpuPerGpu=4
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -160,8 +157,7 @@ ComfyUI workspace is deployed
     ${workspace_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_WORKSPACE_ID}    ${workspace_id}
 
-    Append To List    ${CREATED_WORKLOAD_IDS}    ${workspace_id}
-    Log    Added workspace ${workspace_id} to cleanup list    DEBUG
+    Track Workload For Cleanup    ${workspace_id}
 
     Log    Created ComfyUI workspace ${workspace_id} with name: ${display_name}    INFO
 
@@ -169,8 +165,8 @@ Attempting to deploy second MLflow workspace
     [Documentation]    Attempts to deploy a second MLflow workspace (should fail with 409)
     ${workspace_data}=    Create Dictionary
     ...    gpus=0
-    ...    memory_per_gpu=20
-    ...    cpu_per_gpu=1
+    ...    memoryPerGpu=20
+    ...    cpuPerGpu=1
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -188,8 +184,8 @@ Attempting to deploy second JupyterLab workspace
     ${workspace_data}=    Create Dictionary
     ...    image=rocm/pytorch:rocm6.4_ubuntu24.04_py3.12_pytorch_release_2.6.0
     ...    gpus=0
-    ...    memory_per_gpu=128
-    ...    cpu_per_gpu=4
+    ...    memoryPerGpu=128
+    ...    cpuPerGpu=4
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -207,8 +203,8 @@ Attempting to deploy second VSCode workspace
     ${workspace_data}=    Create Dictionary
     ...    image=rocm/pytorch:rocm6.4_ubuntu24.04_py3.12_pytorch_release_2.6.0
     ...    gpus=0
-    ...    memory_per_gpu=128
-    ...    cpu_per_gpu=4
+    ...    memoryPerGpu=128
+    ...    cpuPerGpu=4
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -226,8 +222,8 @@ Attempting to deploy second ComfyUI workspace
     ${workspace_data}=    Create Dictionary
     ...    image=rocm/pytorch:rocm6.4_ubuntu24.04_py3.12_pytorch_release_2.6.0
     ...    gpus=0
-    ...    memory_per_gpu=128
-    ...    cpu_per_gpu=4
+    ...    memoryPerGpu=128
+    ...    cpuPerGpu=4
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -343,7 +339,7 @@ Workspace external URL should be accessible
     ${external_url}=    Get From Dictionary    ${endpoints}    external
 
     # Make HTTP request - allow redirects and don't verify SSL for internal testing
-    ${http_response}=    GET    ${external_url}    expected_status=any    verify=${False}
+    ${http_response}=    GET    ${external_url}    expected_status=any    verify=${VERIFY_SSL}
 
     # Accept any non-server-error response (200-499 are all valid)
     # This includes: 200 OK, 301/302 redirects, 401/403 auth challenges
@@ -423,12 +419,12 @@ Workspace creation should fail with conflict
 Clean Up Workspace Test Resources
     [Documentation]    Clean up all resources created during workspace tests.
     ...    Uses AIWB workload endpoint for workspace cleanup, then cleans up projects.
-    ${tracking_list}=    Get Variable Value    ${CREATED_WORKLOAD_IDS}    ${EMPTY}
-    ${count}=    Get Length    ${tracking_list}
+    ${tracking_list}=    Get Variable Value    ${CREATED_WORKLOAD_IDS}    ${None}
+    ${count}=    Evaluate    len($tracking_list) if $tracking_list is not None else 0
     IF    ${count} > 0
         Log    Cleaning up ${count} workspace(s) via AIWB API    INFO
         ${namespace}=    Get Project Namespace
-        FOR    ${workload_id}    IN    @{CREATED_WORKLOAD_IDS}
+        FOR    ${workload_id}    IN    @{tracking_list}
             TRY
                 Delete AIWB workload    ${workload_id}    namespace=${namespace}    expected_status=any
                 Log    Deleted workspace ${workload_id}    INFO

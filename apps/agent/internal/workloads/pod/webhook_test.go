@@ -12,12 +12,9 @@ import (
 	agent "github.com/silogen/agent/internal/common"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -28,7 +25,6 @@ import (
 const (
 	testNamespace = "test-ns"
 	testProjectID = "project-123"
-	testUID       = "test-uid-12345"
 	testUsername  = "test-user@example.com"
 )
 
@@ -91,28 +87,34 @@ func createPod(labels map[string]string, scheduler string) *corev1.Pod {
 
 func createAdmissionRequest(pod *corev1.Pod, oldPod *corev1.Pod) admission.Request {
 	raw, _ := json.Marshal(pod)
-
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID(testUID),
-			Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
-			Namespace: testNamespace,
-			Name:      pod.Name,
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo: authenticationv1.UserInfo{
-				Username: testUsername,
-			},
-		},
-	}
-
+	var oldRaw []byte
 	if oldPod != nil {
-		oldRaw, _ := json.Marshal(oldPod)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldPod)
 	}
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+		testNamespace,
+		pod.Name,
+		raw,
+		oldRaw,
+		testUsername,
+	)
+}
 
-	return req
+func expectedPatchesPodAirmCreate() []testutils.ExpectedPatch {
+	return []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    testProjectID,
+			common.KueueNameLabel:   testNamespace,
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      testUsername,
+		}),
+		testutils.AddPatch("/spec/schedulerName", kaiwoSchedulerName),
+	}
 }
 
 func TestPodWebhook(t *testing.T) {
@@ -127,20 +129,8 @@ func TestPodWebhook(t *testing.T) {
 		{
 			name:            "AIRMNamespace_NewResource",
 			namespaceLabels: map[string]string{agent.ProjectIDLabel: testProjectID},
-			expectedPatches: []testutils.ExpectedPatch{
-				testutils.AddMetadataLabels(map[string]interface{}{
-					agent.ProjectIDLabel:    testProjectID,
-					common.KueueNameLabel:   testNamespace,
-					common.WorkloadIDLabel:  testutils.UUIDMatcher,
-					common.ComponentIDLabel: testutils.UUIDMatcher,
-				}),
-				testutils.AddMetadataAnnotations(map[string]interface{}{
-					agent.AutoDiscoveredAnnotation: "true",
-					agent.SubmitterAnnotation:      testUsername,
-				}),
-				testutils.AddPatch("/spec/schedulerName", kaiwoSchedulerName),
-			},
-			allowed: true,
+			expectedPatches: expectedPatchesPodAirmCreate(),
+			allowed:         true,
 		},
 		{
 			name:            "AIRMNamespace_PreservesExistingIDs",
@@ -279,6 +269,34 @@ func TestPodWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, s.expectedPatches)
 		})
 	}
+}
+
+func TestPodWebhook_PreservesUnknownSpecFields(t *testing.T) {
+	ns := createNamespace(map[string]string{agent.ProjectIDLabel: testProjectID})
+	wh := setupWebhook(ns)
+	pod := createPod(nil, "")
+
+	raw := testutils.AddUnknownKeyToJSON(t, pod)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+		testNamespace, pod.Name, raw, nil, testUsername,
+	)
+	resp := wh.Handle(context.Background(), req)
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    testProjectID,
+			common.KueueNameLabel:   testNamespace,
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      testUsername,
+		}),
+		testutils.AddPatch("/spec/schedulerName", kaiwoSchedulerName),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
 }
 
 func TestPodWebhook_NamespaceNotFound(t *testing.T) {

@@ -10,20 +10,26 @@ import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useRouter } from 'next/router';
 
-import { getCluster as fetchCluster } from '@/services/app';
+import {
+  getCluster as fetchCluster,
+  fetchProjectStorages,
+} from '@/services/app';
 import { fetchProject } from '@/services/app';
 import { getCluster } from '@/services/server';
 import { getProject } from '@/services/server';
 
+import { getProjectDashboardUrl, getProjectEditUrl } from '@/utils/projects';
 import {
-  getProjectDashboardUrl,
-  getProjectEditUrl,
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
 } from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 
-import { Cluster, UserRole } from '@amdenterpriseai/types';
+import { UserRole } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ProjectStoragesResponse } from '@/types/storages';
 
-import { ProjectWithMembers } from '@amdenterpriseai/types';
+import { ProjectWithMembers } from '@/types/projects';
 
 import DeleteProject from '@/components/features/projects/DeleteProject';
 import { ReducedWidthLayout } from '@amdenterpriseai/layouts';
@@ -38,17 +44,17 @@ import { useAccessControl } from '@/hooks/useAccessControl';
 import { IconChevronLeft } from '@tabler/icons-react';
 import { getProjectSecrets, getSecrets } from '@/services/server';
 import { getProjectStorages, getStorages } from '@/services/server';
+import { ProjectSecretsResponse } from '@/types/secrets';
 import {
-  ProjectSecretsResponse,
   ProjectSecretWithParentSecret,
   Secret,
   SecretsResponse,
-} from '@amdenterpriseai/types';
+} from '@/types/secrets';
 import {
   ProjectStorageWithParentStorage,
   Storage,
   StoragesResponse,
-} from '@amdenterpriseai/types';
+} from '@/types/storages';
 import ProjectQuotaForm from '@/components/features/projects/ProjectQuotaForm';
 import ProjectBasicInfoForm from '@/components/features/projects/ProjectBasicInfoForm';
 import { fetchProjectSecrets, fetchSecrets } from '@/services/app';
@@ -69,7 +75,7 @@ interface Props {
   storages: Storage[];
 }
 
-const ProjectEditPage: React.FC<Props> = ({
+const ProjectEditPage: React.FC<Props> & WithDocumentationLink = ({
   project,
   cluster,
   projectSecrets,
@@ -105,10 +111,18 @@ const ProjectEditPage: React.FC<Props> = ({
   });
 
   const { data: projectSecretsData } = useQuery<ProjectSecretsResponse>({
-    queryKey: ['projectSecrets', project.id],
+    queryKey: ['secrets', project.id],
     queryFn: () => fetchProjectSecrets(project.id as string),
     initialData: {
       data: projectSecrets,
+    },
+  });
+
+  const { data: projectStoragesData } = useQuery<ProjectStoragesResponse>({
+    queryKey: ['project-storages', project.id],
+    queryFn: () => fetchProjectStorages(project.id as string),
+    initialData: {
+      data: projectStorages,
     },
   });
 
@@ -146,8 +160,8 @@ const ProjectEditPage: React.FC<Props> = ({
           </Tab>
           <Tab key="secrets" title={t('tab.secrets.title')}>
             <ProjectSecrets
-              projectStorages={projectStorages}
-              projectSecrets={projectSecretsData.data}
+              projectStorages={projectStoragesData}
+              projectSecrets={projectSecretsData}
               project={projectData}
               secrets={secretsData.data}
             />
@@ -155,7 +169,7 @@ const ProjectEditPage: React.FC<Props> = ({
           <Tab key="storages" title={t('tab.storages.title')}>
             <ProjectStorages
               project={projectData}
-              projectStorages={projectStorages}
+              projectStorages={projectStoragesData.data}
               storages={storages}
             />
           </Tab>
@@ -187,6 +201,8 @@ const ProjectEditPage: React.FC<Props> = ({
     </div>
   );
 };
+
+ProjectEditPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/projects/project-settings.html`;
 
 export default ProjectEditPage;
 

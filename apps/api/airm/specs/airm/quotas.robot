@@ -15,9 +15,8 @@ Resource            ../resources/airm_clusters.resource
 Resource            resources/api/common.resource
 Library             Collections
 Suite Setup         Verify Cluster Has Available Resources    min_cpu_cores=4    min_memory_gb=4    min_storage_gb=4
-Test Setup          Initialize Project Tracking
-Test Teardown       Clean Up All Created Projects
-Suite Teardown      Clean Up All Created Projects
+Test Teardown       Clean Up All Tracked Resources
+Suite Teardown      Clean Up All Tracked Resources
 
 
 *** Test Cases ***

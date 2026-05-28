@@ -17,10 +17,13 @@
 #   robot --argumentfile arguments.txt --outputdir /tmp/results .
 #   robot --argumentfile arguments.txt --test-timeout 30m .
 
-# Python path - required to find test libraries
-# First path is for local AIWB resources
-# Second path is for shared testing infrastructure (authorization, deployment, etc.)
-# Third path is for AIRM-specific resources (projects, workloads, etc.)
+# Python path - required to find test libraries and resources
+# .                          - local AIWB resources
+# testing                    - shared testing infrastructure (authorization, deployment, etc.)
+# testing/libraries          - shared Python libraries (TestPrefix, KubeconfigAuth, etc.)
+# airm/specs                 - AIRM-specific resources (projects, workloads, etc.)
+# libraries                  - local AIWB Python libraries (LoadGenerator, AimCatalogGenerator, etc.)
+# airm/specs/libraries       - AIRM Python libraries (KeycloakAuth, etc.)
 --pythonpath
 .
 --pythonpath
@@ -29,20 +32,25 @@
 ../../../../testing/libraries
 --pythonpath
 ../../airm/specs
+--pythonpath
+libraries
+--pythonpath
+../../airm/specs/libraries
 
 # Dynamic test generator for aim_catalog.robot
-# Format: libraries.AimCatalogGenerator:<source>:<mode>
-# Source: "api" (default) discovers all models from the cluster.
-#         A file path (e.g., config/aim_models.txt) filters to listed names only.
-# Modes: full (default), smoke, quick
+# Discovers all Ready AIM models from the cluster by default.
+# Safe for all test runs — only activates when running aim_catalog.robot.
+#
+# To test a specific model list, pass --variable AIM_CATALOG_FILTER:<path>:
+#   robot --argumentfile arguments.txt --variable AIM_CATALOG_FILTER:config/silogen-0.11.0.txt aim_catalog.robot
 --listener
-libraries.AimCatalogGenerator:api:full
+AimCatalogGenerator
 
 # Helper that prints guidance on using robot-extract after test execution
 # Note: This listener is in AIRM specs, accessible via pythonpath
 # Commented out for now as it may not be needed for AIWB
 # --listener
-# libraries.TestResultsHelper
+# TestResultsHelper
 
 # Output directory for test results
 --outputdir

@@ -11,8 +11,9 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import BigInteger, Integer, SmallInteger
 
-from ..messaging.schemas import GPUVendor
-from ..utilities.models import BaseEntity
+from api_common.models import BaseEntity
+
+from ..utilities.enums import GPUVendor
 
 
 class Cluster(BaseEntity):
@@ -20,7 +21,7 @@ class Cluster(BaseEntity):
 
     name: Mapped[str] = mapped_column(String, nullable=True)
     last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    workloads_base_url: Mapped[str] = mapped_column(String, nullable=True)
+    workbench_base_url: Mapped[str] = mapped_column(String, nullable=True)
     kube_api_url: Mapped[str] = mapped_column(String, nullable=True)
 
     __table_args__ = (Index("clusters_name_key", func.lower(name), unique=True),)

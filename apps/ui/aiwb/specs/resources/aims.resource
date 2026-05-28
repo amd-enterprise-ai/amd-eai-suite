@@ -23,13 +23,15 @@ ${SEMVER_PATTERN}       \\d+\\.\\d+\\.\\d+
 
 User is on models page
     [Documentation]    Navigates to the AIM Catalog (Models) page.
+    ...                Expects ${UI_BASE_URL} and ${TEST_PROJECT} to be set.
 
-    Navigate to models page    ${UI_BASE_URL}
+    Navigate to models page    ${UI_BASE_URL}    ${TEST_PROJECT}[name]
 
 User is on deployed models page
     [Documentation]    Navigates to the Deployed Models tab on the models page.
+    ...                Expects ${UI_BASE_URL} and ${TEST_PROJECT} to be set.
 
-    Navigate to deployed models page    ${UI_BASE_URL}
+    Navigate to deployed models page    ${UI_BASE_URL}    ${TEST_PROJECT}[name]
 
 # =============================================================================
 # When keywords (actions)
@@ -154,3 +156,12 @@ Deployed models table should have entries
 
     ${count}=    Get deployed models row count
     Should Be True    ${count} > 0    msg=Deployed models table should have at least one entry
+
+Request model card should link to support mailto
+    [Documentation]    Verifies the "Request model" card exposes a support mailto link
+    ...                with the expected subject. Clicking a mailto cannot be verified
+    ...                end-to-end in the browser, so we assert the anchor target instead.
+
+    ${href}=    Get request model card mailto href
+    Should Start With    ${href}    mailto:amd-eai-support@amd.com
+    Should Contain    ${href}    subject=Model%20request

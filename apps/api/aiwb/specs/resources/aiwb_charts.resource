@@ -9,7 +9,7 @@ Documentation       High-level chart testing keywords.
 ...                 higher-level testing scenarios.
 Resource            api/charts.resource
 Resource    resources/aiwb_test_data.resource
-Resource    resources/common/resource_tracking.resource
+Resource    resources/resource_tracking.resource
 Library             String
 Library             uuid
 Library             TestPrefix
@@ -23,7 +23,7 @@ ${SIGNATURE_FILE}       ${CURDIR}/../test_data/charts/signature.yaml
 ${TEST_CHART_ID}        ${None}
 ${TEST_CHART_NAME}      ${None}
 ${TEST_CHART_DATA}      ${None}
-@{CREATED_CHART_IDS}    # List to track created chart IDs for cleanup
+# CREATED_CHART_IDS is lazy-initialized by Track Chart For Cleanup
 
 
 *** Keywords ***
@@ -39,12 +39,11 @@ Create chart request is sent
     ${chart_id}=            Get From Dictionary     ${json}                 id
     Set Test Variable       ${TEST_CHART_ID}        ${chart_id}
 
-    Append To List          ${CREATED_CHART_IDS}    ${chart_id}
-    Log                     Added chart ${chart_id} to cleanup list: ${CREATED_CHART_IDS}           DEBUG
+    Track Chart For Cleanup    ${chart_id}
 
 List charts request is sent
     [Documentation]    Sends a list charts request and stores the response
-    [Arguments]             ${page_number}=1        ${page_size}=10         ${sort_by}=created_at   ${sort_order}=desc
+    [Arguments]             ${page_number}=1        ${page_size}=10         ${sort_by}=createdAt    ${sort_order}=desc
     ${response}=            List charts request     ${page_number}          ${page_size}            ${sort_by}              ${sort_order}
     Set Test Variable       ${TEST_RESPONSE}        ${response}
 
@@ -67,7 +66,7 @@ Valid chart data is prepared
     END
     Set Test Variable       ${TEST_CHART_NAME}      ${test_chart_name}
 
-    # No project_id needed for AIWB charts
+    # No projectId needed for AIWB charts
     &{chart_data}=          Create Dictionary       name=${test_chart_name}                         type=${chart_type}
     Set Test Variable       ${TEST_CHART_DATA}      ${chart_data}
 
@@ -134,6 +133,17 @@ A chart does not exist
     ${chart_id}=            Evaluate                str(uuid.uuid4())       modules=uuid
     Set test variable       ${TEST_CHART_ID}        ${chart_id}
 
+Update chart request is sent
+    [Documentation]    Sends a request to update an existing chart with new template files
+    [Arguments]             ${template}=${TEMPLATE_FILE}    ${signature}=${SIGNATURE_FILE}
+    ${response}=            Update chart request    ${TEST_CHART_ID}        template_file=${template}    signature_file=${signature}
+    Set Test Variable       ${TEST_RESPONSE}        ${response}
+
+Chart should be updated
+    [Documentation]    Verifies the chart was successfully updated by fetching it
+    ${chart_id}=            Set Variable            ${TEST_CHART_ID}
+    Get chart               ${chart_id}             expected_status=200
+
 Find chart ID by name
     [Documentation]    Find chart ID by chart name through API and set as variable
     [Arguments]             ${chart_name}           ${variable_name}=TEST_CHART_ID
@@ -160,3 +170,7 @@ Find chart ID by name
     END
 
     RETURN                  ${None}
+
+Clean Up All Created Charts
+    [Documentation]    Clean up all created chart resources using generic pattern
+    Generic Clean Up All Created Chart

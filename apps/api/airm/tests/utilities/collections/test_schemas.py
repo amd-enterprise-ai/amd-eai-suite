@@ -5,7 +5,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.utilities.collections.schemas import (
+from api_common.collections import (
     BaseFilterableList,
     BasePaginationList,
     BaseSortableList,
@@ -37,6 +37,7 @@ class Test_Pagination_Schemas:
         assert bpl.page == 1
         assert bpl.page_size == 10
         assert bpl.total == 100
+        assert bpl.total_pages == 10
 
 
 class Test_Sort_Schemas:

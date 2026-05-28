@@ -34,12 +34,10 @@ describe('GpuMetricsLoadingSkeleton', () => {
     const memoryTitles = screen.getAllByText(
       'details.fields.memoryUtilization',
     );
-    const tempTitles = screen.getAllByText(
-      'details.fields.junctionTemperature',
-    );
+    const gpuUtilTitles = screen.getAllByText('details.fields.gpuUtilization');
     const powerTitles = screen.getAllByText('details.fields.gpuPowerUsage');
     expect(memoryTitles).toHaveLength(2);
-    expect(tempTitles).toHaveLength(2);
+    expect(gpuUtilTitles).toHaveLength(2);
     expect(powerTitles).toHaveLength(2);
   });
 

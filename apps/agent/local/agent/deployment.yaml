@@ -17,6 +17,10 @@ spec:
           ports:
             - $patch: delete
           env:
+            - name: AIR_BINARY_NAME
+              value: air-agent
+            - name: AIR_CMD
+              value: "./cmd/agent"
             - name: RABBITMQ_HOST
               value: "host.docker.internal"
             - name: RABBITMQ_USER
@@ -25,16 +29,10 @@ spec:
               $patch: delete
             - name: KUBE_CLUSTER_NAME
               $patch: delete
-            - name: GOINSECURE
-              value: "*"
-            - name: GOPROXY
-              value: direct
-            - name: GIT_SSL_NO_VERIFY
-              value: "true"
+            - name: GOFLAGS
+              value: "-mod=vendor"
             - name: GOCACHE
               value: "/go-cache/build"
-            - name: GOMODCACHE
-              value: "/go-cache/mod"
           livenessProbe:
             $patch: delete
           readinessProbe:
@@ -44,8 +42,6 @@ spec:
               mountPath: /code
             - name: go-build-cache
               mountPath: /go-cache/build
-            - name: go-mod-cache
-              mountPath: /go-cache/mod
           securityContext:
             $patch: delete
       volumes:
@@ -55,8 +51,4 @@ spec:
         - name: go-build-cache
           hostPath:
             path: /tmp/airm-agent-go-build-cache
-            type: DirectoryOrCreate
-        - name: go-mod-cache
-          hostPath:
-            path: /tmp/airm-agent-go-mod-cache
             type: DirectoryOrCreate

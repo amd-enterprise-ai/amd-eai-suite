@@ -2,7 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from api_common.schemas import BaseModel
 
 
 class DevelopmentWorkspaceRequest(BaseModel):
@@ -12,10 +14,7 @@ class DevelopmentWorkspaceRequest(BaseModel):
     image_pull_secrets: list | None = Field(
         default_factory=list,
         description="List of image pull secrets",
-        alias="imagePullSecrets",
     )
     gpus: int = Field(default=1, description="Number of GPUs to allocate to the workspace", ge=0, le=8)
-    memory_per_gpu: float = Field(default=128, description="Memory per GPU in Gi", ge=0.01, alias="memoryPerGpu")
-    cpu_per_gpu: float = Field(default=4, description="CPU per GPU in vCPUs", ge=1, alias="cpuPerGpu")
-
-    model_config = ConfigDict(populate_by_name=True)
+    memory_per_gpu: float = Field(default=128, description="Memory per GPU in Gi", ge=0.01)
+    cpu_per_gpu: float = Field(default=4, description="CPU per GPU in vCPUs", ge=1)

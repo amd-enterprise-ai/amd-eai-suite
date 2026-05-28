@@ -2,30 +2,28 @@
 #
 # SPDX-License-Identifier: MIT
 
-from datetime import datetime
 from textwrap import dedent
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Query, Request, status
+from fastapi import APIRouter, Depends, Path, Request, status
 from fastapi.responses import StreamingResponse
 from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.database import get_session
 from api_common.exceptions import NotFoundException
-from api_common.schemas import ListResponse
+from api_common.schemas import ListResponse, QueryParam
 
 from ..logs.client import get_loki_client
-from ..logs.schemas import LogLevel, LogsQueryRequest, LogType, WorkloadLogsResponse
+from ..logs.schemas import LogsQuery, WorkloadLogsResponse
 from ..logs.service import get_logs_by_workload_id, stream_workload_logs_sse
 from ..metrics.client import get_prometheus_client
 from ..metrics.enums import MetricName
 from ..metrics.schemas import MetricsScalar, MetricsScalarWithRange, MetricsTimeRange, MetricsTimeseries
 from ..metrics.service import get_metric_by_workload_id
 from ..namespaces.security import ensure_access_to_workbench_namespace
-from .enums import WorkloadStatus, WorkloadType
 from .repository import get_workload_by_id, get_workloads
-from .schemas import WorkloadResponse
+from .schemas import WorkloadListQuery, WorkloadResponse, WorkloadStreamQuery
 from .service import chat_with_workload, delete_workload_components, list_chattable_workloads
 
 router = APIRouter(tags=["Workloads"])
@@ -39,16 +37,15 @@ router = APIRouter(tags=["Workloads"])
     description="Retrieve all workloads deployed in a specific namespace, optionally filtered by workload type and status.",
 )
 async def list_namespace_workloads(
+    query: QueryParam[WorkloadListQuery],
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     session: AsyncSession = Depends(get_session),
-    workload_type: list[WorkloadType] = Query(default=[], description="Filter by workload type(s)"),
-    status_filter: list[WorkloadStatus] = Query(default=[], description="Filter by workload status"),
 ) -> ListResponse[WorkloadResponse]:
     workloads = await get_workloads(
         session=session,
         namespace=namespace,
-        workload_types=workload_type if workload_type else None,
-        status_filter=status_filter if status_filter else None,
+        workload_types=query.workload_type if query.workload_type else None,
+        status_filter=query.status_filter if query.status_filter else None,
     )
     return ListResponse(data=[WorkloadResponse.model_validate(workload) for workload in workloads])
 
@@ -175,10 +172,10 @@ async def get_workload_metric(
     description="Retrieve logs for a specific workload from Loki, with pagination and filtering support.",
 )
 async def get_workload_logs_endpoint(
+    params: QueryParam[LogsQuery],
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     workload_id: UUID = Path(description="The UUID of the workload"),
     session: AsyncSession = Depends(get_session),
-    params: LogsQueryRequest = Depends(),
     loki_client: object = Depends(get_loki_client),
 ) -> WorkloadLogsResponse:
     """Get logs for a workload with optional filtering and pagination."""
@@ -235,12 +232,9 @@ async def get_workload_logs_endpoint(
     },
 )
 async def workload_logs_stream(
+    query: QueryParam[WorkloadStreamQuery],
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     workload_id: UUID = Path(description="The ID of the workload"),
-    start_time: datetime | None = Query(default=None, description="Start time for streaming (ISO format)"),
-    level: LogLevel | None = Query(default=None, description="Filter logs at this level and above"),
-    log_type: LogType = Query(default=LogType.WORKLOAD, description="Type of logs: 'workload' or 'event'"),
-    delay: int = Query(default=1, ge=1, le=30, description="Delay between polls (1-30 seconds)"),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """Stream workload logs in real-time via SSE."""
@@ -251,10 +245,10 @@ async def workload_logs_stream(
     return StreamingResponse(
         stream_workload_logs_sse(
             workload_id=str(workload_id),
-            start_time=start_time,
-            level_filter=level,
-            log_type=log_type,
-            delay_seconds=delay,
+            start_time=query.start_time,
+            level_filter=query.level,
+            log_type=query.log_type,
+            delay_seconds=query.delay,
         ),
         media_type="text/plain",
         headers={

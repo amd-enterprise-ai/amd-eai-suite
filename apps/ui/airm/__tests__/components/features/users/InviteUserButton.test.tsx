@@ -6,7 +6,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 
 import { fetchOrganization } from '@/services/app';
 
-import { Organization } from '@amdenterpriseai/types';
+import { Organization } from '@/types/organization';
 
 import { InviteUserButton } from '@/components/features/users/InviteUserButton';
 

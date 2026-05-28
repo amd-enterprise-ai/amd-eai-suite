@@ -358,7 +358,7 @@ export const AddSecret: React.FC<Props> = ({
       }
       const payload: CreateSecretRequest = {
         name: values.name,
-        use_case: values.useCase,
+        useCase: values.useCase,
         data: secretData,
       };
       createSecret(payload);

@@ -50,7 +50,7 @@ func (r *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Publish status update
-	if err := publishStorageStatus(ctx, r.Publisher, storageID, messaging.ConfigMapStatusAdded, "ConfigMap is ready."); err != nil {
+	if err := publishStorageStatus(ctx, r.Publisher, storageID, ConfigMapStatusAdded, "ConfigMap is ready."); err != nil {
 		log.Error(err, "failed to publish status")
 		return ctrl.Result{}, err
 	}
@@ -59,7 +59,7 @@ func (r *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		"configmap", cm.Name,
 		"namespace", cm.Namespace,
 		"storage_id", storageID,
-		"status", messaging.ConfigMapStatusAdded,
+		"status", ConfigMapStatusAdded,
 	)
 
 	return ctrl.Result{}, nil

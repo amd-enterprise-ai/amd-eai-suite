@@ -7,7 +7,8 @@ import { IconUser } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 import { useCallback, useMemo, useState } from 'react';
 
-import { InvitedUser, User } from '@amdenterpriseai/types';
+import { InvitedUser } from '@/types/users';
+import { User } from '@/types/users';
 import { UserRole } from '@amdenterpriseai/types';
 
 import { SearchInput, UserListEntry } from '@amdenterpriseai/components';

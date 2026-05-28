@@ -8,9 +8,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import CommonComponentStatus, WorkloadComponentKind, WorkloadStatus
-from app.utilities.collections.schemas import FilterCondition, PaginationConditions, SortCondition, SortDirection
-from app.workloads.enums import WorkloadType
+from api_common.collections import FilterCondition, PaginationConditions, SortCondition, SortDirection
+from app.workloads.enums import CommonComponentStatus, WorkloadComponentKind, WorkloadStatus, WorkloadType
 from app.workloads.repository import (
     create_workload,
     create_workload_component,

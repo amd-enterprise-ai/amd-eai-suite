@@ -1,8 +1,25 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { IconSettings } from '@tabler/icons-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Dropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownTrigger,
+  useDisclosure,
+} from '@heroui/react';
+import {
+  IconChevronDown,
+  IconExternalLink,
+  IconSettings,
+  IconTrash,
+} from '@tabler/icons-react';
+import {
+  useIsFetching,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { getServerSession } from 'next-auth';
@@ -10,7 +27,10 @@ import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useRouter } from 'next/router';
 
+import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSystemToast } from '@amdenterpriseai/hooks';
 import {
+  deleteProject as deleteProjectAPI,
   fetchProjectAverageGPUIdleTime,
   fetchProjectAverageWaitTime,
   fetchProjectGPUDeviceUtilization,
@@ -19,20 +39,25 @@ import {
 } from '@/services/app';
 import { getProject } from '@/services/server';
 
-import { getLatestDate } from '@amdenterpriseai/utils/app';
-import { getProjectEditUrl } from '@amdenterpriseai/utils/app';
+import { getProjectEditUrl } from '@/utils/projects';
 import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
+import { APIRequestError } from '@amdenterpriseai/utils/app';
+import { isHttpUrl, stripTrailingSlashes } from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 
 import { TimeRangePeriod } from '@amdenterpriseai/types';
 import {
   MetricScalarResponse,
-  WorkloadStatusStatsResponse,
   TimeRange,
   TimeSeriesAllocationData,
   TimeSeriesResponse,
 } from '@amdenterpriseai/types';
-import { ProjectWithMembers } from '@amdenterpriseai/types';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
+import { ProjectWithMembers } from '@/types/projects';
 
 import {
   AverageGPUIdleTimeCard,
@@ -43,47 +68,74 @@ import {
   ProjectWorkloadsTable,
   QuotaUtilizationCard,
 } from '@/components/features/projects';
-import { ActionButton } from '@amdenterpriseai/components';
+import {
+  ActionButton,
+  Alert,
+  ConfirmationModal,
+} from '@amdenterpriseai/components';
 import { ChartTimeSelector } from '@amdenterpriseai/components';
+import { useLastQueryUpdated } from '@amdenterpriseai/hooks';
 
-import { isEqual } from 'lodash';
+const PROJECT_DASHBOARD_METRICS_QUERY_PREFIX = ['project', 'metrics'] as const;
 
-const GPU_MEMORY_UTILIZATION_NUMERATOR_LABEL = 'utilized_gpu_vram';
-const GPU_MEMORY_UTILIZATION_DENOMINATOR_LABEL = 'allocated_gpu_vram';
-const GPU_DEVICE_UTILIZATION_NUMERATOR_LABEL = 'utilized_gpus';
-const GPU_DEVICE_UTILIZATION_DENOMINATOR_LABEL = 'allocated_gpus';
+const GPU_MEMORY_UTILIZATION_NUMERATOR_LABEL = 'utilizedGpuVram';
+const GPU_MEMORY_UTILIZATION_DENOMINATOR_LABEL = 'allocatedGpuVram';
+const GPU_DEVICE_UTILIZATION_NUMERATOR_LABEL = 'utilizedGpus';
+const GPU_DEVICE_UTILIZATION_DENOMINATOR_LABEL = 'allocatedGpus';
 
 interface Props {
   project: ProjectWithMembers;
 }
 
-const ProjectDashboardPage: React.FC<Props> = ({ project }) => {
+const ProjectDashboardPage: React.FC<Props> & WithDocumentationLink = ({
+  project,
+}) => {
   const { t } = useTranslation('projects');
   const router = useRouter();
   const { id } = router.query;
+  const { toast } = useSystemToast();
+  const { isAdministrator } = useAccessControl();
   const queryClient = useQueryClient();
-
   const [timeRange, setTimeRange] = useState<TimeRange>(
     getCurrentTimeRange(TimeRangePeriod['1H']),
   );
   const currentTimePeriod = useRef<TimeRangePeriod>(TimeRangePeriod['1H']);
+  const {
+    isOpen: isDeleteModalOpen,
+    onOpen: onDeleteModalOpen,
+    onOpenChange: onDeleteModalOpenChange,
+  } = useDisclosure();
+  const { mutate: deleteProject, isPending: isDeletePending } = useMutation({
+    mutationFn: deleteProjectAPI,
+    onSuccess: () => {
+      onDeleteModalOpenChange();
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      toast.success(t('settings.delete.notification.success'));
+      router.push('/projects');
+    },
+    onError: (error) => {
+      onDeleteModalOpenChange();
+      toast.error(
+        t('settings.delete.notification.error'),
+        error as APIRequestError,
+      );
+    },
+  });
 
   const {
     data: projectWorkloadsStatuses,
     isLoading: isProjectWorkloadsStatusesLoading,
   } = useQuery<WorkloadStatusStatsResponse>({
-    queryKey: ['project', 'metrics', 'statuses', id],
+    queryKey: [...PROJECT_DASHBOARD_METRICS_QUERY_PREFIX, 'statuses', id],
     queryFn: () => fetchProjectWorkloadsStatuses(id as string),
   });
 
   const {
     data: projectGPUMemoryUtilization,
     isLoading: isProjectGPUMemoryUtilizationLoading,
-    dataUpdatedAt: projectGPUMemoryUtilizationUpdatedAt,
   } = useQuery<TimeSeriesResponse>({
     queryKey: [
-      'project',
-      'metrics',
+      ...PROJECT_DASHBOARD_METRICS_QUERY_PREFIX,
       'gpu-memory-utilization',
       {
         start: timeRange.start.toISOString(),
@@ -102,11 +154,9 @@ const ProjectDashboardPage: React.FC<Props> = ({ project }) => {
   const {
     data: projectGPUDeviceUtilization,
     isLoading: isProjectGPUDeviceUtilizationLoading,
-    dataUpdatedAt: projectGPUDeviceUtilizationUpdatedAt,
   } = useQuery<TimeSeriesResponse>({
     queryKey: [
-      'project',
-      'metrics',
+      ...PROJECT_DASHBOARD_METRICS_QUERY_PREFIX,
       'gpu-device-utilization',
       {
         start: timeRange.start.toISOString(),
@@ -125,11 +175,9 @@ const ProjectDashboardPage: React.FC<Props> = ({ project }) => {
   const {
     data: projectAverageWaitTime,
     isLoading: isProjectAverageWaitTimeLoading,
-    dataUpdatedAt: projectAverageWaitTimeUpdatedAt,
   } = useQuery<MetricScalarResponse>({
     queryKey: [
-      'project',
-      'metrics',
+      ...PROJECT_DASHBOARD_METRICS_QUERY_PREFIX,
       'average-wait-time',
       {
         start: timeRange.start.toISOString(),
@@ -148,11 +196,9 @@ const ProjectDashboardPage: React.FC<Props> = ({ project }) => {
   const {
     data: projectAverageGPUIdleTime,
     isLoading: isProjectAverageGPUIdleTimeLoading,
-    dataUpdatedAt: projectAverageGPUIdleTimeUpdatedAt,
   } = useQuery<MetricScalarResponse>({
     queryKey: [
-      'project',
-      'metrics',
+      ...PROJECT_DASHBOARD_METRICS_QUERY_PREFIX,
       'gpu-idle-time',
       {
         start: timeRange.start.toISOString(),
@@ -209,53 +255,17 @@ const ProjectDashboardPage: React.FC<Props> = ({ project }) => {
   );
 
   const handleChartsRefresh = useCallback(() => {
-    const newRange = getCurrentTimeRange(currentTimePeriod.current);
-    if (isEqual(newRange, timeRange)) {
-      queryClient.invalidateQueries({
-        queryKey: ['project', 'metrics'],
-      });
-    } else {
-      // Time range has changed, set the new time range and react-query will auto refetch the data
-      setTimeRange(newRange);
-    }
-  }, [timeRange, queryClient]);
+    setTimeRange(getCurrentTimeRange(currentTimePeriod.current));
+  }, []);
 
-  const isMetricsLoading = useMemo(() => {
-    return (
-      isProjectGPUDeviceUtilizationLoading ||
-      isProjectGPUMemoryUtilizationLoading ||
-      isProjectAverageWaitTimeLoading ||
-      isProjectAverageGPUIdleTimeLoading
-    );
-  }, [
-    isProjectGPUDeviceUtilizationLoading,
-    isProjectGPUMemoryUtilizationLoading,
-    isProjectAverageWaitTimeLoading,
-    isProjectAverageGPUIdleTimeLoading,
-  ]);
+  const isFetchingMetrics =
+    useIsFetching({
+      queryKey: PROJECT_DASHBOARD_METRICS_QUERY_PREFIX,
+    }) > 0;
 
-  const dataLastUpdatedAt = useMemo(() => {
-    const latestTimestamps: Date[] = [];
-
-    if (projectGPUDeviceUtilizationUpdatedAt) {
-      latestTimestamps.push(new Date(projectGPUDeviceUtilizationUpdatedAt));
-    }
-    if (projectGPUMemoryUtilizationUpdatedAt) {
-      latestTimestamps.push(new Date(projectGPUMemoryUtilizationUpdatedAt));
-    }
-    if (projectAverageWaitTimeUpdatedAt) {
-      latestTimestamps.push(new Date(projectAverageWaitTimeUpdatedAt));
-    }
-    if (projectAverageGPUIdleTimeUpdatedAt) {
-      latestTimestamps.push(new Date(projectAverageGPUIdleTimeUpdatedAt));
-    }
-    return getLatestDate(latestTimestamps);
-  }, [
-    projectGPUDeviceUtilizationUpdatedAt,
-    projectGPUMemoryUtilizationUpdatedAt,
-    projectAverageWaitTimeUpdatedAt,
-    projectAverageGPUIdleTimeUpdatedAt,
-  ]);
+  const lastUpdated = useLastQueryUpdated(
+    PROJECT_DASHBOARD_METRICS_QUERY_PREFIX,
+  );
 
   return (
     <div className="flex flex-col gap-8 mt-8">
@@ -268,17 +278,84 @@ const ProjectDashboardPage: React.FC<Props> = ({ project }) => {
               initialTimePeriod={TimeRangePeriod['1H']}
               translationPrefix="timeRange"
               onChartsRefresh={handleChartsRefresh}
-              isFetching={isMetricsLoading}
-              lastFetchedTimestamp={dataLastUpdatedAt}
+              isFetching={isFetchingMetrics}
+              lastFetchedTimestamp={lastUpdated}
             />
-            <ActionButton
-              onPress={() => {
-                router.push(getProjectEditUrl(id as string));
-              }}
-              icon={<IconSettings size={16} stroke={2} />}
-            >
-              {t('dashboard.action.projectSettings')}
-            </ActionButton>
+            <Dropdown>
+              <DropdownTrigger>
+                <ActionButton
+                  aria-label={t('dashboard.action.label') || ''}
+                  endContent={<IconChevronDown size={16} />}
+                >
+                  {t('dashboard.action.label')}
+                </ActionButton>
+              </DropdownTrigger>
+              <DropdownMenu
+                aria-label={t('dashboard.action.label') || ''}
+                disabledKeys={[
+                  ...(!project.cluster?.workbenchBaseUrl ||
+                  !isHttpUrl(project.cluster.workbenchBaseUrl)
+                    ? ['viewInAiwb']
+                    : []),
+                  ...(!isAdministrator ? ['delete'] : []),
+                  'teamMemberAlert',
+                ]}
+              >
+                {!isAdministrator ? (
+                  <DropdownItem
+                    key="teamMemberAlert"
+                    isReadOnly
+                    className="opacity-100"
+                  >
+                    <Alert
+                      color="warning"
+                      classNames={{
+                        base: 'p-2',
+                        title: 'text-xs leading-3.5',
+                        description: 'text-xs leading-tight',
+                      }}
+                      radius="sm"
+                      title={t('dashboard.action.teamMemberAlert.title')}
+                      hideIcon
+                      className="w-[240px]"
+                      description={t(
+                        'dashboard.action.teamMemberAlert.description',
+                      )}
+                    />
+                  </DropdownItem>
+                ) : null}
+                <DropdownItem
+                  key="editSettings"
+                  onPress={() => router.push(getProjectEditUrl(id as string))}
+                  startContent={<IconSettings />}
+                >
+                  {t('dashboard.action.editSettings')}
+                </DropdownItem>
+                <DropdownItem
+                  key="viewInAiwb"
+                  onPress={() => {
+                    window.open(
+                      `${stripTrailingSlashes(project.cluster!.workbenchBaseUrl!)}/${project.name}`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    );
+                  }}
+                  showDivider
+                  startContent={<IconExternalLink />}
+                >
+                  {t('dashboard.action.viewInAiwb')}
+                </DropdownItem>
+                <DropdownItem
+                  key="delete"
+                  className="text-danger"
+                  color="danger"
+                  onPress={onDeleteModalOpen}
+                  startContent={<IconTrash />}
+                >
+                  {t('dashboard.action.delete')}
+                </DropdownItem>
+              </DropdownMenu>
+            </Dropdown>
           </div>
         </div>
         <div className="flex justify-center grow">
@@ -324,9 +401,22 @@ const ProjectDashboardPage: React.FC<Props> = ({ project }) => {
         <h3>{t('dashboard.workloads.title')}</h3>
         <ProjectWorkloadsTable projectId={id as string} />
       </div>
+      <ConfirmationModal
+        confirmationButtonColor="danger"
+        description={t('settings.delete.confirmation.description', {
+          project: project.name,
+        })}
+        title={t('settings.delete.confirmation.title')}
+        isOpen={isDeleteModalOpen}
+        loading={isDeletePending}
+        onConfirm={() => deleteProject(project.id)}
+        onClose={onDeleteModalOpenChange}
+      />
     </div>
   );
 };
+
+ProjectDashboardPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/projects/project-dashboard.html`;
 
 export default ProjectDashboardPage;
 

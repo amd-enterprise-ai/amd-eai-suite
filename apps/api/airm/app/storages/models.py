@@ -9,10 +9,11 @@ from sqlalchemy import ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from ..messaging.schemas import ConfigMapStatus, ProjectStorageStatus
+from api_common.models import BaseEntity
+
 from ..projects.models import Project
-from ..utilities.models import BaseEntity
-from .enums import StorageScope, StorageStatus, StorageType
+from ..workloads.enums import ConfigMapStatus
+from .enums import ProjectStorageStatus, StorageScope, StorageStatus, StorageType
 
 
 class Storage(BaseEntity):

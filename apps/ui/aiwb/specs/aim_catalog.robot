@@ -23,7 +23,6 @@ Resource            resources/workloads.resource
 Resource            resources/aiwb_aims.resource
 Resource            resources/airm_projects.resource
 
-Suite Setup         Initialize Project Tracking
 Suite Teardown      Clean Up All Created Projects
 Test Setup          Open test browser
 Test Teardown       Close test browser
@@ -135,3 +134,19 @@ Deployments list shows workloads with status indicators
     When user is on workloads page
     Then deployed workloads list should have entries
     And inference workload should show status in list
+
+# =============================================================================
+# Request Missing Model (EAI-5623)
+# =============================================================================
+
+Request model card links user to support mailto
+    [Documentation]    Verify that the AIM catalog page shows a "Request model" card
+    ...                linking to the support mailbox so users can ask for missing
+    ...                models.
+    [Tags]    ui    aims    catalog    request    smoke
+
+    Given a ready project with user access exists
+    And user is logged in
+    And project "${TEST_PROJECT}[name]" is selected
+    And user is on models page
+    Then request model card should link to support mailto

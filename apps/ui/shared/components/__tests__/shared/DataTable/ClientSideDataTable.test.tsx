@@ -385,6 +385,64 @@ describe('ClientSideDataTable', () => {
     });
   });
 
+  it('should show correct data and page number after deleting the last item on a non-first page', () => {
+    // 11 items sorted ascending by age: pages 1..10 on page 1, item 11 (age 30) on page 2
+    const initialData = Array.from({ length: 11 }, (_, i) => ({
+      id: i + 1,
+      name: `Item ${i + 1}`,
+      age: i + 20,
+    }));
+
+    let currentData = [...initialData];
+    const { rerender } = render(
+      <ClientSideDataTable
+        data={currentData}
+        columns={mockColumns}
+        defaultSortByField="age"
+        translation={mockTranslation}
+        idKey="id"
+      />,
+    );
+
+    // Navigate to page 2
+    act(() => {
+      const page2Button = screen.getAllByLabelText('pagination item 2');
+      fireEvent.click(page2Button[0]);
+    });
+
+    // Verify we're on page 2 — only 1 row visible (age 30), plus header
+    expect(screen.getAllByRole('row')).toHaveLength(2);
+    expect(screen.getByText('30')).toBeInTheDocument();
+
+    // Delete the item on page 2 — data shrinks to 10 items (fits on 1 page)
+    currentData = currentData.slice(0, 10);
+    act(() => {
+      rerender(
+        <ClientSideDataTable
+          data={currentData}
+          columns={mockColumns}
+          defaultSortByField="age"
+          translation={mockTranslation}
+          idKey="id"
+        />,
+      );
+    });
+
+    // Page should have been clamped back to 1: 10 rows + header
+    const rows = screen.getAllByRole('row');
+    expect(rows).toHaveLength(PageFrameSize.SMALL + 1);
+
+    // Page 1 items must be visible
+    expect(screen.getByText('20')).toBeInTheDocument();
+    // Page 2's item (age 30) must no longer exist in data, and page 1 ends at age 29
+    expect(screen.queryByText('30')).not.toBeInTheDocument();
+
+    // With exactly PageFrameSize.SMALL items the pagination bar is hidden
+    expect(
+      screen.queryByLabelText('list.pagination.pageSize.label'),
+    ).not.toBeInTheDocument();
+  });
+
   it('should render the description if a column needs it', () => {
     const columns = [
       { key: 'name' },

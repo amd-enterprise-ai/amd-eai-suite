@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { LogLevel } from '@amdenterpriseai/types';
+import { LogLevel } from '@/types/enums/workloads';
 
 export const LOG_LEVEL_COLORS: Record<LogLevel, string> = {
   [LogLevel.TRACE]: '#999999',

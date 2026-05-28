@@ -18,7 +18,7 @@ export type SortParams<T> = {
 
 export type PaginationParams<T> = {
   page: number;
-  page_size: number;
+  pageSize: number;
 };
 
 export type CollectionRequestParams<T> = {

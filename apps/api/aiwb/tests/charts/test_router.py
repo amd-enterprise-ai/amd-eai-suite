@@ -299,7 +299,7 @@ def test_list_charts_workspace_usage_scope(
     mlflow_data = next(chart for chart in response_data["data"] if chart["name"] == "dev-tracking-mlflow")
 
     # Verify usage_scope values match the expected mapping
-    assert vscode_data["usage_scope"] == "user"
-    assert mlflow_data["usage_scope"] == "namespace"
+    assert vscode_data["usageScope"] == "user"
+    assert mlflow_data["usageScope"] == "namespace"
 
     mock_repo_list_charts.assert_called_once()

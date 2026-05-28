@@ -98,7 +98,7 @@ func TestReconcile_AddsFinalizerToNewResource(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -140,7 +140,7 @@ func TestReconcile_DoesNotDuplicateFinalizer(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -191,7 +191,7 @@ func TestReconcile_HandlesDeletionWithValidLabels(t *testing.T) {
 
 	// Verify deletion message was published
 	assert.Len(t, mock.Published, 1)
-	msg, ok := mock.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := mock.Published[0].(common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-replicaset", msg.Name)
 	assert.Equal(t, "Deleted", msg.Status)
@@ -280,14 +280,14 @@ func TestReconcile_PublishesAutoDiscoveryMessage(t *testing.T) {
 	// Should publish both auto-discovery and status messages
 	assert.Len(t, mock.Published, 2)
 
-	autoDiscoveryMsg, ok := mock.Published[0].(*messaging.AutoDiscoveredWorkloadComponentMessage)
+	autoDiscoveryMsg, ok := mock.Published[0].(*common.AutoDiscoveredWorkloadComponentMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-replicaset", autoDiscoveryMsg.Name)
 	assert.Equal(t, workloadID.String(), autoDiscoveryMsg.WorkloadID)
 	assert.Equal(t, componentID.String(), autoDiscoveryMsg.ComponentID)
 	assert.Equal(t, projectID.String(), autoDiscoveryMsg.ProjectID)
 
-	statusMsg, ok := mock.Published[1].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[1].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -361,7 +361,7 @@ func TestReconcile_PublishesStatusMessage(t *testing.T) {
 
 	// Should publish status message
 	require.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, "test-replicaset", statusMsg.Name)
 	// Note: Kind field is empty in tests due to fake client limitation with GVK preservation

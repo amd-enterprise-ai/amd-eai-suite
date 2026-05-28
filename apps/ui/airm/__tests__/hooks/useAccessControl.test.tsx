@@ -7,13 +7,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useSession } from 'next-auth/react';
 
 import { useAccessControl } from '@/hooks/useAccessControl';
-import { ProviderWrapper } from '../ProviderWrapper';
+import { ProviderWrapper } from '@/__tests__/ProviderWrapper';
 import {
   mockOrganization,
   mockOrganizationAccessDisabled,
   mockOrganizationIdpLinked,
   mockOrganizationIdpLinkedSmtpDisabled,
-} from '../../__mocks__/services/app/organizations.data';
+} from '@/__mocks__/services/app/organizations.data';
 
 // Mock the organization service
 vi.mock('@/services/app', async (importOriginal) => ({

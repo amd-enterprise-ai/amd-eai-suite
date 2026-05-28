@@ -181,3 +181,11 @@ gh workflow run "E2E Tests" -R silogen/core --ref <branch-name> -f image_tag=mai
 | Manual (Main)     | `gh workflow run "Main" --ref <branch>`      | Builds + E2E |
 | Manual (E2E only) | `gh workflow run "E2E Tests" --ref <branch>` | E2E only     |
 | PR comment        | `/e2e-test` comment on PR                    | E2E only     |
+
+### app-cpu-test cluster setup
+
+The CI runner uses the `app-cpu-test` cluster. AIRM and AIWB are deployed as standalone ArgoCD Applications with `selfHeal: false` so the CI workflow can patch image tags without ArgoCD reverting them. These Applications are **not** managed by cluster-forge — after a cluster reinstall, cluster-forge only recreates the infra apps (`airm-infra-*`, `aiwb-infra-*`).
+
+The workflow handles this automatically: the `deploy-to-app-cpu` job checks whether the `airm` and `aiwb` ArgoCD Applications exist and creates them if missing. The CI runner's kubeconfig has the necessary admin permissions for this; `devuser` OIDC credentials do not.
+
+The canonical Application manifests and cluster-specific Helm values live in `cluster-values-app-cpu-test/` in the `eai-stack` repository.

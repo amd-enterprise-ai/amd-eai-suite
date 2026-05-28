@@ -8,7 +8,12 @@ import { useTranslation } from 'next-i18next';
 import { useLocalStorage } from '@amdenterpriseai/hooks';
 
 import { RelevantDocsCard } from './RelevantDocsCard';
-import { documentationMapping } from './documentation-mapping';
+
+export interface DocEntry {
+  title: string;
+  description: string;
+  url: string;
+}
 
 const STORAGE_KEY = 'relevantDocsAccordion';
 
@@ -19,22 +24,21 @@ const STORAGE_KEY = 'relevantDocsAccordion';
 const DEFAULT_VALUE = [STORAGE_KEY];
 
 export interface RelevantDocsProps {
-  page: string;
+  docs: DocEntry[];
 }
 
-export const RelevantDocs = ({ page }: RelevantDocsProps) => {
+export const RelevantDocs = ({ docs }: RelevantDocsProps) => {
   const { t } = useTranslation('sharedComponents', {
     keyPrefix: 'RelevantDocs',
   });
-  const entries = documentationMapping[page];
-  if (!entries || entries.length === 0) {
-    return null;
-  }
-  const displayEntries = entries.slice(0, 3);
   const [storedKeys, setStoredKeys] = useLocalStorage<string[]>(
     STORAGE_KEY,
     DEFAULT_VALUE,
   );
+
+  if (docs.length === 0) return null;
+
+  const displayEntries = docs.slice(0, 3);
   const selectedKeys = new Set(
     Array.isArray(storedKeys) ? storedKeys : DEFAULT_VALUE,
   );

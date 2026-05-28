@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ApiKey } from '@amdenterpriseai/types';
+import { ApiKey } from '@/types/api-keys';
 
 export const generateMockApiKeys = (count: number): ApiKey[] => {
   return Array.from({ length: count }, (_, i) => ({

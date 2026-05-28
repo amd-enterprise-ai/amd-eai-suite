@@ -54,7 +54,7 @@ const mockAimServices = [
       ownerReferences: [],
     },
     spec: {
-      model: { name: mockAims[0].resourceName },
+      model: { name: mockAims[0].model },
       replicas: 1,
       overrides: {},
       cacheModel: false,
@@ -67,9 +67,8 @@ const mockAimServices = [
     },
     status: {
       status: AIMServiceStatus.RUNNING,
-      resolvedModel: { name: mockAims[0].resourceName },
+      resolvedModel: { name: mockAims[0].model },
     },
-    resourceName: 'gpt-4-deployment',
     clusterAuthGroupId: 'auth-group-1',
     endpoints: {
       internal: 'https://gpt4.internal',
@@ -88,7 +87,7 @@ const mockAimServices = [
       ownerReferences: [],
     },
     spec: {
-      model: { name: mockAims[1].resourceName },
+      model: { name: mockAims[1].model },
       replicas: 1,
       overrides: {},
       cacheModel: false,
@@ -101,9 +100,8 @@ const mockAimServices = [
     },
     status: {
       status: AIMServiceStatus.RUNNING,
-      resolvedModel: { name: mockAims[1].resourceName },
+      resolvedModel: { name: mockAims[1].model },
     },
-    resourceName: 'llama-2-deployment',
     clusterAuthGroupId: 'auth-group-2',
     endpoints: {
       internal: 'https://llama2.internal',
@@ -122,7 +120,7 @@ const mockAimServices = [
       ownerReferences: [],
     },
     spec: {
-      model: { name: mockAims[2].resourceName },
+      model: { name: mockAims[2].model },
       replicas: 1,
       overrides: {},
       cacheModel: false,
@@ -135,9 +133,8 @@ const mockAimServices = [
     },
     status: {
       status: AIMServiceStatus.RUNNING,
-      resolvedModel: { name: mockAims[2].resourceName },
+      resolvedModel: { name: mockAims[2].model },
     },
-    resourceName: 'mistral-deployment',
     clusterAuthGroupId: 'auth-group-3',
     endpoints: {
       internal: 'https://mistral.internal',
@@ -177,7 +174,6 @@ const mockOnClose = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Mock getAimServices to return AIM services
   mockGetAimServices.mockResolvedValue(mockAimServices);
   mockGetAimClusterModels.mockResolvedValue(mockAims);
   const deploymentDisplayNames: Record<string, string> = {
@@ -193,8 +189,7 @@ beforeEach(() => {
       imageVersion: mockAims[0].imageVersion,
       metric: AIMMetric.Default,
       title: displayName,
-      resourceName:
-        aimService.status?.resolvedModel?.name ?? aimService.metadata.name,
+      name: aimService.status?.resolvedModel?.name ?? aimService.metadata.name,
     };
   });
   // Mock fetchApiKeyDetails to return mock API key details

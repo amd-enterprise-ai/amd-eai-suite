@@ -4,23 +4,21 @@
 
 import { Select, SelectProps } from '@heroui/react';
 import { cn } from '@heroui/react';
-import { ComponentType } from 'react';
 import { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 
 interface Props<T extends FieldValues>
   extends Omit<SelectProps, 'form' | 'name'> {
-  icon?: ComponentType<{ className?: string }>;
   form: UseFormReturn<T>;
   name: Path<T>;
 }
 
 export const FormSelect = <T extends FieldValues>({
   form,
-  icon: Icon,
   name,
   className,
   children,
   defaultSelectedKeys,
+  startContent,
   ...props
 }: Props<T>): React.ReactElement => {
   const registration = form.register(name);
@@ -48,16 +46,7 @@ export const FormSelect = <T extends FieldValues>({
       })}
       isInvalid={!!errorMessage}
       errorMessage={errorMessage}
-      startContent={
-        Icon ? (
-          <Icon
-            className={cn({
-              'stroke-danger': !!errorMessage,
-              'stroke-neutral-500': !errorMessage,
-            })}
-          />
-        ) : null
-      }
+      startContent={startContent}
     >
       {children}
     </Select>

@@ -92,7 +92,7 @@ async def test_updates_existing_chart_and_overlay(
     mock_get_registerable_workloads.return_value = [wl]
     mock_select_chart.return_value = SimpleNamespace(id=chart_id)
     mock_update_chart.return_value = SimpleNamespace(id=chart_id)
-    mock_list_overlays.return_value = [SimpleNamespace(id=overlay_id, canonical_name="old/name")]
+    mock_list_overlays.return_value = [SimpleNamespace(id=overlay_id, canonical_name="foo/bar")]
 
     await register_workloads()
 

@@ -103,7 +103,7 @@ describe('ProjectWorkloadsTable', () => {
       sort: [
         {
           direction: 'descending',
-          field: 'created_at',
+          field: 'createdAt',
         },
       ],
       filter: [
@@ -126,12 +126,9 @@ describe('ProjectWorkloadsTable', () => {
             'Running',
             'Complete',
             'Failed',
-            'Degraded',
             'Deleting',
-            'Unknown',
-            'Added',
-            'Downloading',
             'DeleteFailed',
+            'Unknown',
             'Terminated',
           ],
         },

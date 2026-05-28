@@ -15,9 +15,9 @@ import { fetchProjectStorages } from '@/services/app';
 
 import { generateMockProjectWithMembers } from '@/__mocks__/utils/project-mock';
 
-import { Cluster } from '@amdenterpriseai/types';
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { QuotaResource } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { QuotaResource } from '@/types/enums/quotas';
 
 import ProjectEditPage from '@/pages/projects/[id]/edit';
 
@@ -183,6 +183,9 @@ describe('projects/[id]', () => {
     expect(detailsTab).toBeInTheDocument();
 
     expect(
+      screen.getByText('modal.create.form.preemption.sectionTitle'),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText('settings.form.deleteProject.title'),
     ).toBeInTheDocument();
   });
@@ -209,5 +212,38 @@ describe('projects/[id]', () => {
     const { container } = renderProjectEditPage({ cluster: mockCluster });
     fireEvent.click(screen.getByLabelText('actions.back'));
     expect(mockRouterPush).toHaveBeenCalledWith(`/projects/${mockProject.id}`);
+  });
+
+  it('on Details tab, team member sees read-only pre-emption banner and no delete section', () => {
+    const mockedUseAccessControl = useAccessControl as Mock;
+    const adminAccessControl = {
+      isRoleManagementEnabled: true,
+      isInviteEnabled: true,
+      isAdministrator: true,
+    };
+    mockedUseAccessControl.mockReturnValue({
+      isRoleManagementEnabled: true,
+      isInviteEnabled: true,
+      isAdministrator: false,
+    });
+
+    try {
+      act(() => {
+        renderProjectEditPage({ cluster: mockCluster });
+      });
+
+      fireEvent.click(screen.getByText('tab.details.title'));
+
+      expect(
+        screen.getByText(
+          'settings.form.basicInfo.preemption.readonly.bannerDescriptionDisabled',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText('settings.form.deleteProject.title'),
+      ).not.toBeInTheDocument();
+    } finally {
+      mockedUseAccessControl.mockReturnValue(adminAccessControl);
+    }
   });
 });

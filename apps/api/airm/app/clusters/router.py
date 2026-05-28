@@ -8,6 +8,16 @@ from fastapi import APIRouter, Body, Depends, Path, status
 from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.collections import (
+    FilterCondition,
+    PaginationConditions,
+    SortCondition,
+    get_filter_query_params,
+    get_pagination_query_params,
+    get_sort_query_params,
+)
+from api_common.exceptions import NotFoundException
+
 from ..metrics.schemas import (
     GpuDeviceSingleMetricResponse,
     MetricsTimeRange,
@@ -40,14 +50,7 @@ from ..projects.schemas import (
 from ..projects.service import (
     get_projects_in_cluster_with_resource_allocation,
 )
-from ..utilities.collections.dependencies import (
-    get_filter_query_params,
-    get_pagination_query_params,
-    get_sort_query_params,
-)
-from ..utilities.collections.schemas import FilterCondition, PaginationConditions, SortCondition
 from ..utilities.database import get_session
-from ..utilities.exceptions import NotFoundException
 from ..utilities.keycloak_admin import (
     KeycloakAdmin,
     get_kc_admin,

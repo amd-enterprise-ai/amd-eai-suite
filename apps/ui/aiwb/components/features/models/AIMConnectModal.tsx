@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { Snippet, Tab, Tabs, Switch } from '@heroui/react';
-import { IconAlertTriangle, IconCopy } from '@tabler/icons-react';
+import { IconCopy } from '@tabler/icons-react';
 import { useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -105,19 +105,15 @@ const AIMConnectModal = ({
 
   const deployedService = aim?.deployedService;
 
-  const hasClusterAuthGroup = !!deployedService?.clusterAuthGroupId;
-
-  const externalUrl =
-    deployedService?.endpoints?.external && hasClusterAuthGroup
-      ? `${deployedService.endpoints.external}/v1/chat/completions`
-      : '';
+  const externalUrl = deployedService?.endpoints?.external
+    ? `${deployedService.endpoints.external}/v1/chat/completions`
+    : '';
 
   const internalUrl = deployedService?.endpoints?.internal
     ? `${deployedService.endpoints.internal}/v1/chat/completions`
     : '';
 
-  const urlToUse =
-    useInternalUrl || !hasClusterAuthGroup ? internalUrl : externalUrl;
+  const urlToUse = useInternalUrl ? internalUrl : externalUrl || internalUrl;
   const codeExamples = getCodeExamples(urlToUse, aim?.canonicalName || '');
   const codeBlock = codeExamples[selectedLanguage] || codeExamples.curl;
 
@@ -159,18 +155,6 @@ const AIMConnectModal = ({
                 </Snippet>
               </div>
             ) : null}
-            {deployedService && !hasClusterAuthGroup && (
-              <div className="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50/50 p-3 dark:border-warning-500/30 dark:bg-warning-500/10">
-                <IconAlertTriangle
-                  size={16}
-                  className="text-warning-500 mt-0.5 shrink-0"
-                />
-                <p className="text-sm text-default-600">
-                  {tw('fields.notManagedByWorkbench')}
-                </p>
-              </div>
-            )}
-
             <div>
               <label className="block text-sm text-foreground-500 mb-2">
                 {t('actions.connect.modal.internalUrl')}
@@ -196,7 +180,7 @@ const AIMConnectModal = ({
               <label className="block text-sm font-medium text-foreground-500 mb-3">
                 {t('actions.connect.modal.codeExample')}
               </label>
-              {hasClusterAuthGroup && (
+              {externalUrl && (
                 <div className="flex items-center justify-between mb-3">
                   <Switch
                     isSelected={useInternalUrl}

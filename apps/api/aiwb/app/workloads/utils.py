@@ -28,7 +28,6 @@ from .constants import (
     JOB_COND_FAILURE_TARGET,
     JOB_COND_SUSPENDED,
     JOB_RESOURCE,
-    MODEL_ID_LABEL,
     WORKLOAD_ID_LABEL,
     WORKLOAD_TYPE_LABEL,
 )
@@ -93,7 +92,8 @@ def derive_job_status(status: V1JobStatus | None) -> WorkloadStatus:
     """Derive a WorkloadStatus from a V1JobStatus.
 
     Checks conditions first (failed, complete, suspended),
-    then falls back to active/succeeded/failed counters.
+    then falls back to pod counters (active, ready, succeeded, failed).
+    Active pods that aren't ready are treated as Pending.
     """
     if status is None:
         return WorkloadStatus.PENDING
@@ -110,7 +110,9 @@ def derive_job_status(status: V1JobStatus | None) -> WorkloadStatus:
         return WorkloadStatus.PENDING
 
     if status.active and status.active > 0:
-        return WorkloadStatus.RUNNING
+        if status.ready and status.ready > 0:
+            return WorkloadStatus.RUNNING
+        return WorkloadStatus.PENDING
     if status.succeeded and status.succeeded > 0:
         return WorkloadStatus.COMPLETE
     if status.failed and status.failed > 0:
@@ -125,6 +127,7 @@ async def apply_manifest(
     workload: Workload,
     namespace: str,
     submitter: str,
+    extra_labels: dict[str, str] | None = None,
 ) -> None:
     """Apply Kubernetes manifest with workload metadata injection.
 
@@ -139,6 +142,7 @@ async def apply_manifest(
         workload: The workload instance containing metadata to inject
         namespace: Kubernetes namespace
         submitter: User identifier (e.g. email) who submitted the workload
+        extra_labels: Additional labels to inject into primary workload resources (Job/Deployment)
 
     Raises:
         RuntimeError: If applying manifest fails
@@ -172,15 +176,16 @@ async def apply_manifest(
         # All resources get workload-id for tracking
         labels[WORKLOAD_ID_LABEL] = str(workload.id)
 
-        # Only primary workload resources get full metadata for auto-discovery
+        # Only primary workload resources get full metadata for auto-discovery.
         if kind in {DEPLOYMENT_RESOURCE, JOB_RESOURCE}:
             labels[CHART_ID_LABEL] = str(workload.chart_id)
             labels[WORKLOAD_TYPE_LABEL] = sanitize_label_value(str(workload.type))
             labels[DISPLAY_NAME_LABEL] = sanitize_label_value(workload.display_name)
-            if workload.model_id:
-                labels[MODEL_ID_LABEL] = str(workload.model_id)
             if workload.dataset_id:
                 labels[DATASET_ID_LABEL] = str(workload.dataset_id)
+            if extra_labels:
+                for key, value in extra_labels.items():
+                    labels[key] = sanitize_label_value(value)
 
         # Inject submitter annotation
         if "annotations" not in doc["metadata"]:
@@ -219,13 +224,14 @@ def generate_workload_name(workload: Workload) -> str:
 def generate_display_name(workload: Workload) -> str:
     """
     Generate a display name for a managed workload.
+
+    Callers that know a human-readable handle (e.g. the FT flow uses the
+    finetuning job name) should set ``workload.display_name`` explicitly
+    before creation; this fallback only runs when no display name was
+    provided.
     """
     uuid_prefix = str(workload.id)[:8]
-
-    if workload.model:
-        return f"{workload.chart.name}-{workload.model.name}-{uuid_prefix}"
-    else:
-        return f"{workload.chart.name}-{uuid_prefix}"
+    return f"{workload.chart.name}-{uuid_prefix}"  # caller must pass a DB-attached Workload so chart is loaded
 
 
 def get_workload_internal_url(workload_name: str, namespace: str) -> str:

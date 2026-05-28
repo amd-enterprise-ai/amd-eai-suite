@@ -59,7 +59,7 @@ func (r *ExternalSecretReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	secretData, err := common.ExtractSecretData(externalSecretObj, messaging.SecretKindExternalSecret)
+	secretData, err := common.ExtractSecretData(externalSecretObj, common.SecretKindExternalSecret)
 	if err != nil {
 		log.V(1).Info("skipping external secret, cannot extract data", "error", err)
 		return ctrl.Result{}, nil

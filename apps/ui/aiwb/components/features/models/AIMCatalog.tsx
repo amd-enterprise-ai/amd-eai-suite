@@ -31,13 +31,14 @@ import {
 import { AIMWorkloadStatus, ParsedAIM, AggregatedAIM } from '@/types/aims';
 import { useRouter } from 'next/router';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
+import { RequestSoftware } from '@/components/shared/RequestSoftware/RequestSoftware';
 
 const AIMS_REFETCH_INTERVAL = 30000; // Refetch every 30 seconds
 
 const AIMCatalog: React.FC = () => {
   const { t } = useTranslation('models', { keyPrefix: 'aimCatalog' });
   const { toast } = useSystemToast();
-  const { activeProject } = useProject();
+  const { activeProject, projectPath, projectUrl } = useProject();
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -120,14 +121,17 @@ const AIMCatalog: React.FC = () => {
 
   const handleOpenDetails = useCallback(
     (serviceId: string) => {
-      router.push(`/aims/${serviceId}`);
+      router.push(projectPath(`/aims/${serviceId}`));
     },
-    [router],
+    [router, projectPath],
   );
 
-  const handleChatWithModel = useCallback((serviceId: string) => {
-    window.open(`/chat?workload=${serviceId}`, '_blank');
-  }, []);
+  const handleChatWithModel = useCallback(
+    (serviceId: string) => {
+      window.open(projectUrl(`/chat?workload=${serviceId}`), '_blank');
+    },
+    [projectUrl],
+  );
 
   const handleConnectToModel = useCallback(
     (aim: ParsedAIM) => {
@@ -215,6 +219,10 @@ const AIMCatalog: React.FC = () => {
             label: t('list.filter.deploymentStatus.pending'),
             key: AIMWorkloadStatus.PENDING,
           },
+          {
+            label: t('list.filter.deploymentStatus.starting'),
+            key: AIMWorkloadStatus.STARTING,
+          },
         ],
       },
     }),
@@ -295,6 +303,7 @@ const AIMCatalog: React.FC = () => {
           ))}
         </div>
       )}
+      <RequestSoftware variant="model" />
       {aggregatedAimForDeployment && (
         <DeployAIMDrawer
           isOpen={deployDisclosure.isOpen}

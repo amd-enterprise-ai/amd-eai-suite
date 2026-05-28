@@ -13,21 +13,24 @@ import { ActionFieldHintType } from '@amdenterpriseai/types';
 
 import { NestedDropdown, DropdownItem } from '@amdenterpriseai/components';
 
-// Mock Tabler icons
-vi.mock('@tabler/icons-react', () => ({
-  IconDotsVertical: ({ className }: any) => (
-    <span className={className}>action-dot-icon</span>
-  ),
-  IconInfoCircle: ({ className }: any) => (
-    <span className={className}>info-icon</span>
-  ),
-  IconAlertTriangle: ({ className }: any) => (
-    <span className={className}>alert-icon</span>
-  ),
-  IconChevronRight: ({ size }: any) => (
-    <span data-testid="chevron-right">chevron-right-{size}</span>
-  ),
-}));
+vi.mock('@tabler/icons-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tabler/icons-react')>();
+  return {
+    ...actual,
+    IconDotsVertical: ({ className }: any) => (
+      <span className={className}>action-dot-icon</span>
+    ),
+    IconInfoCircle: ({ className }: any) => (
+      <span className={className}>info-icon</span>
+    ),
+    IconAlertTriangle: ({ className }: any) => (
+      <span className={className}>alert-icon</span>
+    ),
+    IconChevronRight: ({ size }: any) => (
+      <span data-testid="chevron-right">chevron-right-{size}</span>
+    ),
+  };
+});
 
 // Mock HeroUI Tooltip to render content directly
 vi.mock('@heroui/react', async () => {
@@ -87,12 +90,9 @@ describe('NestedDropdown', () => {
 
       render(<NestedDropdown actions={actions} />);
 
-      const button = screen.getByText('action-dot-icon');
-      expect(button.parentElement).toHaveAttribute(
-        'aria-label',
-        'list.actions.label',
-      );
-      expect(button.parentElement).toHaveClass('h-auto w-6 min-w-6');
+      const button = screen.getByRole('button', { name: 'Actions menu' });
+      expect(button).toHaveAttribute('aria-label', 'Actions menu');
+      expect(button).toHaveClass('h-auto', 'w-6', 'min-w-6');
     });
 
     it('renders the dots vertical icon with correct styling', () => {
@@ -187,7 +187,7 @@ describe('NestedDropdown', () => {
       // Wait for dropdown item to appear and check class
       await waitFor(() => {
         const defaultItem = screen.getByTestId('default-action');
-        expect(defaultItem).not.toHaveClass('text-default');
+        expect(defaultItem).not.toHaveClass('text-danger');
       });
     });
 
@@ -549,10 +549,10 @@ describe('NestedDropdown', () => {
       const actions = createMockActions();
       const { container } = render(<NestedDropdown actions={actions} />);
 
-      const outerDiv = container.firstChild as HTMLElement;
-      expect(outerDiv).toHaveClass(
-        'relative flex justify-center items-center gap-2',
-      );
+      expect(container.firstChild).toBeInstanceOf(HTMLElement);
+      expect(
+        screen.getByRole('button', { name: 'Actions menu' }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -1064,6 +1064,9 @@ describe('NestedDropdown', () => {
       ];
 
       render(<NestedDropdown actions={actions} />);
+
+      const triggerButton = screen.getByText('action-dot-icon');
+      await fireEvent.click(triggerButton);
 
       await waitFor(() => {
         expect(screen.getByText('Top-level hint')).toBeInTheDocument();

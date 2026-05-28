@@ -294,6 +294,7 @@ def test_get_aggregation_lookback_for_metrics_no_step():
             name="test-project",
             description="Test Description",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             cluster_id=uuid4(),
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
@@ -335,6 +336,7 @@ def test_convert_prometheus_string_to_float():
     assert convert_prometheus_string_to_float("0") == 0.0
     assert convert_prometheus_string_to_float("-10.5") == -10.5
     assert convert_prometheus_string_to_float(PROMETHEUS_NAN_STRING) == 0.0
+    assert convert_prometheus_string_to_float("") == 0.0
 
 
 def test_convert_prometheus_string_to_float_with_invalid_input():
@@ -342,15 +344,12 @@ def test_convert_prometheus_string_to_float_with_invalid_input():
     with pytest.raises(ValueError):
         convert_prometheus_string_to_float("not-a-number")
 
-    with pytest.raises(ValueError):
-        convert_prometheus_string_to_float("")
-
 
 def test_build_workload_device_query_with_lookback():
-    query = build_workload_device_query("wid-123", "gpu_junction_temperature", "avg", use_lookback=True, lookback="5m")
+    query = build_workload_device_query("wid-123", "gpu_gfx_activity", "avg", use_lookback=True, lookback="5m")
     assert 'workload_id="wid-123"' in query
     assert "avg by (gpu_id, gpu_uuid, hostname)" in query
-    assert "avg_over_time(gpu_junction_temperature" in query
+    assert "avg_over_time(gpu_gfx_activity" in query
     assert "[5m]" in query
 
 
@@ -637,6 +636,37 @@ def test_build_node_device_query_with_extra_filters():
     assert 'clock_type="GPU_CLOCK_TYPE_SYSTEM"' in query
     assert "avg_over_time(gpu_clock" in query
     assert "[5m]" in query
+
+
+def test_build_node_device_query_with_extra_regex_filters():
+    query = build_node_device_query(
+        "worker-1",
+        "my-cluster",
+        "gpu_clock",
+        "avg",
+        "5m",
+        extra_regex_filters={"clock_type": "system|GPU_CLOCK_TYPE_SYSTEM"},
+    )
+    assert 'hostname="worker-1"' in query
+    assert 'kube_cluster_name="my-cluster"' in query
+    assert 'clock_type=~"system|GPU_CLOCK_TYPE_SYSTEM"' in query
+    assert "avg_over_time(gpu_clock" in query
+    assert "[5m]" in query
+
+
+def test_build_node_device_query_with_extra_filters_and_regex_filters():
+    query = build_node_device_query(
+        "node-1",
+        "cluster-a",
+        "gpu_clock",
+        "avg",
+        "1m",
+        extra_filters={"extra_label": "extra_value"},
+        extra_regex_filters={"clock_type": "system|GPU_CLOCK_TYPE_SYSTEM"},
+    )
+    assert 'clock_type=~"system|GPU_CLOCK_TYPE_SYSTEM"' in query
+    assert 'extra_label="extra_value"' in query
+    assert 'hostname="node-1"' in query
 
 
 def test_build_node_device_query_with_multiple_extra_filters():

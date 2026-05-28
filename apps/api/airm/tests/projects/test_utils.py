@@ -4,9 +4,10 @@
 
 from unittest.mock import MagicMock
 
-from app.messaging.schemas import NamespaceStatus, QuotaStatus
+from app.namespaces.enums import NamespaceStatus
 from app.projects.enums import ProjectStatus
 from app.projects.utils import resolve_project_status
+from app.quotas.enums import QuotaStatus
 
 
 async def test_resolve_project_status_deleting() -> None:

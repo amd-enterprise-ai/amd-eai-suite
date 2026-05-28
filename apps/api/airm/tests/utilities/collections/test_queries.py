@@ -9,8 +9,8 @@ from sqlalchemy import Column, Integer, String, select
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base
 
+from api_common.collections import FilterCondition, FilterOperator, SortCondition
 from app.utilities.collections.queries import apply_filter_to_query, apply_pagination_to_query, apply_sorting_to_query
-from app.utilities.collections.schemas import FilterCondition, FilterOperator
 
 Base = declarative_base()
 
@@ -26,13 +26,6 @@ class DummyModel(Base):  # type: ignore
     id = Column(PG_UUID(as_uuid=False), primary_key=True)
     name = Column(String)
     description = Column(String)
-
-
-# Mock SortCondition for testing
-class SortCondition:
-    def __init__(self, field, direction="asc"):
-        self.field = field
-        self.direction = direction
 
 
 # Mock model for SQLAlchemy
@@ -62,29 +55,22 @@ def sort_conditions():
 class Test_Sorting_Queries:
     """Test sorting conditions are applied correctly to queries."""
 
-    def test_apply_sorting_to_query(self, monkeypatch, sort_conditions):
-        # Patch SortCondition import in the tested module
-        monkeypatch.setattr("app.utilities.collections.schemas.SortCondition", SortCondition)
+    def test_apply_sorting_to_query(self, sort_conditions):
         query = select(User)
         sorted_query = apply_sorting_to_query(query, sort_conditions, [User])
-        # Should have two ORDER BY clauses
         assert "ORDER BY" in str(sorted_query)
         assert "users.name ASC" in str(sorted_query)
         assert "users.age DESC" in str(sorted_query)
 
-    def test_apply_sorting_to_query_empty(self, monkeypatch):
-        monkeypatch.setattr("app.utilities.collections.schemas.SortCondition", SortCondition)
+    def test_apply_sorting_to_query_empty(self):
         query = select(User)
         sorted_query = apply_sorting_to_query(query, [], User)
-        # Should not have ORDER BY clause
         assert "ORDER BY" not in str(sorted_query)
 
-    def test_apply_sorting_to_query_invalid_field(self, monkeypatch):
-        monkeypatch.setattr("app.utilities.collections.schemas.SortCondition", SortCondition)
+    def test_apply_sorting_to_query_invalid_field(self):
         query = select(User)
         sort = [SortCondition(field="nonexistent", direction="asc")]
         sorted_query = apply_sorting_to_query(query, sort, [User])
-        # Should not add ORDER BY for invalid field
         assert "ORDER BY" not in str(sorted_query)
 
 

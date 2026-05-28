@@ -12,7 +12,7 @@ import {
 
 import { editCluster } from '@/services/app';
 
-import { generateClustersMock } from '../../../../__mocks__/utils/cluster-mock';
+import { generateClustersMock } from '@/__mocks__/utils/cluster-mock';
 
 import { EditCluster } from '@/components/features/clusters';
 
@@ -73,13 +73,13 @@ describe('EditCluster', () => {
     await renderEditCluster();
 
     const baseUrlInput = screen.getByLabelText(
-      'form.edit.field.workloadsBaseUrl.label',
+      'form.edit.field.workbenchBaseUrl.label',
     );
     await fireEvent.change(baseUrlInput, { target: { value: 'invalid-url' } });
 
     await waitFor(() =>
       expect(
-        screen.getByText('form.edit.field.workloadsBaseUrl.error.invalid'),
+        screen.getByText('form.edit.field.workbenchBaseUrl.error.invalid'),
       ).toBeInTheDocument(),
     );
   });
@@ -91,7 +91,7 @@ describe('EditCluster', () => {
     await renderEditCluster();
 
     await fireEvent.change(
-      screen.getByLabelText('form.edit.field.workloadsBaseUrl.label'),
+      screen.getByLabelText('form.edit.field.workbenchBaseUrl.label'),
       {
         target: { value: 'https://example.com' },
       },
@@ -108,8 +108,8 @@ describe('EditCluster', () => {
 
     await waitFor(() => {
       expect(editCluster).toHaveBeenCalledWith(mockCluster.id, {
-        workloads_base_url: 'https://example.com',
-        kube_api_url: 'https://k8s.example.com',
+        workbenchBaseUrl: 'https://example.com',
+        kubeApiUrl: 'https://k8s.example.com',
       });
     });
   });
@@ -121,7 +121,7 @@ describe('EditCluster', () => {
     await renderEditCluster(mockOnOpenChange, true, undefined);
 
     await fireEvent.change(
-      screen.getByLabelText('form.edit.field.workloadsBaseUrl.label'),
+      screen.getByLabelText('form.edit.field.workbenchBaseUrl.label'),
       {
         target: { value: 'https://example.com' },
       },
@@ -157,7 +157,7 @@ describe('EditCluster', () => {
     await renderEditCluster();
 
     await fireEvent.change(
-      screen.getByLabelText('form.edit.field.workloadsBaseUrl.label'),
+      screen.getByLabelText('form.edit.field.workbenchBaseUrl.label'),
       {
         target: { value: 'https://example.com' },
       },
@@ -174,8 +174,8 @@ describe('EditCluster', () => {
 
     await waitFor(() => {
       expect(editCluster).toHaveBeenCalledWith(mockCluster.id, {
-        workloads_base_url: 'https://example.com',
-        kube_api_url: 'https://k8s.example.com',
+        workbenchBaseUrl: 'https://example.com',
+        kubeApiUrl: 'https://k8s.example.com',
       });
     });
 
@@ -190,7 +190,7 @@ describe('EditCluster', () => {
     await renderEditCluster();
 
     await fireEvent.change(
-      screen.getByLabelText('form.edit.field.workloadsBaseUrl.label'),
+      screen.getByLabelText('form.edit.field.workbenchBaseUrl.label'),
       {
         target: { value: 'https://example.com' },
       },
@@ -208,8 +208,8 @@ describe('EditCluster', () => {
 
     await waitFor(() => {
       expect(editCluster).toHaveBeenCalledWith(mockCluster.id, {
-        workloads_base_url: 'https://example.com',
-        kube_api_url: 'https://k8s.example.com',
+        workbenchBaseUrl: 'https://example.com',
+        kubeApiUrl: 'https://k8s.example.com',
       });
     });
 

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import yaml
 from fastapi import File, UploadFile
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
-from api_common.schemas import BaseEntityPublic
+from api_common.schemas import BaseEntityPublic, BaseModel
 
 from ..workloads.enums import WorkloadType
 from ..workspaces.enums import WorkspaceUsageScope
@@ -145,12 +145,8 @@ class ChartResponse(BaseEntityPublic, ChartBase):
     files: list[ChartFile] = []
     usage_scope: WorkspaceUsageScope
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class ChartListResponse(BaseEntityPublic, ChartBase):
     """Lightweight response for listing charts."""
 
     usage_scope: WorkspaceUsageScope
-
-    model_config = ConfigDict(from_attributes=True)

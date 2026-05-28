@@ -12,9 +12,10 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from api_common.exceptions import ConflictException, NotFoundException, ValidationException
+from api_common.secrets import SecretUseCase
 from app import app  # type: ignore
 from app.clusters.schemas import ClusterResources, ClusterResponse, ClusterWithResources  # Add import for ClusterStatus
-from app.messaging.schemas import ProjectSecretStatus, ProjectStorageStatus, SecretKind, SecretScope, WorkloadStatus
 from app.metrics.schemas import (
     Datapoint,
     DatapointsWithMetadata,
@@ -29,6 +30,7 @@ from app.metrics.schemas import (
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
 from app.projects.schemas import (
+    GpuPreemptionConfig,
     ProjectAddUsers,
     ProjectAssignment,
     ProjectCreate,
@@ -41,7 +43,7 @@ from app.projects.schemas import (
     ProjectWithUsers,
 )
 from app.quotas.schemas import QuotaBase, QuotaResponse  # Add import for QuotaCreate
-from app.secrets.enums import SecretStatus, SecretUseCase
+from app.secrets.enums import ProjectSecretStatus, SecretKind, SecretScope, SecretStatus
 from app.secrets.models import OrganizationScopedSecret, ProjectScopedSecret
 from app.secrets.schemas import (
     ProjectSecretsWithParentSecret,
@@ -49,16 +51,16 @@ from app.secrets.schemas import (
     SecretResponse,
     SecretWithProjects,
 )
-from app.storages.enums import StorageScope, StorageStatus, StorageType
+from app.storages.enums import ProjectStorageStatus, StorageScope, StorageStatus, StorageType
 from app.storages.models import ProjectStorage as ProjectStorageModel
 from app.storages.schemas import ProjectStoragesWithParentStorage, ProjectStorageWithParentStorage, StorageResponse
 from app.users.schemas import InvitedUser, UserResponse
-from app.utilities.exceptions import ConflictException, NotFoundException, ValidationException
 from app.utilities.security import (
     Roles,
     auth_token_claimset,
     get_projects_accessible_to_user,
 )
+from app.workloads.enums import WorkloadStatus
 from app.workloads.schemas import WorkloadStatusCount, WorkloadStatusStats, WorkloadType
 from tests.dependency_overrides import (
     ADMIN_FORBIDDEN_OVERRIDES,
@@ -157,7 +159,7 @@ def get_test_project_with_quota(name="project", description="A test project", cl
 COMMON_CLUSTER_WITH_RESOURCES = ClusterWithResources(
     id=uuid4(),
     name="TestCluster",
-    workloads_base_url="http://test-cluster.example.com",
+    workbench_base_url="http://test-cluster.example.com",
     kube_api_url=None,
     last_heartbeat_at=datetime.now(tz=UTC),
     created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -204,7 +206,7 @@ COMMON_PROJECT_OUT = ProjectWithClusterAndQuota(
     cluster=ClusterResponse(
         id="e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
         name="cluster1",
-        workloads_base_url="http://cluster1.example.com",
+        workbench_base_url="http://cluster1.example.com",
         kube_api_url="https://k8s.example.com:6443",
         last_heartbeat_at=datetime(2025, 3, 10, 12, 0, 0, tzinfo=UTC),
         created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -315,6 +317,7 @@ COMMON_PROJECT_STORAGE = ProjectStorageWithParentStorage(
         updated_by="test@example.com",
         status=ProjectStatus.READY,
         status_reason="Project is ready",
+        gpu_preemption_enabled=False,
     ),
 )
 @patch(
@@ -322,7 +325,7 @@ COMMON_PROJECT_STORAGE = ProjectStorageWithParentStorage(
     return_value=ClusterResponse(
         id=uuid4(),
         name="TestCluster",
-        workloads_base_url="https://test-cluster.example.com",
+        workbench_base_url="https://test-cluster.example.com",
         kube_api_url="https://k8s.example.com:6443",
         last_heartbeat_at=datetime.now(tz=UTC),
         created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -339,7 +342,7 @@ async def test_create_project_success(
     project_create = get_test_project_with_quota(name="project", description="Description 1")
 
     with TestClient(app) as client:
-        response = client.post("/v1/projects", json=json.loads(project_create.model_dump_json()))
+        response = client.post("/v1/projects", json=json.loads(project_create.model_dump_json(by_alias=True)))
 
     assert response.status_code == status.HTTP_200_OK
 
@@ -357,7 +360,7 @@ async def test_create_project_success(
     return_value=ClusterResponse(
         id=uuid4(),
         name="TestCluster",
-        workloads_base_url="https://test-cluster.example.com",
+        workbench_base_url="https://test-cluster.example.com",
         kube_api_url="https://k8s.example.com:6443",
         last_heartbeat_at=datetime.now(tz=UTC),
         created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -371,7 +374,7 @@ async def test_create_project_name_conflict(_: MagicMock, __: MagicMock) -> None
     project_create = get_test_project_with_quota(name="project", description="Description 1")
 
     with TestClient(app) as client:
-        response = client.post("/v1/projects", json=json.loads(project_create.model_dump_json()))
+        response = client.post("/v1/projects", json=json.loads(project_create.model_dump_json(by_alias=True)))
 
     assert response.status_code == status.HTTP_409_CONFLICT
 
@@ -382,7 +385,7 @@ async def test_create_project_no_user() -> None:
     project_create = get_test_project_with_quota(name="project1", description="Description 1")
 
     with TestClient(app) as client:
-        response = client.post("/v1/projects", json=json.loads(project_create.model_dump_json()))
+        response = client.post("/v1/projects", json=json.loads(project_create.model_dump_json(by_alias=True)))
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -393,7 +396,7 @@ async def test_create_project_not_in_role() -> None:
     project_create = get_test_project_with_quota(name="project1", description="Description 1")
 
     with TestClient(app) as client:
-        response = client.post("/v1/projects", json=json.loads(project_create.model_dump_json()))
+        response = client.post("/v1/projects", json=json.loads(project_create.model_dump_json(by_alias=True)))
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -422,7 +425,8 @@ async def test_add_users_to_project_success(_: MagicMock, __: MagicMock) -> None
 
     with TestClient(app) as client:
         response = client.post(
-            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c/users", json=json.loads(body.model_dump_json())
+            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c/users",
+            json=json.loads(body.model_dump_json(by_alias=True)),
         )
 
     assert response.status_code == status.HTTP_204_NO_CONTENT
@@ -435,7 +439,8 @@ async def test_add_users_to_project_not_in_role() -> None:
 
     with TestClient(app) as client:
         response = client.post(
-            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c/users", json=json.loads(body.model_dump_json())
+            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c/users",
+            json=json.loads(body.model_dump_json(by_alias=True)),
         )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -450,7 +455,8 @@ async def test_add_users_to_project_no_project_found(_: MagicMock) -> None:
 
     with TestClient(app) as client:
         response = client.post(
-            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c/users", json=json.loads(body.model_dump_json())
+            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c/users",
+            json=json.loads(body.model_dump_json(by_alias=True)),
         )
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -471,7 +477,8 @@ async def test_add_users_to_project_value_error(
 
     with TestClient(app) as client:
         response = client.post(
-            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c/users", json=json.loads(body.model_dump_json())
+            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c/users",
+            json=json.loads(body.model_dump_json(by_alias=True)),
         )
     assert response.json() == {"detail": "Some users not found in the organization."}
 
@@ -551,6 +558,7 @@ async def test_update_project_success() -> None:
         updated_by="test@example.com",
         status=ProjectStatus.READY,
         status_reason="Project is ready",
+        gpu_preemption_enabled=False,
     )
 
     updated_quota = QuotaBase(
@@ -560,7 +568,9 @@ async def test_update_project_success() -> None:
         gpu_count=1,
         description="Updated quota",
     )
-    project_update = ProjectEdit(description="An updated project", quota=updated_quota)
+    project_update = ProjectEdit(
+        description="An updated project", quota=updated_quota, gpu_preemption=GpuPreemptionConfig()
+    )
 
     project_output = COMMON_PROJECT_OUT
 
@@ -579,7 +589,8 @@ async def test_update_project_success() -> None:
         TestClient(app) as client,
     ):
         response = client.put(
-            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c", json=json.loads(project_update.model_dump_json())
+            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c",
+            json=json.loads(project_update.model_dump_json(by_alias=True)),
         )
 
     assert response.status_code == status.HTTP_200_OK
@@ -607,11 +618,13 @@ async def test_update_project_no_project_found(_: MagicMock) -> None:
             ephemeral_storage_bytes=5 * 1024 * 1024 * 1024,  # 5 GB
             gpu_count=0,
         ),
+        gpu_preemption=GpuPreemptionConfig(),
     )
 
     with TestClient(app) as client:
         response = client.put(
-            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c", json=json.loads(project_update.model_dump_json())
+            "/v1/projects/b7c13f41-258d-44b1-a694-5dd4ccda660c",
+            json=json.loads(project_update.model_dump_json(by_alias=True)),
         )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -628,12 +641,12 @@ async def test_update_project_invalid_input() -> None:
         response = client.put(
             f"/v1/projects/{valid_project_id}",
             json={
-                "description": "a",  # Too short
+                "description": "a",
                 "quota": {
-                    "cpu_milli_cores": 1000,
-                    "memory_bytes": 1000000000,
-                    "ephemeral_storage_bytes": 1000000000,
-                    "gpu_count": 0,
+                    "cpuMilliCores": 1000,
+                    "memoryBytes": 1000000000,
+                    "ephemeralStorageBytes": 1000000000,
+                    "gpuCount": 0,
                 },
             },
         )
@@ -643,12 +656,12 @@ async def test_update_project_invalid_input() -> None:
         response = client.put(
             f"/v1/projects/{valid_project_id}",
             json={
-                "description": "x" * 1025,  # Too long
+                "description": "x" * 1025,
                 "quota": {
-                    "cpu_milli_cores": 1000,
-                    "memory_bytes": 1000000000,
-                    "ephemeral_storage_bytes": 1000000000,
-                    "gpu_count": 0,
+                    "cpuMilliCores": 1000,
+                    "memoryBytes": 1000000000,
+                    "ephemeralStorageBytes": 1000000000,
+                    "gpuCount": 0,
                 },
             },
         )
@@ -664,12 +677,12 @@ async def test_update_project_invalid_input() -> None:
             json={
                 "description": "Valid description",
                 "quota": {
-                    "cpu_milli_cores": 1000,
-                    "memory_bytes": 1000000000,
-                    "ephemeral_storage_bytes": 1000000000,
-                    "gpu_count": 0,
+                    "cpuMilliCores": 1000,
+                    "memoryBytes": 1000000000,
+                    "ephemeralStorageBytes": 1000000000,
+                    "gpuCount": 0,
                 },
-                "forbidden_field": "should not be allowed",
+                "forbiddenField": "should not be allowed",
             },
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -721,7 +734,7 @@ async def test_get_project_not_found(_: MagicMock) -> None:
         cluster=ClusterResponse(
             id="e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
             name="cluster1",
-            workloads_base_url="https://test-cluster.example.com",
+            workbench_base_url="https://test-cluster.example.com",
             kube_api_url="https://k8s.example.com:6443",
             last_heartbeat_at=datetime(2025, 3, 10, 12, 0, 0, tzinfo=UTC),
             created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -754,52 +767,53 @@ async def test_get_project_with_invited_users_success(_: MagicMock, __: MagicMoc
         "name": "project1",
         "description": "Description 1",
         "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
-        "cluster_id": "1ab18e82-012c-45b7-a36e-dc3c0277974d",
+        "clusterId": "1ab18e82-012c-45b7-a36e-dc3c0277974d",
         "status": "Pending",
-        "status_reason": "Creating",
+        "statusReason": "Creating",
+        "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
         "users": [],
-        "invited_users": [
+        "invitedUsers": [
             {
                 "id": "0aa18e92-002c-45b7-a06e-dcdc0277974d",
                 "email": "user2@test.com",
                 "role": "Platform Administrator",
-                "invited_at": "2025-02-11T03:42:02.524263Z",
-                "invited_by": "user1",
-                "created_at": "2025-01-01T12:00:00Z",
-                "updated_at": "2025-01-01T12:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
+                "invitedAt": "2025-02-11T03:42:02.524263Z",
+                "invitedBy": "user1",
+                "createdAt": "2025-01-01T12:00:00Z",
+                "updatedAt": "2025-01-01T12:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
             }
         ],
         "cluster": {
             "id": "e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
-            "last_heartbeat_at": "2025-03-10T12:00:00Z",
+            "lastHeartbeatAt": "2025-03-10T12:00:00Z",
             "name": "cluster1",
             "status": "unhealthy",
-            "created_at": "2025-01-01T12:00:00Z",
-            "created_by": "test@example.com",
-            "updated_at": "2025-01-01T12:00:00Z",
-            "updated_by": "test@example.com",
-            "workloads_base_url": "https://test-cluster.example.com",
-            "kube_api_url": "https://k8s.example.com:6443",
+            "createdAt": "2025-01-01T12:00:00Z",
+            "createdBy": "test@example.com",
+            "updatedAt": "2025-01-01T12:00:00Z",
+            "updatedBy": "test@example.com",
+            "workbenchBaseUrl": "https://test-cluster.example.com",
+            "kubeApiUrl": "https://k8s.example.com:6443",
         },
         "quota": {
-            "cpu_milli_cores": 1000,
-            "ephemeral_storage_bytes": 5368709120,
-            "gpu_count": 0,
+            "cpuMilliCores": 1000,
+            "ephemeralStorageBytes": 5368709120,
+            "gpuCount": 0,
             "id": "78f6da5c-e78c-46df-bb2d-934abd05221f",
-            "memory_bytes": 1073741824,
+            "memoryBytes": 1073741824,
             "status": "Pending",
-            "status_reason": None,
-            "created_at": "2025-01-01T12:00:00Z",
-            "updated_at": "2025-01-01T12:00:00Z",
-            "created_by": "test@example.com",
-            "updated_by": "test@example.com",
+            "statusReason": None,
+            "createdAt": "2025-01-01T12:00:00Z",
+            "updatedAt": "2025-01-01T12:00:00Z",
+            "createdBy": "test@example.com",
+            "updatedBy": "test@example.com",
         },
-        "created_at": "2025-01-01T12:00:00Z",
-        "updated_at": "2025-01-01T12:00:00Z",
-        "created_by": "test@example.com",
-        "updated_by": "test@example.com",
+        "createdAt": "2025-01-01T12:00:00Z",
+        "updatedAt": "2025-01-01T12:00:00Z",
+        "createdBy": "test@example.com",
+        "updatedBy": "test@example.com",
     }
     assert response_json == expected
 
@@ -844,7 +858,7 @@ async def test_get_project_with_invited_users_success(_: MagicMock, __: MagicMoc
             updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
             created_by="test@example.com",
             updated_by="test@example.com",
-            workloads_base_url="https://example.com",
+            workbench_base_url="https://example.com",
             kube_api_url="https://k8s.example.com:6443",
         ),
         quota=QuotaResponse(
@@ -872,53 +886,54 @@ async def test_get_project_success(_: MagicMock, __: MagicMock) -> None:
         "name": "project1",
         "description": "Description 1",
         "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
-        "cluster_id": "1ab18e82-012c-45b7-a36e-dc3c0277974d",
+        "clusterId": "1ab18e82-012c-45b7-a36e-dc3c0277974d",
         "status": "Pending",
-        "status_reason": "Creating",
+        "statusReason": "Creating",
+        "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
         "users": [
             {
-                "first_name": "John",
-                "last_name": "Doe",
+                "firstName": "John",
+                "lastName": "Doe",
                 "email": "test@test.com",
                 "id": "0aa18e92-002c-45b7-a06e-dcdc0277974c",
                 "role": "Platform Administrator",
-                "created_at": "2025-01-01T12:00:00Z",
-                "updated_at": "2025-01-01T12:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
-                "last_active_at": None,
+                "createdAt": "2025-01-01T12:00:00Z",
+                "updatedAt": "2025-01-01T12:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
+                "lastActiveAt": None,
             }
         ],
         "cluster": {
             "id": "e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
-            "last_heartbeat_at": "2025-03-10T12:00:00Z",
+            "lastHeartbeatAt": "2025-03-10T12:00:00Z",
             "name": "cluster1",
             "status": "unhealthy",
-            "created_at": "2025-01-01T12:00:00Z",
-            "created_by": "test@example.com",
-            "updated_at": "2025-01-01T12:00:00Z",
-            "updated_by": "test@example.com",
-            "workloads_base_url": "https://example.com",
-            "kube_api_url": "https://k8s.example.com:6443",
+            "createdAt": "2025-01-01T12:00:00Z",
+            "createdBy": "test@example.com",
+            "updatedAt": "2025-01-01T12:00:00Z",
+            "updatedBy": "test@example.com",
+            "workbenchBaseUrl": "https://example.com",
+            "kubeApiUrl": "https://k8s.example.com:6443",
         },
-        "invited_users": [],
+        "invitedUsers": [],
         "quota": {
-            "cpu_milli_cores": 1000,
-            "ephemeral_storage_bytes": 5368709120,
-            "gpu_count": 0,
+            "cpuMilliCores": 1000,
+            "ephemeralStorageBytes": 5368709120,
+            "gpuCount": 0,
             "id": "78f6da5c-e78c-46df-bb2d-934abd05221f",
-            "memory_bytes": 1073741824,
+            "memoryBytes": 1073741824,
             "status": "Pending",
-            "status_reason": None,
-            "created_at": "2025-01-01T12:00:00Z",
-            "updated_at": "2025-01-01T12:00:00Z",
-            "created_by": "test@example.com",
-            "updated_by": "test@example.com",
+            "statusReason": None,
+            "createdAt": "2025-01-01T12:00:00Z",
+            "updatedAt": "2025-01-01T12:00:00Z",
+            "createdBy": "test@example.com",
+            "updatedBy": "test@example.com",
         },
-        "created_at": "2025-01-01T12:00:00Z",
-        "updated_at": "2025-01-01T12:00:00Z",
-        "created_by": "test@example.com",
-        "updated_by": "test@example.com",
+        "createdAt": "2025-01-01T12:00:00Z",
+        "updatedAt": "2025-01-01T12:00:00Z",
+        "createdBy": "test@example.com",
+        "updatedBy": "test@example.com",
     }
     assert response_json == expected
 
@@ -947,7 +962,7 @@ async def test_get_project_success(_: MagicMock, __: MagicMock) -> None:
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    workloads_base_url="https://example.com",
+                    workbench_base_url="https://example.com",
                     kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
@@ -997,7 +1012,7 @@ async def test_get_project_success(_: MagicMock, __: MagicMock) -> None:
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    workloads_base_url="https://example.com",
+                    workbench_base_url="https://example.com",
                     kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
@@ -1045,135 +1060,137 @@ async def test_get_projects_success(_: MagicMock, __: MagicMock) -> None:
                 "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
                 "name": "project1",
                 "description": "Description 1",
-                "cluster_id": "0aa18e92-102c-45b7-a06e-dcdb0277974c",
+                "clusterId": "0aa18e92-102c-45b7-a06e-dcdb0277974c",
                 "status": "Pending",
-                "status_reason": "Creating",
+                "statusReason": "Creating",
+                "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
                 "cluster": {
                     "id": "e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
-                    "created_at": "2025-01-01T12:00:00Z",
-                    "updated_at": "2025-01-01T12:00:00Z",
-                    "created_by": "test@example.com",
-                    "updated_by": "test@example.com",
-                    "workloads_base_url": "https://example.com",
-                    "kube_api_url": "https://k8s.example.com:6443",
+                    "createdAt": "2025-01-01T12:00:00Z",
+                    "updatedAt": "2025-01-01T12:00:00Z",
+                    "createdBy": "test@example.com",
+                    "updatedBy": "test@example.com",
+                    "workbenchBaseUrl": "https://example.com",
+                    "kubeApiUrl": "https://k8s.example.com:6443",
                     "name": "cluster1",
-                    "last_heartbeat_at": "2025-03-10T12:00:00Z",
-                    "available_resources": {
-                        "cpu_milli_cores": 8000,
-                        "memory_bytes": 17179869184,
-                        "ephemeral_storage_bytes": 107374182400,
-                        "gpu_count": 2,
+                    "lastHeartbeatAt": "2025-03-10T12:00:00Z",
+                    "availableResources": {
+                        "cpuMilliCores": 8000,
+                        "memoryBytes": 17179869184,
+                        "ephemeralStorageBytes": 107374182400,
+                        "gpuCount": 2,
                     },
-                    "allocated_resources": {
-                        "cpu_milli_cores": 1000,
-                        "memory_bytes": 1073741824,
-                        "ephemeral_storage_bytes": 5368709120,
-                        "gpu_count": 0,
+                    "allocatedResources": {
+                        "cpuMilliCores": 1000,
+                        "memoryBytes": 1073741824,
+                        "ephemeralStorageBytes": 5368709120,
+                        "gpuCount": 0,
                     },
-                    "total_node_count": 3,
-                    "available_node_count": 2,
-                    "assigned_quota_count": 1,
-                    "gpu_info": None,
+                    "totalNodeCount": 3,
+                    "availableNodeCount": 2,
+                    "assignedQuotaCount": 1,
+                    "gpuInfo": None,
                     "status": "unhealthy",
-                    "priority_classes": [
+                    "priorityClasses": [
                         {"name": "low", "priority": -100},
                         {"name": "medium", "priority": 0},
                         {"name": "high", "priority": 100},
                     ],
-                    "gpu_allocation_percentage": 0.0,
-                    "cpu_allocation_percentage": 12.5,
-                    "memory_allocation_percentage": 6.25,
+                    "gpuAllocationPercentage": 0.0,
+                    "cpuAllocationPercentage": 12.5,
+                    "memoryAllocationPercentage": 6.25,
                 },
                 "quota": {
-                    "cpu_milli_cores": 1000,
-                    "ephemeral_storage_bytes": 5368709120,
-                    "gpu_count": 0,
+                    "cpuMilliCores": 1000,
+                    "ephemeralStorageBytes": 5368709120,
+                    "gpuCount": 0,
                     "id": "0aa18e92-202c-45b7-a06e-dcdb0277974c",
-                    "memory_bytes": 1073741824,
+                    "memoryBytes": 1073741824,
                     "status": "Pending",
-                    "status_reason": None,
-                    "created_at": "2025-01-01T12:00:00Z",
-                    "updated_at": "2025-01-01T12:00:00Z",
-                    "created_by": "test@example.com",
-                    "updated_by": "test@example.com",
+                    "statusReason": None,
+                    "createdAt": "2025-01-01T12:00:00Z",
+                    "updatedAt": "2025-01-01T12:00:00Z",
+                    "createdBy": "test@example.com",
+                    "updatedBy": "test@example.com",
                 },
-                "gpu_allocation_percentage": 0.0,
-                "gpu_allocation_exceeded": False,
-                "cpu_allocation_percentage": 12.5,
-                "cpu_allocation_exceeded": False,
-                "memory_allocation_percentage": 6.25,
-                "memory_allocation_exceeded": False,
-                "created_at": "2025-01-01T12:00:00Z",
-                "updated_at": "2025-01-01T12:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
+                "gpuAllocationPercentage": 0.0,
+                "gpuAllocationExceeded": False,
+                "cpuAllocationPercentage": 12.5,
+                "cpuAllocationExceeded": False,
+                "memoryAllocationPercentage": 6.25,
+                "memoryAllocationExceeded": False,
+                "createdAt": "2025-01-01T12:00:00Z",
+                "updatedAt": "2025-01-01T12:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
             },
             {
                 "id": "65b44238-556d-4e59-82ea-ddfafc5491f3",
                 "name": "project2",
                 "description": "Description 2",
-                "cluster_id": "0aa18e92-302c-45b7-a06e-dcdb0277974c",
+                "clusterId": "0aa18e92-302c-45b7-a06e-dcdb0277974c",
                 "status": "Pending",
-                "status_reason": "Creating",
+                "statusReason": "Creating",
+                "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
                 "cluster": {
                     "id": "e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
-                    "created_at": "2025-01-01T12:00:00Z",
-                    "updated_at": "2025-01-01T12:00:00Z",
-                    "created_by": "test@example.com",
-                    "updated_by": "test@example.com",
-                    "workloads_base_url": "https://example.com",
-                    "kube_api_url": "https://k8s.example.com:6443",
+                    "createdAt": "2025-01-01T12:00:00Z",
+                    "updatedAt": "2025-01-01T12:00:00Z",
+                    "createdBy": "test@example.com",
+                    "updatedBy": "test@example.com",
+                    "workbenchBaseUrl": "https://example.com",
+                    "kubeApiUrl": "https://k8s.example.com:6443",
                     "name": "cluster1",
-                    "last_heartbeat_at": "2025-03-10T12:00:00Z",
-                    "available_resources": {
-                        "cpu_milli_cores": 8000,
-                        "memory_bytes": 17179869184,
-                        "ephemeral_storage_bytes": 107374182400,
-                        "gpu_count": 2,
+                    "lastHeartbeatAt": "2025-03-10T12:00:00Z",
+                    "availableResources": {
+                        "cpuMilliCores": 8000,
+                        "memoryBytes": 17179869184,
+                        "ephemeralStorageBytes": 107374182400,
+                        "gpuCount": 2,
                     },
-                    "allocated_resources": {
-                        "cpu_milli_cores": 1000,
-                        "memory_bytes": 1073741824,
-                        "ephemeral_storage_bytes": 5368709120,
-                        "gpu_count": 0,
+                    "allocatedResources": {
+                        "cpuMilliCores": 1000,
+                        "memoryBytes": 1073741824,
+                        "ephemeralStorageBytes": 5368709120,
+                        "gpuCount": 0,
                     },
-                    "total_node_count": 3,
-                    "available_node_count": 2,
-                    "assigned_quota_count": 1,
-                    "gpu_info": None,
+                    "totalNodeCount": 3,
+                    "availableNodeCount": 2,
+                    "assignedQuotaCount": 1,
+                    "gpuInfo": None,
                     "status": "unhealthy",
-                    "priority_classes": [
+                    "priorityClasses": [
                         {"name": "low", "priority": -100},
                         {"name": "medium", "priority": 0},
                         {"name": "high", "priority": 100},
                     ],
-                    "gpu_allocation_percentage": 0.0,
-                    "cpu_allocation_percentage": 12.5,
-                    "memory_allocation_percentage": 6.25,
+                    "gpuAllocationPercentage": 0.0,
+                    "cpuAllocationPercentage": 12.5,
+                    "memoryAllocationPercentage": 6.25,
                 },
                 "quota": {
-                    "cpu_milli_cores": 2000,
-                    "ephemeral_storage_bytes": 10737418240,
-                    "gpu_count": 1,
+                    "cpuMilliCores": 2000,
+                    "ephemeralStorageBytes": 10737418240,
+                    "gpuCount": 1,
                     "id": "0aa18e92-402c-45b7-a06e-dcdb0277974c",
-                    "memory_bytes": 2147483648,
+                    "memoryBytes": 2147483648,
                     "status": "Pending",
-                    "status_reason": None,
-                    "created_at": "2025-01-01T12:00:00Z",
-                    "updated_at": "2025-01-01T12:00:00Z",
-                    "created_by": "test@example.com",
-                    "updated_by": "test@example.com",
+                    "statusReason": None,
+                    "createdAt": "2025-01-01T12:00:00Z",
+                    "updatedAt": "2025-01-01T12:00:00Z",
+                    "createdBy": "test@example.com",
+                    "updatedBy": "test@example.com",
                 },
-                "gpu_allocation_percentage": 50.0,
-                "gpu_allocation_exceeded": False,
-                "cpu_allocation_percentage": 25.0,
-                "cpu_allocation_exceeded": False,
-                "memory_allocation_percentage": 12.5,
-                "memory_allocation_exceeded": False,
-                "created_at": "2025-01-01T12:00:00Z",
-                "updated_at": "2025-01-01T12:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
+                "gpuAllocationPercentage": 50.0,
+                "gpuAllocationExceeded": False,
+                "cpuAllocationPercentage": 25.0,
+                "cpuAllocationExceeded": False,
+                "memoryAllocationPercentage": 12.5,
+                "memoryAllocationExceeded": False,
+                "createdAt": "2025-01-01T12:00:00Z",
+                "updatedAt": "2025-01-01T12:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
             },
         ]
     }
@@ -1220,7 +1237,7 @@ async def test_get_projects_no_projects(_: MagicMock, __: MagicMock) -> None:
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    workloads_base_url="https://example.com",
+                    workbench_base_url="https://example.com",
                     kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
@@ -1293,7 +1310,7 @@ async def test_get_submittable_projects_no_user() -> None:
                 cluster=ClusterResponse(
                     id="e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
                     name="cluster1",
-                    workloads_base_url="https://test-cluster.example.com",
+                    workbench_base_url="https://test-cluster.example.com",
                     kube_api_url="https://k8s.example.com:6443",
                     last_heartbeat_at=datetime(2025, 3, 10, 12, 0, 0, tzinfo=UTC),
                     created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -1389,7 +1406,7 @@ async def test_get_project_workload_stats_success(mock_get_stats: MagicMock, moc
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["name"] == "Test Project"
-    assert data["total_workloads"] == 5
+    assert data["totalWorkloads"] == 5
     assert {sc["status"] for sc in data["statusCounts"]} == {"Running", "Pending"}
 
 
@@ -1451,7 +1468,7 @@ async def test_get_project_workload_metrics_success(mock_get_metrics: MagicMock,
     data = response.json()
     assert "data" in data
     assert len(data["data"]) == 1
-    assert data["data"][0]["display_name"] == "Mock Workload"
+    assert data["data"][0]["displayName"] == "Mock Workload"
 
 
 @pytest.mark.asyncio
@@ -1503,13 +1520,14 @@ async def test_get_gpu_device_utilization_timeseries_for_project_success(
                         "description": "project 1",
                         "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
                         "name": "project1",
-                        "cluster_id": "0aa22e92-002c-41b7-a06e-dcdb0244974c",
-                        "created_at": "2025-03-10T10:00:00Z",
-                        "updated_at": "2025-03-10T10:00:00Z",
-                        "created_by": "test@example.com",
-                        "updated_by": "test@example.com",
+                        "clusterId": "0aa22e92-002c-41b7-a06e-dcdb0244974c",
+                        "createdAt": "2025-03-10T10:00:00Z",
+                        "updatedAt": "2025-03-10T10:00:00Z",
+                        "createdBy": "test@example.com",
+                        "updatedBy": "test@example.com",
                         "status": "Pending",
-                        "status_reason": "Creating",
+                        "statusReason": "Creating",
+                        "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
                     },
                 },
                 "values": [
@@ -1524,13 +1542,14 @@ async def test_get_gpu_device_utilization_timeseries_for_project_success(
                         "description": "project 2",
                         "id": "19465a28-1649-4f55-887f-536dd36a47f8",
                         "name": "project2",
-                        "cluster_id": "1ab22e52-102c-31b7-a06e-dcdb0244974c",
-                        "created_at": "2025-03-10T10:00:00Z",
-                        "updated_at": "2025-03-10T10:00:00Z",
-                        "created_by": "test@example.com",
-                        "updated_by": "test@example.com",
+                        "clusterId": "1ab22e52-102c-31b7-a06e-dcdb0244974c",
+                        "createdAt": "2025-03-10T10:00:00Z",
+                        "updatedAt": "2025-03-10T10:00:00Z",
+                        "createdBy": "test@example.com",
+                        "updatedBy": "test@example.com",
                         "status": "Pending",
-                        "status_reason": "Creating",
+                        "statusReason": "Creating",
+                        "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
                     },
                 },
                 "values": [
@@ -1541,7 +1560,7 @@ async def test_get_gpu_device_utilization_timeseries_for_project_success(
         ],
         "range": {
             "end": "2025-03-11T12:00:00Z",
-            "interval_seconds": 60,
+            "intervalSeconds": 60,
             "start": "2025-03-10T12:00:00Z",
             "timestamps": ["2025-03-10T12:00:00Z", "2025-03-10T12:01:00Z"],
         },
@@ -1612,13 +1631,14 @@ async def test_get_gpu_memory_utilization_timeseries_for_project_success(
                         "description": "project 1",
                         "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
                         "name": "project1",
-                        "cluster_id": "0aa22e92-002c-41b7-a06e-dcdb0244974c",
-                        "created_at": "2025-03-10T10:00:00Z",
-                        "updated_at": "2025-03-10T10:00:00Z",
-                        "created_by": "test@example.com",
-                        "updated_by": "test@example.com",
+                        "clusterId": "0aa22e92-002c-41b7-a06e-dcdb0244974c",
+                        "createdAt": "2025-03-10T10:00:00Z",
+                        "updatedAt": "2025-03-10T10:00:00Z",
+                        "createdBy": "test@example.com",
+                        "updatedBy": "test@example.com",
                         "status": "Pending",
-                        "status_reason": "Creating",
+                        "statusReason": "Creating",
+                        "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
                     },
                 },
                 "values": [
@@ -1633,13 +1653,14 @@ async def test_get_gpu_memory_utilization_timeseries_for_project_success(
                         "description": "project 2",
                         "id": "19465a28-1649-4f55-887f-536dd36a47f8",
                         "name": "project2",
-                        "cluster_id": "1ab22e52-102c-31b7-a06e-dcdb0244974c",
-                        "created_at": "2025-03-10T10:00:00Z",
-                        "updated_at": "2025-03-10T10:00:00Z",
-                        "created_by": "test@example.com",
-                        "updated_by": "test@example.com",
+                        "clusterId": "1ab22e52-102c-31b7-a06e-dcdb0244974c",
+                        "createdAt": "2025-03-10T10:00:00Z",
+                        "updatedAt": "2025-03-10T10:00:00Z",
+                        "createdBy": "test@example.com",
+                        "updatedBy": "test@example.com",
                         "status": "Pending",
-                        "status_reason": "Creating",
+                        "statusReason": "Creating",
+                        "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
                     },
                 },
                 "values": [
@@ -1650,7 +1671,7 @@ async def test_get_gpu_memory_utilization_timeseries_for_project_success(
         ],
         "range": {
             "end": "2025-03-11T12:00:00Z",
-            "interval_seconds": 60,
+            "intervalSeconds": 60,
             "start": "2025-03-10T12:00:00Z",
             "timestamps": ["2025-03-10T12:00:00Z", "2025-03-10T12:01:00Z"],
         },
@@ -1958,8 +1979,8 @@ async def test_get_project_secrets_filtered_by_use_case(
         response = client.get(
             f"/v1/projects/{uuid4()}/secrets",
             params={
-                "use_case": SecretUseCase.HUGGING_FACE.value,
-                "secret_type": SecretKind.KUBERNETES_SECRET.value,
+                "useCase": SecretUseCase.HUGGING_FACE.value,
+                "secretType": SecretKind.KUBERNETES_SECRET.value,
             },
         )
 
@@ -2542,7 +2563,7 @@ async def test_create_project_secret(
         "name": "test-secret",
         "scope": "Project",
         "type": "KubernetesSecret",
-        "use_case": "HuggingFace",
+        "useCase": "HuggingFace",
         "manifest": manifest_yaml,
     }
 
@@ -2569,8 +2590,8 @@ async def test_create_project_secret(
         assert data["name"] == "test-secret"
         assert data["type"] == "KubernetesSecret"
         assert data["scope"] == "Project"
-        assert data["use_case"] == "HuggingFace"
-        assert len(data["project_secrets"]) == 1
-        assert data["project_secrets"][0]["project"]["id"] == project_id
+        assert data["useCase"] == "HuggingFace"
+        assert len(data["projectSecrets"]) == 1
+        assert data["projectSecrets"][0]["project"]["id"] == project_id
 
         mock_create_project_scoped_secret.assert_called_once()

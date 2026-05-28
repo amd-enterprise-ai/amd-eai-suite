@@ -17,10 +17,15 @@ import { getProjects } from '@/services/server';
 import { getUser } from '@/services/server';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 
-import { ProjectWithResourceAllocation } from '@amdenterpriseai/types';
-import { UserFormData, UserWithProjects } from '@amdenterpriseai/types';
+import { ProjectWithResourceAllocation } from '@/types/projects';
+import { UserFormData } from '@/types/users';
+import { UserWithProjects } from '@/types/users';
 
 import { DeleteUser, Projects, UserRoles } from '@/components/features/user';
 import { FormFieldComponent } from '@amdenterpriseai/components';
@@ -36,7 +41,10 @@ interface Props {
   projects: ProjectWithResourceAllocation[];
 }
 
-const UserPage: React.FC<Props> = ({ user, projects }) => {
+const UserPage: React.FC<Props> & WithDocumentationLink = ({
+  user,
+  projects,
+}) => {
   const router = useRouter();
   const { id } = router.query;
   const { t } = useTranslation(translationKeySet);
@@ -182,6 +190,8 @@ const UserPage: React.FC<Props> = ({ user, projects }) => {
     </div>
   );
 };
+
+UserPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/users/manage-users.html`;
 
 export default UserPage;
 

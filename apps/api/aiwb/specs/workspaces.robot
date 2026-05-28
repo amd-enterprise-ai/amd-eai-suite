@@ -12,10 +12,6 @@ Resource    resources/airm_secrets.resource
 Resource    resources/airm_clusters.resource
 Resource    resources/kubectl_verification.resource
 Library             Collections
-Test Setup          Run Keywords
-...                 Initialize Project Tracking    AND
-...                 Initialize Workspace ID Tracking    AND
-...                 Initialize Workload ID Tracking
 Test Teardown       Clean Up Workspace Test Resources
 
 *** Test Cases ***
@@ -325,10 +321,10 @@ Deploy ComfyUI workspace with GPU
     And workspace status should be "Pending"
 
 ComfyUI workspace transitions to Running
-    [Documentation]    Verify that a ComfyUI workspace transitions from Pending to Running (CPU-only)
+    [Documentation]    Verify that a ComfyUI workspace transitions from Pending to Running
     ...    Tests: Workspace deployment → wait for Running status
-    ...    Requires: MinIO credentials secret assigned to project
-    [Tags]    workspace    comfyui    status
+    ...    Requires: MinIO credentials secret assigned to project, GPU cluster for model download
+    [Tags]    workspace    comfyui    status    gpu
 
     Given a ready project with user access exists
     And secret "minio-credentials-fetcher" is assigned to project

@@ -102,7 +102,7 @@ func TestReconcile_PodWithWorkloadLabel_AddsFinalizer(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -186,7 +186,7 @@ func TestReconcile_PodBeingDeleted_WithValidLabels(t *testing.T) {
 
 	// Verify deletion message was published
 	assert.Len(t, mock.Published, 1)
-	msg, ok := mock.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := mock.Published[0].(common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-pod", msg.Name)
 	assert.Equal(t, "Deleted", msg.Status)
@@ -297,7 +297,7 @@ func TestReconcile_Pod_AutoDiscoveryBehavior(t *testing.T) {
 			autoDiscovered:         true,
 			submitter:              "oidc:user@example.com",
 			expectedMsgCount:       2,
-			expectedSubmitter:      strPtr("user@example.com"),
+			expectedSubmitter:      testutils.Ptr("user@example.com"),
 			expectAutoDiscoveryMsg: true,
 		},
 		{
@@ -361,7 +361,7 @@ func TestReconcile_Pod_AutoDiscoveryBehavior(t *testing.T) {
 			require.Len(t, mockPub.Published, tt.expectedMsgCount)
 
 			if tt.expectAutoDiscoveryMsg {
-				autoDiscMsg, ok := mockPub.Published[0].(*messaging.AutoDiscoveredWorkloadComponentMessage)
+				autoDiscMsg, ok := mockPub.Published[0].(*common.AutoDiscoveredWorkloadComponentMessage)
 				require.True(t, ok)
 				if tt.expectedSubmitter != nil {
 					assert.NotNil(t, autoDiscMsg.Submitter)
@@ -370,20 +370,16 @@ func TestReconcile_Pod_AutoDiscoveryBehavior(t *testing.T) {
 					assert.Nil(t, autoDiscMsg.Submitter)
 				}
 
-				statusMsg, ok := mockPub.Published[1].(*messaging.WorkloadComponentStatusMessage)
+				statusMsg, ok := mockPub.Published[1].(*common.WorkloadComponentStatusMessage)
 				require.True(t, ok)
 				assert.Equal(t, "Running", statusMsg.Status)
 			} else {
-				statusMsg, ok := mockPub.Published[0].(*messaging.WorkloadComponentStatusMessage)
+				statusMsg, ok := mockPub.Published[0].(*common.WorkloadComponentStatusMessage)
 				require.True(t, ok)
 				assert.Equal(t, "Running", statusMsg.Status)
 			}
 		})
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func TestReconcile_Pod_StatusPublishFailure(t *testing.T) {

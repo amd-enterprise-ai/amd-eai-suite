@@ -6,10 +6,10 @@ from ..aims.enums import AIMServiceStatus
 from ..workloads.enums import WorkloadStatus
 
 # Single source of truth: AIMServiceStatus -> WorkloadStatus
-# DEGRADED merges into FAILED, STARTING merges into PENDING
+# DEGRADED merges into FAILED
 AIM_TO_WORKLOAD_STATUS = {
     AIMServiceStatus.PENDING: WorkloadStatus.PENDING,
-    AIMServiceStatus.STARTING: WorkloadStatus.PENDING,
+    AIMServiceStatus.STARTING: WorkloadStatus.STARTING,
     AIMServiceStatus.RUNNING: WorkloadStatus.RUNNING,
     AIMServiceStatus.FAILED: WorkloadStatus.FAILED,
     AIMServiceStatus.DEGRADED: WorkloadStatus.FAILED,

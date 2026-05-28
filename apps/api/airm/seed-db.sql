@@ -10,7 +10,7 @@ INSERT INTO clusters(
     created_by,
     updated_by,
     last_heartbeat_at,
-    workloads_base_url,
+    workbench_base_url,
     kube_api_url
 ) VALUES (
     'Cluster_1',
@@ -20,7 +20,7 @@ INSERT INTO clusters(
     'system',
     'system',
     now() + interval '5 years',
-    'http://workloads.localhost',
+    'http://aiwbui.localhost',
     'http://k8s.localhost'
 ) ON CONFLICT DO NOTHING;
 

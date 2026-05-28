@@ -11,29 +11,36 @@ import { useDisclosure } from '@heroui/react';
 
 import { fetchNamespaceMetrics } from '@/lib/app/namespaces';
 import {
+  fetchProfilesForServices,
   getAimServices,
   getAimClusterModels,
   resolveAIMServiceDisplay,
   undeployAim,
 } from '@/lib/app/aims';
+import type { AIMServiceProfile } from '@/lib/app/aims';
 import { deleteWorkload } from '@/lib/app/workloads';
+import { deleteModel } from '@/lib/app/models';
+import {
+  AIM_CANONICAL_NAME_ANNOTATION,
+  AIM_MODEL_NAME_LABEL,
+  FINE_TUNED_LABEL,
+} from '@/types/aims';
 import { useDebouncedCallback, useSystemToast } from '@amdenterpriseai/hooks';
 
 import { displayMegabytesInGigabytes } from '@amdenterpriseai/utils/app';
-import { getWorkloadStatusVariants } from '@amdenterpriseai/utils/app';
+import { getWorkloadStatusVariants } from '@/utils/workloads';
 import { getWorkloadTypeVariants } from '@amdenterpriseai/utils/app';
 
 import { TableColumns } from '@amdenterpriseai/types';
 import { SortDirection } from '@amdenterpriseai/types';
-import { ResourceType } from '@amdenterpriseai/types';
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
-import { NamespaceWorkloadsTableField } from '../../../enums';
-import type {
-  ResourceMetrics,
-  NamespaceMetricsResponse,
-} from '../../../types/namespaces';
-import type { ParsedAIM } from '@/types/aims';
+import { ResourceType } from '@/types/enums/workloads';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { NamespaceWorkloadsTableField } from '@/enums';
+import type { ResourceMetrics } from '@/types/namespaces';
+import type { AIMService, ParsedAIM } from '@/types/aims';
 import { CollectionRequestParams } from '@amdenterpriseai/types';
+import { NamespaceMetricsResponse } from '@/types/namespaces';
 
 import {
   ChipDisplay,
@@ -52,10 +59,13 @@ import {
   IconTrash,
 } from '@tabler/icons-react';
 
+import { ModelProfileSummary } from '@/components/shared/ModelProfileSummary';
 import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
 import WorkloadLogsModal from '@/components/features/workloads/WorkloadLogsModal';
 import { LogSource } from '@/components/features/workloads/WorkloadLogs';
 import AIMConnectModal from '@/components/features/models/AIMConnectModal';
+import { useProject } from '@/contexts/ProjectContext';
+import { SUBMITTER_ANNOTATION_KEY } from '../secrets/constants';
 
 interface Props {
   namespace: string;
@@ -93,6 +103,7 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
   const { t } = useTranslation(['projects', 'workloads', 'models']);
   const { t: workloadsT } = useTranslation('workloads');
   const router = useRouter();
+  const { projectPath, projectUrl } = useProject();
   const { toast } = useSystemToast();
   const queryClient = useQueryClient();
 
@@ -137,7 +148,7 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
 
   const { data: namespaceMetrics, isFetching: isNamespaceMetricsLoading } =
     useQuery<NamespaceMetricsResponse>({
-      queryKey: ['namespace', namespace, 'metrics', fetchParams],
+      queryKey: ['namespace', namespace, 'workloads', fetchParams],
       queryFn: () => fetchNamespaceMetrics(namespace, fetchParams),
       enabled: !!namespace,
     });
@@ -149,29 +160,104 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
   });
 
   const { data: parsedAIMs = [], isFetching: isParsedAIMsLoading } = useQuery({
-    queryKey: ['aim-cluster-models', namespace],
-    queryFn: () => getAimClusterModels(namespace),
+    queryKey: ['aim-cluster-models'],
+    queryFn: () => getAimClusterModels(),
     enabled: !!namespace,
   });
 
+  const { data: aimServiceProfiles = new Map<string, AIMServiceProfile>() } =
+    useQuery({
+      queryKey: [
+        'namespace',
+        namespace,
+        'aim-service-profiles',
+        (aimServices ?? []).map((s) => s.id),
+      ],
+      queryFn: () => fetchProfilesForServices(aimServices ?? []),
+      enabled: (aimServices?.length ?? 0) > 0,
+    });
+
+  // Merge profile data into items so HeroUI's TableBody sees a new array reference
+  // when profiles resolve, triggering a re-render of rows.
+  const tableData = useMemo((): ResourceMetrics[] => {
+    const rows = namespaceMetrics?.data ?? [];
+    if (!aimServices || aimServiceProfiles.size === 0) return rows;
+
+    // TODO: This is workaround as the API doesn't return createdAt and createdBy as it still reading from DB.
+    // Follow up this on https://amd.atlassian.net/browse/EAI-6063
+
+    const aimServiceById = new Map<string, AIMService>(
+      aimServices.flatMap((s) => (s.id ? [[s.id, s]] : [])),
+    );
+
+    return rows.map((item) => {
+      const profile = aimServiceProfiles.get(String(item.id));
+      if (!profile) return item;
+      const aimService = aimServiceById.get(String(item.id));
+
+      return {
+        ...item,
+        createdAt:
+          item.createdAt ?? aimService?.metadata?.creationTimestamp ?? null,
+        createdBy:
+          item.createdBy ??
+          aimService?.metadata?.annotations?.[SUBMITTER_ANNOTATION_KEY] ??
+          null,
+        metric: profile.metric ?? null,
+        gpu: profile.gpu ?? null,
+        templateGpuCount: profile.templateGpuCount ?? null,
+        precision: profile.precision ?? null,
+      };
+    });
+  }, [namespaceMetrics?.data, aimServices, aimServiceProfiles]);
+
+  // TODO(EAI-6064): The fine-tuned branch fakes a ParsedAIM because
+  // AIMConnectModal asks for one but only uses two fields off it
+  // (deployedService + canonicalName). When that ticket lands and the modal
+  // takes (service, canonicalName) directly, delete the fake-ParsedAIM
+  // construction and pass `aimService` + canonical-name annotation
+  // (`AIM_CANONICAL_NAME_ANNOTATION`) straight through.
   const aimForConnectModal = useMemo((): ParsedAIM | undefined => {
     if (
       !resourceForConnect ||
       resourceForConnect.resourceType !== ResourceType.AIM_SERVICE ||
-      !aimServices ||
-      !parsedAIMs.length
+      !aimServices
     )
       return undefined;
     const aimService = aimServices.find((s) => s.id === resourceForConnect.id);
     if (!aimService) return undefined;
     const modelRef = aimService.status?.resolvedModel?.name;
-    const baseAim = parsedAIMs.find(
-      (a) => a.model === modelRef || a.resourceName === modelRef,
-    );
-    if (!baseAim) return undefined;
+
+    // Cluster-scoped deployment: catalog has the parsed AIM
+    const baseAim = parsedAIMs.find((a) => a.model === modelRef);
+    if (baseAim) {
+      return {
+        ...baseAim,
+        deployedService: aimService,
+      };
+    }
+
+    // Fine-tuned (namespace-scoped) deployment: not in cluster catalog.
+    // Read the canonical name from the AIMService annotation.
+    const canonicalName =
+      aimService.metadata.annotations?.[AIM_CANONICAL_NAME_ANNOTATION] ?? '';
     return {
-      ...baseAim,
+      model: modelRef ?? '',
+      imageReference: '',
+      annotations: {},
+      description: { short: '', full: '' },
+      title:
+        aimService.metadata.annotations?.[AIM_MODEL_NAME_LABEL] ??
+        aimService.metadata.name,
+      imageVersion: '',
+      canonicalName,
+      tags: [],
+      status: aimService.status.status,
+      workloadStatuses: [],
+      isPreview: false,
+      isHfTokenRequired: false,
       deployedService: aimService,
+      deployedServices: [aimService],
     };
   }, [resourceForConnect, aimServices, parsedAIMs]);
 
@@ -184,13 +270,15 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
 
       if (resource.resourceType === ResourceType.AIM_SERVICE) {
         return undeployAim(namespace, id);
+      } else if (resource.type === WorkloadType.FINE_TUNING) {
+        return deleteModel(id, namespace);
       } else {
         return deleteWorkload(id, namespace);
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['namespace', namespace, 'metrics'],
+        queryKey: ['namespace', namespace, 'workloads'],
       });
       queryClient.invalidateQueries({
         queryKey: ['namespace', namespace, 'stats'],
@@ -214,12 +302,12 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
           onPress: (w: ResourceMetrics) => {
             const pathname =
               w.resourceType === ResourceType.AIM_SERVICE
-                ? `/aims/${w.id}`
-                : `/workloads/${w.id}`;
+                ? projectPath(`/aims/${w.id}`)
+                : projectPath(`/workloads/${w.id}`);
 
             router.push({
               pathname,
-              search: `ref=${router.asPath}`,
+              query: { ref: router.asPath },
             });
           },
         });
@@ -234,7 +322,7 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
           label: t('workloads:list.actions.chat.label'),
           startContent: <IconMessage />,
           onPress: () => {
-            window.open(`/chat?workload=${item.id}`, '_blank');
+            window.open(projectUrl(`/chat?workload=${item.id}`), '_blank');
           },
         });
         if (item.resourceType === ResourceType.AIM_SERVICE) {
@@ -310,23 +398,37 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
       return <NoDataDisplay />;
     },
     [NamespaceWorkloadsTableField.NAME]: (item) => {
-      if (
-        item.resourceType === ResourceType.AIM_SERVICE &&
-        aimServices &&
-        parsedAIMs
-      ) {
+      const isAimService = item.resourceType === ResourceType.AIM_SERVICE;
+      const profileSummary = <ModelProfileSummary profile={item} t={t} />;
+
+      if (isAimService && aimServices && parsedAIMs.length > 0) {
         const aimService = aimServices.find(
           (service) => service.id === item.id,
         );
         if (aimService) {
           const displayInfo = resolveAIMServiceDisplay(aimService, parsedAIMs);
-          const metricLabel = t(
-            `models:performanceMetrics.values.${displayInfo.metric}`,
+          // Fine-tuned: show the user-given name (title); cluster catalog: show canonical + version.
+          const isFineTuned =
+            aimService.metadata.labels?.[FINE_TUNED_LABEL] === 'true';
+          const displayName = isFineTuned
+            ? displayInfo.title
+            : `${displayInfo.canonicalName} ${displayInfo.imageVersion ? `(${displayInfo.imageVersion})` : ''}`.trim();
+          return (
+            <div className="flex flex-col gap-1">
+              <span>{displayName}</span>
+              {profileSummary}
+            </div>
           );
-          return `${displayInfo.canonicalName} ${displayInfo.imageVersion ? `(${displayInfo.imageVersion})` : ''} (${metricLabel})`;
         }
       }
-      return item.displayName ?? item.name ?? <NoDataDisplay />;
+
+      const displayName = item.displayName ?? item.name;
+      return (
+        <div className="flex flex-col gap-1">
+          {displayName ? <span>{displayName}</span> : <NoDataDisplay />}
+          {profileSummary}
+        </div>
+      );
     },
     [NamespaceWorkloadsTableField.STATUS]: (item) => (
       <StatusDisplay
@@ -352,7 +454,7 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
         filters={[]}
         handleDataRequest={handleTableParamsChange}
         total={namespaceMetrics?.total ?? 0}
-        data={namespaceMetrics?.data ?? []}
+        data={tableData}
         columns={columns}
         customRenderers={customRenderers}
         defaultSortByField={NamespaceWorkloadsTableField.CREATED_AT}
@@ -397,7 +499,8 @@ export const NamespaceWorkloadsTable: React.FC<Props> = ({ namespace }) => {
         aim={aimForConnectModal}
         onConfirmAction={(aim) => {
           const serviceId = aim.deployedService?.id;
-          if (serviceId) window.open(`/chat?workload=${serviceId}`, '_blank');
+          if (serviceId)
+            window.open(projectUrl(`/chat?workload=${serviceId}`), '_blank');
           onConnectModalClose();
           setResourceForConnect(undefined);
         }}

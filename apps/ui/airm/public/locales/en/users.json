@@ -24,7 +24,7 @@
         "title": "Last Seen At"
       },
       "roles": {
-        "title": "Roles"
+        "title": "Role"
       },
       "actions": {
         "title": ""
@@ -83,7 +83,7 @@
           "placeholder": "Optionally select project(s) for this invited user"
         },
         "roles": {
-          "label": "Roles",
+          "label": "Role",
           "placeholder": "Please select a role for this invited user.",
           "validation": {
             "required": "Please select one of the roles for this user to be invited."
@@ -215,7 +215,7 @@
         }
       },
       "roles": {
-        "title": "Roles",
+        "title": "Role",
         "actions": {
           "edit": {
             "title": "Edit role",
@@ -264,7 +264,7 @@
           "title": "Projects"
         },
         "roles": {
-          "title": "Roles"
+          "title": "Role"
         },
         "invitedAt": {
           "title": "Invite Sent"
@@ -322,8 +322,8 @@
           "desc": "Sort Team by Descending"
         },
         "roles": {
-          "asc": "Sort Roles by Ascending",
-          "desc": "Sort Roles by Descending"
+          "asc": "Sort Role by Ascending",
+          "desc": "Sort Role by Descending"
         },
         "invitedAt": {
           "asc": "Sort Invite Sent by Ascending",

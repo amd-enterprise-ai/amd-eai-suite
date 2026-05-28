@@ -11,7 +11,7 @@ import React from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { StorageType } from '@amdenterpriseai/types';
+import { StorageType } from '@/types/enums/storages';
 
 import { ActionButton } from '@amdenterpriseai/components';
 

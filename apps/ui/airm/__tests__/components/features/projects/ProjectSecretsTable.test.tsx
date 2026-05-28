@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 import { act, render, screen } from '@testing-library/react';
 
-import { generateMockProjectSecretsWithParentSecret } from '../../../../__mocks__/utils/secrets-mock';
+import { generateMockProjectSecretsWithParentSecret } from '@/__mocks__/utils/secrets-mock';
 
 import { ProjectSecretsTable } from '@/components/features/projects/ProjectSecretsTable';
-import { ProjectSecretStatus } from '@amdenterpriseai/types';
+import { ProjectSecretStatus } from '@/types/enums/secrets';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 

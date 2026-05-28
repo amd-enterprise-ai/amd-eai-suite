@@ -10,7 +10,14 @@
   "status": {
     "ready": "Ready",
     "pending": "Pending",
-    "failed": "Failed"
+    "starting": "Starting",
+    "running": "Running",
+    "complete": "Complete",
+    "failed": "Failed",
+    "degraded": "Degraded",
+    "deleting": "Deleting",
+    "deleted": "Deleted",
+    "unknown": "Unknown"
   },
   "capabilities": {
     "chat": "Chat",
@@ -44,6 +51,9 @@
           "title": "Type"
         },
         "onboardingStatus": {
+          "title": "Status"
+        },
+        "status": {
           "title": "Status"
         },
         "workloads": {
@@ -89,7 +99,8 @@
           "label": "Delete",
           "confirmation": {
             "title": "Confirm deletion",
-            "description": "Are you sure you want to delete <strong>{{name}}</strong> model? This action is irreversible."
+            "description": "Are you sure you want to delete <strong>{{name}}</strong> model? This action is irreversible.",
+            "conflictDescription": "Model <strong>{{name}}</strong> has active deployments. Deleting it will also remove all its deployments. This action is irreversible."
           },
           "notification": {
             "success": "Model successfully deleted.",
@@ -115,7 +126,14 @@
           "modal": {
             "title": "{{modelName}} details",
             "close": "Close",
-            "modelNotFound": "Model is not found"
+            "modelNotFound": "Model is not found",
+            "fields": {
+              "name": "Name",
+              "baseModel": "Base Model",
+              "resourceName": "Resource Name",
+              "status": "Status",
+              "conditions": "Conditions"
+            }
           }
         },
         "finetune": {
@@ -128,7 +146,8 @@
             "confirm": "Start training",
             "baseModel": {
               "label": "Base model",
-              "placeholder": "Select base model"
+              "placeholder": "Select base model",
+              "noCompatibleRecipes": "No fine-tuning recipes available for your cluster hardware"
             },
             "dataset": {
               "label": "Training dataset",
@@ -182,6 +201,7 @@
           "deployed": "Deployed",
           "notDeployed": "Not deployed",
           "pending": "Pending",
+          "starting": "Starting",
           "failed": "Failed"
         },
         "type": {
@@ -217,7 +237,8 @@
       "deploymentsCount_one": "Deployments ({{count}})",
       "deploymentsCount_other": "Deployments ({{count}})",
       "actionsMenu": "Actions menu",
-      "tagsMoreCount": "+{{count}} more"
+      "tagsMoreCount": "+{{count}} more",
+      "descriptionDisclaimer": "This description is an AI-generated summary sourced from Hugging Face and may contain inaccuracies."
     },
     "actions": {
       "deploy": {
@@ -346,6 +367,12 @@
         "label": "Hugging Face token",
         "placeholder": "Select Hugging Face token"
       },
+      "imagePullSecrets": {
+        "title": "Image Pull Secrets",
+        "description": "Select one or more image pull secrets, if your cluster requires authentication to pull container images.",
+        "label": "Image Pull Secrets",
+        "placeholder": "Select image pull secrets"
+      },
       "metric": {
         "title": "Performance metric",
         "label": "Performance metric",
@@ -354,20 +381,53 @@
         "notOptimized": "This model has no optimized profiles on your selected hardware. You might experience worse throughput or latency compared to hardware-optimized models.",
         "unoptimizedLabel": "Unoptimized profile"
       },
+      "advancedProfileParams": {
+        "show": "Show advanced profile parameters",
+        "hide": "Hide advanced profile parameters",
+        "optimizationClass": "Optimization class",
+        "gpu": "Accelerator",
+        "precision": "Precision",
+        "gpuCount": "Accelerator count",
+        "profile": "Select a profile or opt for automatic selection",
+        "automatic": "Automatic",
+        "automaticSelection": "Automatic selection",
+        "automaticSelectionFromProfiles": "Automatic selection from {{count}} profiles",
+        "noMatchingProfiles": "No available profiles",
+        "placeholder": "Select option",
+        "resetParameters": "Reset parameters"
+      },
       "autoscaling": {
         "title": "Autoscaling",
-        "tooltip": "Automatically adjust the number of replicas based on demand to optimize resource usage and performance.",
         "enable": "Enable autoscaling"
       }
     },
     "notifications": {
-      "success": "Workload deployment started",
-      "error": "Error deploying workload, reason: {{message}}"
+      "success": "Model deployment started",
+      "error": "Error deploying model, reason: {{message}}",
+      "noTemplatesDescription": "The model cannot be deployed because no deployment templates are available for your hardware configuration."
     }
   },
   "tabs": {
     "aimCatalog": "AIM Catalog",
     "customModels": "Custom Models",
     "deployedModels": "Deployed Models"
+  },
+  "deployFinetuneAIMDrawer": {
+    "title": "Deploy via AIM Engine",
+    "actions": {
+      "cancel": "Cancel",
+      "deploy": "Deploy"
+    },
+    "fields": {
+      "name": {
+        "label": "Name",
+        "description": "This name is auto-generated and cannot be updated."
+      }
+    },
+    "notifications": {
+      "success": "Model deployment started",
+      "error": "Error deploying model, reason: {{message}}",
+      "fetchError": "Failed to fetch deployment configurations. Please try again."
+    }
   }
 }

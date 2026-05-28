@@ -23,3 +23,14 @@ class StorageStatus(StrEnum):
     DELETING = "Deleting"
     DELETED = "Deleted"
     DELETE_FAILED = "DeleteFailed"
+
+
+class ProjectStorageStatus(StrEnum):
+    PENDING = "Pending"
+    SYNCED = "Synced"
+    FAILED = "Failed"
+    SYNCED_ERROR = "SyncedError"
+    DELETE_FAILED = "DeleteFailed"
+    DELETED = "Deleted"
+    DELETING = "Deleting"
+    UNKNOWN = "Unknown"

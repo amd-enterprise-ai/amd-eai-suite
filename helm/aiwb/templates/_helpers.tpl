@@ -63,3 +63,15 @@ Use .Values.keycloak.publicUrl if specified, otherwise construct from appDomain.
 https://{{ .Values.kgateway.keycloak.prefixValue }}.{{ .Values.appDomain }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Construct the AIRM UI URL for cross-app navigation.
+Use .Values.airmAppUrl if specified, otherwise construct from appDomain.
+*/}}
+{{- define "aiwb.airmAppUrl" -}}
+{{- if .Values.airmAppUrl -}}
+{{ .Values.airmAppUrl }}
+{{- else -}}
+https://{{ .Values.kgateway.airm.prefixValue }}.{{ .Values.appDomain }}
+{{- end -}}
+{{- end -}}

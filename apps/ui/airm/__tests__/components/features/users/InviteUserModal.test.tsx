@@ -179,8 +179,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [UserRole.PLATFORM_ADMIN],
-            project_ids: [],
-            temporary_password: undefined,
+            projectIds: [],
+            temporaryPassword: undefined,
           },
           expect.any(Object),
         );
@@ -213,8 +213,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [UserRole.PLATFORM_ADMIN],
-            project_ids: [],
-            temporary_password: undefined,
+            projectIds: [],
+            temporaryPassword: undefined,
           },
           expect.any(Object),
         );
@@ -259,8 +259,8 @@ describe('InviteUserModal', () => {
         {
           email: 'newuser@example.com',
           roles: [],
-          project_ids: [],
-          temporary_password: undefined,
+          projectIds: [],
+          temporaryPassword: undefined,
         },
         expect.any(Object),
       );
@@ -354,8 +354,8 @@ describe('InviteUserModal', () => {
         {
           email: 'newuser@example.com',
           roles: ['Platform Administrator'],
-          project_ids: ['project-1'],
-          temporary_password: undefined,
+          projectIds: ['project-1'],
+          temporaryPassword: undefined,
         },
         expect.any(Object),
       );
@@ -401,8 +401,8 @@ describe('InviteUserModal', () => {
         {
           email: 'newuser@example.com',
           roles: [UserRole.PLATFORM_ADMIN],
-          project_ids: ['project-1'],
-          temporary_password: undefined,
+          projectIds: ['project-1'],
+          temporaryPassword: undefined,
         },
         expect.any(Object),
       );
@@ -446,8 +446,8 @@ describe('InviteUserModal', () => {
             {
               email: 'newuser@example.com',
               roles: [UserRole.PLATFORM_ADMIN],
-              project_ids: ['project-1', 'project-2'],
-              temporary_password: undefined,
+              projectIds: ['project-1', 'project-2'],
+              temporaryPassword: undefined,
             },
             expect.any(Object),
           );
@@ -490,8 +490,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [UserRole.PLATFORM_ADMIN],
-            project_ids: ['project-1'],
-            temporary_password: undefined,
+            projectIds: ['project-1'],
+            temporaryPassword: undefined,
           },
           expect.any(Object),
         );
@@ -542,8 +542,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [],
-            project_ids: ['project-1'],
-            temporary_password: undefined,
+            projectIds: ['project-1'],
+            temporaryPassword: undefined,
           },
           expect.any(Object),
         );
@@ -587,8 +587,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [UserRole.PLATFORM_ADMIN],
-            project_ids: expect.arrayContaining(['project-1', 'project-2']),
-            temporary_password: undefined,
+            projectIds: expect.arrayContaining(['project-1', 'project-2']),
+            temporaryPassword: undefined,
           },
           expect.any(Object),
         );
@@ -631,8 +631,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [UserRole.PLATFORM_ADMIN],
-            project_ids: ['project-1'],
-            temporary_password: undefined,
+            projectIds: ['project-1'],
+            temporaryPassword: undefined,
           },
           expect.any(Object),
         );
@@ -670,8 +670,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [UserRole.PLATFORM_ADMIN],
-            project_ids: [],
-            temporary_password: undefined,
+            projectIds: [],
+            temporaryPassword: undefined,
           },
           expect.any(Object),
         );
@@ -727,8 +727,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [UserRole.PLATFORM_ADMIN],
-            project_ids: ['project-1', 'project-2'],
-            temporary_password: 'TempPassword123',
+            projectIds: ['project-1', 'project-2'],
+            temporaryPassword: 'TempPassword123',
           },
           expect.any(Object),
         );
@@ -897,8 +897,8 @@ describe('InviteUserModal', () => {
             {
               email: 'newuser@example.com',
               roles: [UserRole.PLATFORM_ADMIN],
-              project_ids: [],
-              temporary_password: 'ValidPass123',
+              projectIds: [],
+              temporaryPassword: 'ValidPass123',
             },
             expect.any(Object),
           );
@@ -945,7 +945,7 @@ describe('InviteUserModal', () => {
         expect(inviteUser).toHaveBeenCalledWith(
           expect.objectContaining({
             email: 'newuser@example.com',
-            temporary_password: 'TempPassword123',
+            temporaryPassword: 'TempPassword123',
           }),
           expect.any(Object),
         );
@@ -1001,8 +1001,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [],
-            project_ids: [],
-            temporary_password: 'TempPassword123',
+            projectIds: [],
+            temporaryPassword: 'TempPassword123',
           },
           expect.any(Object),
         );
@@ -1165,8 +1165,8 @@ describe('InviteUserModal', () => {
           {
             email: 'newuser@example.com',
             roles: [UserRole.PLATFORM_ADMIN],
-            project_ids: [],
-            temporary_password: 'Valid Pass 123',
+            projectIds: [],
+            temporaryPassword: 'Valid Pass 123',
           },
           expect.any(Object),
         );

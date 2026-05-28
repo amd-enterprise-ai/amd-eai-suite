@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="007-make-audit-user-fields-nullable" author="akshay">
+        <comment>Make created_by/updated_by nullable to match api_common AuditBase</comment>
+
+        <dropNotNullConstraint tableName="datasets" columnName="created_by" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="datasets" columnName="updated_by" columnDataType="VARCHAR(255)"/>
+
+        <dropNotNullConstraint tableName="charts" columnName="created_by" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="charts" columnName="updated_by" columnDataType="VARCHAR(255)"/>
+
+        <dropNotNullConstraint tableName="chart_files" columnName="created_by" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="chart_files" columnName="updated_by" columnDataType="VARCHAR(255)"/>
+
+        <dropNotNullConstraint tableName="overlays" columnName="created_by" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="overlays" columnName="updated_by" columnDataType="VARCHAR(255)"/>
+
+        <dropNotNullConstraint tableName="inference_models" columnName="created_by" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="inference_models" columnName="updated_by" columnDataType="VARCHAR(255)"/>
+
+        <dropNotNullConstraint tableName="aim_services" columnName="created_by" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="aim_services" columnName="updated_by" columnDataType="VARCHAR(255)"/>
+
+        <dropNotNullConstraint tableName="workloads" columnName="created_by" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="workloads" columnName="updated_by" columnDataType="VARCHAR(255)"/>
+
+        <dropNotNullConstraint tableName="api_keys" columnName="created_by" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="api_keys" columnName="updated_by" columnDataType="VARCHAR(255)"/>
+    </changeSet>
+
+</databaseChangeLog>

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 
 from api_common.schemas import BaseEntityPublic
 
@@ -16,5 +16,3 @@ class DatasetResponse(BaseEntityPublic):
     description: str = Field(description="The description of the dataset")
     path: str = Field(description="The path to the dataset in cloud storage")
     type: DatasetType = Field(description="The type of the dataset")
-
-    model_config = ConfigDict(from_attributes=True)

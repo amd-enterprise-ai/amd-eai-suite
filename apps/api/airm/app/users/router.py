@@ -8,8 +8,9 @@ from fastapi import APIRouter, Body, Depends, Path, status
 from keycloak import KeycloakAdmin
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import NotFoundException
+
 from ..utilities.database import get_session
-from ..utilities.exceptions import NotFoundException
 from ..utilities.keycloak_admin import get_kc_admin
 from ..utilities.security import ensure_platform_administrator
 from ..utilities.security import get_user_email as get_logged_in_user

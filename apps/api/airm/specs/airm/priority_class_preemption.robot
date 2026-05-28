@@ -19,9 +19,6 @@ Resource            ../resources/airm_projects.resource
 Resource            ../resources/airm_clusters.resource
 Resource            resources/common/resource_resolver.resource
 Library             Collections
-Test Setup          Run keywords
-...                 Initialize project tracking    AND
-...                 Initialize workload ID tracking
 Test Teardown       Run keywords
 ...                 Clean up kubectl jobs in test project    AND
 ...                 Clean up all created workloads    AND

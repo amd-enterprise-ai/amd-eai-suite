@@ -11,17 +11,17 @@ import {
 import {
   CollectionRequestParams,
   MetricScalarResponse,
-  WorkloadStatusStatsResponse,
   TimeSeriesResponse,
 } from '@amdenterpriseai/types';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
 import {
   CreateProjectRequest,
   ProjectWithMembers,
   UpdateProjectRequest,
-} from '@amdenterpriseai/types';
+} from '@/types/projects';
 
 import {
-  WorkloadWithMetricsServer,
+  WorkloadWithMetrics,
   ProjectWorkloadsMetricsResponse,
 } from '@/types/workloads';
 
@@ -85,7 +85,6 @@ export const createProject = async (request: CreateProjectRequest) => {
 };
 
 export const updateProject = async (request: UpdateProjectRequest) => {
-  // Only send description for updating - name is immutable
   const response = await fetch(`/api/projects/${request.id}`, {
     method: 'PUT',
     headers: {
@@ -94,6 +93,7 @@ export const updateProject = async (request: UpdateProjectRequest) => {
     body: JSON.stringify({
       description: request.description,
       quota: request.quota,
+      gpuPreemption: request.gpuPreemption,
     }),
   });
   if (!response.ok) {
@@ -140,7 +140,7 @@ export const addUsersToProject = async (data: {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ user_ids: data.userIds }),
+    body: JSON.stringify({ userIds: data.userIds }),
   });
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
@@ -173,7 +173,7 @@ export const deleteUserFromProject = async (data: {
 
 export const fetchProjectWorkloadsMetrics = async (
   projectId: string,
-  collectionRequestParams: CollectionRequestParams<WorkloadWithMetricsServer>,
+  collectionRequestParams: CollectionRequestParams<WorkloadWithMetrics>,
 ): Promise<ProjectWorkloadsMetricsResponse> => {
   const queryParams = buildQueryParams(
     collectionRequestParams.page,

@@ -14,10 +14,10 @@ import { assignStorageToProject } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { StorageStatus } from '@amdenterpriseai/types';
+import { StorageStatus } from '@/types/enums/storages';
 import { FormField } from '@amdenterpriseai/types';
-import { Project } from '@amdenterpriseai/types';
-import { Storage } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import { Storage } from '@/types/storages';
 
 import { DrawerForm } from '@amdenterpriseai/components';
 import { FormFieldComponent } from '@amdenterpriseai/components';

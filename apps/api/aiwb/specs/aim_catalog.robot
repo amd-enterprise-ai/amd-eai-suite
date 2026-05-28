@@ -22,7 +22,7 @@ Resource            resources/api/models.resource
 Resource            resources/api_keys.resource
 Suite Setup         Setup AIM catalog testing
 Suite Teardown      Cleanup AIM catalog testing
-Test Timeout        25 minutes
+Test Timeout        100 minutes
 
 
 *** Variables ***
@@ -32,7 +32,7 @@ ${INCLUDE_TAGS}     ${None}     # Tags to include (set via --variable INCLUDE_TA
 ${EXCLUDE_TAGS}     ${None}     # Tags to exclude (set via --variable EXCLUDE_TAGS:requires-hf-token)
 ${AIM_VERSION}      ${None}     # Version filter: "0.8.5" (exact), ">=0.9.0" (range), "latest" (default dedup)
 ${MAX_GPU_COUNT}    1           # Set by listener to max gpu_count across all discovered models
-${AIM_DEPLOY_TIMEOUT}    1200  # Seconds to wait for AIM to reach Running (20 min, covers large models)
+${AIM_DEPLOY_TIMEOUT}    5400  # Seconds to wait for AIM to reach Running (90 min, covers 671B model first-time download + verify + GPU load)
 
 
 *** Test Cases ***

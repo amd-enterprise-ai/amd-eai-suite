@@ -53,6 +53,7 @@ vi.mock('next-i18next', () => ({
 describe('ChatTextArea Component', () => {
   const defaultProps = {
     content: '',
+    enableImageInput: false,
     handleChange: vi.fn(),
     handleKeyDown: vi.fn(),
     setIsTyping: vi.fn(),
@@ -613,11 +614,7 @@ describe('ChatTextArea Component', () => {
       );
 
       const textarea = screen.getByTestId('chat-input');
-      expect(textarea).toHaveClass(
-        'max-h-[110px]',
-        'md:max-h-[200px]',
-        'lg:max-h-[400px]',
-      );
+      expect(textarea).toHaveClass('max-h-27.5', 'md:max-h-50', 'lg:max-h-100');
     });
 
     it('applies responsive scroll button positioning', () => {
@@ -637,6 +634,137 @@ describe('ChatTextArea Component', () => {
         'right-1.5',
         'md:top-2',
         'md:-right-16',
+      );
+    });
+  });
+
+  describe('Attach Image Button', () => {
+    it('shows attach-image button when onAttachImage is provided and enableImageInput is true', () => {
+      render(
+        <ProviderWrapper>
+          <ChatTextArea
+            {...defaultProps}
+            enableImageInput={true}
+            onAttachImage={vi.fn()}
+          />
+        </ProviderWrapper>,
+      );
+
+      expect(screen.getByTestId('attach-image-button')).toBeInTheDocument();
+    });
+
+    it('does not show attach-image button when onAttachImage is not provided', () => {
+      render(
+        <ProviderWrapper>
+          <ChatTextArea {...defaultProps} enableImageInput={true} />
+        </ProviderWrapper>,
+      );
+
+      expect(
+        screen.queryByTestId('attach-image-button'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not show attach-image button when enableImageInput is false', () => {
+      render(
+        <ProviderWrapper>
+          <ChatTextArea
+            {...defaultProps}
+            enableImageInput={false}
+            onAttachImage={vi.fn()}
+          />
+        </ProviderWrapper>,
+      );
+
+      expect(
+        screen.queryByTestId('attach-image-button'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not show attach-image button when streaming', () => {
+      render(
+        <ProviderWrapper>
+          <ChatTextArea
+            {...defaultProps}
+            enableImageInput={true}
+            onAttachImage={vi.fn()}
+            messageIsStreaming={true}
+          />
+        </ProviderWrapper>,
+      );
+
+      expect(
+        screen.queryByTestId('attach-image-button'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not show attach-image button when disabled', () => {
+      render(
+        <ProviderWrapper>
+          <ChatTextArea
+            {...defaultProps}
+            enableImageInput={true}
+            onAttachImage={vi.fn()}
+            disabled={true}
+          />
+        </ProviderWrapper>,
+      );
+
+      expect(
+        screen.queryByTestId('attach-image-button'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('calls onAttachImage when attach-image button is clicked', async () => {
+      const onAttachImageMock = vi.fn();
+      const user = userEvent.setup();
+
+      render(
+        <ProviderWrapper>
+          <ChatTextArea
+            {...defaultProps}
+            enableImageInput={true}
+            onAttachImage={onAttachImageMock}
+          />
+        </ProviderWrapper>,
+      );
+
+      await user.click(screen.getByTestId('attach-image-button'));
+
+      expect(onAttachImageMock).toHaveBeenCalled();
+    });
+
+    it('applies success color class when hasAttachedImages is true', () => {
+      render(
+        <ProviderWrapper>
+          <ChatTextArea
+            {...defaultProps}
+            enableImageInput={true}
+            onAttachImage={vi.fn()}
+            hasAttachedImages={true}
+          />
+        </ProviderWrapper>,
+      );
+
+      expect(screen.getByTestId('attach-image-button')).toHaveClass(
+        'text-success',
+      );
+    });
+
+    it('does not apply success color class when hasAttachedImages is false', () => {
+      render(
+        <ProviderWrapper>
+          <ChatTextArea
+            {...defaultProps}
+            enableImageInput={true}
+            onAttachImage={vi.fn()}
+            hasAttachedImages={false}
+          />
+        </ProviderWrapper>,
+      );
+
+      expect(screen.getByTestId('attach-image-button')).not.toHaveClass(
+        'text-success',
       );
     });
   });

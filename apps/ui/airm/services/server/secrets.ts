@@ -1,15 +1,10 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 
-import {
-  ProjectSecretsResponse,
-  SecretsResponse,
-} from '@amdenterpriseai/types';
+import { ProjectSecretsResponse } from '@/types/secrets';
+import { SecretsResponse } from '@/types/secrets';
 
 export const getSecrets = async (
   accessToken: string,
@@ -23,8 +18,7 @@ export const getSecrets = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get secrets: ${await getErrorMessage(response)}`,
@@ -45,8 +39,7 @@ export const getProjectSecrets = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get project secrets: ${await getErrorMessage(response)}`,

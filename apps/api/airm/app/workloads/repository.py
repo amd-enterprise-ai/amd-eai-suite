@@ -10,8 +10,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import case
 
+from api_common.collections import FilterCondition, PaginationConditions, SortCondition
+from api_common.exceptions import ConflictException
+from api_common.models import set_updated_fields
+
 from ..clusters.models import Cluster
-from ..messaging.schemas import CommonComponentStatus, WorkloadComponentStatus, WorkloadStatus
 from ..projects.models import Project
 from ..utilities.collections.queries import (
     apply_filter_to_query,
@@ -19,10 +22,7 @@ from ..utilities.collections.queries import (
     apply_sorting_to_query,
     get_count_query,
 )
-from ..utilities.collections.schemas import FilterCondition, PaginationConditions, SortCondition
-from ..utilities.exceptions import ConflictException
-from ..utilities.models import set_updated_fields
-from .enums import WorkloadType
+from .enums import CommonComponentStatus, WorkloadComponentStatus, WorkloadStatus, WorkloadType
 from .models import Workload, WorkloadComponent, WorkloadTimeSummary
 from .schemas import WorkloadComponentIn
 
@@ -31,7 +31,7 @@ async def create_workload(
     session: AsyncSession,
     cluster_id: UUID,
     project_id: UUID,
-    status: str,
+    status: WorkloadStatus,
     creator: str,
     workload_type: WorkloadType,
     display_name: str | None = None,
@@ -60,7 +60,7 @@ async def get_workload_by_id_in_cluster(session: AsyncSession, workload_id: UUID
 
 
 async def update_workload_status(
-    session: AsyncSession, workload: Workload, status: str, updated_at: datetime, updated_by: str
+    session: AsyncSession, workload: Workload, status: WorkloadStatus, updated_at: datetime, updated_by: str
 ) -> None:
     workload.status = status
     workload.updated_at = updated_at
@@ -250,7 +250,7 @@ async def get_workload_counts_with_status_by_project_id(
 
 
 async def get_workload_time_summary_by_workload_id_and_status(
-    session: AsyncSession, workload_id: UUID, status: str
+    session: AsyncSession, workload_id: UUID, status: WorkloadStatus
 ) -> WorkloadTimeSummary | None:
     result = await session.execute(
         select(WorkloadTimeSummary).where(
@@ -260,7 +260,7 @@ async def get_workload_time_summary_by_workload_id_and_status(
     return result.scalar_one_or_none()
 
 
-async def get_workload_time_in_status(session: AsyncSession, workload_id: UUID, status: str) -> int:
+async def get_workload_time_in_status(session: AsyncSession, workload_id: UUID, status: WorkloadStatus) -> int:
     """
     Returns the total seconds a workload has spent in the given status, including
     the live elapsed time if the workload is currently in that status.
@@ -297,7 +297,7 @@ async def increment_total_elapsed_seconds(
 
 
 async def insert_workload_time_summary(
-    session: AsyncSession, workload_id: UUID, status: str, total_elapsed_seconds: float
+    session: AsyncSession, workload_id: UUID, status: WorkloadStatus, total_elapsed_seconds: float
 ) -> WorkloadTimeSummary:
     summary = WorkloadTimeSummary(
         workload_id=workload_id,

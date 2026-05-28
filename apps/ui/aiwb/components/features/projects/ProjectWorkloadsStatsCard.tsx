@@ -4,9 +4,9 @@
 
 import { useTranslation } from 'next-i18next';
 
-import { WORKLOAD_STATUS_COLOR_MAP } from '@amdenterpriseai/utils/app';
+import { WORKLOAD_STATUS_COLOR_MAP } from '@/utils/workloads';
 
-import { ProjectStatusCount } from '@amdenterpriseai/types';
+import { ProjectStatusCount } from '@/types/metrics';
 
 import { CategorySplitStatsCard } from '@amdenterpriseai/components';
 

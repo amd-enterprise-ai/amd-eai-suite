@@ -4,12 +4,13 @@
 
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
-from ..messaging.schemas import SecretKind, SecretScope
+from api_common.schemas import BaseEntityPublic, BaseModel
+from api_common.secrets import SecretUseCase
+
 from ..projects.schemas import ProjectAssignment
-from ..utilities.schema import BaseEntityPublic
-from .enums import SecretStatus, SecretUseCase
+from .enums import SecretKind, SecretScope, SecretStatus
 
 
 class BaseSecret(BaseModel):
@@ -22,8 +23,6 @@ class BaseSecret(BaseModel):
     )
     type: SecretKind = Field(description="The type of the secret")
     scope: SecretScope = Field(description="The scope of the secret")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class SecretResponse(BaseSecret, BaseEntityPublic):

@@ -9,10 +9,11 @@ from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from ..messaging.schemas import ProjectSecretStatus, SecretKind, SecretScope
+from api_common.models import BaseEntity
+from api_common.secrets import SecretUseCase
+
 from ..projects.models import Project
-from ..utilities.models import BaseEntity
-from .enums import SecretStatus, SecretUseCase
+from .enums import ProjectSecretStatus, SecretKind, SecretScope, SecretStatus
 
 
 class Secret(BaseEntity):

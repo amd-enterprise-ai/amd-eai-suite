@@ -23,11 +23,17 @@
 --pythonpath
 ../../../api/aiwb/specs
 --pythonpath
+../../../api/aiwb/specs/libraries
+--pythonpath
 ../../../api/airm/specs
+--pythonpath
+../../../api/airm/specs/libraries
 --pythonpath
 ../../../../testing
 --pythonpath
 ../../../../testing/libraries
+--pythonpath
+libraries
 
 # Output directory for test results
 --outputdir

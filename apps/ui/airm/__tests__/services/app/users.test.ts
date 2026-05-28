@@ -195,7 +195,7 @@ describe('users service', () => {
         '/api/users/1',
         expect.objectContaining({
           method: 'PUT',
-          body: JSON.stringify({ first_name: 'John', last_name: 'Doe' }),
+          body: JSON.stringify({ firstName: 'John', lastName: 'Doe' }),
         }),
       );
     });

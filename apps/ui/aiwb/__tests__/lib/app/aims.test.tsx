@@ -88,7 +88,6 @@ describe('aims utility functions', () => {
           routing: { path: '' },
           endpoints: { internal: '', external: '' },
         },
-        resourceName: modelName,
         clusterAuthGroupId: null,
         endpoints: { internal: '', external: '' },
       } as AIMService;
@@ -97,13 +96,12 @@ describe('aims utility functions', () => {
     const createMockParsedAIM = (
       overrides: Partial<ParsedAIM> = {},
     ): ParsedAIM => ({
-      resourceName: 'aim-test-model',
-      model: 'test-model',
+      model: 'aim-test-model',
       imageReference: 'img:1.0',
-      anotations: {
-        aimEaiAmdComSourceRegistry: '',
-        aimEaiAmdComSourceRepository: '',
-        aimEaiAmdComSourceTag: '',
+      annotations: {
+        'aim.eai.amd.com/source-registry': '',
+        'aim.eai.amd.com/source-repository': '',
+        'aim.eai.amd.com/source-tag': '',
       },
       description: { short: '', full: '' },
       title: 'Test Model Title',
@@ -121,7 +119,7 @@ describe('aims utility functions', () => {
       const aimService = createMockAIMService();
       const parsedAIMs = [
         createMockParsedAIM({
-          resourceName: 'aim-test-model',
+          model: 'aim-test-model',
           title: 'Llama 3.1 8B',
           canonicalName: 'meta-llama/Llama-3.1-8B',
           imageVersion: '2.0.0',
@@ -133,26 +131,24 @@ describe('aims utility functions', () => {
       expect(result.title).toBe('Llama 3.1 8B');
       expect(result.canonicalName).toBe('meta-llama/Llama-3.1-8B');
       expect(result.imageVersion).toBe('2.0.0');
-      expect(result.resourceName).toBe('aim-test-model');
+      expect(result.name).toBe('aim-test-model');
     });
 
-    it('falls back to resourceName when no ParsedAIM matches', () => {
+    it('falls back to resolvedModel.name when no ParsedAIM matches', () => {
       const aimService = createMockAIMService({
         'spec.model.name': 'other-model',
       });
-      const parsedAIMs = [
-        createMockParsedAIM({ resourceName: 'aim-test-model' }),
-      ];
+      const parsedAIMs = [createMockParsedAIM({ model: 'aim-test-model' })];
 
       const result = resolveAIMServiceDisplay(aimService, parsedAIMs);
 
       expect(result.title).toBe('other-model');
       expect(result.canonicalName).toBe('other-model');
       expect(result.imageVersion).toBe('');
-      expect(result.resourceName).toBe('other-model');
+      expect(result.name).toBe('other-model');
     });
 
-    it('falls back to resourceName when parsedAIMs is undefined', () => {
+    it('falls back to metadata.name when parsedAIMs is undefined', () => {
       const aimService = createMockAIMService({
         'spec.model.name': 'standalone',
       });
@@ -162,7 +158,7 @@ describe('aims utility functions', () => {
       expect(result.title).toBe('standalone');
       expect(result.canonicalName).toBe('standalone');
       expect(result.imageVersion).toBe('');
-      expect(result.resourceName).toBe('standalone');
+      expect(result.name).toBe('standalone');
     });
 
     it('returns throughput metric when spec.overrides.metric is throughput', () => {
@@ -224,13 +220,12 @@ describe('aims utility functions', () => {
           status: AIMServiceStatus.RUNNING,
           resolvedModel: { name: 'aim-qwen-resolved' },
         },
-        resourceName: 'qwen3-32b-custom',
         clusterAuthGroupId: null,
         endpoints: { internal: '', external: '' },
       };
       const parsedAIMs = [
         createMockParsedAIM({
-          resourceName: 'aim-qwen-resolved',
+          model: 'aim-qwen-resolved',
           title: 'Qwen3 32B',
           canonicalName: 'qwen/Qwen3-32B',
           imageVersion: '0.8.5',
@@ -239,7 +234,7 @@ describe('aims utility functions', () => {
 
       const result = resolveAIMServiceDisplay(aimService, parsedAIMs);
 
-      expect(result.resourceName).toBe('aim-qwen-resolved');
+      expect(result.name).toBe('aim-qwen-resolved');
       expect(result.title).toBe('Qwen3 32B');
       expect(result.canonicalName).toBe('qwen/Qwen3-32B');
     });
@@ -266,14 +261,13 @@ describe('aims utility functions', () => {
           template: {},
         },
         status: { status: AIMServiceStatus.PENDING },
-        resourceName: 'orphan-service',
         clusterAuthGroupId: null,
         endpoints: { internal: '', external: '' },
       };
 
       const result = resolveAIMServiceDisplay(aimService);
 
-      expect(result.resourceName).toBe('orphan-service');
+      expect(result.name).toBe('orphan-service');
       expect(result.title).toBe('orphan-service');
     });
 
@@ -284,7 +278,7 @@ describe('aims utility functions', () => {
       });
       const parsedAIMs = [
         createMockParsedAIM({
-          resourceName: 'my-aim',
+          model: 'my-aim',
           title: 'My Model',
           canonicalName: 'org/my-aim',
           imageVersion: '1.0.0',
@@ -297,8 +291,9 @@ describe('aims utility functions', () => {
         title: 'My Model',
         canonicalName: 'org/my-aim',
         imageVersion: '1.0.0',
-        resourceName: 'my-aim',
+        name: 'my-aim',
         metric: AIMMetric.Latency,
+        tags: [],
       });
     });
   });
@@ -313,9 +308,9 @@ describe('aims utility functions', () => {
         uid: 'uid-123',
         labels: {},
         annotations: {
-          aimEaiAmdComSourceRegistry: 'docker.io',
-          aimEaiAmdComSourceRepository: 'amdenterpriseai/test-model',
-          aimEaiAmdComSourceTag: '1.0.0',
+          'aim.eai.amd.com/source-registry': 'docker.io',
+          'aim.eai.amd.com/source-repository': 'amdenterpriseai/test-model',
+          'aim.eai.amd.com/source-tag': '1.0.0',
         },
         creationTimestamp: '2023-01-01T00:00:00Z',
         ownerReferences: [],
@@ -328,38 +323,27 @@ describe('aims utility functions', () => {
         imageMetadata: {
           model: {
             canonicalName: 'test/model',
+            descriptionFull: 'Full description',
             hfTokenRequired: false,
             source: 'https://example.com',
             tags: ['test'],
             title: 'Test Model',
             variants: [],
           },
-          originalLabels: {
-            comAmdAimDescriptionFull: 'Full description',
-            comAmdAimHfTokenRequired: 'false',
-            comAmdAimModelCanonicalName: 'test/model',
-            comAmdAimModelPublisher: 'Test Publisher',
-            comAmdAimModelRecommendedDeployments: '[]',
-            comAmdAimModelSource: 'https://example.com',
-            comAmdAimModelTags: 'test',
-            comAmdAimModelVariants: '',
-            comAmdAimReleaseNotes: '',
-            comAmdAimTitle: 'Test Model',
-            orgOpencontainersImageAuthors: 'Test Author',
-            orgOpencontainersImageCreated: '2023-01-01T00:00:00Z',
-            orgOpencontainersImageDescription: 'Short description',
-            orgOpencontainersImageDocumentation: 'https://docs.example.com',
-            orgOpencontainersImageLicenses: 'MIT',
-            orgOpencontainersImageRefName: '1.0.0',
-            orgOpencontainersImageRevision: 'abc123',
-            orgOpencontainersImageSource: 'https://github.com/example/model',
-            orgOpencontainersImageTitle: 'Test Model',
-            orgOpencontainersImageVendor: 'Test Vendor',
-            orgOpencontainersImageVersion: '1.0.0',
+          oci: {
+            description: 'Short description',
+            version: '1.0.0',
+            title: 'Test Model',
+            licenses: 'MIT',
+            vendor: 'Test Vendor',
+            authors: 'Test Author',
+            source: 'https://github.com/example/model',
+            documentation: 'https://docs.example.com',
+            created: '2023-01-01T00:00:00Z',
+            revision: 'abc123',
           },
         },
       },
-      resourceName: 'test-aim',
       ...overrides,
     });
 
@@ -393,7 +377,6 @@ describe('aims utility functions', () => {
       status: {
         status,
       },
-      resourceName: 'test-service',
       clusterAuthGroupId: null,
       endpoints: {
         internal: 'http://test-service.test-namespace.svc.cluster.local',
@@ -451,12 +434,12 @@ describe('aims utility functions', () => {
       expect(parsed.workloadStatuses).toContain(AIMWorkloadStatus.PENDING);
     });
 
-    it('maps STARTING status to PENDING', () => {
+    it('maps STARTING status to STARTING', () => {
       const aim = createMockAIM();
       const service = createMockService(AIMServiceStatus.STARTING);
       const parsed = aimParser(aim, [service]);
 
-      expect(parsed.workloadStatuses).toContain(AIMWorkloadStatus.PENDING);
+      expect(parsed.workloadStatuses).toContain(AIMWorkloadStatus.STARTING);
     });
 
     it('maps FAILED status to FAILED', () => {
@@ -488,7 +471,7 @@ describe('aims utility functions', () => {
               title: 'Test Model',
               variants: [],
             },
-            originalLabels: {} as any,
+            oci: {} as any,
           },
         },
       });
@@ -518,7 +501,7 @@ describe('aims utility functions', () => {
               title: 'Test Model',
               variants: [],
             },
-            originalLabels: {} as any,
+            oci: {} as any,
           },
         },
       });
@@ -540,7 +523,7 @@ describe('aims utility functions', () => {
               title: 'Test Model',
               variants: [],
             },
-            originalLabels: {} as any,
+            oci: {} as any,
           },
         },
       });
@@ -563,13 +546,12 @@ describe('aims utility functions', () => {
       version: string,
       overrides?: Partial<ParsedAIM>,
     ): ParsedAIM => ({
-      resourceName: `aim-${version}`,
       model: `aim-${version}`,
       imageReference: `docker.io/${repository}:${version}`,
-      anotations: {
-        aimEaiAmdComSourceRegistry: 'docker.io',
-        aimEaiAmdComSourceRepository: repository,
-        aimEaiAmdComSourceTag: version,
+      annotations: {
+        'aim.eai.amd.com/source-registry': 'docker.io',
+        'aim.eai.amd.com/source-repository': repository,
+        'aim.eai.amd.com/source-tag': version,
       },
       description: {
         short: 'Test description',
@@ -674,6 +656,7 @@ describe('aims utility functions', () => {
         [AIMWorkloadStatus.DEPLOYED]: 2,
         [AIMWorkloadStatus.DEGRADED]: 0,
         [AIMWorkloadStatus.PENDING]: 1,
+        [AIMWorkloadStatus.STARTING]: 0,
         [AIMWorkloadStatus.FAILED]: 0,
         [AIMWorkloadStatus.NOT_DEPLOYED]: 0,
         [AIMWorkloadStatus.DELETED]: 0,

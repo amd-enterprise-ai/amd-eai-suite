@@ -15,7 +15,7 @@ import React, { Fragment } from 'react';
 
 import { useTranslation } from 'next-i18next';
 import { usePathname } from 'next/navigation';
-import router from 'next/router';
+import router, { useRouter } from 'next/router';
 
 import {
   filterMenuItemsByRole,
@@ -24,26 +24,43 @@ import {
 
 import { SidebarItem } from '@amdenterpriseai/types';
 
+import { buildProjectHref, stripProjectPrefix } from './project-utils';
+
 interface MobileMenuProps {
   menuItems: SidebarItem[];
+  projectPrefix?: string;
 }
 
-export const MobileMenu: React.FC<MobileMenuProps> = ({ menuItems }) => {
+export const MobileMenu: React.FC<MobileMenuProps> = ({
+  menuItems,
+  projectPrefix,
+}) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const pathname = usePathname();
+  const { locale, defaultLocale } = useRouter();
   const { t } = useTranslation('common');
   const { data: session } = useSession();
 
   const userRoles = session?.user?.roles ?? [];
   const filteredMenuItems = filterMenuItemsByRole(menuItems, userRoles);
 
+  const pathWithoutProject = React.useMemo(
+    () => stripProjectPrefix(pathname, projectPrefix, locale, defaultLocale),
+    [projectPrefix, pathname, locale, defaultLocale],
+  );
+
+  const getFullHref = React.useCallback(
+    (href: string): string => buildProjectHref(href, projectPrefix),
+    [projectPrefix],
+  );
+
   function handleNavigation(href: string) {
     setIsMenuOpen(false);
-    router.push(href);
+    router.push(getFullHref(href));
   }
 
   const isItemActive = (item: SidebarItem) =>
-    isMenuItemActive(item.href, pathname);
+    isMenuItemActive(item.href, pathWithoutProject);
 
   const navigationItem = (item: SidebarItem, nested: boolean = false) => (
     <NavbarMenuItem

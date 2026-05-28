@@ -13,7 +13,7 @@ import {
 import {
   generateMockProjectSecrets,
   generateMockSecrets,
-} from '../../../../__mocks__/utils/secrets-mock';
+} from '@/__mocks__/utils/secrets-mock';
 
 import DeleteSecretModal from '@/components/features/secrets/DeleteSecretModal';
 

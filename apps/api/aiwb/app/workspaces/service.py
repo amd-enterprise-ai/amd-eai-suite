@@ -65,9 +65,12 @@ async def create_development_workspace(
 
     chart = await get_chart_by_workspace_type(session, workspace_type)
 
-    # user_inputs contains what the user explicitly provided (no defaults, no metadata)
-    # by_alias=True converts field names using alias (e.g., image_pull_secrets -> imagePullSecrets)
-    user_inputs = request.model_dump(exclude_unset=True, exclude_none=True, by_alias=True)
+    # Helm values must use keys matching the chart's values.yaml, which is a mix of
+    # camelCase (imagePullSecrets) and snake_case (memory_per_gpu, cpu_per_gpu).
+    # Dump with Python field names (snake_case) and remap the ones Helm expects as camelCase.
+    user_inputs = request.model_dump(exclude_unset=True, exclude_none=True)
+    if "image_pull_secrets" in user_inputs:
+        user_inputs["imagePullSecrets"] = user_inputs.pop("image_pull_secrets")
 
     workload = await create_workload(
         session=session,

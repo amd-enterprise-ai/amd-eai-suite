@@ -5,10 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   createHuggingFaceSecretRequest,
-  generateHuggingFaceSecretManifest,
   isValidHuggingFaceToken,
 } from '@/lib/app/huggingface-secret';
-import { SecretScope, SecretType, SecretUseCase } from '@amdenterpriseai/types';
+import { SecretUseCase } from '@amdenterpriseai/types';
 
 describe('Hugging Face Secret Utils', () => {
   describe('isValidHuggingFaceToken', () => {
@@ -27,38 +26,18 @@ describe('Hugging Face Secret Utils', () => {
     });
   });
 
-  describe('generateHuggingFaceSecretManifest', () => {
-    it('should generate valid Kubernetes secret manifest', () => {
-      const secretName = 'test-hf-token';
-      const token = 'hf_test1234567890abcdefghijklmnopqr';
-
-      const manifest = generateHuggingFaceSecretManifest(secretName, token);
-      const parsedManifest = JSON.parse(manifest);
-
-      expect(parsedManifest.apiVersion).toBe('v1');
-      expect(parsedManifest.kind).toBe('Secret');
-      expect(parsedManifest.metadata.name).toBe(secretName);
-      expect(parsedManifest.type).toBe('Opaque');
-      expect(parsedManifest.data.token).toBe(
-        Buffer.from(token, 'utf-8').toString('base64'),
-      );
-    });
-  });
-
   describe('createHuggingFaceSecretRequest', () => {
     it('should create valid secret request without transforming name', () => {
       const name = 'my-test-hf-token';
       const token = 'hf_test1234567890abcdefghijklmnopqr';
-      const projectIds = ['project-1', 'project-2'];
 
-      const request = createHuggingFaceSecretRequest(name, token, projectIds);
+      const request = createHuggingFaceSecretRequest(name, token);
 
       expect(request.name).toBe('my-test-hf-token');
-      expect(request.type).toBe(SecretType.KUBERNETES_SECRET);
-      expect(request.scope).toBe(SecretScope.PROJECT);
-      expect(request.use_case).toBe(SecretUseCase.HUGGING_FACE);
-      expect(request.project_ids).toEqual(projectIds);
-      expect(request.manifest).toContain('my-test-hf-token');
+      expect(request.useCase).toBe(SecretUseCase.HUGGING_FACE);
+      expect(request.data.token).toBe(
+        Buffer.from(token, 'utf-8').toString('base64'),
+      );
     });
 
     it('should use the name as-is without any transformation', () => {
@@ -74,7 +53,6 @@ describe('Hugging Face Secret Utils', () => {
         const request = createHuggingFaceSecretRequest(
           name,
           'hf_test1234567890abcdefghijklmnopqr',
-          ['test-project'],
         );
         expect(request.name).toBe(name);
       });

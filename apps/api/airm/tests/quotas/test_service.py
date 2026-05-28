@@ -10,12 +10,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import (
+from api_common.exceptions import ValidationException
+from app.quotas.enums import QuotaStatus
+from app.quotas.messaging import (
     ClusterQuotaAllocation,
     ClusterQuotasFailureMessage,
     ClusterQuotasStatusMessage,
-    GPUVendor,
-    QuotaStatus,
 )
 from app.quotas.schemas import QuotaBase, QuotaUpdate
 from app.quotas.service import (
@@ -25,14 +25,14 @@ from app.quotas.service import (
     update_pending_quotas_to_failed,
     update_project_quota,
 )
-from app.utilities.exceptions import ValidationException
+from app.utilities.enums import GPUVendor
 from tests import factory  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
 @patch("app.quotas.service.does_quota_match_allocation", return_value=True)
 async def test_update_cluster_quotas_from_allocations_matching(
-    mock_update_project_status: MagicMock, db_session: AsyncSession
+    mock_does_quota_match_allocation: MagicMock, db_session: AsyncSession
 ) -> None:
     env = await factory.create_basic_test_environment(db_session)
 
@@ -86,7 +86,47 @@ async def test_update_cluster_quotas_from_allocations_matching(
 
     await db_session.refresh(quota1)
     assert quota1.status == QuotaStatus.READY
-    assert mock_update_project_status.called
+    assert mock_does_quota_match_allocation.called
+
+
+@pytest.mark.asyncio
+@patch("app.quotas.service.does_quota_match_allocation", return_value=True)
+async def test_update_cluster_quotas_from_allocations_matching_leaves_deleting_unchanged(
+    _: MagicMock, db_session: AsyncSession
+) -> None:
+    """Stale cluster status must not flip a DELETING quota back to READY (deletion in progress)."""
+    env = await factory.create_basic_test_environment(db_session)
+
+    _, quota_deleting = await factory.create_project_with_quota(
+        db_session,
+        env.cluster,
+        project_name="deleting-project",
+        quota_cpu=1000,
+        quota_memory=1000,
+        quota_storage=1000,
+        quota_gpu=2,
+        quota_status=QuotaStatus.DELETING,
+    )
+
+    message = ClusterQuotasStatusMessage(
+        message_type="cluster_quotas_status",
+        quota_allocations=[
+            ClusterQuotaAllocation(
+                quota_name="deleting-project",
+                cpu_milli_cores=1000,
+                memory_bytes=1000,
+                ephemeral_storage_bytes=1000,
+                gpu_count=2,
+                namespaces=["deleting-project"],
+            ),
+        ],
+        updated_at=datetime.datetime.now(datetime.UTC),
+    )
+
+    await update_cluster_quotas_from_allocations(object(), db_session, env.cluster, message)
+
+    await db_session.refresh(quota_deleting)
+    assert quota_deleting.status == QuotaStatus.DELETING
 
 
 @pytest.mark.asyncio

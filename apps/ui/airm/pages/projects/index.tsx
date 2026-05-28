@@ -22,27 +22,34 @@ import {
   getAuthRedirect,
   getFilteredData,
 } from '@amdenterpriseai/utils/app';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 
-import {
-  Cluster,
-  ClusterBasicInfo,
-  ClustersResponse,
-} from '@amdenterpriseai/types';
-import { ClusterStatus } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ClustersResponse } from '@/types/clusters';
+import { ClusterStatus } from '@/types/enums/cluster-status';
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { QuotaStatus } from '@amdenterpriseai/types';
+import { ClusterBasicInfo } from '@/types/clusters';
+import { QuotaStatus } from '@/types/enums/quotas';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
 import {
   ProjectWithResourceAllocation,
   ProjectsResponse,
-} from '@amdenterpriseai/types';
+} from '@/types/projects';
 
 import CreateProjectModal from '@/components/features/projects/CreateProjectModal';
 import { ProjectTable } from '@/components/features/projects';
 import { ActionsToolbar } from '@amdenterpriseai/components';
 import { ActionButton } from '@amdenterpriseai/components';
-import { doesProjectDataNeedToBeRefreshed } from '@amdenterpriseai/utils/app';
+import {
+  RelevantDocs,
+  AirmDocsPage,
+  airmDocumentationMapping,
+} from '@amdenterpriseai/components';
+import { doesProjectDataNeedToBeRefreshed } from '@/utils/projects';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 
 interface Props {
@@ -57,7 +64,10 @@ type ProjectsPerCluster = {
 
 type MappedProjectsPerCluster = Record<string, ProjectsPerCluster>;
 
-const ProjectsPage = ({ clusters, projects }: Props) => {
+const ProjectsPage: React.FC<Props> & WithDocumentationLink = ({
+  clusters,
+  projects,
+}: Props) => {
   const { t } = useTranslation('projects');
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const { isAdministrator } = useAccessControl();
@@ -293,9 +303,12 @@ const ProjectsPage = ({ clusters, projects }: Props) => {
         onProjectCreate={handleProjectCreation}
         projects={projectsData?.data ?? projects}
       />
+      <RelevantDocs docs={airmDocumentationMapping[AirmDocsPage.PROJECTS]} />
     </div>
   );
 };
+
+ProjectsPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/projects/manage-projects.html`;
 
 export default ProjectsPage;
 

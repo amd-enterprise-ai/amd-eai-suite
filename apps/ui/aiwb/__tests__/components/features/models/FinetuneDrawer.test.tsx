@@ -2,18 +2,23 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useQuery } from '@tanstack/react-query';
+import { QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-import { DEFAULT_FINETUNE_PARAMS } from '@/enums/finetune';
-
-import { Dataset, DatasetType } from '@amdenterpriseai/types';
+import { Dataset } from '@/types/datasets';
+import { DatasetType } from '@/types/datasets';
 import { SecretUseCase } from '@amdenterpriseai/types';
 import {
+  AIM_MODEL_WORKLOAD_ID_LABEL,
+  AIM_MODEL_NAME_LABEL,
+} from '@/types/aims';
+import {
+  AIMModelResponse,
+  FinetunableModel,
   Model,
   ModelFinetuneParams,
   ModelOnboardingStatus,
-} from '@amdenterpriseai/types';
+} from '@/types/models';
 
 import FinetuneDrawer from '@/components/features/models/FinetuneDrawer';
 import { createProjectSecret, fetchProjectSecrets } from '@/lib/app/secrets';
@@ -35,9 +40,7 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
   return {
     ...actual,
     useQuery: vi.fn(),
-    useQueryClient: vi.fn(() => ({
-      fetchQuery: vi.fn().mockResolvedValue([]), // Mock fetchQuery to return empty array (no models with that name)
-    })),
+    useQueryClient: vi.fn(),
   };
 });
 
@@ -107,14 +110,34 @@ const mockBaseModel4: Model = {
   canonicalName: 'base-org/base-model-four',
 };
 
-const mockFinetunedModel: Model = {
-  id: 'finetuned-1',
-  name: 'Existing_Finetuned_Model',
-  createdAt: '2023-01-03T00:00:00Z',
-  modelWeightsPath: '/path/finetuned1',
-  createdBy: 'Finetune Author',
+// Recipe that uses 4 GPUs — drives the batch-size-must-be-a-multiple validation.
+const mockGpuBaseModel: Model = {
+  id: 'gpu-base',
+  name: 'Gpu_Base_Model',
+  createdAt: '2023-01-04T00:00:00Z',
+  modelWeightsPath: null,
+  createdBy: 'GPU Author',
   onboardingStatus: ModelOnboardingStatus.READY,
-  canonicalName: 'finetune-org/existing-finetuned-model',
+  canonicalName: 'gpu-org/gpu-base-model',
+};
+const MOCK_GPU_COUNT = 4;
+
+const mockFinetunedModel: AIMModelResponse = {
+  metadata: {
+    name: 'wb-finetune-auto-generated-cr',
+    creationTimestamp: '2023-01-03T00:00:00Z',
+    labels: {
+      [AIM_MODEL_WORKLOAD_ID_LABEL]: 'finetuned-1',
+      [AIM_MODEL_NAME_LABEL]: 'Existing-Finetuned-Model',
+    },
+  },
+  spec: {
+    image: 'amdenterpriseai/aim-base:0.10',
+    modelSources: [
+      { modelId: 'finetune-org/existing-finetuned-model', sourceUri: '' },
+    ],
+  },
+  status: { status: 'Ready' },
 };
 
 const mockFinetunedModelWithInvalidCharacters: Model = {
@@ -132,8 +155,6 @@ const mockModels: Model[] = [
   mockBaseModel2,
   mockBaseModel3,
   mockBaseModel4,
-  mockFinetunedModel,
-  mockFinetunedModelWithInvalidCharacters,
 ];
 
 const mockDataset1: Dataset = {
@@ -166,6 +187,10 @@ describe('FinetuneDrawer', () => {
     typeof vi.fn<(param: { id: string; params: ModelFinetuneParams }) => void>
   >;
   let currentProjectSecrets: SecretResponseData[] = [];
+  let mockQueryClient: {
+    fetchQuery: ReturnType<typeof vi.fn>;
+    invalidateQueries: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -202,6 +227,15 @@ describe('FinetuneDrawer', () => {
     // Mock fetchProjectSecrets to return current secrets
     (fetchProjectSecrets as Mock).mockImplementation(() =>
       Promise.resolve({ projectSecrets: currentProjectSecrets }),
+    );
+
+    // Reset the useQueryClient mock with a fresh fetchQuery implementation
+    mockQueryClient = {
+      fetchQuery: vi.fn().mockResolvedValue([]), // Mock fetchQuery to return empty array (no models with that name)
+      invalidateQueries: vi.fn(),
+    };
+    vi.mocked(useQueryClient).mockReturnValue(
+      mockQueryClient as unknown as QueryClient,
     );
 
     // Mock useQuery return value for datasets, models, and secrets
@@ -255,9 +289,25 @@ describe('FinetuneDrawer', () => {
       onConfirmAction: onConfirmActionMock,
       model: undefined,
       finetunableModels: [
-        mockBaseModel1.canonicalName,
-        mockBaseModel2.canonicalName,
-      ],
+        {
+          canonicalName: mockBaseModel1.canonicalName,
+          gpuCount: 0,
+          compatibleAccelerators: [],
+          compatibleAcceleratorNames: [],
+        },
+        {
+          canonicalName: mockBaseModel2.canonicalName,
+          gpuCount: 0,
+          compatibleAccelerators: [],
+          compatibleAcceleratorNames: [],
+        },
+        {
+          canonicalName: mockGpuBaseModel.canonicalName,
+          gpuCount: MOCK_GPU_COUNT,
+          compatibleAccelerators: [],
+          compatibleAcceleratorNames: [],
+        },
+      ] as FinetunableModel[],
     };
     return render(<FinetuneDrawer {...defaultProps} {...props} />, {
       wrapper,
@@ -304,7 +354,7 @@ describe('FinetuneDrawer', () => {
     });
 
     expect(
-      screen.queryByText(mockFinetunedModel.canonicalName),
+      screen.queryByText(mockFinetunedModel.spec.modelSources[0].modelId),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(mockBaseModel3.canonicalName),
@@ -346,8 +396,14 @@ describe('FinetuneDrawer', () => {
       await screen.findByTestId(`dataset-select-${mockDataset1.id}`),
     );
 
-    // Allow time for dataset dropdown to stabilize
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for dataset dropdown to close
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('listbox', {
+          name: /list.actions.finetune.modal.dataset.label/i,
+        }),
+      ).not.toBeInTheDocument();
+    });
 
     // Enter Model Name
     const nameInput = screen.getByLabelText(
@@ -356,18 +412,7 @@ describe('FinetuneDrawer', () => {
     fireEvent.change(nameInput, { target: { value: 'New_Finetuned_Model' } });
 
     // Select existing HuggingFace token from dropdown
-    await waitFor(
-      () => {
-        expect(
-          screen.getByRole('button', {
-            name: /huggingFaceTokenDrawer.fields.selectToken.label/i,
-          }),
-        ).toBeInTheDocument();
-      },
-      { timeout: 5000 },
-    );
-
-    const tokenSelect = screen.getByRole('button', {
+    const tokenSelect = await screen.findByRole('button', {
       name: /huggingFaceTokenDrawer.fields.selectToken.label/i,
     });
     fireEvent.click(tokenSelect);
@@ -382,25 +427,22 @@ describe('FinetuneDrawer', () => {
     fireEvent.click(confirmButton);
 
     // Assertions
-    await waitFor(
-      () => {
-        expect(onConfirmActionMock).toHaveBeenCalledTimes(1);
-        expect(onConfirmActionMock).toHaveBeenCalledWith({
-          id: encodeURIComponent(mockBaseModel1.canonicalName),
-          params: {
-            name: 'New_Finetuned_Model',
-            datasetId: mockDataset1.id,
-            epochs: DEFAULT_FINETUNE_PARAMS.epochs,
-            learningRate: DEFAULT_FINETUNE_PARAMS.learningRate,
-            batchSize: DEFAULT_FINETUNE_PARAMS.batchSize,
-            hfTokenSecretName: 'hf-secret-1',
-          },
-        });
-        expect(onOpenChangeMock).toHaveBeenCalledTimes(1);
-      },
-      { timeout: 5000 },
-    );
-  }, 10000);
+    await waitFor(() => {
+      expect(onConfirmActionMock).toHaveBeenCalledTimes(1);
+      expect(onConfirmActionMock).toHaveBeenCalledWith({
+        id: encodeURIComponent(mockBaseModel1.canonicalName),
+        params: {
+          name: 'New_Finetuned_Model',
+          datasetId: mockDataset1.id,
+          epochs: undefined,
+          learningRate: undefined,
+          batchSize: undefined,
+          hfTokenSecretName: 'hf-secret-1',
+        },
+      });
+      expect(onOpenChangeMock).toHaveBeenCalledTimes(1);
+    });
+  });
 
   it('should show validation error for empty name', async () => {
     renderComponent({});
@@ -422,14 +464,10 @@ describe('FinetuneDrawer', () => {
   });
 
   it('should show validation error for non-unique name', async () => {
-    // Mock the queryClient fetchQuery to return a model with the same name
-    const mockQueryClient = {
-      fetchQuery: vi.fn().mockResolvedValue([mockFinetunedModel]), // Return existing model
-    };
-
-    // Override the useQueryClient mock for this test
-    const { useQueryClient } = await import('@tanstack/react-query');
-    (useQueryClient as Mock).mockReturnValue(mockQueryClient);
+    // First fetchQuery (models) returns the existing model; second (workloads) returns empty list.
+    mockQueryClient.fetchQuery
+      .mockResolvedValueOnce([mockFinetunedModel])
+      .mockResolvedValueOnce({ data: [] });
 
     renderComponent({});
 
@@ -437,9 +475,11 @@ describe('FinetuneDrawer', () => {
       'list.actions.finetune.modal.modelName.label',
     );
 
-    // Type the name that already exists
+    // Type the display name stored in AIM_MODEL_NAME_LABEL (not the auto-generated K8s resource name)
     fireEvent.change(nameInput, {
-      target: { value: mockFinetunedModel.name },
+      target: {
+        value: mockFinetunedModel.metadata.labels![AIM_MODEL_NAME_LABEL],
+      },
     });
 
     // Wait for debounced validation to complete
@@ -453,6 +493,34 @@ describe('FinetuneDrawer', () => {
       },
       { timeout: 1000 },
     ); // Give more time for debounced validation
+
+    expect(nameInput).toBeInvalid();
+  });
+
+  it('should show validation error for name matching an in-progress job', async () => {
+    // No completed model, but a running finetuning workload with the same displayName.
+    mockQueryClient.fetchQuery.mockResolvedValueOnce([]).mockResolvedValueOnce({
+      data: [{ displayName: 'my-model', status: 'Running' }],
+    });
+
+    renderComponent({});
+
+    const nameInput = screen.getByLabelText(
+      'list.actions.finetune.modal.modelName.label',
+    );
+
+    fireEvent.change(nameInput, { target: { value: 'my-model' } });
+
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText(
+            'list.actions.finetune.modal.modelName.nonUniqueNameError',
+          ),
+        ).toBeInTheDocument();
+      },
+      { timeout: 1000 },
+    );
 
     expect(nameInput).toBeInvalid();
   });
@@ -509,18 +577,7 @@ describe('FinetuneDrawer', () => {
     fireEvent.change(modelNameInput, { target: { value: 'Advanced_Model' } });
 
     // Select existing HuggingFace token from dropdown
-    await waitFor(
-      () => {
-        expect(
-          screen.getByRole('button', {
-            name: /huggingFaceTokenDrawer.fields.selectToken.label/i,
-          }),
-        ).toBeInTheDocument();
-      },
-      { timeout: 5000 },
-    );
-
-    const tokenSelect = screen.getByRole('button', {
+    const tokenSelect = await screen.findByRole('button', {
       name: /huggingFaceTokenDrawer.fields.selectToken.label/i,
     });
     fireEvent.click(tokenSelect);
@@ -596,6 +653,159 @@ describe('FinetuneDrawer', () => {
       });
       expect(onOpenChangeMock).toHaveBeenCalledTimes(1);
     });
+  }, 15000);
+
+  describe('batch size constrained by recipe GPU count', () => {
+    const fillRequiredFieldsForGpuRecipe = async () => {
+      const baseModelSelect = screen.getByTestId('baseModelSelect');
+      fireEvent.click(baseModelSelect);
+      fireEvent.click(
+        await screen.findByTestId(
+          `model-select-${mockGpuBaseModel.canonicalName}`,
+        ),
+      );
+
+      const datasetSelect = screen.getByTestId('datasetSelect');
+      fireEvent.click(datasetSelect);
+      fireEvent.click(
+        await screen.findByTestId(`dataset-select-${mockDataset1.id}`),
+      );
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('listbox', {
+            name: /list.actions.finetune.modal.dataset.label/i,
+          }),
+        ).not.toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByLabelText(
+        'list.actions.finetune.modal.modelName.label',
+      );
+      fireEvent.change(nameInput, { target: { value: 'Gpu_Aware_Model' } });
+
+      const tokenSelect = await screen.findByRole('button', {
+        name: /huggingFaceTokenDrawer.fields.selectToken.label/i,
+      });
+      fireEvent.click(tokenSelect);
+      const tokenOptions = await screen.findAllByText('hf-secret-1');
+      fireEvent.click(tokenOptions[1]);
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('listbox', {
+            name: /huggingFaceTokenDrawer.fields.selectToken.label/i,
+          }),
+        ).not.toBeInTheDocument();
+      });
+    };
+
+    const openAdvancedSettings = async () => {
+      const accordionButton = screen.getByText(
+        'list.actions.finetune.modal.advancedSettingsAccordion.title',
+      );
+      fireEvent.click(accordionButton);
+      await waitFor(() => {
+        expect(
+          screen.getByLabelText('list.actions.finetune.modal.batchSize.label'),
+        ).toBeInTheDocument();
+      });
+    };
+
+    it('leaves batch size empty when a multi-GPU recipe is selected and submits undefined when not provided', async () => {
+      renderComponent({});
+      await fillRequiredFieldsForGpuRecipe();
+      await openAdvancedSettings();
+
+      const batchSizeInput = screen.getByLabelText(
+        'list.actions.finetune.modal.batchSize.label',
+      );
+      // Selecting a recipe should NOT auto-fill batch size; the user must
+      // explicitly opt in to a value (which is then constrained to multiples
+      // of the recipe's GPU count via the input's step/min attributes).
+      expect(batchSizeInput).toHaveValue('');
+
+      const confirmButton = screen.getByText(
+        'list.actions.finetune.modal.confirm',
+      );
+      fireEvent.click(confirmButton);
+
+      await waitFor(() => {
+        expect(onConfirmActionMock).toHaveBeenCalledTimes(1);
+        expect(onConfirmActionMock).toHaveBeenCalledWith({
+          id: encodeURIComponent(mockGpuBaseModel.canonicalName),
+          params: expect.objectContaining({
+            batchSize: undefined,
+          }),
+        });
+      });
+    }, 15000);
+
+    it('resets a previously entered batch size when the selected recipe changes', async () => {
+      renderComponent({});
+      // Pick a non-GPU recipe first and enter a batch size.
+      const baseModelSelect = screen.getByTestId('baseModelSelect');
+      fireEvent.click(baseModelSelect);
+      fireEvent.click(
+        await screen.findByTestId(
+          `model-select-${mockBaseModel1.canonicalName}`,
+        ),
+      );
+      await openAdvancedSettings();
+
+      const batchSizeInput = screen.getByLabelText(
+        'list.actions.finetune.modal.batchSize.label',
+      );
+      fireEvent.change(batchSizeInput, { target: { value: '12' } });
+      fireEvent.blur(batchSizeInput);
+      await waitFor(() => {
+        expect(batchSizeInput).toHaveValue('12');
+      });
+
+      // Switch to the multi-GPU recipe — the previously entered value must
+      // not silently carry over because it likely violates the new recipe's
+      // multiple-of-gpuCount constraint.
+      fireEvent.click(screen.getByTestId('baseModelSelect'));
+      fireEvent.click(
+        await screen.findByTestId(
+          `model-select-${mockGpuBaseModel.canonicalName}`,
+        ),
+      );
+
+      await waitFor(() => {
+        expect(batchSizeInput).toHaveValue('');
+      });
+    }, 15000);
+
+    it('accepts a batch size that is a multiple of the recipe GPU count', async () => {
+      renderComponent({});
+      await fillRequiredFieldsForGpuRecipe();
+      await openAdvancedSettings();
+
+      const batchSizeInput = screen.getByLabelText(
+        'list.actions.finetune.modal.batchSize.label',
+      );
+      // 8 is a multiple of 4
+      fireEvent.change(batchSizeInput, { target: { value: '8' } });
+      fireEvent.blur(batchSizeInput);
+
+      await waitFor(() => {
+        expect(batchSizeInput).toHaveValue('8');
+      });
+
+      const confirmButton = screen.getByText(
+        'list.actions.finetune.modal.confirm',
+      );
+      fireEvent.click(confirmButton);
+
+      await waitFor(() => {
+        expect(onConfirmActionMock).toHaveBeenCalledTimes(1);
+        expect(onConfirmActionMock).toHaveBeenCalledWith({
+          id: encodeURIComponent(mockGpuBaseModel.canonicalName),
+          params: expect.objectContaining({
+            batchSize: 8,
+          }),
+        });
+      });
+    }, 15000);
   });
 
   it('should use model id when model with local weights is provided', async () => {
@@ -607,8 +817,14 @@ describe('FinetuneDrawer', () => {
       await screen.findByTestId(`dataset-select-${mockDataset1.id}`),
     );
 
-    // Allow time for dataset dropdown to stabilize
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for dataset dropdown to close
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('listbox', {
+          name: /list.actions.finetune.modal.dataset.label/i,
+        }),
+      ).not.toBeInTheDocument();
+    });
 
     // Enter Model Name
     const nameInput = screen.getByLabelText(
@@ -641,9 +857,9 @@ describe('FinetuneDrawer', () => {
         params: {
           name: 'Model_With_Prop',
           datasetId: mockDataset1.id,
-          epochs: DEFAULT_FINETUNE_PARAMS.epochs,
-          learningRate: DEFAULT_FINETUNE_PARAMS.learningRate,
-          batchSize: DEFAULT_FINETUNE_PARAMS.batchSize,
+          epochs: undefined,
+          learningRate: undefined,
+          batchSize: undefined,
           // No hfTokenSecretName since model is already available locally
         },
       });
@@ -652,13 +868,8 @@ describe('FinetuneDrawer', () => {
   });
 
   it('should handle error during model name uniqueness check gracefully', async () => {
-    // Mock the queryClient to throw an error
-    const mockQueryClient = {
-      fetchQuery: vi.fn().mockRejectedValue(new Error('Network error')),
-    };
-
-    const { useQueryClient } = await import('@tanstack/react-query');
-    (useQueryClient as Mock).mockReturnValue(mockQueryClient);
+    // Override the fetchQuery to throw an error
+    mockQueryClient.fetchQuery.mockRejectedValue(new Error('Network error'));
 
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
@@ -798,16 +1009,15 @@ describe('FinetuneDrawer', () => {
     );
     fireEvent.click(confirmButton);
 
-    // Wait a bit for validation to process
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // onConfirmAction should not be called due to validation error
-    // Modal should still be open
+    // Validate that submission was prevented by form validation:
+    // the modal should remain open and the confirm action should not have been called
+    await waitFor(() => {
+      expect(
+        screen.getByText('list.actions.finetune.modal.title'),
+      ).toBeInTheDocument();
+    });
     expect(onConfirmActionMock).not.toHaveBeenCalled();
     expect(onOpenChangeMock).not.toHaveBeenCalledWith(false);
-    expect(
-      screen.getByText('list.actions.finetune.modal.title'),
-    ).toBeInTheDocument();
   });
 
   it('should not require HF Token when fine-tuning model with local weights', async () => {
@@ -842,9 +1052,9 @@ describe('FinetuneDrawer', () => {
         params: {
           name: 'Finetuned_From_Existing',
           datasetId: mockDataset1.id,
-          epochs: DEFAULT_FINETUNE_PARAMS.epochs,
-          learningRate: DEFAULT_FINETUNE_PARAMS.learningRate,
-          batchSize: DEFAULT_FINETUNE_PARAMS.batchSize,
+          epochs: undefined,
+          learningRate: undefined,
+          batchSize: undefined,
           // No hfTokenSecretName - not needed since model has local weights
         },
       });

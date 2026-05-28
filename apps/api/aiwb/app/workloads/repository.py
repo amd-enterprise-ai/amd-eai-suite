@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..charts.models import Chart
 from .enums import WorkloadStatus, WorkloadType
+from .gateway import get_workload_from_k8s
 from .models import Workload
 from .utils import generate_display_name, generate_workload_name
 
@@ -21,7 +22,6 @@ async def create_workload(
     namespace: str,
     submitter: str,
     status: WorkloadStatus,
-    model_id: UUID | None = None,
     dataset_id: UUID | None = None,
 ) -> Workload:
     """
@@ -35,7 +35,6 @@ async def create_workload(
         namespace: Kubernetes namespace where workload is deployed
         submitter: Email of the user creating the workload
         status: Initial status of the workload
-        model_id: Optional ID of the model associated with this workload
         dataset_id: Optional ID of the dataset associated with this workload
 
     Returns:
@@ -50,7 +49,6 @@ async def create_workload(
         namespace=namespace,
         created_by=submitter,
         updated_by=submitter,
-        model_id=model_id,
         dataset_id=dataset_id,
     )
     session.add(workload)
@@ -64,8 +62,30 @@ async def create_workload(
     return workload
 
 
-async def get_workload_by_id(session: AsyncSession, workload_id: UUID, namespace: str | None = None) -> Workload | None:
-    """Get a workload by ID, optionally filtered by namespace."""
+async def get_workload_by_id(
+    session: AsyncSession,
+    workload_id: UUID,
+    namespace: str | None = None,
+) -> Workload | None:
+    """Get a workload by ID, checking Kubernetes first then falling back to the database.
+
+    When a namespace is provided, the live K8s cluster is queried first (Deployments,
+    then Jobs). This is the preferred path as the codebase moves away from storing
+    workload state in the database.
+
+    Falls back to the database when:
+    - No namespace is supplied
+    - The workload is not found in the cluster (e.g. it was deleted from K8s but the
+      DB record still exists, or it pre-dates the K8s-first approach)
+    """
+    if namespace is not None:
+        workload = await get_workload_from_k8s(workload_id, namespace)
+        if workload is not None:
+            if workload.chart_id:
+                result = await session.execute(select(Chart).where(Chart.id == workload.chart_id))
+                workload.chart = result.unique().scalar_one_or_none()
+            return workload
+
     query = select(Workload).where(Workload.id == workload_id)
 
     if namespace is not None:

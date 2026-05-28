@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import { KeyCreatedDrawer } from '@/components/features/api-keys/KeyCreatedDrawer';
-import { ApiKeyWithFullKey } from '@amdenterpriseai/types';
+import { ApiKeyWithFullKey } from '@/types/api-keys';
 
 import '@testing-library/jest-dom';
 

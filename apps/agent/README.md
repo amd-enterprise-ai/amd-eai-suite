@@ -126,6 +126,17 @@ Onboard your kind cluster to obtain RabbitMQ credentials:
 - Onboard the kind cluster via AMD Resource Manager and copy the values of the **Auth ID** and **Connection Token** that are provided as part of the cluster onboarding.
 - Set up environment variables by first copying the `.env.example` file and replace the `RABBITMQ_USER` and `RABBITMQ_PASSWORD` in the `.env` file with the values for Auth ID and Connection Token respectively.
 
+#### Build/cache dependencies
+
+Due to corporate proxies and other MITM, proxy.golang.org is inaccessible from within the cluster, and going directly to repositories leads to different checksums.
+As a workaround, when deploying locally in a cluster, we use `go mod vendor` prior to deployment to cache a local copy of dependencies under `apps/agent/vendor/` (on your `/code` mount).
+
+Run the following from root of the `core/` repository:
+
+```bash
+make -C apps/agent vendor
+```
+
 #### Deploy Agent and Webhook
 
 Deploy both applications to the cluster from the root of the `core/` repository:
@@ -135,23 +146,6 @@ kubectl kustomize apps/agent/local --enable-helm | kubectl apply -f -
 ```
 
 This deploys the agent and webhook in the `airm` namespace with service accounts, RBAC permissions, webhook certificates, and all necessary services. If deployment succeeds, the applications are volume-mounted from your local filesystem with hot-reloading enabled via Air. Any code changes (including `.env` file changes) will automatically trigger a rebuild and restart.
-
-**Note on Helm v4:** If you're running Helm v4.x, the above command will fail due to a known incompatibility. Install Helm v3 alongside v4:
-
-For macOS:
-
-```bash
-brew install helm@3
-kubectl kustomize apps/agent/local --enable-helm \
-  --helm-command /opt/homebrew/opt/helm@3/bin/helm | kubectl apply -f -
-```
-
-For Linux:
-
-```bash
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-kubectl kustomize apps/agent/local --enable-helm | kubectl apply -f -
-```
 
 ### Option 2: Local Agent Development
 

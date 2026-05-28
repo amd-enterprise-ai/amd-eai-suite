@@ -24,9 +24,9 @@ import { displayMegabytesInGigabytes } from '@amdenterpriseai/utils/app';
 import { displayTimestamp } from '@amdenterpriseai/utils/app';
 import {
   getWorkloadStatusFilterItems,
+  getWorkloadStatusVariants,
   getWorkloadTypeFilterItems,
-} from '@amdenterpriseai/utils/app';
-import { getWorkloadStatusVariants } from '@amdenterpriseai/utils/app';
+} from '@/utils/workloads';
 import { getWorkloadTypeVariants } from '@amdenterpriseai/utils/app';
 
 import {
@@ -36,15 +36,15 @@ import {
 } from '@amdenterpriseai/types';
 import { TableColumns } from '@amdenterpriseai/types';
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { ClusterWorkloadsTableField } from '@amdenterpriseai/types';
+import { ClusterWorkloadsTableField } from '@/types/enums/cluster-workloads-table-field';
 import { FilterOperator } from '@amdenterpriseai/types';
 import { SortDirection } from '@amdenterpriseai/types';
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 import { FilterValueMap } from '@amdenterpriseai/types';
-import { ProjectBasicInfo } from '@amdenterpriseai/types';
+import { ProjectBasicInfo } from '@/types/projects';
 import {
   WorkloadWithMetrics,
-  WorkloadWithMetricsServer,
   ClusterWorkloadsMetricsResponse,
 } from '@/types/workloads';
 
@@ -79,7 +79,7 @@ const defaultStatusSet = Object.values(WorkloadStatus).filter(
   (status) => status !== WorkloadStatus.DELETED,
 );
 
-const defaultFilterValues: FilterParams<WorkloadWithMetricsServer>[] = [
+const defaultFilterValues: FilterParams<WorkloadWithMetrics>[] = [
   {
     fields: ['type'],
     operator: FilterOperator.EQ,
@@ -93,18 +93,17 @@ const defaultFilterValues: FilterParams<WorkloadWithMetricsServer>[] = [
 ];
 
 const WORKLOADS_METRICS_QUERY_KEY = 'cluster';
-const API_REQUEST_DEFAULTS: CollectionRequestParams<WorkloadWithMetricsServer> =
-  {
-    page: 1,
-    pageSize: 10,
-    sort: [
-      {
-        field: 'created_at' as keyof WorkloadWithMetricsServer,
-        direction: SortDirection.DESC,
-      },
-    ],
-    filter: defaultFilterValues,
-  };
+const API_REQUEST_DEFAULTS: CollectionRequestParams<WorkloadWithMetrics> = {
+  page: 1,
+  pageSize: 10,
+  sort: [
+    {
+      field: 'createdAt' as keyof WorkloadWithMetrics,
+      direction: SortDirection.DESC,
+    },
+  ],
+  filter: defaultFilterValues,
+};
 
 export const ClusterWorkloadsTable: React.FC<Props> = ({ clusterId }) => {
   const { t } = useTranslation('clusters');
@@ -117,9 +116,7 @@ export const ClusterWorkloadsTable: React.FC<Props> = ({ clusterId }) => {
   >();
 
   const [filters, setFilters] =
-    useState<Array<FilterParams<WorkloadWithMetricsServer>>>(
-      defaultFilterValues,
-    );
+    useState<Array<FilterParams<WorkloadWithMetrics>>>(defaultFilterValues);
 
   const {
     isOpen: isDeleteWorkloadModalOpen,
@@ -145,7 +142,7 @@ export const ClusterWorkloadsTable: React.FC<Props> = ({ clusterId }) => {
   });
 
   const [workloadsTableParams, setWorkloadsTableParams] =
-    useState<CollectionRequestParams<WorkloadWithMetricsServer>>(
+    useState<CollectionRequestParams<WorkloadWithMetrics>>(
       API_REQUEST_DEFAULTS,
     );
 
@@ -171,7 +168,7 @@ export const ClusterWorkloadsTable: React.FC<Props> = ({ clusterId }) => {
   });
 
   const handleWorkloadsTableParamsChange = useDebouncedCallback(
-    (params: CollectionRequestParams<WorkloadWithMetricsServer>) => {
+    (params: CollectionRequestParams<WorkloadWithMetrics>) => {
       setWorkloadsTableParams(params);
     },
     100,
@@ -228,12 +225,12 @@ export const ClusterWorkloadsTable: React.FC<Props> = ({ clusterId }) => {
   };
 
   const sortFieldMapper: CustomSortFieldMapperConfig<
-    WorkloadWithMetricsServer,
+    WorkloadWithMetrics,
     ClusterWorkloadsTableField
   > = {
-    [ClusterWorkloadsTableField.CREATED_AT]: { fields: ['created_at'] },
-    [ClusterWorkloadsTableField.NAME]: { fields: ['display_name'] },
-    [ClusterWorkloadsTableField.CREATED_BY]: { fields: ['created_by'] },
+    [ClusterWorkloadsTableField.CREATED_AT]: { fields: ['createdAt'] },
+    [ClusterWorkloadsTableField.NAME]: { fields: ['displayName'] },
+    [ClusterWorkloadsTableField.CREATED_BY]: { fields: ['createdBy'] },
     [ClusterWorkloadsTableField.TYPE]: { fields: ['type'] },
     [ClusterWorkloadsTableField.STATUS]: { fields: ['status'] },
   };
@@ -317,9 +314,9 @@ export const ClusterWorkloadsTable: React.FC<Props> = ({ clusterId }) => {
   };
 
   const serverSideFilterMapping: Partial<
-    Record<string, (keyof WorkloadWithMetricsServer)[]>
+    Record<string, (keyof WorkloadWithMetrics)[]>
   > = {
-    search: ['display_name'],
+    search: ['displayName'],
     type: ['type'],
     status: ['status'],
   };
@@ -333,7 +330,7 @@ export const ClusterWorkloadsTable: React.FC<Props> = ({ clusterId }) => {
         isRefreshing={isClusterWorkloadsMetricsLoading}
         onFilterChange={(filters) => {
           const serverSideFilters =
-            convertToServerSideFilterParams<WorkloadWithMetricsServer>(
+            convertToServerSideFilterParams<WorkloadWithMetrics>(
               filters as FilterValueMap,
               operatorMapping,
               serverSideFilterMapping,

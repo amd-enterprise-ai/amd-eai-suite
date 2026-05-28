@@ -13,6 +13,7 @@ import {
 import { addCluster, getCluster } from '@/services/app';
 
 import ConnectClusterModal from '@/components/features/clusters/ConnectClusterModal';
+import { CLUSTER_ONBOARDING_DOC_URL } from '@/constants/clusters/connectCluster';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock } from 'vitest';
@@ -41,6 +42,14 @@ describe('ConnectClusterModal', () => {
     await renderConnectClusterModal();
     const modelTitle = screen.getAllByText('connectCluster.title');
     expect(modelTitle.length).toBeGreaterThan(0);
+  });
+
+  it('renders onboarding documentation link with correct attributes', async () => {
+    await renderConnectClusterModal();
+    const docLink = screen.getByRole('link');
+    expect(docLink).toHaveAttribute('href', CLUSTER_ONBOARDING_DOC_URL);
+    expect(docLink).toHaveAttribute('target', '_blank');
+    expect(docLink).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
   it('Create cluster API call will be called', async () => {

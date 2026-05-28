@@ -7,7 +7,7 @@ package nodes
 import (
 	"testing"
 
-	"github.com/silogen/agent/internal/messaging"
+	agent "github.com/silogen/agent/internal/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -219,7 +219,7 @@ func TestGetGPUInfo(t *testing.T) {
 	tests := []struct {
 		name     string
 		node     *corev1.Node
-		expected *messaging.GPUInformation
+		expected *GPUInformation
 	}{
 		{
 			name: "node with no GPU",
@@ -257,10 +257,10 @@ func TestGetGPUInfo(t *testing.T) {
 					},
 				},
 			},
-			expected: &messaging.GPUInformation{
+			expected: &GPUInformation{
 				Count:              8,
 				GPUType:            "0x740f",
-				Vendor:             messaging.GPUVendorAMD,
+				Vendor:             agent.GPUVendorAMD,
 				VRAMBytesPerDevice: 64 * 1024 * 1024 * 1024,
 				ProductName:        "AMD Instinct MI250X",
 			},
@@ -281,10 +281,10 @@ func TestGetGPUInfo(t *testing.T) {
 					},
 				},
 			},
-			expected: &messaging.GPUInformation{
+			expected: &GPUInformation{
 				Count:              8,
 				GPUType:            "0x740f",
-				Vendor:             messaging.GPUVendorAMD,
+				Vendor:             agent.GPUVendorAMD,
 				VRAMBytesPerDevice: 192 * 1024 * 1024 * 1024,
 				ProductName:        "AMD Instinct MI300X",
 			},
@@ -298,10 +298,10 @@ func TestGetGPUInfo(t *testing.T) {
 					},
 				},
 			},
-			expected: &messaging.GPUInformation{
+			expected: &GPUInformation{
 				Count:              4,
 				GPUType:            "Unknown",
-				Vendor:             messaging.GPUVendorAMD,
+				Vendor:             agent.GPUVendorAMD,
 				VRAMBytesPerDevice: 0,
 				ProductName:        "Unknown",
 			},

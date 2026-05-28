@@ -6,11 +6,14 @@ import os
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Query, Request, status
-from fastapi.security import OpenIdConnect
+from fastapi import Depends, HTTPException, Query, status
 from keycloak import KeycloakAdmin, KeycloakOpenID
 from loguru import logger
+from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from api_common.auth.security import OpenIdAuthorization
+from api_common.exceptions import NotFoundException
 
 from ..clusters.service import get_cluster_by_id, validate_cluster_accessible_to_user
 from ..projects.models import Project
@@ -21,7 +24,6 @@ from ..workloads.repository import get_workload_by_id, get_workload_by_id_and_us
 from .config import KEYCLOAK_INTERNAL_URL, KEYCLOAK_PUBLIC_URL, KEYCLOAK_REALM
 from .database import get_session
 from .enums import Roles
-from .exceptions import NotFoundException
 from .keycloak_admin import get_kc_admin
 from .keycloak_admin import get_user as get_keycloak_user
 
@@ -30,26 +32,7 @@ OPENID_CONFIGURATION_URL = os.getenv(
 )
 KEYCLOAK_OPENID = KeycloakOpenID(server_url=KEYCLOAK_INTERNAL_URL, client_id=None, realm_name=KEYCLOAK_REALM)
 
-DISABLE_JWT_VALIDATION = os.getenv("DISABLE_JWT_VALIDATION", "true") == "true"
-
-
-class OpenIdAuthorization(OpenIdConnect):
-    """
-    Modified OpenIdConnect dependable class to return 401 with correct headers instead of 403 in case of missing auth.
-    """
-
-    async def __call__(self, request: Request) -> str | None:
-        authorization = request.headers.get("Authorization")
-        if not authorization:
-            if self.auto_error:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Unauthorized",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            else:
-                return None
-        return authorization
+DISABLE_JWT_VALIDATION = os.getenv("DISABLE_JWT_VALIDATION", "false") == "true"
 
 
 # Dependable that requires a JWT Bearer token to be set and provides docs for how to get
@@ -275,7 +258,7 @@ async def ensure_user_can_view_workload(
 
 async def validate_and_get_project_from_query(
     accessible_projects: list[Project] = Depends(get_projects_accessible_to_user),
-    project_id: UUID = Query(..., description="The ID of the project for the request"),
+    project_id: UUID = Query(..., description="The ID of the project for the request", alias=to_camel("project_id")),
 ) -> Project:
     """
     Validate that the user has access to the specified project and return it.

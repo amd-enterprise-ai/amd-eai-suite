@@ -11,7 +11,7 @@ Documentation       High-level dataset testing keywords.
 Resource            api/datasets.resource
 Resource    resources/airm_projects.resource
 Resource    resources/aiwb_test_data.resource
-Resource    resources/common/resource_tracking.resource
+Resource            resources/resource_tracking.resource
 Resource    aiwb_common.resource
 Library             Collections
 Library             String
@@ -19,11 +19,10 @@ Library             OperatingSystem
 
 
 *** Variables ***
-@{CREATED_DATASET_IDS}      # Define CREATED_DATASET_IDS as an empty list
+# CREATED_DATASET_IDS is lazy-initialized by Track Dataset For Cleanup
 
 
 *** Keywords ***
-# Initialize Dataset Tracking is now imported from common/resource_tracking.resource
 
 Create dataset request is sent
     [Documentation]    DEPRECATED: Sends request to create a dataset using POST to base endpoint.
@@ -40,8 +39,7 @@ Create dataset request is sent
     IF    ${response.status_code} in [200, 201]
         ${dataset_id}=          Get from dictionary     ${response.json()}      id
         Set test variable       ${TEST_DATASET_ID}      ${dataset_id}
-        Append To List          ${CREATED_DATASET_IDS}                          ${dataset_id}
-        Log                     Added dataset ${dataset_id} to cleanup list: ${CREATED_DATASET_IDS}     DEBUG
+        Track Dataset For Cleanup    ${dataset_id}
     ELSE
         Log                     Create dataset failed with status ${response.status_code} - endpoint not supported     WARN
     END
@@ -62,8 +60,7 @@ Upload dataset request is sent
     Set Test Variable       ${TEST_RESPONSE}             ${response}
     ${dataset_id}=          Get from dictionary     ${response.json()}      id
     Set test variable       ${TEST_DATASET_ID}      ${dataset_id}
-    Append To List          ${CREATED_DATASET_IDS}                          ${dataset_id}
-    Log                     Added dataset ${dataset_id} to cleanup list: ${CREATED_DATASET_IDS}     DEBUG
+    Track Dataset For Cleanup    ${dataset_id}
 
 Finetune dataset exists
     [Documentation]    Creates a finetune dataset for testing and stores its ID as a test variable
@@ -104,8 +101,8 @@ Dataset should exist in database
     Dictionary should contain key                   ${db_response.json()}                           id
     Dictionary should contain value                 ${db_response.json()}                           ${dataset_id}
     Dictionary should contain key                   ${db_response.json()}                           name
-    Dictionary should contain key                   ${db_response.json()}                           created_at
-    Dictionary should contain key                   ${db_response.json()}                           updated_at
+    Dictionary should contain key                   ${db_response.json()}                           createdAt
+    Dictionary should contain key                   ${db_response.json()}                           updatedAt
 
 The dataset should not exist in database
     [Documentation]    Verifies the dataset no longer exists in database
@@ -177,15 +174,13 @@ Batch delete datasets request is sent
 Clean Up Dataset Test Resources
     [Documentation]    Clean up all dataset resources created during tests.
     ...    Resolves namespace from test state and passes it explicitly to API keywords.
-    ${tracking_list}=       Get Variable Value    ${CREATED_DATASET_IDS}    ${EMPTY}
+    ${tracking_list}=       Get Variable Value    ${CREATED_DATASET_IDS}    ${None}
+    IF    $tracking_list is None    RETURN
     ${count}=               Get Length    ${tracking_list}
-    IF    ${count} == 0
-        Log                 No datasets to clean up    DEBUG
-        RETURN
-    END
+    IF    ${count} == 0    RETURN    END
     Log                     Cleaning up ${count} dataset(s)    INFO
     ${namespace}=           Get Project Namespace
-    FOR    ${dataset_id}    IN    @{CREATED_DATASET_IDS}
+    FOR    ${dataset_id}    IN    @{tracking_list}
         TRY
             Delete dataset    ${dataset_id}    ${namespace}    expected_status=any
             Log               Deleted dataset ${dataset_id}    INFO
@@ -258,4 +253,67 @@ Get dataset request is sent for "${dataset_id}"
     [Documentation]    Get a specific dataset and store the response as test variable.
     ${namespace}=           Get Project Namespace
     ${response}=            Get dataset             ${dataset_id}           namespace=${namespace}   expected_status=200
-    Set Test Variable       ${TEST_RESPONSE}             ${response}
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
+
+Get dataset request is sent
+    [Documentation]    Get the current test dataset and store the response
+    ${namespace}=           Get Project Namespace
+    ${response}=            Get dataset             ${TEST_DATASET_ID}      namespace=${namespace}   expected_status=any
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
+
+Get request is sent for non-existent dataset
+    [Documentation]    Sends a GET request for a dataset ID that does not exist
+    ${fake_id}=             Evaluate                str(uuid.uuid4())       modules=uuid
+    ${namespace}=           Get Project Namespace
+    ${response}=            Get dataset             ${fake_id}              namespace=${namespace}   expected_status=any
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
+
+Download request is sent for non-existent dataset
+    [Documentation]    Sends a download request for a dataset ID that does not exist
+    ${fake_id}=             Evaluate                str(uuid.uuid4())       modules=uuid
+    ${namespace}=           Get Project Namespace
+    ${response}=            Download dataset        ${fake_id}              namespace=${namespace}   expected_status=any
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
+
+Oversized dataset upload request is sent
+    [Documentation]    Generates and uploads a dataset exceeding the maximum file size limit.
+    ...    Uses in-memory JSONL generation to avoid creating large temp files on disk.
+    ${random_suffix}=       Generate random string                          8                       [LETTERS][NUMBERS]
+    VAR    ${dataset_name}    test-oversized-${random_suffix}
+    ${namespace}=           Get Project Namespace
+    ${response}=            Upload oversized dataset                        ${dataset_name}         ${namespace}
+    IF    ${response.status_code} == 200 or ${response.status_code} == 201
+        VAR    ${body}    ${response.json()}
+        Track Dataset For Cleanup    ${body}[id]
+    END
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
+
+Upload dataset with same name is attempted
+    [Documentation]    Attempts to upload a dataset with the same name as an existing one.
+    ...    Expects a 409 Conflict response.
+    ${namespace}=           Get Project Namespace
+    ${response}=            Upload dataset
+    ...                     jsonl_file_path=${TEST_DATASET_FILE}
+    ...                     name=${TEST_DATASET}[name]
+    ...                     description=${TEST_DATASET}[description]
+    ...                     dataset_type=${TEST_DATASET}[type]
+    ...                     namespace=${namespace}
+    ...                     expected_status=any
+    IF    ${response.status_code} == 200 or ${response.status_code} == 201
+        VAR    ${body}    ${response.json()}
+        Set Test Variable       ${TEST_DATASET_ID}    ${body}[id]
+        Track Dataset For Cleanup    ${body}[id]
+    END
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
+
+Response should contain the uploaded dataset
+    [Documentation]    Verifies the uploaded dataset appears in the dataset list response
+    VAR    ${body}    ${TEST_RESPONSE.json()}
+    VAR    ${found}    ${False}
+    FOR    ${dataset}    IN    @{body}[data]
+        IF    "${dataset}[name]" == "${TEST_DATASET}[name]"
+            VAR    ${found}    ${True}
+            BREAK
+        END
+    END
+    Should be true          ${found}                msg=Uploaded dataset '${TEST_DATASET}[name]' not found in list response

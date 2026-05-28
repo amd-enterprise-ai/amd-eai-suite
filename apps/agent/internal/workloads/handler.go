@@ -42,7 +42,7 @@ func NewWorkloadHandler(clientset kubernetes.Interface, dynamicClient dynamic.In
 }
 
 func (h *Handler) HandleCreate(ctx context.Context, msg *messaging.RawMessage) error {
-	var createMsg messaging.WorkloadMessage
+	var createMsg common.WorkloadMessage
 	if err := json.Unmarshal(msg.Payload, &createMsg); err != nil {
 		return fmt.Errorf("failed to parse WorkloadMessage: %w", err)
 	}
@@ -119,7 +119,7 @@ func (h *Handler) HandleDelete(ctx context.Context, msg *messaging.RawMessage) e
 		ctx,
 		h.publisher,
 		deleteMsg.WorkloadID,
-		messaging.WorkloadStatusDeleted,
+		common.WorkloadStatusDeleted,
 		reason,
 	); pubErr != nil {
 		h.logger.Error(pubErr, "failed to publish workload deleted status", "workload_id", deleteMsg.WorkloadID)

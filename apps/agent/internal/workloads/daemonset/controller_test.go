@@ -110,7 +110,7 @@ func TestReconcile_HandlesDeletion(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 	assert.Len(t, mock.Published, 1)
 
-	msg, ok := mock.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := mock.Published[0].(common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-daemonset", msg.Name)
 	assert.Equal(t, "Deleted", msg.Status)
@@ -131,7 +131,7 @@ func TestReconcile_DaemonSet_AutoDiscoveryBehavior(t *testing.T) {
 			autoDiscovered:         true,
 			submitter:              "oidc:admin@example.com",
 			expectedMsgCount:       2,
-			expectedSubmitter:      strPtr("admin@example.com"),
+			expectedSubmitter:      testutils.Ptr("admin@example.com"),
 			expectAutoDiscoveryMsg: true,
 		},
 		{
@@ -198,7 +198,7 @@ func TestReconcile_DaemonSet_AutoDiscoveryBehavior(t *testing.T) {
 			require.Len(t, mockPub.Published, tt.expectedMsgCount)
 
 			if tt.expectAutoDiscoveryMsg {
-				autoDiscMsg, ok := mockPub.Published[0].(*messaging.AutoDiscoveredWorkloadComponentMessage)
+				autoDiscMsg, ok := mockPub.Published[0].(*common.AutoDiscoveredWorkloadComponentMessage)
 				require.True(t, ok)
 				if tt.expectedSubmitter != nil {
 					assert.NotNil(t, autoDiscMsg.Submitter)
@@ -207,20 +207,16 @@ func TestReconcile_DaemonSet_AutoDiscoveryBehavior(t *testing.T) {
 					assert.Nil(t, autoDiscMsg.Submitter)
 				}
 
-				statusMsg, ok := mockPub.Published[1].(*messaging.WorkloadComponentStatusMessage)
+				statusMsg, ok := mockPub.Published[1].(*common.WorkloadComponentStatusMessage)
 				require.True(t, ok)
 				assert.Equal(t, "Running", statusMsg.Status)
 			} else {
-				statusMsg, ok := mockPub.Published[0].(*messaging.WorkloadComponentStatusMessage)
+				statusMsg, ok := mockPub.Published[0].(*common.WorkloadComponentStatusMessage)
 				require.True(t, ok)
 				assert.Equal(t, "Running", statusMsg.Status)
 			}
 		})
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func TestReconcile_DaemonSet_StatusPublishFailure(t *testing.T) {
@@ -342,7 +338,7 @@ func TestReconcile_DaemonSet_AutoDiscoveryPublishFailure(t *testing.T) {
 
 	mock := testutils.NewMockSelectiveFailingPublisher(
 		func(msg interface{}) bool {
-			_, isAutoDiscovery := msg.(*messaging.AutoDiscoveredWorkloadComponentMessage)
+			_, isAutoDiscovery := msg.(*common.AutoDiscoveredWorkloadComponentMessage)
 			return isAutoDiscovery
 		},
 		assert.AnError,

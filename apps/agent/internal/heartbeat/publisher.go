@@ -40,7 +40,7 @@ func NewPublisher(
 // Publish sends a heartbeat message to the queue.
 func (p *Publisher) Publish(ctx context.Context) error {
 	// Create heartbeat message
-	message := &messaging.HeartbeatMessage{
+	message := &HeartbeatMessage{
 		MessageType:     messaging.MessageTypeHeartbeat,
 		LastHeartbeatAt: time.Now().UTC(),
 		ClusterName:     p.clusterName,

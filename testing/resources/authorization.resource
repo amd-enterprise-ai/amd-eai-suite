@@ -5,7 +5,7 @@
 *** Settings ***
 Library     DateTime
 Library     Process
-Library     ../libraries/KubeconfigAuth.py
+Library     KubeconfigAuth
 Library     OperatingSystem
 Resource    deployment.resource
 Resource    api/common.resource

@@ -4,15 +4,16 @@
 
 from textwrap import dedent
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.auth.security import get_user_email
 from api_common.database import get_session
+from api_common.schemas import QueryParam
 
 from ..dispatch.kube_client import KubernetesClient, get_kube_client
 from ..namespaces.security import ensure_access_to_workbench_namespace
-from ..workloads.schemas import WorkloadResponse
+from ..workloads.schemas import DisplayNameQuery, WorkloadResponse
 from .enums import WorkspaceType
 from .schemas import DevelopmentWorkspaceRequest
 from .service import create_development_workspace
@@ -46,15 +47,13 @@ router = APIRouter(tags=["Workspaces"])
 )
 async def create_workspace_endpoint(
     request: DevelopmentWorkspaceRequest,
+    query: QueryParam[DisplayNameQuery],
     workspace_type: WorkspaceType = Path(..., description="Type of workspace to create"),
-    display_name: str | None = Query(None, description="User-friendly display name for the workspace"),
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     session: AsyncSession = Depends(get_session),
     submitter: str = Depends(get_user_email),
     kube_client: KubernetesClient = Depends(get_kube_client),
 ) -> WorkloadResponse:
-    """Create and deploy a new development workspace."""
-
     workload = await create_development_workspace(
         session=session,
         kube_client=kube_client,
@@ -62,7 +61,7 @@ async def create_workspace_endpoint(
         namespace=namespace,
         request=request,
         workspace_type=workspace_type,
-        display_name=display_name,
+        display_name=query.display_name,
     )
 
     return WorkloadResponse.model_validate(workload)

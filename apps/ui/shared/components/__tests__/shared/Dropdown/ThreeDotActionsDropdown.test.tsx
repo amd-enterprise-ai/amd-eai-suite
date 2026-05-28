@@ -14,18 +14,21 @@ import { ActionFieldHintType } from '@amdenterpriseai/types';
 
 import { ThreeDotActionsDropdown } from '@amdenterpriseai/components';
 
-// Mock Tabler icons
-vi.mock('@tabler/icons-react', () => ({
-  IconDotsVertical: ({ className }: any) => (
-    <span className={className}>action-dot-icon</span>
-  ),
-  IconInfoCircle: ({ className }: any) => (
-    <span className={className}>info-icon</span>
-  ),
-  IconAlertTriangle: ({ className }: any) => (
-    <span className={className}>alert-icon</span>
-  ),
-}));
+vi.mock('@tabler/icons-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tabler/icons-react')>();
+  return {
+    ...actual,
+    IconDotsVertical: ({ className }: any) => (
+      <span className={className}>action-dot-icon</span>
+    ),
+    IconInfoCircle: ({ className }: any) => (
+      <span className={className}>info-icon</span>
+    ),
+    IconAlertTriangle: ({ className }: any) => (
+      <span className={className}>alert-icon</span>
+    ),
+  };
+});
 
 // Mock HeroUI Tooltip to render content directly
 vi.mock('@heroui/react', async () => {
@@ -243,6 +246,58 @@ describe('ThreeDotActionsDropdown', () => {
           'aria-label',
           'Delete',
         );
+      });
+    });
+
+    it('renders description when provided', async () => {
+      const actions: ActionItem<TestItem>[] = [
+        {
+          key: 'with-description',
+          label: 'Action with Description',
+          description: 'This is a helpful description',
+          onPress: vi.fn(),
+        },
+      ];
+
+      render(<ThreeDotActionsDropdown actions={actions} item={mockItem} />);
+
+      // Open dropdown
+      const triggerButton = screen.getByText('action-dot-icon');
+      await fireEvent.click(triggerButton);
+
+      // Wait for dropdown item and description to appear
+      await waitFor(() => {
+        expect(
+          screen.getByText('This is a helpful description'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('renders showDivider when provided', async () => {
+      const actions: ActionItem<TestItem>[] = [
+        {
+          key: 'with-divider',
+          label: 'Action with Divider',
+          showDivider: true,
+          onPress: vi.fn(),
+        },
+        {
+          key: 'after-divider',
+          label: 'Action after Divider',
+          onPress: vi.fn(),
+        },
+      ];
+
+      render(<ThreeDotActionsDropdown actions={actions} item={mockItem} />);
+
+      // Open dropdown
+      const triggerButton = screen.getByText('action-dot-icon');
+      await fireEvent.click(triggerButton);
+
+      // Wait for dropdown items to appear
+      await waitFor(() => {
+        expect(screen.getByTestId('with-divider')).toBeInTheDocument();
+        expect(screen.getByTestId('after-divider')).toBeInTheDocument();
       });
     });
   });

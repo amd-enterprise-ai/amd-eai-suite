@@ -115,27 +115,35 @@ echo "Starting test execution..."
 echo "========================================"
 set +e  # Temporarily disable exit on error
 
-# Check for arguments.txt file in the test directory
-ARGS_FILE="$TEST_PATH/arguments.txt"
-
 # For AIWB tests, add AIRM specs to PYTHONPATH for shared resources
 if [[ "$SERVICE_NAME" == "AIWB" ]]; then
     export PYTHONPATH="/code/apps/api/airm/specs:${PYTHONPATH:-}"
     echo "Added AIRM specs to PYTHONPATH for shared resources"
 fi
 
+# Determine test directory and robot target (handles both file and directory paths)
+if [ -f "$TEST_PATH" ]; then
+    TEST_DIR="$(dirname "$TEST_PATH")"
+    ROBOT_TARGET="$(basename "$TEST_PATH")"
+else
+    TEST_DIR="$TEST_PATH"
+    ROBOT_TARGET="."
+fi
+
 # Change to test directory so relative paths in arguments.txt work correctly
-cd "$TEST_PATH"
+cd "$TEST_DIR"
 echo "Working directory: $(pwd)"
+echo "Robot target: $ROBOT_TARGET"
 echo ""
 
+ARGS_FILE="$TEST_DIR/arguments.txt"
 if [ -f "$ARGS_FILE" ]; then
     echo "Using arguments file: $ARGS_FILE"
     # Place -d flag AFTER --argumentfile to override any outputdir in the arguments file
-    robot --argumentfile "$ARGS_FILE" -d "$RESULTS_DIR" "${ROBOT_ARGS[@]}" .
+    robot --argumentfile "$ARGS_FILE" -d "$RESULTS_DIR" "${ROBOT_ARGS[@]}" "$ROBOT_TARGET"
 else
     echo "No arguments file found, running with default configuration"
-    robot -d "$RESULTS_DIR" "${ROBOT_ARGS[@]}" .
+    robot -d "$RESULTS_DIR" "${ROBOT_ARGS[@]}" "$ROBOT_TARGET"
 fi
 
 # Get the test execution status

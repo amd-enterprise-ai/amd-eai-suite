@@ -93,7 +93,8 @@
       "close": "Close ,enu",
       "themeToggle": "Toggle light/dark mode",
       "theme": "Theme: {{theme}}",
-      "logout": "Logout"
+      "logout": "Logout",
+      "reportIssue": "Report issue"
     }
   },
   "actions": {
@@ -183,6 +184,10 @@
       "title": "Service temporarily unavailable",
       "description": "Please try again in a few moments."
     },
+    "projectNotFound": {
+      "title": "Project not found",
+      "description": "The project in the URL does not exist or you don't have access to it. Please select a different project."
+    },
     "unknown": {
       "title": "Something went wrong",
       "description": "We're having trouble connecting to our services. Please try again in a few moments."
@@ -249,5 +254,20 @@
   "password": {
     "showPassword": "Show password",
     "hidePassword": "Hide password"
+  },
+  "userMenu": {
+    "airmAppLabel": "AI Resource Manager"
+  },
+  "requestSoftware": {
+    "model": {
+      "title": "Need Another Model?",
+      "description": "If a model you need is not currently available, please submit a request. Our team reviews user feedback and will consider adding selected models in future updates.",
+      "button": "Request model"
+    },
+    "workspace": {
+      "title": "Need Another Workspace?",
+      "description": "If a workspace template you need is not currently available, please submit a request. Our team reviews user feedback and will consider adding selected workspaces in future updates.",
+      "button": "Request workspace"
+    }
   }
 }

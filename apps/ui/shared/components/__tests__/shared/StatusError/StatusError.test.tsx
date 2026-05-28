@@ -34,15 +34,18 @@ vi.mock('@heroui/react', () => ({
   ),
 }));
 
-// Mock @tabler/icons-react
-vi.mock('@tabler/icons-react', () => ({
-  IconChevronLeft: (props: any) => (
-    <svg data-testid="icon-chevron-left" {...props} />
-  ),
-  IconChevronRight: (props: any) => (
-    <svg data-testid="icon-chevron-right" {...props} />
-  ),
-}));
+vi.mock('@tabler/icons-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tabler/icons-react')>();
+  return {
+    ...actual,
+    IconChevronLeft: (props: any) => (
+      <svg data-testid="icon-chevron-left" {...props} />
+    ),
+    IconChevronRight: (props: any) => (
+      <svg data-testid="icon-chevron-right" {...props} />
+    ),
+  };
+});
 
 describe('StatusError', () => {
   const props = {

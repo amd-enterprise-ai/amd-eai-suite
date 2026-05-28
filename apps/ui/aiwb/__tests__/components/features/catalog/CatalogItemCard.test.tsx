@@ -4,8 +4,8 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import { CatalogItem } from '@amdenterpriseai/types';
-import { CatalogItemCategory, CatalogItemType } from '@amdenterpriseai/types';
+import { CatalogItem } from '@/types/catalog';
+import { CatalogItemCategory, CatalogItemType } from '@/types/enums/catalog';
 
 import { CatalogItemCard } from '@/components/features/catalog/CatalogItemCard';
 

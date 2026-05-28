@@ -23,15 +23,15 @@ ${SEMVER_PATTERN}       \\d+\\.\\d+\\.\\d+
 
 User is on workloads page
     [Documentation]    Navigates to the Dashboard which contains the workloads table.
-    ...                Expects ${UI_BASE_URL} to be set (e.g., by User is logged in).
+    ...                Expects ${UI_BASE_URL} and ${TEST_PROJECT} to be set.
 
-    Navigate to dashboard    ${UI_BASE_URL}
+    Navigate to dashboard    ${UI_BASE_URL}    ${TEST_PROJECT}[name]
 
 User is on AIM details page
     [Documentation]    Navigates to the AIM service details page.
-    ...                Expects ${UI_BASE_URL} and ${TEST_AIM_ID} to be set.
+    ...                Expects ${UI_BASE_URL}, ${TEST_PROJECT}, and ${TEST_AIM_ID} to be set.
 
-    Navigate to AIM details page    ${UI_BASE_URL}    ${TEST_AIM_ID}
+    Navigate to AIM details page    ${UI_BASE_URL}    ${TEST_PROJECT}[name]    ${TEST_AIM_ID}
 
 # =============================================================================
 # When keywords (actions)

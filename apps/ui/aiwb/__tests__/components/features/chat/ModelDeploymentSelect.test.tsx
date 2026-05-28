@@ -5,7 +5,9 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Mock, vi } from 'vitest';
 
-import { Workload, WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { Workload } from '@/types/workloads';
+import { WorkloadStatus } from '@/types/enums/workloads';
 
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import ProviderWrapper from '@/__tests__/ProviderWrapper';

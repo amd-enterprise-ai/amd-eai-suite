@@ -4,7 +4,7 @@
 
 import React, { useMemo } from 'react';
 
-import { Alert, Select, SelectItem } from '@heroui/react';
+import { Select, SelectItem } from '@heroui/react';
 import { IconAt } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -24,17 +24,17 @@ import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { UserRole } from '@amdenterpriseai/types';
 import { FormField } from '@amdenterpriseai/types';
-import { ProjectsResponse } from '@amdenterpriseai/types';
+import { ProjectsResponse } from '@/types/projects';
+import { InviteUserFormData } from '@/types/users';
 import {
   InvitedUser,
-  InviteUserFormData,
   InviteUserRequest,
   InvitedUsersResponse,
   User,
   UsersResponse,
-} from '@amdenterpriseai/types';
+} from '@/types/users';
 
-import { DrawerForm } from '@amdenterpriseai/components';
+import { DrawerForm, Alert } from '@amdenterpriseai/components';
 import { FormFieldComponent } from '@amdenterpriseai/components';
 import { FormPasswordInput } from '@amdenterpriseai/components';
 
@@ -243,8 +243,8 @@ const InviteUserModal: React.FC<Props> = ({
             data.roles === UserRole.PLATFORM_ADMIN
               ? [UserRole.PLATFORM_ADMIN]
               : [],
-          project_ids: data.projectIds,
-          temporary_password: data.tempPassword,
+          projectIds: data.projectIds,
+          temporaryPassword: data.tempPassword,
         } as InviteUserRequest);
       }}
       defaultValues={{
@@ -274,7 +274,6 @@ const InviteUserModal: React.FC<Props> = ({
               />
               <Alert
                 color="warning"
-                className="bg-primary/10!"
                 description={t('modal.addUser.instructionTempPassword')}
               />
             </>

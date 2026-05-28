@@ -9,8 +9,8 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import ConfigMapStatus, ProjectStorageStatus
-from app.storages.enums import StorageStatus, StorageType
+from api_common.exceptions import ConflictException
+from app.storages.enums import ProjectStorageStatus, StorageStatus, StorageType
 from app.storages.models import ProjectStorage, Storage
 from app.storages.repository import (
     create_project_storage,
@@ -31,7 +31,7 @@ from app.storages.repository import (
     update_storage_status,
 )
 from app.storages.schemas import S3Spec, StorageIn
-from app.utilities.exceptions import ConflictException
+from app.workloads.enums import ConfigMapStatus
 from tests import factory  # type: ignore[attr-defined]
 
 

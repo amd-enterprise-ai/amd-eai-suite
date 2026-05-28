@@ -18,8 +18,8 @@ class AuditBase(DeclarativeBase):
     metadata = metadata
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-    created_by: Mapped[str] = mapped_column(String, nullable=False)
-    updated_by: Mapped[str] = mapped_column(String, nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class BaseEntity(AuditBase):

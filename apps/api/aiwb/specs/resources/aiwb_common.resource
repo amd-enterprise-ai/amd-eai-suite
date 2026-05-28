@@ -6,10 +6,15 @@
 Documentation       Shared AIWB keywords used across multiple resource files.
 ...                 Contains utility keywords that don't belong to any specific domain.
 Resource            resources/common/resource_resolver.resource
+Resource            api/health.resource
 Library             Collections
 
 
 *** Keywords ***
+AIWB service is running
+    [Documentation]    Verifies that AIWB service is running and healthy.
+    Verify AIWB health
+
 Get Project Namespace
     [Documentation]    Returns the Kubernetes namespace for the current test project.
     ...    Decouples AIWB from AIRM project internals -- if namespace derivation changes,

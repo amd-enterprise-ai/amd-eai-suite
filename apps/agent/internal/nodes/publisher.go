@@ -27,13 +27,13 @@ func PublishClusterNodes(
 		return fmt.Errorf("failed to retrieve cluster nodes: %w", err)
 	}
 
-	clusterNodes := make([]messaging.ClusterNode, 0, len(nodes.Items))
+	clusterNodes := make([]ClusterNode, 0, len(nodes.Items))
 	for _, node := range nodes.Items {
 		clusterNode := mapNodeToClusterNode(&node)
 		clusterNodes = append(clusterNodes, clusterNode)
 	}
 
-	message := &messaging.ClusterNodesMessage{
+	message := &ClusterNodesMessage{
 		MessageType:  messaging.MessageTypeClusterNodes,
 		ClusterNodes: clusterNodes,
 		UpdatedAt:    time.Now().UTC(),

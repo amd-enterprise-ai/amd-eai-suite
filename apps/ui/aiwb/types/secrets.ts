@@ -21,7 +21,7 @@ type SecretMetadata = {
 export type CreateSecretRequest = {
   name: string;
   data: Record<string, string>;
-  use_case: SecretUseCase;
+  useCase: SecretUseCase;
 };
 
 export type SecretDataEntry = {
@@ -35,4 +35,10 @@ export type CreateSecretForm = {
   key?: string;
   value?: string;
   dataEntries?: SecretDataEntry[];
+};
+
+export type HuggingFaceTokenData = {
+  selectedToken?: string;
+  name?: string;
+  token?: string;
 };

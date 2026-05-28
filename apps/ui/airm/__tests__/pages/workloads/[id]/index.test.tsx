@@ -8,12 +8,13 @@ import userEvent from '@testing-library/user-event';
 import {
   getWorkloadMetrics,
   getWorkloadVramUtilization,
-  getWorkloadJunctionTemperature,
+  getWorkloadGpuUtilization,
   getWorkloadPowerUsage,
   deleteWorkload,
 } from '@/services/app';
 
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 import { WorkloadResponse, WorkloadMetricsDetails } from '@/types/workloads';
 
 import { generateClusterNodesMock } from '@/__mocks__/utils/cluster-mock';
@@ -26,23 +27,13 @@ import { Mock } from 'vitest';
 const mockWorkload: WorkloadResponse = {
   id: 'workload-123',
   type: WorkloadType.INFERENCE,
-  name: 'aim-inference-llama3.3-70b-instruct',
   displayName: 'aim-inference-llama3.3-70b-instruct',
   createdBy: 'user@amd.com',
   createdAt: '2025-10-07T19:48:00Z',
   updatedAt: '2025-10-07T19:53:00Z',
   status: WorkloadStatus.RUNNING,
-  project: {
-    id: 'project-1',
-    name: 'Test Project',
-    description: '',
-    status: 'active' as any,
-    statusReason: null,
-    clusterId: 'cluster-1',
-  },
   projectId: 'project-1',
   clusterId: 'cluster-1',
-  allocatedResources: { gpuCount: 2, vram: 128 },
 };
 
 const mockWorkloadMetrics: WorkloadMetricsDetails = {
@@ -81,7 +72,7 @@ vi.mock('@/services/app', async (importOriginal) => ({
   deleteWorkload: vi.fn(),
   getWorkloadMetrics: vi.fn(),
   getWorkloadVramUtilization: vi.fn(),
-  getWorkloadJunctionTemperature: vi.fn(),
+  getWorkloadGpuUtilization: vi.fn(),
   getWorkloadPowerUsage: vi.fn(),
 }));
 
@@ -102,10 +93,10 @@ vi.mock('next/router', () => ({
   }),
 }));
 
-const renderPage = () =>
+const renderPage = (overrides?: Partial<WorkloadResponse>) =>
   render(
     <WorkloadDetailPage
-      workload={mockWorkload}
+      workload={{ ...mockWorkload, ...overrides }}
       clusterNodes={mockClusterNodes}
     />,
     { wrapper },
@@ -118,7 +109,7 @@ describe('Workload detail page', () => {
       gpuDevices: [],
       range: { start: '', end: '' },
     });
-    vi.mocked(getWorkloadJunctionTemperature).mockResolvedValue({
+    vi.mocked(getWorkloadGpuUtilization).mockResolvedValue({
       gpuDevices: [],
       range: { start: '', end: '' },
     });
@@ -223,7 +214,7 @@ describe('Workload detail page', () => {
       expect(getWorkloadVramUtilization as Mock).toHaveBeenCalledWith(
         ...expectedArgs,
       );
-      expect(getWorkloadJunctionTemperature as Mock).toHaveBeenCalledWith(
+      expect(getWorkloadGpuUtilization as Mock).toHaveBeenCalledWith(
         ...expectedArgs,
       );
       expect(getWorkloadPowerUsage as Mock).toHaveBeenCalledWith(
@@ -255,6 +246,34 @@ describe('Workload detail page', () => {
           name: 'workloads:details.actions.delete',
         }),
       ).toBeInTheDocument();
+    });
+  });
+
+  it('should disable Delete button when workload status is Deleting', async () => {
+    await act(async () => {
+      renderPage({ status: WorkloadStatus.DELETING });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', {
+          name: 'workloads:details.actions.delete',
+        }),
+      ).toBeDisabled();
+    });
+  });
+
+  it('should disable Delete button when workload status is Deleted', async () => {
+    await act(async () => {
+      renderPage({ status: WorkloadStatus.DELETED });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', {
+          name: 'workloads:details.actions.delete',
+        }),
+      ).toBeDisabled();
     });
   });
 
@@ -313,19 +332,19 @@ describe('Workload detail page', () => {
         {
           ...baseDevice,
           metric: {
-            seriesLabel: 'vram_utilization_pct',
+            seriesLabel: 'vramUtilizationPct',
             values: [{ timestamp: '2025-10-07T19:00:00Z', value: 50 }],
           },
         },
       ],
       range,
     });
-    vi.mocked(getWorkloadJunctionTemperature).mockResolvedValue({
+    vi.mocked(getWorkloadGpuUtilization).mockResolvedValue({
       gpuDevices: [
         {
           ...baseDevice,
           metric: {
-            seriesLabel: 'junction_temperature_c',
+            seriesLabel: 'gpuActivityPct',
             values: [{ timestamp: '2025-10-07T19:00:00Z', value: 60 }],
           },
         },
@@ -380,19 +399,19 @@ describe('Workload detail page', () => {
         {
           ...baseDevice,
           metric: {
-            seriesLabel: 'vram_utilization_pct',
+            seriesLabel: 'vramUtilizationPct',
             values: [{ timestamp: '2025-10-07T19:00:00Z', value: 50 }],
           },
         },
       ],
       range,
     });
-    vi.mocked(getWorkloadJunctionTemperature).mockResolvedValue({
+    vi.mocked(getWorkloadGpuUtilization).mockResolvedValue({
       gpuDevices: [
         {
           ...baseDevice,
           metric: {
-            seriesLabel: 'junction_temperature_c',
+            seriesLabel: 'gpuActivityPct',
             values: [{ timestamp: '2025-10-07T19:00:00Z', value: 60 }],
           },
         },

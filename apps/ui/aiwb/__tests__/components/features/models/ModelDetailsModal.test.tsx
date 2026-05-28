@@ -4,20 +4,29 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import { Model, ModelOnboardingStatus } from '@amdenterpriseai/types';
+import { AIMModelResponse } from '@/types/models';
 
 import ModelDetailsModal from '@/components/features/models/ModelDetailsModal';
 
 import { describe, expect, it, vi } from 'vitest';
 
-const mockModel: Model = {
-  id: '3',
-  name: 'Test Model',
-  createdAt: '2023-01-02T00:00:00Z',
-  modelWeightsPath: '/dev/null',
-  createdBy: 'Test',
-  onboardingStatus: ModelOnboardingStatus.READY,
-  canonicalName: 'test-org/test-model',
+const mockModel: AIMModelResponse = {
+  metadata: {
+    name: 'test-model-resource',
+    creationTimestamp: '2023-01-02T00:00:00Z',
+    labels: {
+      'aiwb.apps.eai.amd.com/model-name': 'Test Model',
+    },
+  },
+  spec: {
+    image: 'test-image:latest',
+    modelSources: [
+      { modelId: 'test-org/test-model', sourceUri: 'hf://test-org/test-model' },
+    ],
+  },
+  status: {
+    status: 'Ready',
+  },
 };
 
 describe('ModelDetailsModal', () => {
@@ -41,8 +50,6 @@ describe('ModelDetailsModal', () => {
   });
 
   it('should render with default title if model is undefined but isOpen is true', () => {
-    // Note: The component currently renders a default title even if model is undefined.
-    // Adjust test if component behavior changes to not render or show specific message.
     render(
       <ModelDetailsModal
         isOpen={true}
@@ -72,7 +79,7 @@ describe('ModelDetailsModal', () => {
     ).toBeInTheDocument();
   });
 
-  it('should display all model details', () => {
+  it('should display model name and resource name', () => {
     render(
       <ModelDetailsModal
         isOpen={true}
@@ -81,14 +88,8 @@ describe('ModelDetailsModal', () => {
       />,
     );
 
-    // Check if all keys and values from mockModel are rendered
-    Object.entries(mockModel).forEach(([key, value]) => {
-      expect(screen.getByText(key)).toBeInTheDocument();
-      const valueString =
-        typeof value === 'object' ? JSON.stringify(value) : String(value);
-      // Use queryByText for potentially long strings or complex objects
-      expect(screen.queryByText(valueString)).toBeInTheDocument();
-    });
+    expect(screen.getByText('Test Model')).toBeInTheDocument();
+    expect(screen.getByText('test-model-resource')).toBeInTheDocument();
   });
 
   it('should call onOpenChange with false when close button is clicked', () => {
@@ -108,7 +109,6 @@ describe('ModelDetailsModal', () => {
   });
 
   it('should call onOpenChange with false when modal overlay is clicked (simulated via onClose)', () => {
-    // Assuming Modal component calls onClose when overlay is clicked
     render(
       <ModelDetailsModal
         isOpen={true}
@@ -117,11 +117,8 @@ describe('ModelDetailsModal', () => {
       />,
     );
 
-    // Simulate the Modal's internal onClose mechanism if possible,
-    // otherwise test the handleClose function directly or rely on button test.
-    // For this example, we'll re-test the close button as a proxy for onClose trigger.
     const closeButton = screen.getByText('list.actions.details.modal.close');
-    fireEvent.click(closeButton); // This triggers handleClose -> onOpenChange(false)
+    fireEvent.click(closeButton);
 
     expect(onOpenChangeMock).toHaveBeenCalledTimes(1);
     expect(onOpenChangeMock).toHaveBeenCalledWith(false);

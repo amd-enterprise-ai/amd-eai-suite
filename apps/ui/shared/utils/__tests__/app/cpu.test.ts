@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { millicoresToCpus } from '../../src/app/cpu';
+import { millicoresToCpus } from '@/src/app/cpu';
 
 import { describe, expect, it } from 'vitest';
 

@@ -5,11 +5,11 @@ import { act, render, screen } from '@testing-library/react';
 
 import { fetchProjectStorages } from '@/services/app';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 import { generateMockProjectStoragesWithParentStorage } from '@/__mocks__/utils/storages-mock';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 
-import { ProjectStorageStatus } from '@amdenterpriseai/types';
+import { ProjectStorageStatus } from '@/types/enums/storages';
 
 import { ProjectStoragesTable } from '@/components/features/projects';
 

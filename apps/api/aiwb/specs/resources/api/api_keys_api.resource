@@ -6,7 +6,7 @@
 Documentation       Keywords for interacting with the API Keys API endpoints (AIWB API).
 ...                 Provides low-level keywords for managing API keys through the AIWB API.
 ...                 AIWB uses namespace-based routing: /namespaces/{namespace}/api-keys
-...                 This differs from AIRM which uses project_id query parameter.
+...                 This differs from AIRM which uses projectId query parameter.
 ...                 Includes operations for creating, reading, updating, and deleting API keys.
 Library             RequestsLibrary
 Library             Collections

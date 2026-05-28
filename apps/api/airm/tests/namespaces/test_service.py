@@ -10,12 +10,14 @@ import pytest
 from keycloak import KeycloakAdmin
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import (
+from api_common.exceptions import NotFoundException
+from app.messaging.sender import MessageSender
+from app.namespaces.enums import NamespaceStatus
+from app.namespaces.messaging import (
     NamespaceDeletedMessage,
-    NamespaceStatus,
     ProjectNamespaceCreateMessage,
     ProjectNamespaceStatusMessage,
-    QuotaStatus,
+    ProjectNamespaceUpdateMessage,
     UnmanagedNamespaceMessage,
 )
 from app.namespaces.repository import (
@@ -27,11 +29,13 @@ from app.namespaces.service import (
     delete_namespace_in_cluster,
     handle_namespace_deleted,
     record_unmanaged_namespace,
+    send_project_namespace_manifest_update,
     update_project_namespace_status,
 )
-from app.projects.enums import ProjectStatus
+from app.projects.enums import GpuPreemptionPolicy, ProjectStatus
 from app.projects.repository import get_project_by_id
-from app.utilities.exceptions import NotFoundException
+from app.projects.schemas import GpuPreemptionConfig
+from app.quotas.enums import QuotaStatus
 from app.workloads.constants import PROJECT_ID_LABEL
 from tests import factory  # type: ignore[attr-defined]
 
@@ -369,3 +373,167 @@ async def test_handle_namespace_deleted_namespace_not_found(db_session: AsyncSes
 
     with pytest.raises(NotFoundException):
         await handle_namespace_deleted(AsyncMock(spec=KeycloakAdmin), db_session, env.cluster, message)
+
+
+@pytest.mark.asyncio
+async def test_create_namespace_for_project_includes_preemption_annotations(db_session: AsyncSession) -> None:
+    """Preemption annotations are embedded in the manifest when the project has gpu preemption enabled."""
+    env = await factory.create_basic_test_environment(db_session)
+    env.project.gpu_preemption_enabled = True
+    env.project.gpu_preemption_threshold = 50
+    env.project.gpu_preemption_grace_period = 1800
+    env.project.gpu_preemption_policy = GpuPreemptionPolicy.ON_PRESSURE
+    await db_session.flush()
+
+    mock_message_sender = AsyncMock(spec=MessageSender)
+
+    await create_namespace_for_project(db_session, env.project, env.cluster.id, "user@test.com", mock_message_sender)
+
+    args, _ = mock_message_sender.enqueue.call_args
+    manifest = args[1].namespace_manifest
+    annotations = manifest.metadata.annotations
+    assert annotations is not None
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.enabled"] == "true"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.threshold"] == "50"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.grace-period"] == "1800s"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.policy"] == "OnPressure"
+
+
+@pytest.mark.asyncio
+async def test_send_project_namespace_manifest_update_enabled(db_session: AsyncSession) -> None:
+    """send_project_namespace_manifest_update sends a ProjectNamespaceUpdateMessage with all Kaiwo annotations."""
+    env = await factory.create_basic_test_environment(db_session)
+    gpu_preemption = GpuPreemptionConfig(
+        enabled=True, threshold=80, grace_period=900, policy=GpuPreemptionPolicy.ALWAYS
+    )
+    mock_message_sender = AsyncMock(spec=MessageSender)
+
+    await send_project_namespace_manifest_update(env.project, gpu_preemption, mock_message_sender)
+
+    mock_message_sender.enqueue.assert_awaited_once()
+    args, _ = mock_message_sender.enqueue.call_args
+    assert args[0] == env.project.cluster_id
+    assert isinstance(args[1], ProjectNamespaceUpdateMessage)
+    assert args[1].message_type == "project_namespace_update"
+    annotations = args[1].namespace_manifest.metadata.annotations
+    assert annotations is not None
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.enabled"] == "true"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.threshold"] == "80"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.grace-period"] == "900s"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.policy"] == "Always"
+
+
+@pytest.mark.asyncio
+async def test_send_project_namespace_manifest_update_disabled(db_session: AsyncSession) -> None:
+    """send_project_namespace_manifest_update sends a manifest with no annotations when disabled."""
+    env = await factory.create_basic_test_environment(db_session)
+    gpu_preemption = GpuPreemptionConfig(enabled=False)
+    mock_message_sender = AsyncMock(spec=MessageSender)
+
+    await send_project_namespace_manifest_update(env.project, gpu_preemption, mock_message_sender)
+
+    mock_message_sender.enqueue.assert_awaited_once()
+    args, _ = mock_message_sender.enqueue.call_args
+    assert isinstance(args[1], ProjectNamespaceUpdateMessage)
+    assert args[1].namespace_manifest.metadata.annotations is None
+
+
+@pytest.mark.asyncio
+async def test_update_project_namespace_status_no_preemption_field_skips_reconciliation(
+    db_session: AsyncSession,
+) -> None:
+    """Status message without gpu_preemption field does not trigger re-apply (old agent backward compat)."""
+    env = await factory.create_basic_test_environment(db_session)
+    env.project.gpu_preemption_enabled = True
+    env.project.gpu_preemption_threshold = 50
+    await db_session.flush()
+
+    await factory.create_namespace(
+        db_session, cluster=env.cluster, project=env.project, status=NamespaceStatus.PENDING.value
+    )
+
+    message = ProjectNamespaceStatusMessage(
+        message_type="project_namespace_status",
+        project_id=env.project.id,
+        status=NamespaceStatus.ACTIVE,
+        status_reason=None,
+        gpu_preemption=None,
+    )
+
+    with patch("app.projects.service.update_project_status_from_components"):
+        await update_project_namespace_status(object(), db_session, env.cluster, message)
+
+    updated_namespace = await get_namespace_by_project_and_cluster(db_session, env.project.id, env.cluster.id)
+    assert updated_namespace is not None
+    assert updated_namespace.status == NamespaceStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_update_project_namespace_status_matching_preemption_skips_reconciliation(
+    db_session: AsyncSession,
+) -> None:
+    """Status message with gpu_preemption matching DB does not trigger re-apply."""
+    env = await factory.create_basic_test_environment(db_session)
+    env.project.gpu_preemption_enabled = True
+    env.project.gpu_preemption_threshold = 50
+    env.project.gpu_preemption_grace_period = 1800
+    env.project.gpu_preemption_policy = GpuPreemptionPolicy.ON_PRESSURE
+    await db_session.flush()
+
+    await factory.create_namespace(
+        db_session, cluster=env.cluster, project=env.project, status=NamespaceStatus.PENDING.value
+    )
+
+    observed = GpuPreemptionConfig(
+        enabled=True, threshold=50, grace_period=1800, policy=GpuPreemptionPolicy.ON_PRESSURE
+    )
+    message = ProjectNamespaceStatusMessage(
+        message_type="project_namespace_status",
+        project_id=env.project.id,
+        status=NamespaceStatus.ACTIVE,
+        status_reason=None,
+        gpu_preemption=observed,
+    )
+
+    with patch("app.projects.service.update_project_status_from_components"):
+        await update_project_namespace_status(object(), db_session, env.cluster, message)
+
+    updated_namespace = await get_namespace_by_project_and_cluster(db_session, env.project.id, env.cluster.id)
+    assert updated_namespace is not None
+    assert updated_namespace.status == NamespaceStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_update_project_namespace_status_mismatched_preemption_fails_namespace(
+    db_session: AsyncSession,
+) -> None:
+    """Status message with gpu_preemption differing from DB marks namespace as FAILED."""
+    env = await factory.create_basic_test_environment(db_session)
+    env.project.gpu_preemption_enabled = True
+    env.project.gpu_preemption_threshold = 80
+    env.project.gpu_preemption_grace_period = 900
+    env.project.gpu_preemption_policy = GpuPreemptionPolicy.ALWAYS
+    await db_session.flush()
+
+    await factory.create_namespace(
+        db_session, cluster=env.cluster, project=env.project, status=NamespaceStatus.PENDING.value
+    )
+
+    # Agent observed stale config (threshold differs)
+    observed = GpuPreemptionConfig(enabled=True, threshold=50, grace_period=900, policy=GpuPreemptionPolicy.ALWAYS)
+    message = ProjectNamespaceStatusMessage(
+        message_type="project_namespace_status",
+        project_id=env.project.id,
+        status=NamespaceStatus.ACTIVE,
+        status_reason=None,
+        gpu_preemption=observed,
+    )
+
+    with patch("app.projects.service.update_project_status_from_components"):
+        await update_project_namespace_status(object(), db_session, env.cluster, message)
+
+    updated_namespace = await get_namespace_by_project_and_cluster(db_session, env.project.id, env.cluster.id)
+    assert updated_namespace is not None
+    assert updated_namespace.status == NamespaceStatus.FAILED
+    assert updated_namespace.status_reason is not None
+    assert "does not match" in updated_namespace.status_reason

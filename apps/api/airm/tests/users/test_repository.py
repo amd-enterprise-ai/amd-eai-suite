@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import ConflictException
 from app.users.repository import (
     create_user,
     delete_user,
@@ -16,7 +17,6 @@ from app.users.repository import (
     get_users_by_ids,
     update_last_active_at,
 )
-from app.utilities.exceptions import ConflictException
 from tests import factory  # type: ignore[attr-defined]
 
 

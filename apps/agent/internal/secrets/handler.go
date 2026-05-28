@@ -63,13 +63,13 @@ func (h *SecretHandler) HandleCreate(ctx context.Context, msg *messaging.RawMess
 	)
 
 	switch secretType {
-	case messaging.SecretKindKubernetesSecret:
+	case common.SecretKindKubernetesSecret:
 		secret, ok := secretObj.(*corev1.Secret)
 		if !ok {
 			return fmt.Errorf("unexpected object type for KubernetesSecret")
 		}
 		return h.createKubernetesSecret(ctx, secret)
-	case messaging.SecretKindExternalSecret:
+	case common.SecretKindExternalSecret:
 		obj, ok := secretObj.(*unstructured.Unstructured)
 		if !ok {
 			return fmt.Errorf("unexpected object type for ExternalSecret")
@@ -96,9 +96,9 @@ func (h *SecretHandler) HandleDelete(ctx context.Context, msg *messaging.RawMess
 	)
 
 	switch deleteMsg.SecretType {
-	case messaging.SecretKindKubernetesSecret:
+	case common.SecretKindKubernetesSecret:
 		return h.deleteKubernetesSecrets(ctx, deleteMsg)
-	case messaging.SecretKindExternalSecret:
+	case common.SecretKindExternalSecret:
 		return h.deleteExternalSecrets(ctx, deleteMsg)
 	default:
 		h.logger.Info("WARN: unsupported secret type",
@@ -118,24 +118,24 @@ func (h *SecretHandler) HandleUpdate(_ context.Context, _ *messaging.RawMessage)
 // and derives the project secret ID and scope from the manifest labels.
 func parseCreateMessage(msg *messaging.RawMessage) (
 	projectSecretID string,
-	secretType messaging.SecretKind,
-	scope *messaging.SecretScope,
+	secretType common.SecretKind,
+	scope *common.SecretScope,
 	secretObj client.Object,
 	err error,
 ) {
-	var createMsg messaging.ProjectSecretsCreateMessage
+	var createMsg common.ProjectSecretsCreateMessage
 	if err := json.Unmarshal(msg.Payload, &createMsg); err != nil {
 		return "", "", nil, nil, fmt.Errorf("failed to parse create message: %w", err)
 	}
 
 	switch createMsg.SecretType {
-	case messaging.SecretKindKubernetesSecret:
+	case common.SecretKindKubernetesSecret:
 		var secret corev1.Secret
 		if err := json.Unmarshal(createMsg.Manifest, &secret); err != nil {
 			return "", "", nil, nil, fmt.Errorf("failed to parse secret manifest: %w", err)
 		}
 		secretObj = &secret
-	case messaging.SecretKindExternalSecret:
+	case common.SecretKindExternalSecret:
 		var obj unstructured.Unstructured
 		if err := json.Unmarshal(createMsg.Manifest, &obj.Object); err != nil {
 			return "", "", nil, nil, fmt.Errorf("failed to parse external secret manifest: %w", err)
@@ -165,8 +165,8 @@ func parseCreateMessage(msg *messaging.RawMessage) (
 }
 
 // parseDeleteMessage unmarshals the delete message payload.
-func parseDeleteMessage(msg *messaging.RawMessage) (*messaging.ProjectSecretsDeleteMessage, error) {
-	var deleteMsg messaging.ProjectSecretsDeleteMessage
+func parseDeleteMessage(msg *messaging.RawMessage) (*common.ProjectSecretsDeleteMessage, error) {
+	var deleteMsg common.ProjectSecretsDeleteMessage
 	if err := json.Unmarshal(msg.Payload, &deleteMsg); err != nil {
 		return nil, fmt.Errorf("failed to parse delete message: %w", err)
 	}
@@ -177,11 +177,11 @@ func parseDeleteMessage(msg *messaging.RawMessage) (*messaging.ProjectSecretsDel
 func (h *SecretHandler) publishStatus(
 	ctx context.Context,
 	projectSecretID string,
-	secretScope *messaging.SecretScope,
-	status messaging.ProjectSecretStatus,
+	secretScope *common.SecretScope,
+	status common.ProjectSecretStatus,
 	reason string,
 ) {
-	statusMsg := &messaging.ProjectSecretsUpdateMessage{
+	statusMsg := &common.ProjectSecretsUpdateMessage{
 		MessageType:     messaging.MessageTypeProjectSecretsUpdate,
 		ProjectSecretID: projectSecretID,
 		SecretScope:     secretScope,
@@ -218,7 +218,7 @@ func (h *SecretHandler) createKubernetesSecret(
 			"project_secret_id", projectSecretID,
 		)
 		reason := fmt.Sprintf("Failed to create secret: %v", err)
-		h.publishStatus(ctx, projectSecretID, scope, messaging.ProjectSecretStatusFailed, reason)
+		h.publishStatus(ctx, projectSecretID, scope, common.ProjectSecretStatusFailed, reason)
 		return fmt.Errorf("failed to create secret: %w", err)
 	}
 
@@ -244,7 +244,7 @@ func (h *SecretHandler) createExternalSecret(
 			"project_secret_id", projectSecretID,
 		)
 		reason := fmt.Sprintf("Invalid apiVersion '%s': %v", obj.GetAPIVersion(), err)
-		h.publishStatus(ctx, projectSecretID, scope, messaging.ProjectSecretStatusFailed, reason)
+		h.publishStatus(ctx, projectSecretID, scope, common.ProjectSecretStatusFailed, reason)
 		return fmt.Errorf("invalid API version: %w", err)
 	}
 
@@ -265,7 +265,7 @@ func (h *SecretHandler) createExternalSecret(
 			"project_secret_id", projectSecretID,
 		)
 		reason := fmt.Sprintf("Failed to create ExternalSecret: %v", err)
-		h.publishStatus(ctx, projectSecretID, scope, messaging.ProjectSecretStatusFailed, reason)
+		h.publishStatus(ctx, projectSecretID, scope, common.ProjectSecretStatusFailed, reason)
 		return fmt.Errorf("failed to create ExternalSecret: %w", err)
 	}
 
@@ -278,7 +278,7 @@ func (h *SecretHandler) createExternalSecret(
 	return nil
 }
 
-func (h *SecretHandler) deleteKubernetesSecrets(ctx context.Context, deleteMsg *messaging.ProjectSecretsDeleteMessage) error {
+func (h *SecretHandler) deleteKubernetesSecrets(ctx context.Context, deleteMsg *common.ProjectSecretsDeleteMessage) error {
 	labelSelector := common.BuildLabelSelector(deleteMsg.ProjectSecretID)
 
 	secretList, err := h.clientset.CoreV1().Secrets(deleteMsg.ProjectName).List(ctx, metav1.ListOptions{
@@ -300,7 +300,7 @@ func (h *SecretHandler) deleteKubernetesSecrets(ctx context.Context, deleteMsg *
 			"label_selector", labelSelector,
 			"project_secret_id", deleteMsg.ProjectSecretID,
 		)
-		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, messaging.ProjectSecretStatusDeleted, "No secrets found")
+		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, common.ProjectSecretStatusDeleted, "No secrets found")
 		return nil
 	}
 
@@ -316,7 +316,7 @@ func (h *SecretHandler) deleteKubernetesSecrets(ctx context.Context, deleteMsg *
 			"project_secret_id", deleteMsg.ProjectSecretID,
 		)
 		reason := fmt.Sprintf("Failed to delete secrets: %v", err)
-		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, messaging.ProjectSecretStatusDeleteFailed, reason)
+		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, common.ProjectSecretStatusDeleteFailed, reason)
 		return fmt.Errorf("failed to delete secrets: %w", err)
 	}
 
@@ -328,7 +328,7 @@ func (h *SecretHandler) deleteKubernetesSecrets(ctx context.Context, deleteMsg *
 	return nil
 }
 
-func (h *SecretHandler) deleteExternalSecrets(ctx context.Context, deleteMsg *messaging.ProjectSecretsDeleteMessage) error {
+func (h *SecretHandler) deleteExternalSecrets(ctx context.Context, deleteMsg *common.ProjectSecretsDeleteMessage) error {
 	labelSelector := common.BuildLabelSelector(deleteMsg.ProjectSecretID)
 
 	version, installed, derr := externalsecret.DiscoverExternalSecretVersion(ctx, h.dynamicClient)
@@ -341,7 +341,7 @@ func (h *SecretHandler) deleteExternalSecrets(ctx context.Context, deleteMsg *me
 
 	scope := &deleteMsg.SecretScope
 	if !installed {
-		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, messaging.ProjectSecretStatusDeleted, "ExternalSecret CRD not installed; nothing to delete")
+		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, common.ProjectSecretStatusDeleted, "ExternalSecret CRD not installed; nothing to delete")
 		return nil
 	}
 
@@ -368,7 +368,7 @@ func (h *SecretHandler) deleteExternalSecrets(ctx context.Context, deleteMsg *me
 			"label_selector", labelSelector,
 			"project_secret_id", deleteMsg.ProjectSecretID,
 		)
-		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, messaging.ProjectSecretStatusDeleted, "No ExternalSecrets found")
+		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, common.ProjectSecretStatusDeleted, "No ExternalSecrets found")
 		return nil
 	}
 
@@ -384,7 +384,7 @@ func (h *SecretHandler) deleteExternalSecrets(ctx context.Context, deleteMsg *me
 			"project_secret_id", deleteMsg.ProjectSecretID,
 		)
 		reason := fmt.Sprintf("Failed to delete ExternalSecrets: %v", err)
-		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, messaging.ProjectSecretStatusDeleteFailed, reason)
+		h.publishStatus(ctx, deleteMsg.ProjectSecretID, scope, common.ProjectSecretStatusDeleteFailed, reason)
 		return fmt.Errorf("failed to delete ExternalSecrets: %w", err)
 	}
 

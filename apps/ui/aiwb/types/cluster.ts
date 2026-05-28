@@ -2,9 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { QuotaResourceType } from '@amdenterpriseai/types';
-
 export type ClusterResources = {
-  availableResources: QuotaResourceType;
+  availableResources: {
+    gpuCount: number;
+    cpuMilliCores: number;
+    memoryBytes: number;
+    ephemeralStorageBytes: number;
+  };
   totalNodeCount: number;
 };

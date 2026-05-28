@@ -20,6 +20,7 @@ import (
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	agent "github.com/silogen/agent/internal/common"
 	"github.com/silogen/agent/internal/messaging"
 	kaiwov1alpha1 "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
@@ -56,11 +57,11 @@ func setupQuotaHandler() (*QuotaHandler, *testutils.MockPublisher) {
 func TestQuotaHandler_HandleUpdate_Success(t *testing.T) {
 	handler, mockPub := setupQuotaHandler()
 
-	gpuVendor := messaging.GPUVendorAMD
-	allocationMsg := messaging.ClusterQuotasAllocationMessage{
+	gpuVendor := agent.GPUVendorAMD
+	allocationMsg := ClusterQuotasAllocationMessage{
 		MessageType: messaging.MessageTypeClusterQuotasAllocationMessage,
 		GPUVendor:   &gpuVendor,
-		QuotaAllocations: []messaging.ClusterQuotaAllocation{
+		QuotaAllocations: []ClusterQuotaAllocation{
 			{
 				QuotaName:             "test-quota",
 				Namespaces:            []string{"ns1", "ns2"},
@@ -70,7 +71,7 @@ func TestQuotaHandler_HandleUpdate_Success(t *testing.T) {
 				GPUCount:              2,
 			},
 		},
-		PriorityClasses: []messaging.PriorityClass{
+		PriorityClasses: []PriorityClass{
 			{Name: "high", Priority: 100},
 			{Name: "low", Priority: 50},
 		},
@@ -104,7 +105,7 @@ func TestQuotaHandler_HandleUpdate_InvalidJSON(t *testing.T) {
 
 	// Should publish failure message
 	require.Len(t, mockPub.Published, 1)
-	failureMsg, ok := mockPub.Published[0].(*messaging.ClusterQuotaFailureMessage)
+	failureMsg, ok := mockPub.Published[0].(*ClusterQuotaFailureMessage)
 	require.True(t, ok)
 	assert.Equal(t, messaging.MessageTypeClusterQuotasFailureMessage, failureMsg.MessageType)
 	assert.Contains(t, failureMsg.Reason, "Failed to parse message")
@@ -137,7 +138,7 @@ func TestPublishFailure(t *testing.T) {
 	handler.publishFailure(context.Background(), reason)
 
 	require.Len(t, mockPub.Published, 1)
-	failureMsg, ok := mockPub.Published[0].(*messaging.ClusterQuotaFailureMessage)
+	failureMsg, ok := mockPub.Published[0].(*ClusterQuotaFailureMessage)
 	require.True(t, ok)
 	assert.Equal(t, messaging.MessageTypeClusterQuotasFailureMessage, failureMsg.MessageType)
 	assert.Equal(t, reason, failureMsg.Reason)

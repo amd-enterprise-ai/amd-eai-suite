@@ -11,6 +11,20 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import (
+    DeletionConflictException,
+    ForbiddenException,
+    NotFoundException,
+    PreconditionNotMetException,
+)
+from app.clusters.messaging import (
+    ClusterNode,
+    ClusterNodeDeleteMessage,
+    ClusterNodesMessage,
+    ClusterNodeUpdateMessage,
+    GPUInformation,
+    HeartbeatMessage,
+)
 from app.clusters.models import Cluster as ClusterModel
 from app.clusters.models import ClusterNode as ClusterNodeModel
 from app.clusters.repository import get_cluster_by_id, get_cluster_nodes_by_cluster_and_name
@@ -35,23 +49,9 @@ from app.clusters.service import (
     update_last_heartbeat,
     validate_cluster_accessible_to_user,
 )
-from app.messaging.schemas import (
-    ClusterNode,
-    ClusterNodeDeleteMessage,
-    ClusterNodesMessage,
-    ClusterNodeUpdateMessage,
-    GPUInformation,
-    GPUVendor,
-    HeartbeatMessage,
-)
 from app.projects.models import Project
-from app.quotas.models import QuotaStatus
-from app.utilities.exceptions import (
-    DeletionConflictException,
-    ForbiddenException,
-    NotFoundException,
-    PreconditionNotMetException,
-)
+from app.quotas.enums import QuotaStatus
+from app.utilities.enums import GPUVendor
 from tests import factory  # type: ignore[attr-defined]
 
 
@@ -66,7 +66,7 @@ async def test_create_cluster_success(db_session: AsyncSession) -> None:
         patch("app.clusters.service.configure_queues_for_cluster") as mock_configure_queues,
     ):
         result = await create_cluster(
-            db_session, creator, cluster_create=ClusterIn(workloads_base_url="http://example.com")
+            db_session, creator, cluster_create=ClusterIn(workbench_base_url="http://example.com")
         )
 
     mock_create_vhost.assert_called_once()
@@ -75,7 +75,7 @@ async def test_create_cluster_success(db_session: AsyncSession) -> None:
     assert result is not None
     assert result.created_by == creator
     assert result.user_secret == "12345"
-    assert result.workloads_base_url == "http://example.com"
+    assert result.workbench_base_url == "http://example.com"
 
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_create_cluster_success_no_base_url(db_session: AsyncSession) -> N
     assert result is not None
     assert result.created_by == creator
     assert result.user_secret == "12345"
-    assert result.workloads_base_url is None
+    assert result.workbench_base_url is None
 
 
 @pytest.mark.asyncio
@@ -107,7 +107,7 @@ async def test_create_cluster_vhost_failure(db_session: AsyncSession) -> None:
 
     with patch("app.clusters.service.create_vhost_and_user", side_effect=Exception("Mock exception")):
         with pytest.raises(Exception, match="Mock exception"):
-            await create_cluster(db_session, creator, cluster_create=ClusterIn(workloads_base_url="http://example.com"))
+            await create_cluster(db_session, creator, cluster_create=ClusterIn(workbench_base_url="http://example.com"))
 
 
 @pytest.mark.asyncio
@@ -117,7 +117,7 @@ async def test_update_cluster_success(db_session: AsyncSession) -> None:
     cluster = env.cluster
     original_name = cluster.name
 
-    cluster_data = ClusterIn(workloads_base_url="https://updated.example.com")
+    cluster_data = ClusterIn(workbench_base_url="https://updated.example.com")
     updater = "test_updater"
 
     result = await update_cluster(db_session, cluster, cluster_data, updater)
@@ -125,9 +125,9 @@ async def test_update_cluster_success(db_session: AsyncSession) -> None:
     await db_session.refresh(cluster)
     assert cluster.name == original_name
     assert cluster.updated_by == updater
-    assert cluster.workloads_base_url == "https://updated.example.com"
+    assert cluster.workbench_base_url == "https://updated.example.com"
     assert result.name == original_name
-    assert result.workloads_base_url == "https://updated.example.com"
+    assert result.workbench_base_url == "https://updated.example.com"
 
 
 @pytest.mark.asyncio
@@ -198,7 +198,7 @@ async def test_get_clusters_with_resources(db_session: AsyncSession) -> None:
     cluster1 = env.cluster
 
     # Create second cluster
-    cluster2 = await factory.create_cluster(db_session, name="cluster2", workloads_base_url="http://example.com")
+    cluster2 = await factory.create_cluster(db_session, name="cluster2", workbench_base_url="http://example.com")
 
     # Create cluster nodes
     await factory.create_cluster_node(db_session, cluster1, name="node1", gpu_count=1, status="Ready")
@@ -470,7 +470,7 @@ async def test_update_last_heartbeat_with_cluster_name_update(db_session: AsyncS
     """Test heartbeat update that also sets cluster name."""
     env = await factory.create_basic_test_environment(db_session)
     # Create cluster without name to test name setting during heartbeat
-    cluster = await factory.create_cluster(db_session, name=None, workloads_base_url="http://example.com")
+    cluster = await factory.create_cluster(db_session, name=None, workbench_base_url="http://example.com")
 
     message = HeartbeatMessage(
         message_type="heartbeat",
@@ -563,7 +563,7 @@ async def test_create_cluster_failure(db_session: AsyncSession) -> None:
     # Mock database failure and verify exception is raised
     with patch("app.clusters.service.create_cluster_in_db", side_effect=Exception("Mock DB exception")):
         with pytest.raises(Exception, match="Mock DB exception"):
-            await create_cluster(db_session, creator, ClusterIn(workloads_base_url="http://example.com"))
+            await create_cluster(db_session, creator, ClusterIn(workbench_base_url="http://example.com"))
 
 
 @pytest.mark.asyncio
@@ -732,7 +732,7 @@ async def test_get_clusters_stats(db_session: AsyncSession) -> None:
     cluster1 = env.cluster
 
     # Create second cluster
-    cluster2 = await factory.create_cluster(db_session, name="cluster2", workloads_base_url="http://example.com")
+    cluster2 = await factory.create_cluster(db_session, name="cluster2", workbench_base_url="http://example.com")
 
     # Create cluster nodes with different specs
     await factory.create_cluster_node(db_session, cluster1, name="node1", gpu_count=8, status="Ready", is_ready=True)
@@ -837,8 +837,8 @@ async def test_get_stats_for_clusters_accessible_to_user(db_session: AsyncSessio
     env = await factory.create_basic_test_environment(db_session, cluster_name="cluster1")
     cluster1 = env.cluster
 
-    cluster2 = await factory.create_cluster(db_session, name="cluster2", workloads_base_url="http://example.com")
-    cluster3 = await factory.create_cluster(db_session, name="cluster3", workloads_base_url="http://example.com")
+    cluster2 = await factory.create_cluster(db_session, name="cluster2", workbench_base_url="http://example.com")
+    cluster3 = await factory.create_cluster(db_session, name="cluster3", workbench_base_url="http://example.com")
     await factory.create_cluster_node(db_session, cluster1, name="node1", gpu_count=8, status="Ready", is_ready=True)
     await factory.create_cluster_node(db_session, cluster2, name="node1", gpu_count=4, status="Ready", is_ready=True)
     await factory.create_cluster_node(db_session, cluster3, name="node1", gpu_count=4, status="Ready", is_ready=True)
@@ -877,8 +877,8 @@ async def test_get_clusters_accessible_to_user_with_resources(db_session: AsyncS
     env = await factory.create_basic_test_environment(db_session, cluster_name="cluster1")
     cluster1 = env.cluster
 
-    cluster2 = await factory.create_cluster(db_session, name="cluster2", workloads_base_url="http://example.com")
-    cluster3 = await factory.create_cluster(db_session, name="cluster3", workloads_base_url="http://example.com")
+    cluster2 = await factory.create_cluster(db_session, name="cluster2", workbench_base_url="http://example.com")
+    cluster3 = await factory.create_cluster(db_session, name="cluster3", workbench_base_url="http://example.com")
     await factory.create_cluster_node(db_session, cluster1, name="node1", gpu_count=8, status="Ready", is_ready=True)
     await factory.create_cluster_node(db_session, cluster2, name="node1", gpu_count=4, status="Ready", is_ready=True)
     await factory.create_cluster_node(db_session, cluster3, name="node1", gpu_count=2, status="Ready", is_ready=True)

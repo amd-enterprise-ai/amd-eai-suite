@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -29,6 +30,9 @@ type Publisher struct {
 	queueName string
 	userID    string // User ID to set in message properties (cluster UUID)
 	logger    logr.Logger
+	// sessionMu: RLock around PublishWithContext on a healthy session (concurrent publishes).
+	// Lock for connect and close.
+	sessionMu sync.RWMutex
 	conn      *amqp.Connection
 	channel   *amqp.Channel
 }
@@ -48,7 +52,22 @@ func NewPublisher(rabbitMqConfig config.RabbitMQConfig, logger logr.Logger) *Pub
 
 // Connect establishes connection to RabbitMQ.
 func (p *Publisher) Connect(ctx context.Context) error {
-	conn, err := amqp.Dial(p.amqpURL)
+	p.sessionMu.Lock()
+	defer p.sessionMu.Unlock()
+	return p.connectLocked(ctx)
+}
+
+func (p *Publisher) connectLocked(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p.closeTransportLocked()
+
+	conn, err := amqp.DialConfig(p.amqpURL, amqp.Config{
+		Heartbeat: 30 * time.Second,
+		Locale:    "en_US",
+		Dial:      amqp.DefaultDial(BrokerConnectionTimeout),
+	})
 	if err != nil {
 		return fmt.Errorf("connect failed: %w", err)
 	}
@@ -56,7 +75,8 @@ func (p *Publisher) Connect(ctx context.Context) error {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
+		p.conn = nil
 		return fmt.Errorf("channel failed: %w", err)
 	}
 	p.channel = ch
@@ -71,8 +91,10 @@ func (p *Publisher) Connect(ctx context.Context) error {
 		queueCfg.Args,
 	)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
+		p.channel = nil
+		p.conn = nil
 		return fmt.Errorf("queue declare failed: %w", err)
 	}
 
@@ -80,12 +102,24 @@ func (p *Publisher) Connect(ctx context.Context) error {
 	return nil
 }
 
+func (p *Publisher) closeTransportLocked() {
+	if p.channel != nil {
+		_ = p.channel.Close()
+		p.channel = nil
+	}
+	if p.conn != nil {
+		_ = p.conn.Close()
+		p.conn = nil
+	}
+}
+
+func (p *Publisher) isHealthy() bool {
+	return p.conn != nil && p.channel != nil &&
+		!p.conn.IsClosed() && !p.channel.IsClosed()
+}
+
 // Publish publishes a message to the queue.
 func (p *Publisher) Publish(ctx context.Context, message interface{}) error {
-	if p.channel == nil {
-		return fmt.Errorf("not connected, call Connect first")
-	}
-
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("marshal failed: %w", err)
@@ -97,7 +131,23 @@ func (p *Publisher) Publish(ctx context.Context, message interface{}) error {
 		msgType = string(envelope.MessageType)
 	}
 
-	p.logger.Info("publishing message", "type", msgType, "queue", p.queueName)
+	for {
+		p.sessionMu.RLock()
+		if p.isHealthy() {
+			break
+		}
+		p.sessionMu.RUnlock()
+
+		p.sessionMu.Lock()
+		if !p.isHealthy() {
+			p.logger.Info("rabbitmq session unhealthy; reconnecting", "queue", p.queueName)
+			if connectErr := p.connectLocked(ctx); connectErr != nil {
+				p.sessionMu.Unlock()
+				return connectErr
+			}
+		}
+		p.sessionMu.Unlock()
+	}
 
 	err = p.channel.PublishWithContext(
 		ctx,
@@ -113,6 +163,8 @@ func (p *Publisher) Publish(ctx context.Context, message interface{}) error {
 			UserId:       p.userID,
 		},
 	)
+	p.sessionMu.RUnlock()
+
 	if err != nil {
 		p.logger.Error(err, "publish failed", "type", msgType, "queue", p.queueName)
 		return fmt.Errorf("publish failed: %w", err)
@@ -124,6 +176,9 @@ func (p *Publisher) Publish(ctx context.Context, message interface{}) error {
 
 // Close closes the publisher connection.
 func (p *Publisher) Close() error {
+	p.sessionMu.Lock()
+	defer p.sessionMu.Unlock()
+
 	var errs []error
 	if p.channel != nil {
 		if err := p.channel.Close(); err != nil {

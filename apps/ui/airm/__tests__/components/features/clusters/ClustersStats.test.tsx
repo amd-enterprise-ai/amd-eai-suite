@@ -4,9 +4,9 @@
 
 import { act, render, screen } from '@testing-library/react';
 
-import { generateClustersMock } from '../../../../__mocks__/utils/cluster-mock';
+import { generateClustersMock } from '@/__mocks__/utils/cluster-mock';
 
-import { WorkloadsStats } from '@amdenterpriseai/types';
+import { WorkloadsStats } from '@/types/workloads';
 
 import { ClustersStats } from '@/components/features/clusters';
 

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-.PHONY: build build-agent build-webhook run run-agent run-webhook dev dev-agent dev-webhook test test-verbose test-coverage test-coverage-html clean tidy format lint lint-fix
+.PHONY: build build-agent build-webhook run run-agent run-webhook dev dev-agent dev-webhook test test-verbose test-coverage test-coverage-html clean tidy format lint lint-fix vendor
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
@@ -62,6 +62,10 @@ clean:
 
 tidy:
 	go mod tidy
+
+# Populate gitignored vendor/ for local dev and kind Air (mounted /code). Not used in CI/Docker image builds.
+vendor:
+	go mod vendor
 
 # Format the codebase using gofmt (standard Go formatter)
 format:

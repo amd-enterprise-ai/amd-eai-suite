@@ -20,8 +20,9 @@ Resource            pages/workspaces_page.resource
 
 User is on secrets page
     [Documentation]    Navigates to the Secrets page.
+    ...                Expects ${UI_BASE_URL} and ${TEST_PROJECT} to be set.
 
-    Navigate to secrets page    ${UI_BASE_URL}
+    Navigate to secrets page    ${UI_BASE_URL}    ${TEST_PROJECT}[name]
 
 # =============================================================================
 # When keywords (actions)
@@ -100,8 +101,9 @@ Verify exact secret count
 The user opens the workspace deploy form
     [Documentation]    Navigates to the workspaces page and opens the deploy drawer
     ...                on the first available workspace.
+    ...                Expects ${UI_BASE_URL} and ${TEST_PROJECT} to be set.
 
-    Navigate to workspaces page    ${UI_BASE_URL}
+    Navigate to workspaces page    ${UI_BASE_URL}    ${TEST_PROJECT}[name]
     Click first workspace deploy button
     Wait for deploy drawer
 

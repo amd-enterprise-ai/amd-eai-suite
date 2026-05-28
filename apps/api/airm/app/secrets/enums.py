@@ -5,14 +5,6 @@
 from enum import StrEnum
 
 
-class SecretUseCase(StrEnum):
-    HUGGING_FACE = "HuggingFace"
-    IMAGE_PULL_SECRET = "ImagePullSecret"
-    S3 = "S3"
-    GENERIC = "Generic"
-    DATABASE = "Database"
-
-
 class SecretStatus(StrEnum):
     UNASSIGNED = "Unassigned"
     PENDING = "Pending"
@@ -24,3 +16,24 @@ class SecretStatus(StrEnum):
     DELETED = "Deleted"
     DELETE_FAILED = "DeleteFailed"
     UNKNOWN = "Unknown"
+
+
+class ProjectSecretStatus(StrEnum):
+    PENDING = "Pending"
+    SYNCED = "Synced"
+    FAILED = "Failed"
+    SYNCED_ERROR = "SyncedError"
+    DELETE_FAILED = "DeleteFailed"
+    DELETED = "Deleted"
+    DELETING = "Deleting"
+    UNKNOWN = "Unknown"
+
+
+class SecretKind(StrEnum):
+    EXTERNAL_SECRET = "ExternalSecret"
+    KUBERNETES_SECRET = "KubernetesSecret"
+
+
+class SecretScope(StrEnum):
+    ORGANIZATION = "Organization"
+    PROJECT = "Project"

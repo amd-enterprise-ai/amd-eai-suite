@@ -20,6 +20,7 @@ import {
   fetchProjectWorkloadsMetrics,
 } from '@/services/app';
 
+import { GPU_PREEMPTION_DISABLED } from '@/types/projects';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
@@ -84,12 +85,13 @@ describe('projects service', () => {
       name: 'test',
       description: 'desc',
       quota: {
-        cpu_milli_cores: 0,
-        gpu_count: 0,
-        memory_bytes: 0,
-        ephemeral_storage_bytes: 0,
+        cpuMilliCores: 0,
+        gpuCount: 0,
+        memoryBytes: 0,
+        ephemeralStorageBytes: 0,
       },
-      cluster_id: 'cid',
+      clusterId: 'cid',
+      gpuPreemption: GPU_PREEMPTION_DISABLED,
     });
     expect(mockFetch).toHaveBeenCalledWith(
       '/api/projects',
@@ -105,12 +107,13 @@ describe('projects service', () => {
         name: 'test',
         description: 'desc',
         quota: {
-          cpu_milli_cores: 0,
-          gpu_count: 0,
-          memory_bytes: 0,
-          ephemeral_storage_bytes: 0,
+          cpuMilliCores: 0,
+          gpuCount: 0,
+          memoryBytes: 0,
+          ephemeralStorageBytes: 0,
         },
-        cluster_id: 'cid',
+        clusterId: 'cid',
+        gpuPreemption: GPU_PREEMPTION_DISABLED,
       }),
     ).rejects.toThrow(APIRequestError);
   });
@@ -121,11 +124,12 @@ describe('projects service', () => {
       id: 'id1',
       description: 'desc',
       quota: {
-        cpu_milli_cores: 0,
-        gpu_count: 0,
-        memory_bytes: 0,
-        ephemeral_storage_bytes: 0,
+        cpuMilliCores: 0,
+        gpuCount: 0,
+        memoryBytes: 0,
+        ephemeralStorageBytes: 0,
       },
+      gpuPreemption: GPU_PREEMPTION_DISABLED,
     });
     expect(mockFetch).toHaveBeenCalledWith(
       '/api/projects/id1',
@@ -141,11 +145,12 @@ describe('projects service', () => {
         id: 'id1',
         description: 'desc',
         quota: {
-          cpu_milli_cores: 0,
-          gpu_count: 0,
-          memory_bytes: 0,
-          ephemeral_storage_bytes: 0,
+          cpuMilliCores: 0,
+          gpuCount: 0,
+          memoryBytes: 0,
+          ephemeralStorageBytes: 0,
         },
+        gpuPreemption: GPU_PREEMPTION_DISABLED,
       }),
     ).rejects.toThrow(APIRequestError);
   });
@@ -220,7 +225,7 @@ describe('projects service', () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      '/api/projects/pid/workloads/metrics?page=1&page_size=10&sort=%5B%5D&filter=%5B%5D',
+      '/api/projects/pid/workloads/metrics?page=1&pageSize=10&sort=%5B%5D&filter=%5B%5D',
     );
   });
 

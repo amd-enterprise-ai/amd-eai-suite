@@ -3,15 +3,18 @@
 # SPDX-License-Identifier: MIT
 from uuid import UUID
 
+from api_common.exceptions import ConflictException
+
 from ..clusters.schemas import ClusterResponse, ClusterWithResources
-from ..messaging.schemas import NamespaceStatus, QuotaStatus
+from ..namespaces.enums import NamespaceStatus
 from ..namespaces.models import Namespace
+from ..quotas.enums import QuotaStatus
 from ..quotas.models import Quota
 from ..quotas.schemas import QuotaResponse
-from ..utilities.exceptions import ConflictException
 from .enums import ProjectStatus
 from .models import Project
 from .schemas import (
+    GpuPreemptionConfig,
     ProjectResponse,
     ProjectsWithResourceAllocation,
     ProjectWithClusterAndQuota,
@@ -19,11 +22,42 @@ from .schemas import (
 )
 
 
-def map_to_schema(
+def flatten_gpu_preemption(config: GpuPreemptionConfig) -> dict:
+    """Flatten a GpuPreemptionConfig into column names matching the Project model."""
+    return {
+        "gpu_preemption_enabled": config.enabled,
+        "gpu_preemption_threshold": config.threshold,
+        "gpu_preemption_grace_period": config.grace_period,
+        "gpu_preemption_policy": config.policy,
+    }
+
+
+def extract_gpu_preemption_config(project: Project) -> GpuPreemptionConfig:
+    return GpuPreemptionConfig(
+        enabled=project.gpu_preemption_enabled,
+        threshold=project.gpu_preemption_threshold,
+        grace_period=project.gpu_preemption_grace_period,
+        policy=project.gpu_preemption_policy,
+    )
+
+
+def has_gpu_preemption_changed(current: GpuPreemptionConfig, updated: GpuPreemptionConfig) -> bool:
+    current_fields = current.model_dump()
+    return any(v != current_fields.get(k) for k, v in updated.model_dump().items())
+
+
+def map_to_project_response(project: Project) -> ProjectResponse:
+    """Map a SQLAlchemy Project to a ProjectResponse, assembling the nested gpu_preemption config."""
+    return ProjectResponse.model_validate(project).model_copy(
+        update={"gpu_preemption": extract_gpu_preemption_config(project)}
+    )
+
+
+def map_to_project_with_cluster_and_quota(
     project: Project,
 ) -> ProjectWithClusterAndQuota:
     return ProjectWithClusterAndQuota(
-        **ProjectResponse.model_validate(project).model_dump(),
+        **map_to_project_response(project).model_dump(),
         quota=QuotaResponse.model_validate(project.quota),
         cluster=ClusterResponse.model_validate(project.cluster),
     )
@@ -88,9 +122,9 @@ def build_projects_with_allocations(
 ) -> ProjectsWithResourceAllocation:
     projects_list = []
     for project in projects:
-        project_schema = ProjectResponse.model_validate(project)
+        project_response = map_to_project_response(project)
         project_with_allocation = ProjectWithResourceAllocation(
-            **project_schema.model_dump(),
+            **project_response.model_dump(),
             quota=QuotaResponse.model_validate(project.quota),
             cluster=clusters_with_resources[project.cluster.id],
         )

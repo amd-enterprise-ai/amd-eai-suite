@@ -4,13 +4,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { proxyRequest } from '@amdenterpriseai/utils/server';
 
-import { ProjectWithMembers, ProjectsResponse } from '@amdenterpriseai/types';
+import { ProjectWithMembers } from '@/types/projects';
+import { ProjectsResponse } from '@/types/projects';
 
 export const getProjects = async (
   accessToken: string,
@@ -24,8 +22,7 @@ export const getProjects = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get projects: ${await getErrorMessage(response)}`,
@@ -46,8 +43,7 @@ export const getProject = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get project: ${await getErrorMessage(response)}`,
@@ -67,7 +63,7 @@ export const addUserToProject = async (
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ user_ids: [userId] }),
+    body: JSON.stringify({ userIds: [userId] }),
   });
 
   if (response.ok) {

@@ -7,7 +7,9 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from api_common.schemas import BaseModel
 
 
 class K8sMetadata(BaseModel):
@@ -16,18 +18,12 @@ class K8sMetadata(BaseModel):
     uid: str | None = None
     labels: dict[str, str] = Field(default_factory=dict)
     annotations: dict[str, str] = Field(default_factory=dict)
-    creation_timestamp: datetime | None = Field(None, alias="creationTimestamp")
-    owner_references: list[dict[str, Any]] = Field(default_factory=list, alias="ownerReferences")
-
-    class Config:
-        populate_by_name = True
+    creation_timestamp: datetime | None = None
+    owner_references: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class K8sListResponse(BaseModel):
-    api_version: str = Field(alias="apiVersion")
+    api_version: str
     kind: str
     items: list[dict[str, Any]]
     metadata: dict[str, Any] = Field(default_factory=dict)
-
-    class Config:
-        populate_by_name = True

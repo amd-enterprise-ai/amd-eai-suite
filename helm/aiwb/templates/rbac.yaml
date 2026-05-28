@@ -21,7 +21,7 @@ metadata:
 rules:
 # AIM CRD access
 - apiGroups: ["aim.eai.amd.com"]
-  resources: ["aimservices", "aimclustermodels", "aimclusterservicetemplates", "aimruntimeconfigs", "aimclusterruntimeconfigs"]
+  resources: ["aimservices", "aimclustermodels", "aimclusterservicetemplates", "aimruntimeconfigs", "aimclusterruntimeconfigs", "aimmodels", "aimservicetemplates"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 # Kubernetes Secret access (on-demand reads, no database persistence)
@@ -96,6 +96,14 @@ rules:
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
   verbs: ["get", "list", "watch"]
+
+# ServiceAccount management (for finetuning job aimmodel-applier sidecar RBAC)
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  verbs: ["get", "create", "delete", "deletecollection"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings"]
+  verbs: ["get", "create", "delete", "deletecollection"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

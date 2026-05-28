@@ -2,13 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  DebugInfo,
-  Message,
-  ChatMessageWithDebug,
-} from '@amdenterpriseai/types';
+import { DebugInfo, Message, ChatMessageWithDebug } from '@/types/chat';
 
-import type { InferenceSettings } from '@amdenterpriseai/types';
+import type { InferenceSettings } from '@/types/models';
 
 export const mockInferenceSettings: InferenceSettings = {
   systemPrompt: 'Test system prompt',
@@ -76,4 +72,12 @@ export const mockUserMarkdownMessage: Message = {
   role: 'user',
   content:
     '# This should not be rendered as heading\n\n**This should not be bold**',
+};
+
+export const mockMultimodalUserMessage: Message = {
+  role: 'user',
+  content: [
+    { type: 'text', text: 'describe this image' },
+    { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } },
+  ],
 };

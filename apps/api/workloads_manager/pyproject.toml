@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7.0.0"]
+test = ["pytest>=9.0.3"]
 
 [tool.setuptools]
 include-package-data = true
@@ -46,7 +46,7 @@ include = ["workloads_manager*"]
 [dependency-groups]
 dev = [
     "coverage>=7.10.2",
-    "pytest>=8.4.1",
+    "pytest>=9.0.3",
 ]
 
 [project.scripts]

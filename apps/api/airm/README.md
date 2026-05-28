@@ -6,27 +6,28 @@ SPDX-License-Identifier: MIT
 
 # AMD Resource Manager API
 
-The AI Resource Manager API provides authentication, access control, cluster management, quota allocation, and organizational hierarchy features for the AMD Enterprise AI Suite.
+The Resource Manager API provides authentication, access control, cluster management, quota allocation, and organizational hierarchy features for the AMD enterprise AI reference stack.
 
 ## Deployment Modes
 
 ### Standalone AIRM
 
-Deploy only the AI Resource Manager for authentication, access control, cluster management, quota allocation, and organizational hierarchy. This is suitable for environments that only need resource management without AI development tools.
+Deploy only the Resource Manager for authentication, access control, cluster management, quota allocation, and organizational hierarchy. This is suitable for environments that only need resource management without AI development tools.
 
 **Features:**
 
 - Organization and project management
 - Kubernetes cluster onboarding and management
 - Resource quota allocation and tracking
+- GPU pre-emption for idle workloads (per-project policy configuration)
 - User authentication and access control
 - Role-based permissions
 - Secrets and storage configuration management
 - Workload orchestration and monitoring
 
-### Combined Deployment with AIWB
+### Combined Deployment with AI Workbench
 
-Deploy both AIRM and AIWB APIs together for the full AMD Enterprise AI Suite experience:
+Deploy both the Resource Manager (AIRM) and the AI Workbench (AIWB) APIs together to benefit from all features:
 
 - **AIRM API** provides authentication, access control, clusters, quotas, and organizational hierarchy
 - **AIWB API** (see [`apps/api/aiwb/`](../aiwb/)) provides AIMs, workloads, workspaces, fine-tuning, and datasets
@@ -49,7 +50,7 @@ More details about `uv` can be read from our [dependency management guidelines](
 
 ### Running AIRM API locally
 
-Note: If you are on a mac and see this error: Error: pg_config executable not found.
+Note: If you are on a mac and see this error: `Error: pg_config executable not found`.
 Please install the postgresql package using brew:
 
 ```bash

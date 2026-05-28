@@ -6,7 +6,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.projects.enums import ProjectStatus
+from api_common.exceptions import ConflictException
+from app.projects.enums import GpuPreemptionPolicy, ProjectStatus
 from app.projects.repository import (
     create_project,
     delete_project,
@@ -21,9 +22,8 @@ from app.projects.repository import (
     update_project,
     update_project_status,
 )
-from app.projects.schemas import ProjectCreate, ProjectEdit
+from app.projects.schemas import GpuPreemptionConfig, ProjectCreate, ProjectEdit
 from app.quotas.schemas import QuotaBase
-from app.utilities.exceptions import ConflictException
 from tests import factory  # type: ignore[attr-defined]
 
 
@@ -116,7 +116,7 @@ async def test_update_project(db_session: AsyncSession) -> None:
         description="Updated quota",
     )
 
-    edits = ProjectEdit(description="An updated project", quota=updated_quota)
+    edits = ProjectEdit(description="An updated project", quota=updated_quota, gpu_preemption=GpuPreemptionConfig())
 
     updated_project = await update_project(db_session, env.project, edits, "updater")
 
@@ -124,6 +124,56 @@ async def test_update_project(db_session: AsyncSession) -> None:
     assert updated_project.description == "An updated project"
     assert updated_project.description != original_description
     assert updated_project.updated_by == "updater"
+
+
+@pytest.mark.asyncio
+async def test_update_project_gpu_preemption_fields(db_session: AsyncSession) -> None:
+    """Test that gpu preemption fields are persisted and that unset fields are not reset."""
+    env = await factory.create_basic_test_environment(db_session)
+
+    quota = QuotaBase(
+        cpu_milli_cores=1000,
+        memory_bytes=1024**3,
+        ephemeral_storage_bytes=5 * 1024**3,
+        gpu_count=0,
+        description="quota",
+    )
+
+    edits = ProjectEdit(
+        description="enable preemption",
+        quota=quota,
+        gpu_preemption=GpuPreemptionConfig(
+            enabled=True,
+            threshold=80,
+            grace_period=900,
+            policy=GpuPreemptionPolicy.ON_PRESSURE,
+        ),
+    )
+    updated = await update_project(db_session, env.project, edits, "updater")
+
+    assert updated.gpu_preemption_enabled is True
+    assert updated.gpu_preemption_threshold == 80
+    assert updated.gpu_preemption_grace_period == 900
+    assert updated.gpu_preemption_policy == GpuPreemptionPolicy.ON_PRESSURE
+
+    # Second update: re-send the same preemption config — fields should be preserved
+    edits_again = ProjectEdit(
+        description="just description",
+        quota=quota,
+        gpu_preemption=GpuPreemptionConfig(
+            enabled=True,
+            threshold=80,
+            grace_period=900,
+            policy=GpuPreemptionPolicy.ON_PRESSURE,
+        ),
+    )
+    updated_again = await update_project(db_session, updated, edits_again, "updater")
+
+    assert updated_again.description == "just description"
+    assert updated_again.gpu_preemption_enabled is True
+    assert updated_again.gpu_preemption_threshold == 80
+    assert updated_again.gpu_preemption_grace_period == 900
+    assert updated_again.gpu_preemption_policy == GpuPreemptionPolicy.ON_PRESSURE
 
 
 @pytest.mark.asyncio

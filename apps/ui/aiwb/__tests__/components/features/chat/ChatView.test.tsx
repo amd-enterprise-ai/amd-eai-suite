@@ -12,14 +12,11 @@ import {
 
 import { streamChatResponse } from '@/lib/app/chat';
 
-import {
-  Model,
-  ModelOnboardingStatus,
-  Workload,
-  WorkloadStatus,
-  WorkloadType,
-} from '@amdenterpriseai/types';
-import { mockProject1 } from '@/__mocks__/services/app/projects.data';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { Model } from '@/types/models';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { ModelOnboardingStatus } from '@/types/models';
+import { Workload } from '@/types/workloads';
 
 import { ChatView } from '@/components/features/chat/ChatView';
 import ProviderWrapper from '@/__tests__/ProviderWrapper';
@@ -90,6 +87,32 @@ vi.mock('next-i18next', () => ({
 }));
 
 describe('ChatView Component', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 1280,
+    });
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches:
+          query.includes('min-width') && query.includes('1024')
+            ? window.innerWidth >= 1024
+            : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  });
+
   const mockModels: Model[] = [
     {
       id: '1',
@@ -106,14 +129,12 @@ describe('ChatView Component', () => {
     {
       id: '1',
       chartId: '',
-      project: mockProject1,
       type: WorkloadType.INFERENCE,
       createdBy: 'test-user',
       updatedBy: 'test-user',
       createdAt: '',
       updatedAt: '',
       status: WorkloadStatus.RUNNING,
-      modelId: '1',
       displayName: 'Model 1',
       name: 'mw-test-workload',
       output: {
@@ -140,7 +161,6 @@ describe('ChatView Component', () => {
       );
     });
 
-    expect(screen.getByTestId('chat-messages')).toBeInTheDocument();
     expect(screen.getByLabelText('chat-input')).toBeInTheDocument();
   });
 
@@ -534,6 +554,73 @@ describe('ChatView Component', () => {
       content.includes('performanceMetrics.values.throughput'),
     );
     expect(descriptionElements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders embedded input in empty state on mobile viewports', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 375,
+    });
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={mockWorkloads} />
+        </ProviderWrapper>,
+      );
+    });
+
+    // Only the embedded input (inside the intro layout) should be present, not the bottom one
+    const inputs = screen.getAllByLabelText('chat-input');
+    expect(inputs).toHaveLength(1);
+  });
+
+  it('does not render the bottom input in mobile empty state', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 375,
+    });
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={mockWorkloads} />
+        </ProviderWrapper>,
+      );
+    });
+
+    // Card variant is not shown on mobile — no card testid
+    expect(screen.queryByTestId('card')).not.toBeInTheDocument();
   });
 
   it('displays loading state correctly', async () => {

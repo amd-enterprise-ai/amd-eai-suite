@@ -9,15 +9,15 @@ import type {
 
 export function mergeGpuDeviceTimeseriesToChartData(
   gpuDevices: {
-    gpu_id: string;
+    gpuId: string;
     metric?: { values: { timestamp: string; value: number }[] };
   }[],
 ): Record<string, string | number | null>[] {
   const sortedDevices = [...gpuDevices].sort(
-    (a, b) => parseInt(a.gpu_id, 10) - parseInt(b.gpu_id, 10),
+    (a, b) => parseInt(a.gpuId, 10) - parseInt(b.gpuId, 10),
   );
   const categoryKeys = sortedDevices.map(
-    (d) => `gpu-${parseInt(d.gpu_id, 10) + 1}`,
+    (d) => `gpu-${parseInt(d.gpuId, 10) + 1}`,
   );
   const timestampToValueByCategory = categoryKeys.map((_, i) => {
     const values = sortedDevices[i]?.metric?.values ?? [];
@@ -44,23 +44,17 @@ export function mergeGpuDeviceTimeseriesToChartData(
 export function normalizeNodeGpuUtilizationResponse(
   raw: NodeGpuUtilizationRawResponse,
 ): NodeGpuUtilizationResponse {
-  if (raw.gpu_devices) {
-    return {
-      gpu_devices: raw.gpu_devices,
-      range: raw.range ?? { start: '', end: '' },
-    };
-  }
-  const gpu_devices = (raw.gpuDevices ?? []).map((d) => ({
-    gpu_uuid: d.gpuUuid,
-    gpu_id: d.gpuId,
+  const gpuDevices = (raw.gpuDevices ?? []).map((d) => ({
+    gpuUuid: d.gpuUuid,
+    gpuId: d.gpuId,
     hostname: d.hostname,
     metric: d.metric
       ? {
-          series_label: d.metric.seriesLabel ?? 'gpu_activity_pct',
+          seriesLabel: d.metric.seriesLabel ?? 'gpuActivityPct',
           values: d.metric.values ?? [],
         }
-      : { series_label: 'gpu_activity_pct', values: [] },
+      : { seriesLabel: 'gpuActivityPct', values: [] },
   }));
   const range = raw.range ?? { start: '', end: '' };
-  return { gpu_devices, range };
+  return { gpuDevices, range };
 }

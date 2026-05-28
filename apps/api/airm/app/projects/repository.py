@@ -9,11 +9,13 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..utilities.exceptions import ConflictException
-from ..utilities.models import set_updated_fields
+from api_common.exceptions import ConflictException
+from api_common.models import set_updated_fields
+
 from .enums import ProjectStatus
 from .models import Project
 from .schemas import ProjectCreate, ProjectEdit
+from .utils import flatten_gpu_preemption
 
 
 async def get_projects_in_clusters(session: AsyncSession, cluster_ids: list[UUID]) -> list[Project]:
@@ -45,8 +47,10 @@ async def create_project(
     status: ProjectStatus = ProjectStatus.PENDING,
     status_reason: str = "Project is being created.",
 ) -> Project:
+    data = project.model_dump(exclude={"quota", "gpu_preemption"})
+    data.update(flatten_gpu_preemption(project.gpu_preemption))
     new_project = Project(
-        **project.model_dump(exclude={"quota"}),
+        **data,
         created_by=creator,
         updated_by=creator,
         keycloak_group_id=keycloak_group_id,
@@ -75,7 +79,9 @@ async def delete_project(session: AsyncSession, project: Project) -> None:
 
 
 async def update_project(session: AsyncSession, project: Project, edits: ProjectEdit, updater: str) -> Project:
-    for key, value in edits.model_dump(exclude={"quota"}).items():
+    data = edits.model_dump(exclude={"quota", "gpu_preemption"}, exclude_unset=True)
+    data.update(flatten_gpu_preemption(edits.gpu_preemption))
+    for key, value in data.items():
         setattr(project, key, value)
 
     set_updated_fields(project, updater)

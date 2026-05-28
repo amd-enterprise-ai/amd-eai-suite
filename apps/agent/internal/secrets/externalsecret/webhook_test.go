@@ -14,12 +14,9 @@ import (
 	secretcommon "github.com/silogen/agent/internal/secrets/common"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -103,28 +100,21 @@ func createExternalSecret(namespace string, labels, annotations map[string]strin
 
 func createAdmissionRequest(obj map[string]interface{}, oldObj map[string]interface{}) admission.Request {
 	raw, _ := json.Marshal(obj)
-
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID("test-uid-12345"),
-			Kind:      metav1.GroupVersionKind{Group: "external-secrets.io", Version: "v1beta1", Kind: "ExternalSecret"},
-			Namespace: obj["metadata"].(map[string]interface{})["namespace"].(string),
-			Name:      obj["metadata"].(map[string]interface{})["name"].(string),
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo: authenticationv1.UserInfo{
-				Username: "test-user@example.com",
-			},
-		},
-	}
-
+	meta := obj["metadata"].(map[string]interface{})
+	namespace := meta["namespace"].(string)
+	name := meta["name"].(string)
+	var oldRaw []byte
 	if oldObj != nil {
-		oldRaw, _ := json.Marshal(oldObj)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldObj)
 	}
-
-	return req
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "external-secrets.io", Version: "v1beta1", Kind: "ExternalSecret"},
+		namespace,
+		name,
+		raw,
+		oldRaw,
+		"test-user@example.com",
+	)
 }
 
 func TestExternalSecretWebhook(t *testing.T) {
@@ -248,6 +238,31 @@ func TestExternalSecretWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, s.expectedPatches)
 		})
 	}
+}
+
+func TestExternalSecretWebhook_PreservesUnknownSpecFields(t *testing.T) {
+	ns := createNamespace("airm-test", "project-123")
+	wh := setupTestWebhook(ns)
+	obj := createExternalSecret("airm-test", nil, nil)
+	raw := testutils.AddUnknownKeyToJSON(t, obj)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "external-secrets.io", Version: "v1beta1", Kind: "ExternalSecret"},
+		"airm-test", "test-external-secret", raw, nil, "test-user@example.com",
+	)
+	resp := wh.Handle(context.Background(), req)
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:                 "project-123",
+			secretcommon.ProjectSecretIDLabel:    testutils.UUIDMatcher,
+			secretcommon.ProjectSecretScopeLabel: secretcommon.ProjectSecretScopeProject,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      "test-user@example.com",
+		}),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
 }
 
 func TestExternalSecretWebhook_NamespaceNotFound(t *testing.T) {

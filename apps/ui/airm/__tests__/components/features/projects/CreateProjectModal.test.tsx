@@ -12,11 +12,15 @@ import {
 
 import { createProject } from '@/services/app';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { ProjectWithResourceAllocation } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { GpuPreemptionPolicy } from '@/types/enums/gpu-preemption-policy';
+import {
+  GPU_PREEMPTION_DISABLED,
+  ProjectWithResourceAllocation,
+} from '@/types/projects';
 
 import CreateProjectModal from '@/components/features/projects/CreateProjectModal';
 
@@ -402,13 +406,14 @@ describe('CreateProjectModal', () => {
       expect((createProject as Mock).mock.calls[0][0]).toEqual({
         name: 'new-project',
         description: 'Description',
-        cluster_id: 'cluster-1',
+        clusterId: 'cluster-1',
         quota: {
-          cpu_milli_cores: 0,
-          memory_bytes: 0,
-          ephemeral_storage_bytes: 0,
-          gpu_count: 0,
+          cpuMilliCores: 0,
+          memoryBytes: 0,
+          ephemeralStorageBytes: 0,
+          gpuCount: 0,
         },
+        gpuPreemption: GPU_PREEMPTION_DISABLED,
       });
       expect(toastSuccessMock).toBeCalledWith(
         'modal.create.notification.success',
@@ -460,18 +465,132 @@ describe('CreateProjectModal', () => {
       expect((createProject as Mock).mock.calls[0][0]).toEqual({
         name: 'new-project',
         description: 'Description',
-        cluster_id: 'cluster-1',
+        clusterId: 'cluster-1',
         quota: {
-          cpu_milli_cores: 0,
-          ephemeral_storage_bytes: 0,
-          gpu_count: 0,
-          memory_bytes: 0,
+          cpuMilliCores: 0,
+          ephemeralStorageBytes: 0,
+          gpuCount: 0,
+          memoryBytes: 0,
         },
+        gpuPreemption: GPU_PREEMPTION_DISABLED,
       });
       expect(toastErrorMock).toBeCalledWith(
         'modal.create.notification.error',
         mockError,
       );
     });
+  });
+
+  it('sends enabled gpuPreemption payload when pre-emption toggle is on', async () => {
+    (createProject as Mock).mockResolvedValueOnce({ id: 'newProjectId' });
+    const clusters = generateClustersMock(1);
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(
+        <CreateProjectModal
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          projects={projects}
+          clusters={clusters}
+          onProjectCreate={onProjectCreate}
+        />,
+        { wrapper },
+      );
+    });
+
+    await fireEvent.change(
+      screen.getByLabelText('modal.create.form.name.label'),
+      { target: { value: 'new-project' } },
+    );
+    await fireEvent.change(
+      screen.getByLabelText('modal.create.form.description.label'),
+      { target: { value: 'Description ' } },
+    );
+    const clusterSelect = screen.getByTestId('cluster-select');
+    fireEvent.click(clusterSelect);
+    fireEvent.click(screen.getByTestId(clusters[0].id));
+
+    await user.click(
+      screen.getByRole('switch', {
+        name: 'modal.create.form.preemption.toggle',
+      }),
+    );
+
+    const actionButton = screen.getByText('modal.create.actions.confirm');
+    await user.click(actionButton);
+
+    await waitFor(() => {
+      expect(createProject).toHaveBeenCalled();
+      expect((createProject as Mock).mock.calls[0][0]).toEqual({
+        name: 'new-project',
+        description: 'Description',
+        clusterId: 'cluster-1',
+        quota: {
+          cpuMilliCores: 0,
+          memoryBytes: 0,
+          ephemeralStorageBytes: 0,
+          gpuCount: 0,
+        },
+        gpuPreemption: {
+          enabled: true,
+          threshold: 10,
+          gracePeriod: 1800,
+          policy: GpuPreemptionPolicy.OnPressure,
+        },
+      });
+    });
+  });
+
+  it('does not submit when pre-emption is on and idle timer is below minimum', async () => {
+    (createProject as Mock).mockClear();
+    const clusters = generateClustersMock(1);
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(
+        <CreateProjectModal
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          projects={projects}
+          clusters={clusters}
+          onProjectCreate={onProjectCreate}
+        />,
+        { wrapper },
+      );
+    });
+
+    await fireEvent.change(
+      screen.getByLabelText('modal.create.form.name.label'),
+      { target: { value: 'new-project' } },
+    );
+    await fireEvent.change(
+      screen.getByLabelText('modal.create.form.description.label'),
+      { target: { value: 'Valid description for the project.' } },
+    );
+    const clusterSelect = screen.getByTestId('cluster-select');
+    fireEvent.click(clusterSelect);
+    fireEvent.click(screen.getByTestId(clusters[0].id));
+
+    await user.click(
+      screen.getByRole('switch', {
+        name: 'modal.create.form.preemption.toggle',
+      }),
+    );
+
+    const graceInput = screen.getByLabelText(
+      'modal.create.form.preemption.gracePeriod.label',
+    );
+    await user.clear(graceInput);
+    await user.type(graceInput, '10');
+
+    await user.click(screen.getByText('modal.create.actions.confirm'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('modal.create.form.preemption.validation.graceMin'),
+      ).toBeInTheDocument();
+    });
+    expect(createProject).not.toHaveBeenCalled();
   });
 });

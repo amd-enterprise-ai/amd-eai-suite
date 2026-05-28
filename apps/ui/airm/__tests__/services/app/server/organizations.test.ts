@@ -4,20 +4,12 @@
 
 import { getCurrentUserOrganizationDetails } from '@/services/server';
 
-import { Organization } from '@amdenterpriseai/types';
-
 describe('getCurrentUserOrganizationDetails', () => {
   const token = 'test-token';
   const apiUrl = 'https://api.example.com';
-  const orgResponse = { id: '1', org_name: 'Test Org' };
-  const orgCamel: Organization = {
-    idpLinked: false,
-    smtpEnabled: false,
-  };
+  const orgResponse = { id: '1', orgName: 'Test Org' };
 
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
-  let convertSnakeToCamelMock: ReturnType<typeof vi.fn>;
-  let getErrorMessageMock: ReturnType<typeof vi.fn>;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
@@ -25,8 +17,6 @@ describe('getCurrentUserOrganizationDetails', () => {
     process.env.AIRM_API_SERVICE_URL = apiUrl;
 
     fetchMock = vi.fn<typeof fetch>();
-    convertSnakeToCamelMock = vi.fn();
-    getErrorMessageMock = vi.fn();
 
     global.fetch = fetchMock;
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -38,12 +28,11 @@ describe('getCurrentUserOrganizationDetails', () => {
     vi.resetModules();
   });
 
-  it('should fetch organization details and return camel-cased organization', async () => {
+  it('should fetch organization details and return organization', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(orgResponse),
     } as unknown as Response);
-    convertSnakeToCamelMock.mockReturnValue(orgCamel);
 
     const result = await getCurrentUserOrganizationDetails(token);
 
@@ -56,10 +45,7 @@ describe('getCurrentUserOrganizationDetails', () => {
         }),
       }),
     );
-    expect(result).toEqual({
-      id: '1',
-      orgName: 'Test Org',
-    });
+    expect(result).toEqual(orgResponse);
   });
 
   it('should throw error if response is not ok', async () => {
@@ -67,7 +53,6 @@ describe('getCurrentUserOrganizationDetails', () => {
       ok: false,
       json: vi.fn(),
     } as unknown as Response);
-    getErrorMessageMock.mockResolvedValue('Unauthorized');
 
     await expect(getCurrentUserOrganizationDetails(token)).rejects.toThrow(
       /^Error fetching organization details/,

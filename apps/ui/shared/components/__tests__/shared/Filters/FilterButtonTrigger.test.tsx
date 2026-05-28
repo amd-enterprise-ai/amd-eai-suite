@@ -70,20 +70,6 @@ vi.mock('@heroui/react', async () => {
   };
 });
 
-// Mock InlineBadge component
-vi.mock('@amdenterpriseai/components', () => ({
-  InlineBadge: ({ children, color, size, variant }: any) => (
-    <div
-      data-testid="inline-badge"
-      data-color={color}
-      data-size={size}
-      data-variant={variant}
-    >
-      {children}
-    </div>
-  ),
-}));
-
 describe('FilterButtonTrigger Component', () => {
   const defaultProps = {
     label: 'Status',
@@ -103,7 +89,7 @@ describe('FilterButtonTrigger Component', () => {
     expect(buttonElement).toHaveTextContent('Status');
 
     // Badge should not be present when isActive is false
-    const badgeElement = screen.queryByTestId('inline-badge');
+    const badgeElement = screen.queryByTestId('chip');
     expect(badgeElement).not.toBeInTheDocument();
 
     // End content should contain chevron down icon
@@ -123,12 +109,9 @@ describe('FilterButtonTrigger Component', () => {
     const buttonElement = screen.getByTestId('button');
     expect(buttonElement).toHaveAttribute('data-variant', 'flat');
 
-    // Badge should be present when isActive is true
-    const badgeElement = screen.getByTestId('inline-badge');
+    const badgeElement = screen.getByTestId('chip');
     expect(badgeElement).toBeInTheDocument();
     expect(badgeElement).toHaveAttribute('data-color', 'primary');
-    expect(badgeElement).toHaveAttribute('data-size', 'sm');
-    expect(badgeElement).toHaveAttribute('data-variant', 'solid');
     expect(badgeElement).toHaveTextContent('2');
   });
 
@@ -150,9 +133,9 @@ describe('FilterButtonTrigger Component', () => {
     expect(tooltipElement).toHaveAttribute('data-delay', '500');
     expect(tooltipElement).toHaveAttribute('data-size', 'sm');
 
-    // Badge should be inside the tooltip
-    const badgeElement = screen.getByTestId('inline-badge');
-    expect(badgeElement).toBeInTheDocument();
+    expect(
+      screen.getByTestId('tooltip').querySelector('[data-testid="chip"]'),
+    ).toBeInTheDocument();
   });
 
   it('displays start content alongside label', () => {

@@ -37,7 +37,7 @@ func NewConfigMapHandler(clientset kubernetes.Interface, publisher messaging.Mes
 
 // HandleCreate processes storage create messages.
 func (h *ConfigMapHandler) HandleCreate(ctx context.Context, msg *messaging.RawMessage) error {
-	var createMsg messaging.ProjectS3StorageCreateMessage
+	var createMsg ProjectS3StorageCreateMessage
 	if err := json.Unmarshal(msg.Payload, &createMsg); err != nil {
 		h.logger.Error(err, "failed to parse create message", "payload", string(msg.Payload))
 		return fmt.Errorf("failed to parse message: %w", err)
@@ -76,7 +76,7 @@ func (h *ConfigMapHandler) HandleCreate(ctx context.Context, msg *messaging.RawM
 		)
 
 		// Publish failure status
-		h.publishStatus(ctx, createMsg.ProjectStorageID, messaging.ConfigMapStatusFailed,
+		h.publishStatus(ctx, createMsg.ProjectStorageID, ConfigMapStatusFailed,
 			fmt.Sprintf("Failed to create ConfigMap: %v", err))
 
 		return fmt.Errorf("failed to create configmap: %w", err)
@@ -94,7 +94,7 @@ func (h *ConfigMapHandler) HandleCreate(ctx context.Context, msg *messaging.RawM
 
 // HandleDelete processes storage delete messages.
 func (h *ConfigMapHandler) HandleDelete(ctx context.Context, msg *messaging.RawMessage) error {
-	var deleteMsg messaging.ProjectStorageDeleteMessage
+	var deleteMsg ProjectStorageDeleteMessage
 	if err := json.Unmarshal(msg.Payload, &deleteMsg); err != nil {
 		h.logger.Error(err, "failed to parse delete message", "payload", string(msg.Payload))
 		return fmt.Errorf("failed to parse message: %w", err)
@@ -126,7 +126,7 @@ func (h *ConfigMapHandler) HandleDelete(ctx context.Context, msg *messaging.RawM
 			"namespace", deleteMsg.ProjectName,
 			"storage_id", deleteMsg.ProjectStorageID,
 		)
-		h.publishStatus(ctx, deleteMsg.ProjectStorageID, messaging.ConfigMapStatusDeleted,
+		h.publishStatus(ctx, deleteMsg.ProjectStorageID, ConfigMapStatusDeleted,
 			"ConfigMap not found (already deleted)")
 		return nil
 	}
@@ -144,7 +144,7 @@ func (h *ConfigMapHandler) HandleDelete(ctx context.Context, msg *messaging.RawM
 		)
 
 		// Publish failure status
-		h.publishStatus(ctx, deleteMsg.ProjectStorageID, messaging.ConfigMapStatusFailed,
+		h.publishStatus(ctx, deleteMsg.ProjectStorageID, ConfigMapStatusFailed,
 			fmt.Sprintf("Failed to delete ConfigMaps: %v", err))
 
 		return fmt.Errorf("failed to delete configmaps: %w", err)
@@ -164,8 +164,8 @@ func (h *ConfigMapHandler) HandleUpdate(_ context.Context, _ *messaging.RawMessa
 	return errors.New("update operation not supported")
 }
 
-func (h *ConfigMapHandler) publishStatus(ctx context.Context, storageID string, status messaging.ConfigMapStatus, reason string) {
-	statusMsg := &messaging.ProjectStorageUpdateMessage{
+func (h *ConfigMapHandler) publishStatus(ctx context.Context, storageID string, status ConfigMapStatus, reason string) {
+	statusMsg := &ProjectStorageUpdateMessage{
 		MessageType:      messaging.MessageTypeProjectStorageUpdate,
 		ProjectStorageID: storageID,
 		Status:           status,

@@ -10,14 +10,21 @@ from keycloak import KeycloakAdmin
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import ConflictException, NotFoundException, UnhealthyException, ValidationException
+
 from ..clusters.models import Cluster
 from ..clusters.schemas import ClusterResponse, ClusterStatus, ClusterWithResources
 from ..clusters.service import get_cluster_with_resources
-from ..messaging.schemas import GPUVendor, NamespaceStatus, QuotaStatus, SecretScope
 from ..messaging.sender import MessageSender
+from ..namespaces.enums import NamespaceStatus
 from ..namespaces.models import Namespace
 from ..namespaces.repository import get_namespace_by_name_and_cluster, get_namespace_by_project_and_cluster
-from ..namespaces.service import create_namespace_for_project, delete_namespace_in_cluster
+from ..namespaces.service import (
+    create_namespace_for_project,
+    delete_namespace_in_cluster,
+    send_project_namespace_manifest_update,
+)
+from ..quotas.enums import QuotaStatus
 from ..quotas.models import Quota
 from ..quotas.schemas import QuotaResponse
 from ..quotas.service import (
@@ -25,6 +32,7 @@ from ..quotas.service import (
     delete_project_quota,
     update_project_quota,
 )
+from ..secrets.enums import SecretScope
 from ..secrets.models import OrganizationScopedSecret
 from ..secrets.repository import get_secrets_for_project
 from ..secrets.service import recalculate_organization_secret_status
@@ -37,7 +45,7 @@ from ..users.utils import (
     merge_invited_user_details,
     merge_user_details,
 )
-from ..utilities.exceptions import ConflictException, NotFoundException, UnhealthyException, ValidationException
+from ..utilities.enums import GPUVendor
 from ..utilities.keycloak_admin import (
     assign_users_to_group,
     create_group,
@@ -68,12 +76,19 @@ from .repository import update_project as update_project_in_db
 from .schemas import (
     ProjectCreate,
     ProjectEdit,
-    ProjectResponse,
     Projects,
     ProjectsWithResourceAllocation,
     ProjectWithUsers,
 )
-from .utils import build_projects_with_allocations, ensure_project_safe_to_delete, map_to_schema, resolve_project_status
+from .utils import (
+    build_projects_with_allocations,
+    ensure_project_safe_to_delete,
+    extract_gpu_preemption_config,
+    has_gpu_preemption_changed,
+    map_to_project_response,
+    map_to_project_with_cluster_and_quota,
+    resolve_project_status,
+)
 
 
 async def get_submittable_projects(accessible_projects: list[Project]) -> Projects:
@@ -83,14 +98,14 @@ async def get_submittable_projects(accessible_projects: list[Project]) -> Projec
     """
     projects_list = []
     for project in accessible_projects:
-        projects_list.append(map_to_schema(project))
+        projects_list.append(map_to_project_with_cluster_and_quota(project))
 
     return Projects(data=projects_list)
 
 
 async def get_projects_in_cluster(session: AsyncSession, cluster: ClusterResponse) -> Projects:
     projects = await get_projects_in_cluster_from_db(session, cluster.id)
-    return Projects(data=[map_to_schema(project) for project in projects])
+    return Projects(data=[map_to_project_with_cluster_and_quota(project) for project in projects])
 
 
 async def __fetch_cluster_resources(
@@ -175,7 +190,7 @@ async def get_project_with_users(kc_admin: KeycloakAdmin, session: AsyncSession,
     ]
 
     return ProjectWithUsers(
-        **ProjectResponse.model_validate(project).model_dump(),
+        **map_to_project_response(project).model_dump(),
         quota=QuotaResponse.model_validate(project.quota),
         cluster=ClusterResponse.model_validate(project.cluster),
         users=[
@@ -222,8 +237,14 @@ async def create_project(
 async def update_project(
     session: AsyncSession, message_sender: MessageSender, project: Project, project_edit: ProjectEdit, updater: str
 ) -> Project:
+    if project.status == ProjectStatus.DELETING:
+        raise ConflictException("Project is currently marked for deletion")
+
+    old_preemption = extract_gpu_preemption_config(project)
     await update_project_in_db(session, project, project_edit, updater)
     await update_project_quota(session, project, project.cluster, project_edit.quota, updater, message_sender)
+    if has_gpu_preemption_changed(old_preemption, project_edit.gpu_preemption):
+        await send_project_namespace_manifest_update(project, project_edit.gpu_preemption, message_sender)
     return project
 
 

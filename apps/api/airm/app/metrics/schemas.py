@@ -4,10 +4,12 @@
 
 from datetime import UTC, datetime, timedelta
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import AwareDatetime, Field, model_validator
+
+from api_common.collections import BasePaginationList
+from api_common.schemas import BaseModel
 
 from ..projects.schemas import ProjectResponse
-from ..utilities.collections.schemas import BasePaginationList
 from ..workloads.schemas import WorkloadResponse
 from .constants import MAX_DAYS_FOR_TIMESERIES
 
@@ -173,7 +175,7 @@ class GpuDeviceWithSingleMetric(BaseModel):
 
 
 class GpuDeviceSingleMetricResponse(BaseModel):
-    """Response for a single GPU device metric (VRAM utilization, junction temperature, or power usage)."""
+    """Response for a single GPU device metric (VRAM utilization, GPU utilization, or power usage)."""
 
     gpu_devices: list[GpuDeviceWithSingleMetric] = Field(
         description="Per-GPU device timeseries for this metric.", default_factory=list

@@ -15,3 +15,11 @@ const (
 	OIDCUserPrefix       = "oidc:"
 	SubmitterMaxLength   = 256
 )
+
+// GPUVendor identifies GPU hardware for node reporting and quota allocation messages.
+type GPUVendor string
+
+const (
+	GPUVendorNVIDIA GPUVendor = "NVIDIA"
+	GPUVendorAMD    GPUVendor = "AMD"
+)

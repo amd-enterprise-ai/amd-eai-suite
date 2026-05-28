@@ -10,10 +10,6 @@ Resource            ../resources/airm_storage.resource
 Resource            ../resources/airm_projects.resource
 Resource            ../resources/airm_secrets.resource
 Library             Collections
-Test setup          Run keywords
-...                 Initialize project tracking    AND
-...                 Initialize secret ID tracking    AND
-...                 Initialize storage ID tracking
 Test teardown       Run keywords
 ...                 Clean up all created storage    AND
 ...                 Clean up all created secrets    AND
@@ -38,7 +34,7 @@ Create storage with valid S3 spec
 
 Create storage and assign to project
     [Documentation]    Verify that storage can be created and assigned to a project
-    ...    Tests: POST /storages with project_ids → storage creation with PENDING status
+    ...    Tests: POST /storages with projectIds → storage creation with PENDING status
     [Tags]    storage    project    assignment
 
     Given a ready project with user access exists

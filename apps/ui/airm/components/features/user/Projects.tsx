@@ -17,11 +17,8 @@ import {
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import {
-  AssignProjectFormData,
-  ProjectInUser,
-  UserWithProjects,
-} from '@amdenterpriseai/types';
+import { AssignProjectFormData, ProjectInUser } from '@/types/users';
+import { UserWithProjects } from '@/types/users';
 
 import { ConfirmationModal } from '@amdenterpriseai/components';
 import { DrawerForm } from '@amdenterpriseai/components';

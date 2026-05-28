@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir uv uvicorn
 
 COPY apps/api/airm/pyproject.toml apps/api/airm/uv.lock /code/apps/api/airm/
+COPY apps/api/api_common /code/apps/api/api_common
 
 # Copy application code
 COPY apps/api/airm/app /code/apps/api/airm/app

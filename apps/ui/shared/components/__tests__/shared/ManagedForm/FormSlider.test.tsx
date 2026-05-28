@@ -260,13 +260,11 @@ describe('FormSlider', () => {
 
     expect(slider).toHaveValue('70');
 
-    // Reset form using the button
     await act(async () => {
       fireEvent.click(screen.getByText('Reset'));
     });
 
-    // Verify reset to initial value
-    expect(slider).toHaveValue('30');
+    expect(screen.getByRole('slider')).toHaveValue('30');
   });
 
   it('maintains number type consistency with multiple sliders', async () => {

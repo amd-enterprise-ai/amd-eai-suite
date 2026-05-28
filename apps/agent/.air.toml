@@ -8,8 +8,8 @@ tmp_dir = "tmp"
 
 [build]
   args_bin = []
-  bin = "./tmp/main"
-  cmd = "go build -o ./tmp/main ${AIR_CMD:-./cmd/agent}"
+  bin = "./tmp/${AIR_BINARY_NAME:-main}"
+  cmd = "go build -o ./tmp/${AIR_BINARY_NAME:-main} ${AIR_CMD:-./cmd/agent}"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin"]
   exclude_file = []
@@ -27,7 +27,7 @@ tmp_dir = "tmp"
   rerun = false
   rerun_delay = 500
   send_interrupt = false
-  stop_on_error = false
+  stop_on_error = true
 
 [color]
   app = ""

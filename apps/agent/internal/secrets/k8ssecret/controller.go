@@ -46,7 +46,7 @@ func (r *KubernetesSecretReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	secretData, err := common.ExtractSecretData(&secret, messaging.SecretKindKubernetesSecret)
+	secretData, err := common.ExtractSecretData(&secret, common.SecretKindKubernetesSecret)
 	if err != nil {
 		log.V(1).Info("skipping secret, cannot extract data", "error", err)
 		return ctrl.Result{}, nil
@@ -64,7 +64,7 @@ func (r *KubernetesSecretReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		)
 	}
 
-	status := messaging.ProjectSecretStatusSynced
+	status := common.ProjectSecretStatusSynced
 
 	if err := common.PublishStatus(ctx, r.Publisher, projectSecretID, secretData.Scope, status, common.ProjectSecretStatusReadyReason); err != nil {
 		log.Error(err, "failed to publish status")

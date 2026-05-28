@@ -4,7 +4,7 @@
 
 import { act, render, screen } from '@testing-library/react';
 
-import { generateMockSecrets } from '../../../../__mocks__/utils/secrets-mock';
+import { generateMockSecrets } from '@/__mocks__/utils/secrets-mock';
 
 import SecretsTable from '@/components/features/secrets/SecretsTable';
 

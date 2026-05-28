@@ -60,7 +60,7 @@ func TestConfigMapHandler_HandleCreate_Success(t *testing.T) {
 	handler := NewConfigMapHandler(clientset, publisher, logger)
 
 	// Manifest with namespace and labels already set by the API.
-	createMsg := messaging.ProjectS3StorageCreateMessage{
+	createMsg := ProjectS3StorageCreateMessage{
 		MessageType:      messaging.MessageTypeProjectS3StorageCreate,
 		ProjectStorageID: "storage-123",
 		ProjectName:      "test-project",
@@ -117,7 +117,7 @@ data:
   BUCKET_URL: "s3://my-bucket"
 `
 
-	createMsg := messaging.ProjectS3StorageCreateMessage{
+	createMsg := ProjectS3StorageCreateMessage{
 		MessageType:      messaging.MessageTypeProjectS3StorageCreate,
 		ProjectStorageID: "storage-123",
 		ProjectName:      "test-project",
@@ -162,7 +162,7 @@ func TestConfigMapHandler_HandleCreate_MissingManifest(t *testing.T) {
 	publisher := testutils.NewMockPublisher()
 	handler := NewConfigMapHandler(clientset, publisher, logger)
 
-	createMsg := messaging.ProjectS3StorageCreateMessage{
+	createMsg := ProjectS3StorageCreateMessage{
 		MessageType:      messaging.MessageTypeProjectS3StorageCreate,
 		ProjectStorageID: "storage-123",
 		ProjectName:      "test-project",
@@ -233,9 +233,9 @@ func TestConfigMapHandler_HandleDelete_NotFound_PublishesDeletedStatus(t *testin
 	assert.NoError(t, err)
 	// Should publish Deleted status when ConfigMap doesn't exist
 	require.Len(t, publisher.Published, 1)
-	statusMsg, ok := publisher.Published[0].(*messaging.ProjectStorageUpdateMessage)
+	statusMsg, ok := publisher.Published[0].(*ProjectStorageUpdateMessage)
 	require.True(t, ok)
-	assert.Equal(t, messaging.ConfigMapStatusDeleted, statusMsg.Status)
+	assert.Equal(t, ConfigMapStatusDeleted, statusMsg.Status)
 	assert.Equal(t, "storage-123", statusMsg.ProjectStorageID)
 	require.NotNil(t, statusMsg.StatusReason)
 	assert.Contains(t, *statusMsg.StatusReason, "already deleted")

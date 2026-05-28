@@ -10,9 +10,9 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Enum as SQLAlchemyEnum
 
-from ..messaging.schemas import WorkloadStatus
-from ..utilities.models import BaseEntity
-from .enums import WorkloadType
+from api_common.models import BaseEntity
+
+from .enums import WorkloadStatus, WorkloadType
 
 
 class Workload(BaseEntity):

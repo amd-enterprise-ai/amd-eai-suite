@@ -96,4 +96,7 @@
     <include file="090_remove_organizations.xml" relativeToChangelogFile="true"/>
     <include file="091_fix_secret_indexes.xml" relativeToChangelogFile="true"/>
     <include file="092_drop_workbench_entities.xml" relativeToChangelogFile="true"/>
+    <include file="093_rename_workloads_base_url_to_workbench_base_url.xml" relativeToChangelogFile="true"/>
+    <include file="094_add_gpu_preemption_columns_to_projects.xml" relativeToChangelogFile="true"/>
+    <include file="095_convert_gpu_preemption_grace_period_to_seconds.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

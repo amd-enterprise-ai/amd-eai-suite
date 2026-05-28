@@ -22,7 +22,6 @@ vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
   return {
     ...actual,
     getErrorMessage: vi.fn().mockResolvedValue('error message'),
-    convertCamelToSnake: vi.fn((obj) => obj), // Pass through for testing
   };
 });
 

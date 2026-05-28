@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"dario.cat/mergo"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -39,9 +40,14 @@ func GetProjectIdFromNamespace(ctx context.Context, c client.Client, namespace s
 	}, nil
 }
 
-// CreatePatchResponse builds a JSON patch admission response by comparing raw and mutated objects.
+// CreatePatchResponse builds the mutating admission JSON patch after handlers decode and change a typed object.
+// We want to preserve any unknown keys in the original request that aren't represented in the typed object (for example
+// due to CRD updates outpacing Go type updates). If we marshal the typed object alone, those unknown keys would be
+// lost and the patch would end up deleting them on the cluster. Instead, we merge the changes from the typed object
+// back into the original raw JSON before creating the patch, so that unknown keys are preserved while still applying
+// the intended mutations.
 func CreatePatchResponse(req admission.Request, obj client.Object, logger logr.Logger) admission.Response {
-	marshaledObj, err := json.Marshal(obj)
+	marshaledObj, err := mergePatchedObjectWithRaw(req.Object.Raw, obj)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
@@ -55,6 +61,24 @@ func CreatePatchResponse(req admission.Request, obj client.Object, logger logr.L
 
 	logger.Info("applying mutations", "kind", req.Kind.Kind, "patches", len(resp.Patches))
 	return resp
+}
+
+func mergePatchedObjectWithRaw(raw []byte, obj client.Object) ([]byte, error) {
+	typed, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	var base, overlay map[string]interface{}
+	if err = json.Unmarshal(raw, &base); err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(typed, &overlay); err != nil {
+		return nil, err
+	}
+	if err = mergo.Merge(&base, overlay, mergo.WithSliceDeepCopy); err != nil {
+		return nil, err
+	}
+	return json.Marshal(base)
 }
 
 // GetLabelsFromRaw extracts labels from a raw JSON Kubernetes object.

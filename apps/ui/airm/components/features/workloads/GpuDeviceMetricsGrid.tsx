@@ -8,7 +8,7 @@ import { useRouter } from 'next/router';
 
 import { AvailableChartColorsKeys } from '@amdenterpriseai/types';
 import { WorkloadGpuDeviceSnapshot } from '@/types/workloads';
-import { ClusterNode } from '@amdenterpriseai/types';
+import { ClusterNode } from '@/types/clusters';
 import { TimeSeriesDataPoint } from '@amdenterpriseai/types';
 
 import { StatsWithLineChart } from '@amdenterpriseai/components';
@@ -82,12 +82,13 @@ export const GpuDeviceMetricsGrid: React.FC<GpuDeviceMetricsGridProps> = ({
                 showYAxis
               />
               <StatsWithLineChart
-                title={t('details.fields.junctionTemperature')}
-                tooltip={t('details.fields.junctionTemperatureTooltip')}
-                data={toTimeSeriesDataPoints(device.junctionTemperatureSeries)}
-                dataFormatter={(v) => `${Number(v).toFixed(1)}°C`}
+                title={t('details.fields.gpuUtilization')}
+                tooltip={t('details.fields.gpuUtilizationTooltip')}
+                data={toTimeSeriesDataPoints(device.gpuUtilizationSeries)}
+                dataFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                showValueAsPercentage
                 isLoading={isFetching}
-                colors={['amber' as AvailableChartColorsKeys]}
+                colors={['emerald' as AvailableChartColorsKeys]}
                 showYAxis
               />
               <StatsWithLineChart

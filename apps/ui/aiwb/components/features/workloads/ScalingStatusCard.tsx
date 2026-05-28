@@ -9,12 +9,77 @@
  */
 
 import { Card, CardBody, CardHeader, Button } from '@heroui/react';
-import { IconArrowsMaximize, IconSettings } from '@tabler/icons-react';
-import { useState } from 'react';
+import {
+  IconArrowsMaximize,
+  IconChevronDown,
+  IconCircleCaretRight,
+  IconQuestionMark,
+  IconSettings,
+} from '@tabler/icons-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'next-i18next';
 import { AIMServiceSpec, AIMServiceRuntime } from '@/types/aims';
 import { SCALING_METRIC_KEYS } from '@/lib/app/aims';
+import type { AutoscalingFieldValues } from '@/lib/app/aims';
+import type { AimServiceReplica } from '@/types/aims';
+import {
+  Intent,
+  StatusBadgeVariant,
+  TableColumns,
+} from '@amdenterpriseai/types';
+import {
+  ClientSideDataTable,
+  DateDisplay,
+  NoDataDisplay,
+  StatusDisplay,
+} from '@amdenterpriseai/components';
 import { DeploymentSettingsDrawer } from './DeploymentSettingsDrawer';
+
+// Flat display type for the replicas table, derived from the nested AimServiceReplica
+type ReplicaRow = {
+  name: string;
+  gpuCount?: string;
+  createdAt?: string;
+  status?: string;
+};
+
+type ReplicaColumnKey = 'name' | 'gpuCount' | 'createdAt' | 'status';
+
+const replicaColumns: TableColumns<ReplicaColumnKey> = [
+  { key: 'name', sortable: false },
+  { key: 'gpuCount', sortable: true },
+  { key: 'createdAt', sortable: true },
+  { key: 'status', sortable: true },
+];
+
+const getPodPhaseVariants = (
+  t: (key: string) => string,
+): Record<string, StatusBadgeVariant> => ({
+  Running: {
+    label: t('podPhase.running'),
+    icon: IconCircleCaretRight,
+    color: 'primary',
+  },
+  Pending: { label: t('podPhase.pending'), intent: Intent.PENDING },
+  Succeeded: { label: t('podPhase.succeeded'), intent: Intent.SUCCESS },
+  Failed: { label: t('podPhase.failed'), intent: Intent.DANGER },
+  Unknown: {
+    label: t('podPhase.unknown'),
+    icon: IconQuestionMark,
+    color: 'danger',
+  },
+});
+
+function toReplicaRow(replica: AimServiceReplica): ReplicaRow {
+  const gpuRaw =
+    replica.spec?.containers?.[0]?.resources?.limits?.['amd.com/gpu'];
+  return {
+    name: replica.metadata.name,
+    gpuCount: gpuRaw,
+    createdAt: replica.metadata.creationTimestamp,
+    status: replica.status?.phase,
+  };
+}
 
 interface Props {
   /** The AIMService spec containing scaling configuration */
@@ -25,8 +90,10 @@ interface Props {
   namespace?: string;
   /** Workload ID for the settings drawer */
   id?: string;
-  /** Called after autoscaling settings are saved successfully */
-  onSettingsSaved?: () => void;
+  /** Called after autoscaling settings are saved successfully with all saved form values */
+  onSettingsSaved?: (savedValues: AutoscalingFieldValues) => void;
+  /** Pod-level replica info for the running service */
+  replicas?: AimServiceReplica[];
 }
 
 export const ScalingStatusCard = ({
@@ -35,9 +102,35 @@ export const ScalingStatusCard = ({
   namespace,
   id,
   onSettingsSaved,
+  replicas,
 }: Props) => {
   const { t } = useTranslation('autoscaling');
+  const podPhaseVariants = useMemo(() => getPodPhaseVariants(t), [t]);
+  const replicaCustomRenderers = useMemo(
+    () => ({
+      status: (item: ReplicaRow) => (
+        <StatusDisplay
+          type={item.status ?? 'Unknown'}
+          variants={podPhaseVariants}
+        />
+      ),
+      gpuCount: (item: ReplicaRow) => item.gpuCount ?? <NoDataDisplay />,
+      createdAt: (item: ReplicaRow) =>
+        item.createdAt ? (
+          <DateDisplay date={item.createdAt} />
+        ) : (
+          <NoDataDisplay />
+        ),
+    }),
+    [podPhaseVariants],
+  );
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isReplicasOpen, setIsReplicasOpen] = useState(false);
+  // Increment on every open to remount DeploymentSettingsDrawer, forcing ManagedForm
+  // to re-initialize useForm with the latest drawerInitialValues (react-hook-form only
+  // reads defaultValues once at mount time, so remounting is required to pick up
+  // updated spec data that arrives asynchronously after initial render).
+  const [drawerKey, setDrawerKey] = useState(0);
 
   // Extract scaling info from spec
   const firstMetric = spec.autoScaling?.metrics?.[0]?.podmetric;
@@ -81,7 +174,10 @@ export const ScalingStatusCard = ({
             size="sm"
             variant="light"
             startContent={<IconSettings size={14} />}
-            onPress={() => setIsDrawerOpen(true)}
+            onPress={() => {
+              setDrawerKey((k) => k + 1);
+              setIsDrawerOpen(true);
+            }}
           >
             {t('actions.settings')}
           </Button>
@@ -107,30 +203,72 @@ export const ScalingStatusCard = ({
             </>
           )}
 
-          {/* Scaling Metric and Target - same row */}
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-small text-default-500">
-                {t('scalingMetric.label')}
+          {/* Scaling Metric and Target - grouped together, capped at ~30% width, chevron far right */}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-6 max-w-[30%]">
+              <div>
+                <div className="text-small text-default-500">
+                  {t('scalingMetric.label')}
+                </div>
+                <div className="text-small font-medium text-foreground truncate">
+                  {metricLabel}
+                </div>
               </div>
-              <div className="text-small font-medium text-foreground">
-                {metricLabel}
+              <div>
+                <div className="text-small text-default-500">
+                  {t('targetValue.label')}
+                </div>
+                <div className="text-small font-medium text-foreground">
+                  {targetValue} ({operationOverTime})
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-small text-default-500">
-                {t('targetValue.label')}
-              </div>
-              <div className="text-small font-medium text-foreground">
-                {targetValue} ({operationOverTime})
-              </div>
-            </div>
+            {replicas && (
+              <Button
+                isIconOnly
+                variant="light"
+                size="sm"
+                className="text-default-500"
+                aria-label={t('replicas.toggle')}
+                aria-expanded={isReplicasOpen}
+                onPress={() => setIsReplicasOpen((v) => !v)}
+              >
+                <IconChevronDown
+                  size={32}
+                  className={`transition-transform duration-200 ${isReplicasOpen ? 'rotate-180' : ''}`}
+                />
+              </Button>
+            )}
           </div>
+
+          {/* Replicas table - expanded by chevron with slide animation */}
+          {replicas && (
+            <div
+              className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+                isReplicasOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+              }`}
+            >
+              <div className="overflow-hidden">
+                <div className="border-t border-default-100 pt-3 -mx-6 px-6">
+                  <ClientSideDataTable
+                    data={replicas.map(toReplicaRow)}
+                    columns={replicaColumns}
+                    customRenderers={replicaCustomRenderers}
+                    defaultSortByField="createdAt"
+                    translation={t}
+                    idKey="name"
+                    translationKeyPrefix="replicas"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </CardBody>
       </Card>
 
       {/* Autoscaling Settings Drawer */}
       <DeploymentSettingsDrawer
+        key={drawerKey}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onSuccess={onSettingsSaved}

@@ -14,7 +14,7 @@ import {
 import { ActionButton } from '../Buttons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { v4 as uuidv4 } from 'uuid';
-import { ZodType } from 'zod';
+import { type ZodType, type ZodTypeDef } from 'zod';
 
 interface Props<T extends FieldValues> {
   className?: string;
@@ -22,10 +22,10 @@ interface Props<T extends FieldValues> {
   formRef?: React.RefObject<HTMLFormElement | null> | null;
   onFormFailure?: (errors: FieldErrors<T>, data: T) => void;
   onFormSuccess: (data: T) => void;
-  validationSchema: ZodType<T>;
+  validationSchema: ZodType<T, ZodTypeDef, unknown>;
   isActioning?: boolean;
   renderFields: (form: UseFormReturn<T>) => React.ReactNode;
-  resolver?: (schema: ZodType<T>) => Resolver<T>;
+  resolver?: (schema: ZodType<T, ZodTypeDef, unknown>) => Resolver<T>;
   showResetButton?: boolean;
   showSubmitButton?: boolean;
   submitButtonText?: string;

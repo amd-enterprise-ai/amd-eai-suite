@@ -18,7 +18,7 @@ interface RefreshButtonProps {
   onPress: (e?: PressEvent) => void;
 }
 
-const RefreshButton = ({
+export const RefreshButton = ({
   onPress,
   isLoading,
   isDisabled,

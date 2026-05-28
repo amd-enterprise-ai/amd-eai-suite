@@ -89,7 +89,7 @@ func TestHandleDeletion_PublishesAndRemovesFinalizer(t *testing.T) {
 	assert.NoError(t, err)
 
 	require.Len(t, pub.Published, 1)
-	msg, ok := pub.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := pub.Published[0].(WorkloadComponentStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, "Deleted", msg.Status)
 	assert.Equal(t, "test-pod", msg.Name)

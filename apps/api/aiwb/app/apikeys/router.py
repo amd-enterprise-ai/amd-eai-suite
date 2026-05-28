@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.auth.security import get_user_email
 from api_common.database import get_session
+from api_common.exceptions import UnhealthyException
 from api_common.schemas import ListResponse
 
 from ..cluster_auth import get_cluster_auth_client
@@ -42,6 +43,18 @@ from .service import (
 )
 
 router = APIRouter(tags=["API Keys"])
+
+
+def require_cluster_auth(
+    cluster_auth_client: ClusterAuthClient | None = Depends(get_cluster_auth_client),
+) -> ClusterAuthClient:
+    """Raises 503 when cluster-auth is disabled or unavailable."""
+    if cluster_auth_client is None:
+        raise UnhealthyException(
+            "API key operations require cluster-auth, which is currently disabled. "
+            "Set CLUSTER_AUTH_ENABLED=true to enable this feature."
+        )
+    return cluster_auth_client
 
 
 @router.get(
@@ -87,7 +100,7 @@ async def create_api_key(
     user: str = Depends(get_user_email),
     session: AsyncSession = Depends(get_session),
     kube_client: KubernetesClient = Depends(get_kube_client),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> ApiKeyWithFullKey:
     """
     Create a new API key for a namespace.
@@ -115,7 +128,7 @@ async def get_api_key_details(
     api_key_id: UUID = Path(description="The ID of the API key"),
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     session: AsyncSession = Depends(get_session),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> ApiKeyDetails:
     """
     Get detailed API key information.
@@ -143,7 +156,7 @@ async def update_api_key_bindings(
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     session: AsyncSession = Depends(get_session),
     kube_client: KubernetesClient = Depends(get_kube_client),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> ApiKeyDetails:
     """
     Update API key bindings to AIM groups.
@@ -170,7 +183,7 @@ async def delete_api_key(
     api_key_id: UUID = Path(description="The ID of the API key to delete"),
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     session: AsyncSession = Depends(get_session),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> None:
     """
     Delete an API key.
@@ -195,7 +208,7 @@ async def renew_api_key(
     api_key_id: UUID = Path(description="The ID of the API key to renew"),
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     session: AsyncSession = Depends(get_session),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> RenewApiKeyResponse:
     """
     Renew an API key's lease.
@@ -221,7 +234,7 @@ async def bind_api_key_to_group(
     bind_request: BindGroupRequest = Body(description="Group binding request"),
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     session: AsyncSession = Depends(get_session),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> dict:
     """
     Bind an API key to a group.
@@ -248,7 +261,7 @@ async def unbind_api_key_from_group(
     unbind_request: UnbindGroupRequest = Body(description="Group unbinding request"),
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     session: AsyncSession = Depends(get_session),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> dict:
     """
     Unbind an API key from a group.
@@ -276,7 +289,7 @@ async def unbind_api_key_from_group(
 )
 async def create_group(
     group_in: GroupCreate = Body(description="Group creation data"),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> GroupResponse:
     """
     Create a new group or update an existing one in Cluster Auth.
@@ -300,7 +313,7 @@ async def create_group(
 )
 async def delete_group(
     group_id: str = Path(description="The ID of the group to delete"),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> None:
     """
     Delete a group from Cluster Auth.

@@ -2,17 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  convertCamelToSnakeParams,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import {
-  ChipDisplayVariant,
-  Dataset,
-  DatasetType,
-} from '@amdenterpriseai/types';
+import { ChipDisplayVariant } from '@amdenterpriseai/types';
+import { Dataset, DatasetType } from '@/types/datasets';
 
 export const DATASET_FILESIZE_LIMIT = 100 * 1024 * 1024; // 100MB
 
@@ -36,7 +30,15 @@ export const getDatasets = async (
     name?: string;
   },
 ) => {
-  const queryParams = params ? convertCamelToSnakeParams(params) : '';
+  const urlParams = new URLSearchParams();
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        urlParams.append(key, String(value));
+      }
+    });
+  }
+  const queryParams = urlParams.toString();
 
   const url = queryParams
     ? `/api/namespaces/${projectId}/datasets?${queryParams}`

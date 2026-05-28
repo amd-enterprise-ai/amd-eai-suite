@@ -9,9 +9,10 @@ from ..clusters.constants import DEFAULT_PRIORITY_CLASSES
 from ..clusters.models import Cluster, ClusterNode
 from ..clusters.schemas import ClusterWithResources
 from ..clusters.service import get_cluster_with_resources
-from ..messaging.schemas import ClusterQuotaAllocation, ClusterQuotasAllocationMessage, GPUVendor
 from ..projects.models import Project
+from ..utilities.enums import GPUVendor
 from .constants import DEFAULT_CATCH_ALL_QUOTA_NAME
+from .messaging import ClusterQuotaAllocation, ClusterQuotasAllocationMessage
 from .models import Quota
 from .schemas import QuotaCreate, QuotaUpdate
 

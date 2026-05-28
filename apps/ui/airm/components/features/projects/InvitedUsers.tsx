@@ -16,11 +16,9 @@ import { fetchOrganization } from '@/services/app';
 import { deleteUserFromProject as deleteUserFromProjectAPI } from '@/services/app';
 
 import { TableColumns } from '@amdenterpriseai/types';
-import { ProjectUsersTableField } from '@amdenterpriseai/types';
-import {
-  InvitedUserInProject,
-  ProjectWithMembers,
-} from '@amdenterpriseai/types';
+import { ProjectUsersTableField } from '@/types/enums/project-users-table-fields';
+import { ProjectWithMembers } from '@/types/projects';
+import { InvitedUser } from '@/types/users';
 
 import InviteUserModal from '@/components/features/users/InviteUserModal';
 import { ConfirmationModal } from '@amdenterpriseai/components';
@@ -55,7 +53,7 @@ export const InvitedUsers: React.FC<Props> = ({ project }) => {
         ),
         color: 'danger',
         startContent: <IconTrash className="text-danger" />,
-        onPress: (user: InvitedUserInProject) => {
+        onPress: (user: InvitedUser) => {
           setUserBeingRemoved(user);
           onRemoveConfirmOpen();
         },
@@ -76,8 +74,7 @@ export const InvitedUsers: React.FC<Props> = ({ project }) => {
   } = useDisclosure();
 
   const queryClient = useQueryClient();
-  const [userBeingRemoved, setUserBeingRemoved] =
-    useState<InvitedUserInProject>();
+  const [userBeingRemoved, setUserBeingRemoved] = useState<InvitedUser>();
 
   // Fetch organization identity provider status
   const { data: organizationData, isLoading: isLoadingOrgData } = useQuery({

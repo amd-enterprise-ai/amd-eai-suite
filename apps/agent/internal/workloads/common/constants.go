@@ -37,3 +37,29 @@ const (
 	StatusAdded     = "Added"
 	StatusInvalid   = "Invalid"
 )
+
+// WorkloadStatus is the high-level workload status in RabbitMQ messages.
+type WorkloadStatus string
+
+const (
+	WorkloadStatusDeleted WorkloadStatus = "Deleted"
+)
+
+// WorkloadComponentKind identifies a workload component kind in RabbitMQ messages.
+type WorkloadComponentKind string
+
+const (
+	WorkloadComponentKindDeployment   WorkloadComponentKind = "Deployment"
+	WorkloadComponentKindJob          WorkloadComponentKind = "Job"
+	WorkloadComponentKindStatefulSet  WorkloadComponentKind = "StatefulSet"
+	WorkloadComponentKindDaemonSet    WorkloadComponentKind = "DaemonSet"
+	WorkloadComponentKindReplicaSet   WorkloadComponentKind = "ReplicaSet"
+	WorkloadComponentKindCronJob      WorkloadComponentKind = "CronJob"
+	WorkloadComponentKindPod          WorkloadComponentKind = "Pod"
+	WorkloadComponentKindKaiwoJob     WorkloadComponentKind = "KaiwoJob"
+	WorkloadComponentKindKaiwoService WorkloadComponentKind = "KaiwoService"
+	WorkloadComponentKindService      WorkloadComponentKind = "Service"
+	WorkloadComponentKindConfigMap    WorkloadComponentKind = "ConfigMap"
+	WorkloadComponentKindIngress      WorkloadComponentKind = "Ingress"
+	WorkloadComponentKindHTTPRoute    WorkloadComponentKind = "HTTPRoute"
+)

@@ -13,12 +13,9 @@ import (
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -31,7 +28,6 @@ import (
 const (
 	testNamespace = "test-ns"
 	testProjectID = "project-123"
-	testUID       = "test-uid-12345"
 	testUsername  = "test-user@example.com"
 )
 
@@ -85,7 +81,7 @@ func createAIMService(labels map[string]string) *aimv1alpha1.AIMService {
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
 			Model: aimv1alpha1.AIMServiceModel{
-				Name: ptr("test-model"),
+				Name: testutils.Ptr("test-model"),
 			},
 			Template: aimv1alpha1.AIMServiceTemplateConfig{
 				Name: "test-template",
@@ -94,34 +90,20 @@ func createAIMService(labels map[string]string) *aimv1alpha1.AIMService {
 	}
 }
 
-func ptr(s string) *string {
-	return &s
-}
-
 func createAdmissionRequest(aimService *aimv1alpha1.AIMService, oldAIMService *aimv1alpha1.AIMService) admission.Request {
 	raw, _ := json.Marshal(aimService)
-
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID(testUID),
-			Kind:      metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha1", Kind: "AIMService"},
-			Namespace: testNamespace,
-			Name:      aimService.Name,
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo: authenticationv1.UserInfo{
-				Username: testUsername,
-			},
-		},
-	}
-
+	var oldRaw []byte
 	if oldAIMService != nil {
-		oldRaw, _ := json.Marshal(oldAIMService)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldAIMService)
 	}
-
-	return req
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha1", Kind: "AIMService"},
+		testNamespace,
+		aimService.Name,
+		raw,
+		oldRaw,
+		testUsername,
+	)
 }
 
 func TestAIMServiceWebhook(t *testing.T) {
@@ -241,6 +223,32 @@ func TestAIMServiceWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, scenario.expectedPatches)
 		})
 	}
+}
+
+func TestAIMServiceWebhook_PreservesUnknownSpecFields(t *testing.T) {
+	ns := createNamespace(map[string]string{agent.ProjectIDLabel: testProjectID})
+	wh := setupWebhook(ns)
+	svc := createAIMService(nil)
+
+	raw := testutils.AddUnknownKeyToJSON(t, svc)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha1", Kind: "AIMService"},
+		testNamespace, svc.Name, raw, nil, testUsername,
+	)
+	resp := wh.Handle(context.Background(), req)
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    testProjectID,
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      testUsername,
+		}),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
 }
 
 func TestAIMServiceWebhook_NamespaceNotFound(t *testing.T) {

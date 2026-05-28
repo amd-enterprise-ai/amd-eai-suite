@@ -10,9 +10,6 @@ Resource            ../resources/airm_secrets.resource
 Resource            ../resources/airm_projects.resource
 Resource            ../resources/kubectl_verification.resource
 Library             Collections
-Test Setup          Run Keywords
-...                 Initialize Project Tracking    AND
-...                 Initialize Secret ID Tracking
 Test Teardown       Clean Up Secret Test Resources
 
 *** Keywords ***
@@ -38,7 +35,7 @@ Create secret with valid manifest
 
 Create secret and assign to project
     [Documentation]    Verify that secret can be created and assigned to a project
-    ...    Tests: POST /secrets with project_ids → secret creation with initial status (Pending or Synced)
+    ...    Tests: POST /secrets with projectIds → secret creation with initial status (Pending or Synced)
     [Tags]    secret    project    assignment
 
     Given a ready project with user access exists

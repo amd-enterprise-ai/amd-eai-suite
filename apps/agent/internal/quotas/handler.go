@@ -47,7 +47,7 @@ func (h *QuotaHandler) HandleDelete(_ context.Context, _ *messaging.RawMessage) 
 }
 
 func (h *QuotaHandler) HandleUpdate(ctx context.Context, msg *messaging.RawMessage) error {
-	var allocationMsg messaging.ClusterQuotasAllocationMessage
+	var allocationMsg ClusterQuotasAllocationMessage
 	if err := json.Unmarshal(msg.Payload, &allocationMsg); err != nil {
 		h.logger.Error(err, "failed to parse update message", "payload", string(msg.Payload))
 		h.publishFailure(ctx, fmt.Sprintf("Failed to parse message: %v", err))
@@ -102,7 +102,7 @@ func (h *QuotaHandler) HandleUpdate(ctx context.Context, msg *messaging.RawMessa
 
 // publishFailure sends a ClusterQuotaFailureMessage to the feedback queue.
 func (h *QuotaHandler) publishFailure(ctx context.Context, reason string) {
-	failureMsg := &messaging.ClusterQuotaFailureMessage{
+	failureMsg := &ClusterQuotaFailureMessage{
 		MessageType: messaging.MessageTypeClusterQuotasFailureMessage,
 		UpdatedAt:   time.Now(),
 		Reason:      reason,

@@ -119,7 +119,7 @@ description: Test workload
     assert not workload._is_allowed_file("scripts/build.sh")
 
 
-@patch.object(config, "ALLOWED_CHART_PATHS", ["overrides/models/"])
+@patch.object(config, "ALLOWED_CHART_PATHS", ["overrides/models", "Chart.yaml"])
 def test_workload_get_overlay_files(tmp_path):
     """Test Workload.get_overlay_files method."""
     # Create a temporary workload directory structure
@@ -158,18 +158,26 @@ description: Test workload
     dev_file = dev_center_dir / "config.yaml"
     dev_file.write_text("config: dev")
 
+    # Create file in a subdirectory of overrides/models/ — included, since
+    # AIWB applies deployability filtering at request time on its own.
+    no_profile_dir = models_dir / "no-matching-aim-profiles"
+    no_profile_dir.mkdir()
+    no_profile_file = no_profile_dir / "recipe.yaml"
+    no_profile_file.write_text("model: no-profile-model")
+
     workload = Workload(path=workload_dir)
 
     overlay_files = workload.get_overlay_files()
 
-    # Should only include YAML files from overrides/models/
-    assert len(overlay_files) == 2
+    # Includes YAML files at any depth under overrides/models/
+    assert len(overlay_files) == 3
 
     file_paths = [rel_path for _, rel_path in overlay_files]
     assert "overrides/models/model1.yaml" in file_paths
     assert "overrides/models/model2.yml" in file_paths
+    assert "overrides/models/no-matching-aim-profiles/recipe.yaml" in file_paths
 
-    # Should not include non-YAML or dev-center files
+    # Should still exclude non-YAML and files outside ALLOWED_CHART_PATHS overlay dirs
     assert "overrides/models/README.md" not in file_paths
     assert "overrides/dev-center/config.yaml" not in file_paths
     assert "overrides/dev-center/_metadata.yaml" not in file_paths

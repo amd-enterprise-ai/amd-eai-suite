@@ -5,7 +5,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { ClusterNode } from '@amdenterpriseai/types';
+import { ClusterNode } from '@/types/clusters';
 import { WorkloadGpuDeviceSnapshot } from '@/types/workloads';
 
 import { GpuDeviceMetricsGrid } from '@/components/features/workloads/GpuDeviceMetricsGrid';
@@ -34,10 +34,10 @@ const makeDevice = (
   gpuId: '0',
   hostname: 'node-host-1',
   vramUtilizationPct: 50,
-  junctionTemperatureC: 60,
+  gpuUtilizationPct: 60,
   powerUsageW: 200,
   vramUtilizationSeries: [{ time: '2025-01-01T00:00:00Z', value: 50 }],
-  junctionTemperatureSeries: [{ time: '2025-01-01T00:00:00Z', value: 60 }],
+  gpuUtilizationSeries: [{ time: '2025-01-01T00:00:00Z', value: 60 }],
   powerUsageSeries: [{ time: '2025-01-01T00:00:00Z', value: 200 }],
   ...overrides,
 });
@@ -112,7 +112,7 @@ describe('GpuDeviceMetricsGrid', () => {
       screen.getByText('details.fields.memoryUtilization'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('details.fields.junctionTemperature'),
+      screen.getByText('details.fields.gpuUtilization'),
     ).toBeInTheDocument();
     expect(
       screen.getByText('details.fields.gpuPowerUsage'),

@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/silogen/agent/internal/messaging"
 	"github.com/silogen/agent/internal/testutils"
 )
 
@@ -77,10 +76,10 @@ func TestConfigMapReconcile_ManagedConfigMap_AddsFinalizer(t *testing.T) {
 
 	// Status published in the same reconcile
 	require.Len(t, mockPub.Published, 1)
-	msg, ok := mockPub.Published[0].(*messaging.ProjectStorageUpdateMessage)
+	msg, ok := mockPub.Published[0].(*ProjectStorageUpdateMessage)
 	require.True(t, ok)
 	assert.Equal(t, "storage-123", msg.ProjectStorageID)
-	assert.Equal(t, messaging.ConfigMapStatusAdded, msg.Status)
+	assert.Equal(t, ConfigMapStatusAdded, msg.Status)
 }
 
 func TestConfigMapReconcile_UnmanagedConfigMap_Ignored(t *testing.T) {
@@ -176,9 +175,9 @@ func TestConfigMapReconcile_ConfigMapBeingDeleted_RemovesFinalizer(t *testing.T)
 
 	// Check deletion status was published
 	require.Len(t, mockPub.Published, 1)
-	msg, ok := mockPub.Published[0].(*messaging.ProjectStorageUpdateMessage)
+	msg, ok := mockPub.Published[0].(*ProjectStorageUpdateMessage)
 	require.True(t, ok)
-	assert.Equal(t, messaging.ConfigMapStatusDeleted, msg.Status)
+	assert.Equal(t, ConfigMapStatusDeleted, msg.Status)
 }
 
 func TestConfigMapReconcile_ConfigMapBeingDeleted_WithoutFinalizer(t *testing.T) {

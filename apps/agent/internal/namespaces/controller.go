@@ -49,8 +49,13 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	phase := string(ns.Status.Phase)
 	status := mapK8sPhaseToNamespaceStatus(phase)
-
-	if err := publishNamespaceStatus(ctx, r.Publisher, ns.Name, projectID, status); err != nil {
+	event := namespaceStatusEvent{
+		NamespaceName: ns.Name,
+		ProjectID:     projectID,
+		Status:        status,
+		GpuPreemption: gpuPreemptionStatusFromNamespace(ctx, &ns),
+	}
+	if err := publishNamespaceStatus(ctx, r.Publisher, event); err != nil {
 		log.Error(err, "failed to publish status")
 		return ctrl.Result{}, err
 	}

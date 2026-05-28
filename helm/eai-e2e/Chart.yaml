@@ -9,6 +9,7 @@ description: A Helm chart for EAI E2E testing resources
 
 type: application
 
-version: 0.1.0
+version: 0.0.0
 
-appVersion: "1.0.0"
+# Placeholder overridden during release packaging
+appVersion: "0.0.0"

@@ -14,13 +14,30 @@ from api_common.exceptions import ValidationException
 
 from ..config import CLUSTER_HOST, EAI_APPS_METADATA_PREFIX, SUBMITTER_ANNOTATION
 from ..dispatch.crds import K8sMetadata
+from ..workloads.constants import CANONICAL_NAME_LABEL, MODEL_NAME_LABEL
 from ..workloads.enums import WorkloadType
 from .config import AIM_CLUSTER_RUNTIME_CONFIG_NAME, AIM_GATEWAY_NAME, AIM_GATEWAY_NAMESPACE
-from .constants import CLUSTER_AUTH_GROUP_ANNOTATION
+from .constants import CLUSTER_AUTH_GROUP_ANNOTATION, FINE_TUNED_LABEL
 from .crds import AIMClusterModelResource, AIMServiceResource, AIMServiceSpec, HTTPRouteResource
 
 if TYPE_CHECKING:
     from .schemas import AIMDeployRequest
+
+
+def is_condition_true(conditions: list[dict[str, Any]], condition_type: str) -> bool:
+    """Check if a specific condition type is True.
+
+    Args:
+        conditions: List of condition dicts from AIMService status
+        condition_type: Condition type to check (e.g., "InferenceServiceReady")
+
+    Returns:
+        True if condition exists and status is "True", False otherwise
+    """
+    for condition in conditions:
+        if condition.get("type") == condition_type:
+            return condition.get("status") == "True"
+    return False
 
 
 def generate_aim_service_name(aim_id: str | None = None) -> str:
@@ -169,6 +186,83 @@ def extract_endpoints(
     return endpoints
 
 
+def generate_fine_tuned_aim_service_manifest(
+    model_name: str,
+    deploy_request: "AIMDeployRequest",
+    namespace: str,
+    service_name: str,
+    api_version: str,
+    submitter: str,
+    cluster_auth_group_id: str | None,
+    display_name: str,
+    canonical_name: str,
+) -> dict:
+    """Generate AIMService manifest for a fine-tuned model deployment.
+
+    Sibling of generate_aim_service_manifest; takes a namespace-scoped AIMModel
+    name (`model_name`) instead of an AIMClusterModelResource. Stamps
+    FINE_TUNED_LABEL so chattable detection skips the cluster-catalog lookup,
+    plus display_name and canonical_name as annotations for the FE.
+    """
+    routing_config: dict[str, Any] = {
+        "enabled": True,
+        "gatewayRef": {
+            "name": AIM_GATEWAY_NAME,
+            "namespace": AIM_GATEWAY_NAMESPACE,
+        },
+    }
+    if cluster_auth_group_id is not None:
+        routing_config["annotations"] = {CLUSTER_AUTH_GROUP_ANNOTATION: cluster_auth_group_id}
+
+    template_dict: dict[str, Any] = {
+        "allowUnoptimized": deploy_request.allow_unoptimized,
+    }
+    if deploy_request.template_name:
+        template_dict["name"] = deploy_request.template_name
+
+    spec_dict: dict[str, Any] = {
+        "model": {"name": model_name},
+        "replicas": deploy_request.replicas,
+        "runtime_config_name": AIM_CLUSTER_RUNTIME_CONFIG_NAME,
+        "cache_model": True,
+        "routing": routing_config,
+        "template": template_dict,
+    }
+
+    if deploy_request.min_replicas is not None:
+        spec_dict["min_replicas"] = deploy_request.min_replicas
+        spec_dict["max_replicas"] = deploy_request.max_replicas
+        spec_dict["auto_scaling"] = deploy_request.auto_scaling
+
+    resource = AIMServiceResource(
+        metadata=K8sMetadata(
+            name=service_name,
+            namespace=namespace,
+            annotations={
+                SUBMITTER_ANNOTATION: submitter,
+                CANONICAL_NAME_LABEL: canonical_name,
+                MODEL_NAME_LABEL: display_name,
+            },
+            labels={
+                f"{EAI_APPS_METADATA_PREFIX}/workload-type": WorkloadType.INFERENCE,
+                # Marks this service as deployed from a fine-tuned model so that
+                # chattable detection does not require an AIMClusterModel catalog lookup.
+                FINE_TUNED_LABEL: "true",
+            },
+        ),
+        spec=AIMServiceSpec.model_validate(spec_dict),
+    )
+
+    manifest = resource.model_dump(
+        by_alias=True,
+        exclude_none=True,
+        exclude={"status", "httproute", "inference_service_name", "id"},
+    )
+    manifest["apiVersion"] = api_version
+    manifest["kind"] = "AIMService"
+    return manifest
+
+
 def generate_aim_service_manifest(
     aim: AIMClusterModelResource,
     deploy_request: "AIMDeployRequest",
@@ -176,7 +270,7 @@ def generate_aim_service_manifest(
     service_name: str,
     api_version: str,
     submitter: str,
-    cluster_auth_group_id: str,
+    cluster_auth_group_id: str | None,
 ) -> dict:
     """Generate AIMService CRD manifest for deploying an AIM using Pydantic models.
 
@@ -187,7 +281,7 @@ def generate_aim_service_manifest(
         service_name: The K8s resource name for the AIMService
         api_version: K8s API version
         submitter: User submitting the service
-        cluster_auth_group_id: Cluster-Auth group ID for access control
+        cluster_auth_group_id: Cluster-Auth group ID for access control, or None when disabled
     """
     # Build spec using dict for complex fields that aren't fully modeled
     routing_config: dict[str, Any] = {
@@ -196,8 +290,15 @@ def generate_aim_service_manifest(
             "name": AIM_GATEWAY_NAME,
             "namespace": AIM_GATEWAY_NAMESPACE,
         },
-        "annotations": {CLUSTER_AUTH_GROUP_ANNOTATION: cluster_auth_group_id},
     }
+    if cluster_auth_group_id is not None:
+        routing_config["annotations"] = {CLUSTER_AUTH_GROUP_ANNOTATION: cluster_auth_group_id}
+
+    template_dict: dict[str, Any] = {
+        "allowUnoptimized": deploy_request.allow_unoptimized,
+    }
+    if deploy_request.template_name:
+        template_dict["name"] = deploy_request.template_name
 
     spec_dict: dict[str, Any] = {
         "model": {"name": aim.metadata.name},
@@ -205,9 +306,7 @@ def generate_aim_service_manifest(
         "runtime_config_name": AIM_CLUSTER_RUNTIME_CONFIG_NAME,
         "cache_model": True,
         "routing": routing_config,
-        "template": {
-            "allowUnoptimized": deploy_request.allow_unoptimized,
-        },
+        "template": template_dict,
     }
 
     # Add scaling policy if provided (validation handled by pydantic schema)
@@ -227,8 +326,22 @@ def generate_aim_service_manifest(
             }
         ]
 
+    overrides: dict[str, Any] = {}
     if deploy_request.metric:
-        spec_dict["overrides"] = {"metric": deploy_request.metric}
+        overrides["metric"] = deploy_request.metric
+    if deploy_request.precision:
+        overrides["precision"] = deploy_request.precision
+    if deploy_request.gpu_model is not None or deploy_request.gpu_count is not None:
+        gpu_spec: dict[str, Any] = {}
+        if deploy_request.gpu_model is not None:
+            gpu_spec["model"] = deploy_request.gpu_model
+        if deploy_request.gpu_count is not None:
+            gpu_spec["requests"] = deploy_request.gpu_count
+        if gpu_spec:
+            overrides["hardware"] = {"gpu": gpu_spec}
+
+    if overrides:
+        spec_dict["overrides"] = overrides
 
     resource = AIMServiceResource(
         metadata=K8sMetadata(
@@ -243,11 +356,11 @@ def generate_aim_service_manifest(
     )
 
     # Convert to dict with camelCase for K8s API
-    # Exclude status, events, and computed fields (id, resource_name) which aren't part of the CRD
+    # Exclude status and computed fields (e.g., id) which aren't part of the CRD
     manifest = resource.model_dump(
         by_alias=True,
         exclude_none=True,
-        exclude={"status", "httproute", "id", "resource_name"},
+        exclude={"status", "httproute", "inference_service_name", "id"},
     )
     manifest["apiVersion"] = api_version
     manifest["kind"] = "AIMService"

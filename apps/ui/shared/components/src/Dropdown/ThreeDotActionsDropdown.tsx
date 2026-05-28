@@ -94,6 +94,8 @@ export const ThreeDotActionsDropdown = <T,>({
           aria-label={action.label}
           data-testid={action.key}
           startContent={action.startContent}
+          description={action.description}
+          showDivider={action.showDivider}
         >
           {action.label}
         </DropdownItem>

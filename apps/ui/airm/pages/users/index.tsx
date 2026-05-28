@@ -13,18 +13,31 @@ import { getUsers, getInvitedUsers } from '@/services/server';
 
 import { authOptions } from '@amdenterpriseai/utils/server';
 
-import { InvitedUsersResponse, UsersResponse } from '@amdenterpriseai/types';
+import { InvitedUsersResponse } from '@/types/users';
+import { UsersResponse } from '@/types/users';
 
 import { ActiveUsersTab, InvitedUsersTab } from '@/components/features/users';
 import InviteUserModal from '@/components/features/users/InviteUserModal';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
+import {
+  RelevantDocs,
+  AirmDocsPage,
+  airmDocumentationMapping,
+} from '@amdenterpriseai/components';
 
 interface Props {
   users: UsersResponse;
   invitedUsers: InvitedUsersResponse;
 }
 
-const UsersPage = ({ users, invitedUsers }: Props) => {
+const UsersPage: React.FC<Props> & WithDocumentationLink = ({
+  users,
+  invitedUsers,
+}: Props) => {
   const { t } = useTranslation('users');
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const { isInviteEnabled } = useAccessControl();
@@ -58,9 +71,12 @@ const UsersPage = ({ users, invitedUsers }: Props) => {
         isOpen={isOpen}
         onOpenChange={onOpenChange}
       />
+      <RelevantDocs docs={airmDocumentationMapping[AirmDocsPage.USERS]} />
     </div>
   );
 };
+
+UsersPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/users/overview.html`;
 
 export default UsersPage;
 

@@ -5,11 +5,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React, { act } from 'react';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
-import { generateMockSecrets } from '../../../../__mocks__/utils/secrets-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
+import { generateMockSecrets } from '@/__mocks__/utils/secrets-mock';
 
-import { Project } from '@amdenterpriseai/types';
-import { Secret } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import { Secret } from '@/types/secrets';
 
 import AssignSecret from '@/components/features/secrets/AssignSecret';
 
@@ -108,7 +108,7 @@ describe('AssignSecret', () => {
     fireEvent.click(screen.getByText('form.assign.action.save'));
     await waitFor(() => {
       expect(mockUpdateSecretAssignment).toHaveBeenCalledWith(secret.id, {
-        project_ids: [],
+        projectIds: [],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe('AssignSecret', () => {
 
     await waitFor(() => {
       expect(mockUpdateSecretAssignment).toHaveBeenCalledWith(secret.id, {
-        project_ids: [],
+        projectIds: [],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -180,7 +180,7 @@ describe('AssignSecret', () => {
 
     await waitFor(() => {
       expect(mockUpdateSecretAssignment).toHaveBeenCalledWith(secret.id, {
-        project_ids: [mockProjects[0].id, mockProjects[2].id],
+        projectIds: [mockProjects[0].id, mockProjects[2].id],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -214,7 +214,7 @@ describe('AssignSecret', () => {
 
     await waitFor(() => {
       expect(mockUpdateSecretAssignment).toHaveBeenCalledWith(secret.id, {
-        project_ids: [mockProjects[1].id],
+        projectIds: [mockProjects[1].id],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -250,7 +250,7 @@ describe('AssignSecret', () => {
 
     await waitFor(() => {
       expect(mockUpdateSecretAssignment).toHaveBeenCalledWith(secret.id, {
-        project_ids: [mockProjects[0].id],
+        projectIds: [mockProjects[0].id],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();

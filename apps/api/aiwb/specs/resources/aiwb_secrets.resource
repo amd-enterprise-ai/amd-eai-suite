@@ -10,6 +10,7 @@ Documentation       High-level AIWB secret testing keywords.
 Resource            api/secrets.resource
 Resource            resources/airm_projects.resource
 Resource            resources/airm_secrets.resource
+Resource            resources/resource_tracking.resource
 Resource            aiwb_common.resource
 Library             Collections
 Library             Process
@@ -77,13 +78,13 @@ A secret "${name}" with use case "${use_case}" is created via AIWB
     &{body}=    Create Dictionary
     ...    name=${full_name}
     ...    data=${secret_data}
-    ...    use_case=${use_case}
+    ...    useCase=${use_case}
 
     ${response}=    Create AIWB Secret    ${namespace}    ${body}    expected_status=201
 
     Set Test Variable    ${TEST_AIWB_SECRET_NAME}    ${full_name}
     Append To List    ${CREATED_AIWB_SECRET_NAMES}    ${full_name}
-    Log    Created AIWB secret: name=${full_name}, use_case=${use_case}    INFO
+    Log    Created AIWB secret: name=${full_name}, useCase=${use_case}    INFO
 
 A secret "${name}" is created via AIWB
     [Documentation]    Creates a secret via AIWB API with Generic use case.
@@ -125,15 +126,15 @@ AIWB secret list should contain "${count}" secrets
     Log    Secret list count verified: ${actual_count}    INFO
 
 AIWB secrets filtered by use case "${use_case}" should return "${count}" results
-    [Documentation]    Lists AIWB secrets filtered by use_case and verifies the count.
+    [Documentation]    Lists AIWB secrets filtered by useCase and verifies the count.
     ${namespace}=    Get Project Namespace
 
     ${response}=    List AIWB Secrets    ${namespace}    use_case=${use_case}    expected_status=200
     ${secrets_list}=    Set Variable    ${response.json()['data']}
     ${actual_count}=    Get Length    ${secrets_list}
     Should Be Equal As Integers    ${actual_count}    ${count}
-    ...    msg=Expected ${count} secrets for use_case ${use_case}, found ${actual_count}
-    Log    Filtered secret count for use_case=${use_case}: ${actual_count}    INFO
+    ...    msg=Expected ${count} secrets for useCase ${use_case}, found ${actual_count}
+    Log    Filtered secret count for useCase=${use_case}: ${actual_count}    INFO
 
 AIWB secret "${name}" is deleted
     [Documentation]    Deletes an AIWB secret by name.
@@ -153,7 +154,7 @@ Creating duplicate AIWB secret "${name}" should fail
     &{body}=    Create Dictionary
     ...    name=${full_name}
     ...    data=${secret_data}
-    ...    use_case=Generic
+    ...    useCase=Generic
 
     ${response}=    Create AIWB Secret    ${namespace}    ${body}    expected_status=409
     Log    Duplicate AIWB secret creation correctly rejected with 409    INFO
@@ -186,7 +187,7 @@ Find AIWB secret in AIRM API
         IF    '${name}' == '${secret_name}'
             ${secret_id}=    Get From Dictionary    ${secret}    id
             Set Test Variable    ${TEST_SECRET_ID}    ${secret_id}
-            Append To List    ${CREATED_SECRET_IDS}    ${secret_id}
+            Track Secret For Cleanup    ${secret_id}
             Log    Found AIWB secret ${secret_name} in AIRM API with ID: ${secret_id}    INFO
             RETURN
         END
@@ -225,14 +226,17 @@ Verify AIWB secret removed from AIRM API
     Log    Secret ${secret_name} confirmed removed from AIRM API    INFO
 
 AIRM agent pod is restarted
-    [Documentation]    Restarts the AIRM agent pod by performing a rollout restart.
-    ...    This triggers re-reconciliation of all auto-discovered secrets.
-    ${result}=    Run Process    kubectl    rollout    restart
-    ...    deployment/airm-agent    -n    airm
+    [Documentation]    Restarts the AIRM agent by deleting every matching pod replica at once;
+    ...    the Deployment recreates them. Avoids patch on deployments (kubectl rollout restart).
+    ...    Expects label app=airm-agent on all replicas. Triggers re-reconciliation of auto-discovered secrets.
+    ${result}=    Run Process    kubectl    delete    pods
+    ...    -n    airm
+    ...    -l    app\=airm-agent
+    ...    --wait\=false
     ...    stderr=PIPE
     Should Be Equal As Integers    ${result.rc}    0
-    ...    msg=Failed to restart AIRM agent pod: ${result.stderr}
-    Log    AIRM agent pod restart initiated    INFO
+    ...    msg=Failed to delete AIRM agent pod replica(s): ${result.stderr}
+    Log    Delete issued for all airm-agent replicas; replacements will be scheduled    INFO
 
 AIRM agent pod should be ready
     [Documentation]    Waits for the AIRM agent pod to be ready after restart.

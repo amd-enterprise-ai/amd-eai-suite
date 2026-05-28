@@ -8,7 +8,8 @@ import React from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { DebugInfo, Message } from '@amdenterpriseai/types';
+import { DebugInfo } from '@/types/chat';
+import { Message } from '@/types/chat';
 
 import { Modal } from '@amdenterpriseai/components';
 

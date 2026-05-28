@@ -42,7 +42,7 @@ const nextConfig = {
                   {
                     name: 'prefixIds',
                     params: {
-                      prefixIds: false,
+                      prefixIds: true,
                       prefixClassNames: false,
                     },
                   },
@@ -106,7 +106,7 @@ const nextConfig = {
                   {
                     name: 'prefixIds',
                     params: {
-                      prefixIds: false,
+                      prefixIds: true,
                       prefixClassNames: false,
                     },
                   },

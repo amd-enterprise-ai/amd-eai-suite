@@ -18,9 +18,13 @@ import {
 import { getCluster, getClusterWorkloadsStatusStats } from '@/services/server';
 
 import { authOptions } from '@amdenterpriseai/utils/server';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
 
-import { Cluster } from '@amdenterpriseai/types';
-import { WorkloadStatusStatsResponse } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
 
 import {
   ClusterWorkloadsStatsCard,
@@ -32,7 +36,7 @@ interface Props {
   workloadsStatusStats: WorkloadStatusStatsResponse;
 }
 
-const ClusterWorkloadsPage: React.FC<Props> = ({
+const ClusterWorkloadsPage: React.FC<Props> & WithDocumentationLink = ({
   cluster,
   workloadsStatusStats,
 }) => {
@@ -90,6 +94,8 @@ const ClusterWorkloadsPage: React.FC<Props> = ({
     </div>
   );
 };
+
+ClusterWorkloadsPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/workloads/overview.html`;
 
 export default ClusterWorkloadsPage;
 

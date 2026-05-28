@@ -36,38 +36,44 @@ Test Template: Deploy AIM Model
     ...                This template:
     ...                - Ensures project exists with user access (Given)
     ...                - Ensures HuggingFace token secret exists if needed (Given)
-    ...                - Looks up the AIM by image_name (partial match on image_reference)
+    ...                - Looks up the AIM by image name (substring match on spec.image)
     ...                - Prepares deployment configuration
     ...                - Deploys the AIM (When)
     ...                - Verifies AIM service is created (Then)
     ...
     ...                Args:
-    ...                - image_name: The AIM image name (e.g., aim-meta-llama-llama-3-1-8b-instruct)
+    ...                - docker_image: Full docker image reference (e.g., ghcr.io/silogen/aim-foo:0.11.0)
     ...                - requires_hf_token: Boolean indicating if HuggingFace token is required
-    [Arguments]    ${image_name}    ${requires_hf_token}
+    [Arguments]    ${docker_image}    ${requires_hf_token}
 
-    Log    Deploying AIM: ${image_name} (HF token required: ${requires_hf_token})    INFO
+    Log    Deploying AIM: ${docker_image} (HF token required: ${requires_hf_token})    INFO
 
     # GIVEN - Ensure prerequisites (each test is self-contained)
     ${catalog_project}=    Test Name    aim-catalog
     A ready project "${catalog_project}" with user access exists
-    Project quota is set to    gpu_count=${MAX_GPU_COUNT}    cpu_milli_cores=8000    memory_bytes=68719476736
+    Project quota is set to    gpu_count=${MAX_GPU_COUNT}
     IF    ${requires_hf_token}
         HuggingFace token secret exists in namespace
     END
 
-    # Look up AIM by image_name to get its resource_name
-    ${aim_resource_name}=    Find AIM by image name    ${image_name}
+    # Look up AIM by docker image reference to get its resource_name
+    ${aim_resource_name}=    Find AIM by image name    ${docker_image}
     ${namespace}=    Get Project Namespace
 
     # Prepare deployment configuration
+    # allowUnoptimized lets models deploy even when recommended profile IDs aren't present
+    # in the test cluster's runtime configs — needed for pre-release catalog validation.
+    # imagePullSecrets passes the GHCR pull credentials copied to the namespace in suite
+    # setup, so kserve predictor pods can pull private ghcr.io/silogen images.
+    ${pull_secrets}=    Create List    regcred
     ${deploy_data}=    Create Dictionary
     ...    replicas=1
-    ...    cache_model=${True}
+    ...    allowUnoptimized=${True}
+    ...    imagePullSecrets=${pull_secrets}
 
     # Add HF token secret if required by this model
     IF    ${requires_hf_token}
-        Set To Dictionary    ${deploy_data}    hf_token=${HF_TOKEN_SECRET_NAME}
+        Set To Dictionary    ${deploy_data}    hfToken=${HF_TOKEN_SECRET_NAME}
         Log    Added HF token secret ${HF_TOKEN_SECRET_NAME} to deployment configuration    DEBUG
     END
 
@@ -87,18 +93,18 @@ Test Template: Deploy AIM Model
         # Track deployed AIM service for cleanup
         Append To List    ${DEPLOYED_AIMS_LIST}    ${service_id}
 
-        Log    Created new AIM service ${service_id} for ${image_name}    INFO
+        Log    Created new AIM service ${service_id} for ${docker_image}    INFO
     ELSE IF    ${response.status_code} == 409
         # Already deployed - get existing service
-        Log    AIM ${image_name} already deployed, using existing service    WARN
+        Log    AIM ${docker_image} already deployed, using existing service    WARN
         ${service_id}=    Get existing workload ID for AIM    ${aim_resource_name}
 
         # Track deployed AIM service for cleanup
         Append To List    ${DEPLOYED_AIMS_LIST}    ${service_id}
 
-        Log    Using existing AIM service ${service_id} for ${image_name}    INFO
+        Log    Using existing AIM service ${service_id} for ${docker_image}    INFO
     ELSE
-        Fail    Unexpected status code ${response.status_code} when deploying AIM ${image_name}
+        Fail    Unexpected status code ${response.status_code} when deploying AIM ${docker_image}
     END
 
     # Set variables for subsequent tests
@@ -114,9 +120,9 @@ Test Template: Deploy AIM Model
 
     # Assign API key to this AIM for external endpoint access
     Api key is assigned to AIMS model
-    Log    Assigned API key to AIM ${image_name}    DEBUG
+    Log    Assigned API key to AIM ${docker_image}    DEBUG
 
-    Log    Successfully deployed AIM ${image_name} with service ID ${service_id}    INFO
+    Log    Successfully deployed AIM ${docker_image} with service ID ${service_id}    INFO
 
 Test Template: Verify AIM Running State
     [Documentation]    Test template for verifying AIM reaches Running state.
@@ -127,18 +133,18 @@ Test Template: Verify AIM Running State
     ...                - Fails fast if service enters Failed or Degraded state
     ...
     ...                Args:
-    ...                - image_name: The AIM image name for logging purposes
-    [Arguments]    ${image_name}
+    ...                - docker_image: Full docker image reference for logging purposes
+    [Arguments]    ${docker_image}
 
     # GIVEN - Verify prerequisites from previous test
-    AIM "${image_name}" is deployed
+    AIM "${docker_image}" is deployed
 
-    Log    Waiting for AIM ${image_name} (service ${TEST_AIM_ID}) to reach Running state    INFO
+    Log    Waiting for AIM ${docker_image} (service ${TEST_AIM_ID}) to reach Running state    INFO
 
     # Wait for AIM service to reach Running state (uses aiwb_aims keyword with fast-fail)
     Wait for AIM workload to reach state    Running    timeout=${AIM_DEPLOY_TIMEOUT}    interval=10
 
-    Log    AIM ${image_name} successfully reached Running state    INFO
+    Log    AIM ${docker_image} successfully reached Running state    INFO
 
 Test Template: Run AIM Inference
     [Documentation]    Test template for running inference on a deployed AIM.
@@ -150,13 +156,13 @@ Test Template: Run AIM Inference
     ...                - Verifies response is valid
     ...
     ...                Args:
-    ...                - image_name: The AIM image name
-    [Arguments]    ${image_name}
+    ...                - docker_image: Full docker image reference
+    [Arguments]    ${docker_image}
 
-    Log    Testing inference for AIM ${image_name}    INFO
+    Log    Testing inference for AIM ${docker_image}    INFO
 
     # GIVEN - Verify prerequisites from previous test
-    AIM "${image_name}" is Running
+    AIM "${docker_image}" is Running
 
     # Ensure API key exists for this test (self-contained)
     Api key exists for user
@@ -165,22 +171,28 @@ Test Template: Run AIM Inference
     Api key is assigned to AIMS model
     Log    API key assigned for inference testing    DEBUG
 
-    # Get AIM service details to get external endpoint
+    # Get AIM service details to get inference endpoint
     ${response}=    Get AIM Service By ID    ${TEST_AIM_ID}    expected_status=200
     ${json}=    Set Variable    ${response.json()}
 
-    # Get external endpoint (AIWB uses endpoints.external)
+    # Prefer internal endpoint when running inside K8s (external is unreachable from in-cluster)
     Dictionary Should Contain Key    ${json}    endpoints    msg=AIM service should have endpoints field
     ${endpoints}=    Get From Dictionary    ${json}    endpoints
     Should Not Be Equal    ${endpoints}    ${None}    msg=AIM service endpoints should not be None
-    Dictionary Should Contain Key    ${endpoints}    external    msg=Endpoints should contain external
-    ${external_host}=    Get From Dictionary    ${endpoints}    external
-    Should Not Be Empty    ${external_host}    msg=external endpoint should not be empty
-
-    Log    External endpoint: ${external_host}    DEBUG
+    ${in_cluster}=    Evaluate    __import__('os').path.exists('/var/run/secrets/kubernetes.io/serviceaccount/token')
+    ${has_internal}=    Run Keyword And Return Status    Dictionary Should Contain Key    ${endpoints}    internal
+    IF    ${in_cluster} and ${has_internal}
+        ${inference_host}=    Get From Dictionary    ${endpoints}    internal
+        Log    Running in-cluster, using internal endpoint: ${inference_host}    INFO
+    ELSE
+        Dictionary Should Contain Key    ${endpoints}    external    msg=Endpoints should contain external
+        ${inference_host}=    Get From Dictionary    ${endpoints}    external
+        Should Not Be Empty    ${inference_host}    msg=external endpoint should not be empty
+        Log    Using external endpoint: ${inference_host}    DEBUG
+    END
 
     # List available models from endpoint (using API key)
-    ${models}=    List models from external endpoint    ${external_host}    ${TEST_AIM_ID}    ${TEST_API_KEY_VALUE}
+    ${models}=    List models from external endpoint    ${inference_host}    ${TEST_AIM_ID}    ${TEST_API_KEY_VALUE}
     Should Be True    isinstance($models, list)    msg=Models data should be a list
     ${model_count}=    Get Length    ${models}
     Should Be True    ${model_count} > 0    msg=Endpoint should return at least one model
@@ -192,11 +204,11 @@ Test Template: Run AIM Inference
     Log    Running inference with model: ${model_id}    DEBUG
 
     # Run a simple inference request
-    ${inference_response}=    Run simple inference    ${external_host}    ${model_id}    ${TEST_AIM_ID}
+    ${inference_response}=    Run simple inference    ${inference_host}    ${model_id}    ${TEST_AIM_ID}
 
     # Verify inference response
     Should Not Be Empty    ${inference_response}    msg=Inference response should not be empty
-    Log    Inference completed successfully for ${image_name}    INFO
+    Log    Inference completed successfully for ${docker_image}    INFO
 
 Test Template: Verify AIM Metrics
     [Documentation]    Test template for verifying AIM service details are complete.
@@ -207,13 +219,13 @@ Test Template: Verify AIM Metrics
     ...                - Verifies model spec information
     ...
     ...                Args:
-    ...                - image_name: The AIM image name
-    [Arguments]    ${image_name}
+    ...                - docker_image: Full docker image reference
+    [Arguments]    ${docker_image}
 
-    Log    Verifying details for AIM ${image_name}    INFO
+    Log    Verifying details for AIM ${docker_image}    INFO
 
     # GIVEN - Verify prerequisites from previous test
-    AIM "${image_name}" is Running
+    AIM "${docker_image}" is Running
 
     # Get AIM service details
     ${response}=    Get AIM Service By ID    ${TEST_AIM_ID}    expected_status=200
@@ -221,7 +233,6 @@ Test Template: Verify AIM Metrics
 
     # Verify core AIM service fields exist
     Dictionary Should Contain Key    ${json}    id    msg=AIM service should have id
-    Dictionary Should Contain Key    ${json}    resource_name    msg=AIM service should have resource_name
     Dictionary Should Contain Key    ${json}    metadata    msg=AIM service should have metadata
     Dictionary Should Contain Key    ${json}    spec    msg=AIM service should have spec
     Dictionary Should Contain Key    ${json}    status    msg=AIM service should have status
@@ -250,7 +261,7 @@ Test Template: Verify AIM Metrics
     ${external}=    Get From Dictionary    ${endpoints}    external
     Should Not Be Empty    ${external}    msg=External endpoint should not be empty when Running
 
-    Log    Details verification passed for ${image_name}    INFO
+    Log    Details verification passed for ${docker_image}    INFO
 
 Test Template: Undeploy AIM Model
     [Documentation]    Test template for undeploying an AIM model.
@@ -262,13 +273,13 @@ Test Template: Undeploy AIM Model
     ...                - Verifies cleanup from Kubernetes
     ...
     ...                Args:
-    ...                - image_name: The AIM image name
-    [Arguments]    ${image_name}
+    ...                - docker_image: Full docker image reference
+    [Arguments]    ${docker_image}
 
-    Log    Undeploying AIM ${image_name}    INFO
+    Log    Undeploying AIM ${docker_image}    INFO
 
     # GIVEN - Verify prerequisites from previous test
-    AIM "${image_name}" is deployed
+    AIM "${docker_image}" is deployed
     ${namespace}=    Get Project Namespace
 
     # Get AIM service details for Kubernetes verification later
@@ -283,7 +294,7 @@ Test Template: Undeploy AIM Model
     ...    ${namespace}
     ...    expected_status=204
 
-    Log    Undeploy request sent for AIM ${image_name}    DEBUG
+    Log    Undeploy request sent for AIM ${docker_image}    DEBUG
 
     # Wait for AIM service to reach Deleted state or be removed (up to 60 seconds)
     Wait for catalog AIM workload to reach state    Deleted    timeout=60    interval=5    workload_id=${TEST_AIM_ID}
@@ -314,12 +325,13 @@ Test Template: Undeploy AIM Model
         Remove Values From List    ${DEPLOYED_AIMS_LIST}    ${TEST_AIM_ID}
     END
 
-    Log    Successfully undeployed AIM ${image_name}    INFO
+    Log    Successfully undeployed AIM ${docker_image}    INFO
 
 # Helper keywords for catalog testing
 
 AIM "${image_name}" is deployed
     [Documentation]    Verifies that an AIM has been deployed (AIM service exists).
+    ...                Accepts full docker image reference or short image name.
     ...                Sets TEST_AIM_NAME and TEST_AIM_ID variables.
     ${catalog_project}=    Test Name    aim-catalog
     A ready project "${catalog_project}" with user access exists
@@ -335,6 +347,7 @@ AIM "${image_name}" is deployed
 
 AIM "${image_name}" is Running
     [Documentation]    Verifies that an AIM is in Running state.
+    ...                Accepts full docker image reference or short image name.
     ...                Sets TEST_AIM_NAME and TEST_AIM_ID variables.
     ${catalog_project}=    Test Name    aim-catalog
     A ready project "${catalog_project}" with user access exists
@@ -355,26 +368,28 @@ AIM "${image_name}" is Running
     Log    AIM ${image_name} is Running (service ${service_id})    DEBUG
 
 Find AIM by image name
-    [Documentation]    Finds an AIM by its image_name (partial match on image_reference)
-    ...                and returns the resource_name. Fails if AIM is not found.
+    [Documentation]    Finds an AIM cluster model by image name substring match on spec.image.
+    ...                Returns the AIM's metadata.name (Kubernetes resource name). Fails if not found.
     ...
-    ...                The generator provides short image names (e.g., aim-meta-llama-llama-3-1-8b-instruct)
-    ...                while the List AIMs API returns full docker refs
-    ...                (e.g., amdenterpriseai/aim-meta-llama-llama-3-1-8b-instruct:0.8.5).
-    ...                This keyword uses contains matching to bridge the difference.
+    ...                Accepts either a full docker image reference
+    ...                (e.g., ghcr.io/silogen/aim-foo:0.11.0) or a short image name
+    ...                (e.g., aim-foo). Uses substring matching so both forms work.
     [Arguments]    ${image_name}
 
     ${response}=    List AIMs    expected_status=200
     ${aims_data}=    Set Variable    ${response.json()}
     ${aims_list}=    Set Variable    ${aims_data['data']}
 
-    # Search for AIM whose image_reference contains the image_name
+    # Search for AIM whose spec.image contains the image_name (substring match).
+    # spec.image is the full Docker image reference, e.g.
+    # "ghcr.io/silogen/aim-openai-gpt-oss-20b:0.11.0", which always
+    # contains the short image name "aim-openai-gpt-oss-20b".
     ${found_aim}=    Set Variable    ${None}
     FOR    ${aim}    IN    @{aims_list}
-        ${current_ref}=    Set Variable    ${aim}[image_reference]
+        ${current_ref}=    Set Variable    ${aim}[spec][image]
         IF    "${image_name}" in "${current_ref}"
             ${found_aim}=    Set Variable    ${aim}
-            Log    Found AIM ${image_name} (ref: ${current_ref}, resource: ${aim}[resource_name])    DEBUG
+            Log    Found AIM ${image_name} (image: ${current_ref}, resource: ${aim}[metadata][name])    DEBUG
             BREAK
         END
     END
@@ -383,7 +398,7 @@ Find AIM by image name
     Should Not Be Equal    ${found_aim}    ${None}
     ...    msg=AIM with image_name '${image_name}' not found in system. Available AIMs: ${aims_list}
 
-    RETURN    ${found_aim}[resource_name]
+    RETURN    ${found_aim}[metadata][name]
 
 Get existing workload ID for AIM
     [Documentation]    Gets the existing AIM service ID for a deployed AIM.
@@ -472,6 +487,46 @@ HuggingFace token secret exists in namespace
 
     Log    Created HuggingFace token secret ${secret_name} in namespace ${namespace}    INFO
 
+Ensure GHCR pull secret exists in namespace
+    [Documentation]    Ensures the GHCR image pull secret exists in the namespace.
+    ...                Copies regcred from aim-system if missing. AIM inference server images are
+    ...                private on ghcr.io/silogen and require credentials to pull.
+    [Arguments]    ${namespace}    ${source_namespace}=aim-system    ${secret_name}=regcred
+
+    Log    Checking GHCR pull secret "${secret_name}" in namespace ${namespace}    DEBUG
+
+    ${result}=    Run Process    kubectl    get    secret    ${secret_name}
+    ...    -n    ${namespace}
+    ...    stdout=DEVNULL    stderr=PIPE
+    IF    ${result.rc} == 0
+        Log    GHCR pull secret "${secret_name}" already exists in namespace ${namespace}    DEBUG
+        RETURN
+    END
+
+    Log    GHCR pull secret missing, copying from ${source_namespace} namespace    INFO
+
+    ${get_result}=    Run Process    kubectl    get    secret    ${secret_name}
+    ...    -n    ${source_namespace}
+    ...    -o    json
+    ...    stderr=PIPE
+
+    Should Be Equal As Integers    ${get_result.rc}    0
+    ...    msg=Failed to get ${secret_name} from ${source_namespace}. Error: ${get_result.stderr}
+
+    # Strip cluster-specific metadata fields so the secret can be recreated in a new namespace.
+    # Uses Evaluate + stdin to avoid shell quoting issues with multi-line JSON.
+    ${clean_json}=    Evaluate
+    ...    (lambda d: json.dumps({**d, 'metadata': {k: v for k, v in d['metadata'].items() if k not in ['namespace', 'resourceVersion', 'uid', 'creationTimestamp', 'ownerReferences', 'annotations']}}))(__import__('json').loads($get_result.stdout))
+    ...    json
+    ${copy_result}=    Run Process    kubectl    create    -n    ${namespace}    -f    -
+    ...    stdin=${clean_json}
+    ...    stderr=PIPE
+
+    Should Be Equal As Integers    ${copy_result.rc}    0
+    ...    msg=Failed to copy ${secret_name} to namespace ${namespace}. Error: ${copy_result.stderr}
+
+    Log    GHCR pull secret "${secret_name}" copied to namespace ${namespace}    INFO
+
 Setup AIM catalog testing
     [Documentation]    Suite setup for AIM catalog testing.
     ...                Cleans up the AIM catalog test project if it exists from a previous run,
@@ -482,7 +537,8 @@ Setup AIM catalog testing
 
     ${catalog_project}=    Test Name    aim-catalog
 
-    # Clean up stale test project from previous runs (only our project, never others)
+    # Clean up stale test project from previous runs (only our project, never others).
+    # Waits for deletion to complete so the next step creates a truly fresh project.
     TRY
         ${response}=    Get projects    expected_status=any
         IF    ${response.status_code} == 200
@@ -491,6 +547,7 @@ Setup AIM catalog testing
                 IF    "${project}[name]" == "${catalog_project}"
                     Log    Deleting stale test project: ${project}[name] (${project}[id])    INFO
                     Delete project    ${project}[id]    expected_status=any
+                    Wait Until Project Deleted    ${project}[id]    timeout=5 min
                 END
             END
         END
@@ -505,6 +562,11 @@ Setup AIM catalog testing
 
     # Create the project for testing
     A ready project "${catalog_project}" with user access exists
+
+    # AIM inference server images are private on ghcr.io/silogen — copy the pull secret
+    # from aim-system so the project namespace can pull them before public release
+    ${namespace}=    Get Project Namespace
+    Ensure GHCR pull secret exists in namespace    ${namespace}
 
     Log    AIM catalog testing suite initialized    INFO
 

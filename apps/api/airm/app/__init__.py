@@ -15,20 +15,9 @@ from fastapi_mcp import FastApiMCP
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 
-from .clusters.router import router as clusters_router
-from .health.router import router as health_router
-from .messaging.admin import configure_inbound_vhost
-from .messaging.consumer import start_consuming_from_common_feedback_queue
-from .messaging.queues import configure_queues_for_common_vhost
-from .metrics.service import init_prometheus_client
-from .organizations.router import router as organizations_router
-from .projects.router import router as projects_router
-from .secrets.router import router as secrets_router
-from .storages.router import router as storages_router
-from .users.router import router as users_router
-from .utilities.database import dispose_db, init_db
-from .utilities.exceptions import (
-    BaseAirmException,
+from api_common.database import dispose_db, init_db
+from api_common.exceptions import (
+    BaseApiException,
     ConflictException,
     ExternalServiceError,
     ForbiddenException,
@@ -39,8 +28,8 @@ from .utilities.exceptions import (
     UploadFailedException,
     ValidationException,
 )
-from .utilities.fastapi import (
-    base_airm_exception_handler,
+from api_common.fastapi import (
+    base_api_exception_handler,
     conflict_exception_handler,
     exception_group_handler,
     external_service_error_handler,
@@ -55,6 +44,19 @@ from .utilities.fastapi import (
     validation_exception_handler,
     value_error_handler,
 )
+from api_common.health.router import router as health_router
+from api_common.middleware import CamelCaseMiddleware
+
+from .clusters.router import router as clusters_router
+from .messaging.admin import configure_inbound_vhost
+from .messaging.consumer import start_consuming_from_common_feedback_queue
+from .messaging.queues import configure_queues_for_common_vhost
+from .metrics.service import init_prometheus_client
+from .organizations.router import router as organizations_router
+from .projects.router import router as projects_router
+from .secrets.router import router as secrets_router
+from .storages.router import router as storages_router
+from .users.router import router as users_router
 from .utilities.keycloak_admin import init_keycloak_admin_client
 from .utilities.prometheus_instrumentation import setup_instrumentation, start_metrics_server
 from .utilities.security import create_logged_in_user_in_system, track_user_activity_from_token
@@ -154,6 +156,8 @@ api_secured_router.include_router(secrets_router, prefix="/v1")
 api_secured_router.include_router(storages_router, prefix="/v1")
 
 
+app.add_middleware(CamelCaseMiddleware)
+
 app.include_router(api_unsecured_router)
 app.include_router(api_secured_router)
 
@@ -167,7 +171,7 @@ mcp.setup_server()
 app.add_exception_handler(Exception, generic_exception_handler)
 app.add_exception_handler(ValueError, value_error_handler)  # type: ignore
 app.add_exception_handler(ExceptionGroup, exception_group_handler)
-app.add_exception_handler(BaseAirmException, base_airm_exception_handler)
+app.add_exception_handler(BaseApiException, base_api_exception_handler)
 app.add_exception_handler(NotFoundException, not_found_exception_handler)
 app.add_exception_handler(IntegrityError, integrity_error_handler)
 app.add_exception_handler(ConflictException, conflict_exception_handler)  # Handles DeletionConflictException too

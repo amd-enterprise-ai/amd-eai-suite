@@ -4,7 +4,7 @@
 
 import { render, screen } from '@testing-library/react';
 
-import SystemToastContainer from '../../../../components/shared/SystemToastContainer/SystemToastContainer';
+import { SystemToastContainer } from '@amdenterpriseai/components';
 
 // Mock next-themes useTheme
 vi.mock('next-themes', () => ({
@@ -25,10 +25,13 @@ vi.mock('react-toastify', async () => {
   };
 });
 
-// Mock @tabler/icons-react IconX
-vi.mock('@tabler/icons-react', () => ({
-  IconX: (props: any) => <svg data-testid="icon-x" {...props} />,
-}));
+vi.mock('@tabler/icons-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tabler/icons-react')>();
+  return {
+    ...actual,
+    IconX: (props: any) => <svg data-testid="icon-x" {...props} />,
+  };
+});
 
 describe('SystemToastContainer', () => {
   it('renders ToastContainer with correct props', () => {

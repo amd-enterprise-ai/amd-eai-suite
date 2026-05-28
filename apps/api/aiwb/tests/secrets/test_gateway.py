@@ -9,9 +9,9 @@ from unittest.mock import MagicMock
 import pytest
 from kubernetes_asyncio.client import ApiException, V1ObjectMeta, V1Secret
 
+from api_common.secrets import SecretUseCase
 from app.config import SUBMITTER_ANNOTATION
 from app.secrets.constants import USE_CASE_LABEL
-from app.secrets.enums import SecretUseCase
 from app.secrets.gateway import create_kubernetes_secret, list_kubernetes_secrets
 
 

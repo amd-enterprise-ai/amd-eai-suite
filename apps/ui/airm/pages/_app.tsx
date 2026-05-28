@@ -14,6 +14,7 @@ import nextI18NextConfig from '../next-i18next.config.js';
 
 import { AppLayout } from '@amdenterpriseai/layouts';
 import { airmMenuItems } from '@amdenterpriseai/utils/app';
+import { WithDocumentationLink } from '@amdenterpriseai/utils/app';
 import { SystemToastContainer } from '@amdenterpriseai/components';
 
 import '@/styles/globals.css';
@@ -21,6 +22,9 @@ import '@/styles/toastify.css';
 
 function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
   const queryClient = new QueryClient();
+  const documentationHref = (
+    Component as AppProps['Component'] & WithDocumentationLink
+  ).documentationLink;
 
   return (
     <SessionProvider session={session} refetchInterval={10 * 60}>
@@ -36,6 +40,7 @@ function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
               pageBreadcrumb={pageProps?.pageBreadcrumb}
               menuItems={airmMenuItems}
               appTitle={'sections.resourceManagement.title'}
+              documentationHref={documentationHref}
             >
               <Component {...pageProps} />
             </AppLayout>

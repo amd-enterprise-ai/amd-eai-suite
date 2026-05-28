@@ -5,7 +5,9 @@
     "start": {
       "title": "Start",
       "content": {
-        "description": "Connecting a new cluster to AMD Resource Manager is currently an alpha-stage feature. Please contact AMD support for detailed information on how to proceed. You will be provided secrets in subsequent steps that will be used to securely connect your cluster to AMD Resource Manager."
+        "description": "Connecting a new cluster to AMD Resource Manager will provide you with secrets in the subsequent steps. Please follow the instructions in the",
+        "docLinkText": "onboarding documentation",
+        "descriptionEnd": "to complete the process."
       },
       "actions": {
         "cancel": "Cancel",
@@ -13,11 +15,11 @@
       }
     },
     "script": {
-      "title": "Install Dispatcher",
+      "title": "Onboard Cluster",
       "content": {
-        "description": "Once you have received detailed instructions from AMD Support, please use these secrets to connect your cluster to AMD Resource Manager.",
+        "description": "Copy the keys below and use them as part of the onboarding process described in the documentation linked in the previous step.",
         "note": "Note that these secrets will only be displayed once for security!",
-        "confirmation": "I have copied the secrets to connect my cluster to AMD Resource Manager."
+        "confirmation": "I have copied the keys to use with the onboarding documentation."
       },
       "actions": {
         "next": "Next"
@@ -40,12 +42,12 @@
     "edit": {
       "title": "Edit Cluster",
       "field": {
-        "workloadsBaseUrl": {
-          "label": "Base URL for workloads submitted to the cluster.",
-          "placeholder": "Provide base URL for the workloads",
-          "emptyError": "Workloads base URL must not be empty",
+        "workbenchBaseUrl": {
+          "label": "Workbench URL for the cluster.",
+          "placeholder": "Provide Workbench base URL",
+          "emptyError": "Workbench base URL must not be empty",
           "error": {
-            "invalid": "Workloads base URL must be a valid URL (must start with http:// or https://)"
+            "invalid": "Workbench base URL must be a valid URL (must start with http:// or https://)"
           }
         },
         "kubeApiUrl": {
@@ -80,9 +82,6 @@
         "requestedAt": {
           "title": "Request created at"
         },
-        "requestExpiry": {
-          "title": "Request expires at"
-        },
         "status": {
           "title": "Status"
         },
@@ -99,9 +98,6 @@
           "label": "Show",
           "entities": "clusters"
         }
-      },
-      "actions": {
-        "cancel": "Cancel"
       }
     },
     "active": {
@@ -146,20 +142,16 @@
         "entities": "clusters"
       }
     },
-    "sort": {
-      "name": {
-        "asc": "Sort Name by Ascending",
-        "desc": "Sort Name by Descending"
-      },
-      "status": {
-        "asc": "Sort Status by Ascending",
-        "desc": "Sort Status by Descending"
-      }
-    },
     "empty": {
       "description": "List of clusters is empty."
     },
     "actions": {
+      "openDetails": {
+        "label": "Open details"
+      },
+      "viewInAiwb": {
+        "label": "View in AI Workbench"
+      },
       "delete": {
         "label": "Delete",
         "confirmation": {
@@ -482,11 +474,22 @@
     "title": "Workloads",
     "actions": {
       "view": "View Workloads",
-      "back": "Back to Cluster"
+      "back": "Back to Cluster",
+      "disabled": "Only administrators can view workloads."
     }
   },
   "actions": {
-    "connect": "Connect a cluster"
+    "teamMemberAlert": {
+      "title": "Limited permissions",
+      "description": "Team Members can only view the cluster and its resources"
+    },
+    "connect": {
+      "label": "Connect a cluster",
+      "tooltip": "Only administrators can connect clusters"
+    },
+    "viewInAiwb": {
+      "label": "View in AI Workbench"
+    }
   },
   "status": {
     "healthy": "Connected",

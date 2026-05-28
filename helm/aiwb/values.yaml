@@ -18,6 +18,11 @@ standAloneMode: false
 # All AIWB resources (AIMs, workloads, workspaces, datasets) will be confined to this namespace.
 defaultNamespace: "workbench"
 
+# Full URL override for AIRM UI (cross-app navigation).
+# If empty, auto-constructed as https://{kgateway.airm.prefixValue}.{appDomain}.
+# Only used when standAloneMode is false.
+airmAppUrl: ""
+
 # Metadata prefixes for labels and annotations on Kubernetes resources
 metadataPrefix:
   # EAI Apps prefix for workload identification (workload-id, project-id labels)
@@ -51,16 +56,18 @@ kgateway:
       request: 1m
   keycloak:
     prefixValue: kc
+  airm:
+    prefixValue: airmui
 
 # Backend (API) configuration
 backend:
-  # Cluster host for external URLs (e.g., https://workloads.app-dev.silogen.ai)
+  # Cluster host for external URLs (e.g., https://workloads.<your-domain>)
   # If not set, defaults to https://workloads.{appDomain}
   clusterHost: ""
   image:
-    repository: aiwb-api
+    repository: amdenterpriseai/aiwb-api
+    tag: ""
     pullPolicy: IfNotPresent
-    tag: 1.0.3
   # NOTE: AIWB currently only supports 1 replica due to the poller/syncer setup.
   replicaCount: 1
   service:
@@ -115,9 +122,9 @@ backend:
 # Frontend (UI) configuration
 frontend:
   image:
-    repository: aiwb-ui
+    repository: amdenterpriseai/aiwb-ui
+    tag: ""
     pullPolicy: IfNotPresent
-    tag: 1.0.3
   replicaCount: 1
   service:
     port: 8000
@@ -148,8 +155,12 @@ minio:
   accessKeyKey: "minio-access-key"
   secretKeyKey: "minio-secret-key"
 
-# ClusterAuth configuration (for API key management)
+# ClusterAuth configuration (for API key management and AIM access control)
+# Set enabled: false to disable cluster-auth integration. When disabled:
+#   - AIMs deploy without access restrictions (no cluster-auth/allowed-group annotation)
+#   - API key endpoints return 503 Service Unavailable
 clusterAuth:
+  enabled: true
   url: "http://cluster-auth.cluster-auth.svc.cluster.local:8081"
   secretName: "cluster-auth-admin-token"
 

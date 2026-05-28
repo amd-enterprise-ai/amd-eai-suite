@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 import { useWorkloadLogsStream } from '@/hooks/useWorkloadLogsStream';
 
-import { LogLevel, LogEntry } from '@amdenterpriseai/types';
+import { LogLevel } from '@/types/enums/workloads';
+import { LogEntry } from '@/types/workloads';
 
 /**
  * Mock log entries for testing workload logs
@@ -191,7 +192,7 @@ describe('useWorkloadLogsStream', () => {
 
       const instance = MockEventSource.getLatestInstance();
       expect(instance?.url).toBe(
-        '/api/namespaces/test-namespace/workloads/test-workload-id/logs/stream?start_date=2023-01-01&level=error',
+        '/api/namespaces/test-namespace/workloads/test-workload-id/logs/stream?startTime=2023-01-01&level=error',
       );
     });
 

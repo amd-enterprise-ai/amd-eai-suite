@@ -8,7 +8,7 @@ Documentation       High-level secret testing keywords.
 ...                 Uses the low-level API keywords from api/secrets.resource to implement
 ...                 higher-level testing scenarios for secrets management and project assignments.
 Resource            api/secrets.resource
-Resource            common/resource_tracking.resource
+Resource            common/airm_resource_cleanup.resource
 Resource            resources/common/resource_lifecycle.resource
 Resource            airm_projects.resource
 Library             Collections
@@ -20,7 +20,7 @@ Library             Process
 *** Variables ***
 ${TEST_SECRET_ID}                ${None}
 ${SECOND_SECRET_ID}              ${None}
-@{CREATED_SECRET_IDS}            # List to track created secret IDs for cleanup
+# CREATED_SECRET_IDS is lazy-initialized by Track Secret For Cleanup
 ${TEST_SECOND_PROJECT_ID}        ${None}
 ${TEST_VALID_MANIFEST}           ${EMPTY}
 ${TEST_INVALID_MANIFEST}         ${EMPTY}
@@ -89,7 +89,7 @@ Secret is created without project assignment
     ...    type=ExternalSecret
     ...    scope=Organization
     ...    manifest=${TEST_VALID_MANIFEST}
-    ...    project_ids=${empty_project_ids}
+    ...    projectIds=${empty_project_ids}
 
     ${response}=    Create secret
     ...    secret_data=${secret_data}
@@ -98,12 +98,7 @@ Secret is created without project assignment
     ${secret_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_SECRET_ID}    ${secret_id}
 
-    TRY
-        Append To List    ${CREATED_SECRET_IDS}    ${secret_id}
-        Log    Tracking secret ${secret_id} for cleanup    DEBUG
-    EXCEPT
-        Log    CREATED_SECRET_IDS not available, secret won't be auto-cleaned    WARN
-    END
+    Track Secret For Cleanup    ${secret_id}
 
     Log    Created secret: id=${secret_id}, name=${name}, status=Unassigned    INFO
 
@@ -129,7 +124,7 @@ Secret is created and assigned to project
     ...    type=ExternalSecret
     ...    scope=Organization
     ...    manifest=${TEST_VALID_MANIFEST}
-    ...    project_ids=${project_ids}
+    ...    projectIds=${project_ids}
 
     ${response}=    Create secret
     ...    secret_data=${secret_data}
@@ -138,12 +133,7 @@ Secret is created and assigned to project
     ${secret_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_SECRET_ID}    ${secret_id}
 
-    TRY
-        Append To List    ${CREATED_SECRET_IDS}    ${secret_id}
-        Log    Tracking secret ${secret_id} for cleanup    DEBUG
-    EXCEPT
-        Log    CREATED_SECRET_IDS not available, secret won't be auto-cleaned    WARN
-    END
+    Track Secret For Cleanup    ${secret_id}
 
     Log    Created secret: id=${secret_id}, name=${name}, assigned to project=${TEST_PROJECT_ID}    INFO
 
@@ -177,7 +167,7 @@ Secret "${secret_name}" is assigned to project
     ${secret_data}=    Set Variable    ${secret_details.json()}
 
     # Get project_secrets from secret - it's a list of objects with project_id field
-    ${project_secrets}=    Get From Dictionary    ${secret_data}    project_secrets    default=@{EMPTY}
+    ${project_secrets}=    Get From Dictionary    ${secret_data}    projectSecrets    default=@{EMPTY}
 
     # Extract project IDs from project_secrets objects
     @{current_project_ids}=    Create List
@@ -200,7 +190,7 @@ Secret "${secret_name}" is assigned to project
     ${assign_response}=    Assign secret to projects
     ...    ${secret_id}
     ...    ${project_ids}
-    ...    expected_status=anything
+    ...    expected_status=any
 
     # Verify status is either 200 or 409
     ${status_code}=    Set Variable    ${assign_response.status_code}
@@ -258,7 +248,7 @@ Attempting to create secret with same name
     ...    type=ExternalSecret
     ...    scope=Organization
     ...    manifest=${TEST_VALID_MANIFEST}
-    ...    project_ids=${empty_project_ids}
+    ...    projectIds=${empty_project_ids}
 
     ${response}=    Create secret
     ...    secret_data=${secret_data}
@@ -387,7 +377,7 @@ Secret should have "${count}" project assignment
     # Fetch the latest secret state
     ${secret_response}=    Get secret    ${TEST_SECRET_ID}    expected_status=200
     ${json}=    Set Variable    ${secret_response.json()}
-    ${project_secrets}=    Get From Dictionary    ${json}    project_secrets
+    ${project_secrets}=    Get From Dictionary    ${json}    projectSecrets
     ${actual_count}=    Get Length    ${project_secrets}
 
     Should Be Equal As Integers    ${actual_count}    ${count_int}
@@ -401,7 +391,7 @@ Secret should have "${count}" project assignment in response
     ${count_int}=    Convert To Integer    ${count}
 
     ${json}=    Set Variable    ${TEST_RESPONSE.json()}
-    ${project_secrets}=    Get From Dictionary    ${json}    project_secrets
+    ${project_secrets}=    Get From Dictionary    ${json}    projectSecrets
     ${actual_count}=    Get Length    ${project_secrets}
 
     Should Be Equal As Integers    ${actual_count}    ${count_int}
@@ -446,7 +436,7 @@ All project assignments should be synced
     [Documentation]    Verifies that all project assignments have Synced status by fetching fresh state
     ${secret_response}=    Get secret    ${TEST_SECRET_ID}    expected_status=200
     ${json}=    Set Variable    ${secret_response.json()}
-    ${project_secrets}=    Get From Dictionary    ${json}    project_secrets
+    ${project_secrets}=    Get From Dictionary    ${json}    projectSecrets
 
     FOR    ${project_secret}    IN    @{project_secrets}
         ${status}=    Get From Dictionary    ${project_secret}    status
@@ -682,7 +672,7 @@ Secret with invalid path is created and assigned to project
     ...    type=ExternalSecret
     ...    scope=Organization
     ...    manifest=${TEST_VALID_MANIFEST}
-    ...    project_ids=${project_ids}
+    ...    projectIds=${project_ids}
 
     ${response}=    Create secret
     ...    secret_data=${secret_data}
@@ -691,12 +681,7 @@ Secret with invalid path is created and assigned to project
     ${secret_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_SECRET_ID}    ${secret_id}
 
-    TRY
-        Append To List    ${CREATED_SECRET_IDS}    ${secret_id}
-        Log    Tracking secret ${secret_id} for cleanup    DEBUG
-    EXCEPT
-        Log    CREATED_SECRET_IDS not available, secret won't be auto-cleaned    WARN
-    END
+    Track Secret For Cleanup    ${secret_id}
 
     Log    Created secret with invalid path: id=${secret_id}, name=${name}, assigned to project=${TEST_PROJECT_ID}    INFO
 
@@ -734,7 +719,7 @@ Secret status should be synced error
     ...    msg=Expected secret status to be SyncedError, but got ${status}
 
     # Optionally check for error message if available
-    ${error_message}=    Get From Dictionary    ${json}    error_message    ${None}
+    ${error_message}=    Get From Dictionary    ${json}    errorMessage    ${None}
     Run Keyword If    '${error_message}' != '${None}'
     ...    Log    Secret error message: ${error_message}    WARN
 
@@ -775,7 +760,7 @@ Secret with same name "${name}" can be created
     ...    type=ExternalSecret
     ...    scope=Organization
     ...    manifest=${TEST_VALID_MANIFEST}
-    ...    project_ids=${empty_project_ids}
+    ...    projectIds=${empty_project_ids}
 
     ${response}=    Create secret
     ...    secret_data=${secret_data}
@@ -784,12 +769,7 @@ Secret with same name "${name}" can be created
     ${new_secret_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_NEW_SECRET_ID}    ${new_secret_id}
 
-    TRY
-        Append To List    ${CREATED_SECRET_IDS}    ${new_secret_id}
-        Log    Tracking recreated secret ${new_secret_id} for cleanup    DEBUG
-    EXCEPT
-        Log    CREATED_SECRET_IDS not available, secret won't be auto-cleaned    WARN
-    END
+    Track Secret For Cleanup    ${new_secret_id}
 
     Log    Created secret with reused name: id=${new_secret_id}, name=${name}    INFO
 
@@ -881,10 +861,7 @@ Find auto-discovered secret in AIRM API
             END
             ${secret_id}=    Get From Dictionary    ${secret}    id
             Set Test Variable    ${TEST_SECRET_ID}    ${secret_id}
-            ${already_tracked}=    Evaluate    "${secret_id}" in $CREATED_SECRET_IDS
-            IF    not $already_tracked
-                Append To List    ${CREATED_SECRET_IDS}    ${secret_id}
-            END
+            Track Secret For Cleanup    ${secret_id}
             Log    Discovered secret ${secret_name} in AIRM API: id=${secret_id}, kind=${expected_kind}    INFO
             RETURN
         END
@@ -1030,7 +1007,7 @@ Verify secret use case
 
     ${response}=    Get secret    ${TEST_SECRET_ID}    expected_status=200
     ${secret}=    Set Variable    ${response.json()}
-    ${use_case}=    Get From Dictionary    ${secret}    use_case
+    ${use_case}=    Get From Dictionary    ${secret}    useCase
     Should Be Equal As Strings    ${use_case}    ${expected_use_case}
     ...    msg=Expected use_case "${expected_use_case}" but got "${use_case}"
 
@@ -1171,7 +1148,7 @@ Auto-discovered secret metadata should be correct
 
     ${kind}=    Get From Dictionary    ${json}    type
     ${scope}=    Get From Dictionary    ${json}    scope
-    ${use_case}=    Get From Dictionary    ${json}    use_case
+    ${use_case}=    Get From Dictionary    ${json}    useCase
 
     Should Be Equal    ${kind}    ${expected_kind}
     ...    msg=Expected kind=${expected_kind}, got ${kind}
@@ -1224,24 +1201,28 @@ Verify child KubernetesSecret exists in cluster
     ...    msg=Child K8s Secret ${TEST_KUBECTL_ES_NAME} not yet created by ESO controller: ${result.stderr}
 
 AIRM controller pod is restarted
-    [Documentation]    Triggers a rolling restart of the AIRM controller deployment.
+    [Documentation]    Triggers a restart by deleting every AIRM controller pod replica at once.
+    ...    Uses -l app=... so all running pods for the workload are removed; the Deployment recreates them
+    ...    without patch permission on deployments (unlike kubectl rollout restart).
+    ...    Expects pods labeled app=${AIRM_CONTROLLER_DEPLOYMENT} (matches airm-agent Helm chart).
     ...    Override AIRM_CONTROLLER_NAMESPACE and AIRM_CONTROLLER_DEPLOYMENT variables
     ...    if your cluster uses different names (e.g. --variable AIRM_CONTROLLER_DEPLOYMENT:airm-api).
 
-    Log    Restarting deployment ${AIRM_CONTROLLER_DEPLOYMENT} in namespace ${AIRM_CONTROLLER_NAMESPACE}    INFO
+    Log    Deleting all pod replicas (-l app=${AIRM_CONTROLLER_DEPLOYMENT}) in namespace ${AIRM_CONTROLLER_NAMESPACE}    INFO
 
-    ${result}=    Run Process    kubectl    rollout    restart
-    ...    deployment/${AIRM_CONTROLLER_DEPLOYMENT}
+    ${result}=    Run Process    kubectl    delete    pods
     ...    -n    ${AIRM_CONTROLLER_NAMESPACE}
+    ...    -l    app\=${AIRM_CONTROLLER_DEPLOYMENT}
+    ...    --wait\=false
     ...    stderr=PIPE
 
     Should Be Equal As Integers    ${result.rc}    0
-    ...    msg=Failed to restart deployment ${AIRM_CONTROLLER_DEPLOYMENT}: ${result.stderr}
+    ...    msg=Failed to delete AIRM controller pod replica(s) for app=${AIRM_CONTROLLER_DEPLOYMENT}: ${result.stderr}
 
-    Log    Rollout restart triggered for ${AIRM_CONTROLLER_DEPLOYMENT}    INFO
+    Log    Delete issued for all matching replicas of ${AIRM_CONTROLLER_DEPLOYMENT}; replacements will be scheduled    INFO
 
 AIRM controller pod should be ready
-    [Documentation]    Waits for the AIRM controller deployment to finish rolling restart
+    [Documentation]    Waits for the AIRM controller deployment to finish replacing pod(s)
     ...    and all pods to be ready again.
     Log    Waiting for ${AIRM_CONTROLLER_DEPLOYMENT} rollout to complete    INFO
     Wait Until Keyword Succeeds    3 min    5 sec

@@ -2,9 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+import math
 from enum import Enum, StrEnum
 
-from pydantic import BaseModel
+from pydantic import computed_field, field_validator
+from pydantic.alias_generators import to_snake
+
+from api_common.schemas import BaseModel
 
 
 class PaginationConditions(BaseModel):
@@ -21,6 +25,11 @@ class SortCondition(BaseModel):
     field: str
     direction: SortDirection = SortDirection.asc  # default to ascending order
 
+    @field_validator("field")
+    @classmethod
+    def _normalize_field(cls, v: str) -> str:
+        return to_snake(v)
+
 
 class FilterOperator(Enum):
     EQ = "eq"
@@ -32,6 +41,11 @@ class FilterCondition(BaseModel):
     operator: FilterOperator | None  # default to CONTAINS if not specified
     fields: list[str]
     show_all_if_values_empty: bool | None = False
+
+    @field_validator("fields")
+    @classmethod
+    def _normalize_fields(cls, v: list[str]) -> list[str]:
+        return [to_snake(f) for f in v]
 
 
 class BaseFilterableList(BaseModel):
@@ -50,4 +64,10 @@ class BasePaginationList(PaginationConditions):
     """Base Pagination response fields for paginated lists."""
 
     total: int
-    total_pages: int
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_pages(self) -> int:
+        if not self.page_size:
+            return 1
+        return max(1, math.ceil(self.total / self.page_size))

@@ -58,7 +58,7 @@ def test_get_secrets_with_use_case_filter():
     with patch("app.secrets.router.list_secrets_for_namespace") as mock_service:
         mock_service.return_value = expected_secrets
         with TestClient(app) as client:
-            response = client.get(f"/v1/namespaces/{mock_namespace}/secrets?use_case=S3")
+            response = client.get(f"/v1/namespaces/{mock_namespace}/secrets?useCase=S3")
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
@@ -161,7 +161,7 @@ def test_create_secret_with_use_case():
                 json={
                     "name": "s3-secret",
                     "type": "Opaque",
-                    "use_case": "S3",
+                    "useCase": "S3",
                     "data": {
                         "accessKey": "AKIAIOSFODNN7EXAMPLE",
                         "secretKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",

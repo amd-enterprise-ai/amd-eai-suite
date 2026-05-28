@@ -111,7 +111,7 @@ async def sync_aim_services(session: AsyncSession, kube_client: KubernetesClient
                     namespace=service.metadata.namespace,
                     model=model_name,
                     status=service.status.status,
-                    metric=service.spec.overrides.get("metric"),
+                    metric=(service.spec.overrides or {}).get("metric"),
                     submitter=service.metadata.annotations.get(SUBMITTER_ANNOTATION, "system"),
                     id=service_id,
                 )

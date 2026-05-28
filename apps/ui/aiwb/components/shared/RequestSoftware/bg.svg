@@ -1,0 +1,62 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="512" cy="512" r="133.5" stroke="currentColor" />
+  <g opacity="0.6">
+    <circle cx="325" cy="608" r="4" fill="currentColor" />
+    <circle cx="699" cy="609" r="4" fill="currentColor" />
+    <circle cx="4" cy="4" r="4" transform="matrix(-1 0 0 1 517 297)" fill="currentColor" />
+    <circle cx="512" cy="512" r="210.5" stroke="currentColor" />
+  </g>
+  <g opacity="0.6">
+    <circle cx="406" cy="774" r="4" fill="currentColor" />
+    <circle cx="699" cy="724" r="4" fill="currentColor" />
+    <circle cx="788" cy="450" r="4" fill="currentColor" />
+    <circle cx="655" cy="268" r="2" fill="currentColor" />
+    <circle cx="236" cy="573" r="2" fill="currentColor" />
+    <circle cx="309" cy="316" r="4" fill="currentColor" />
+    <circle cx="512" cy="512" r="282.5" stroke="currentColor" />
+  </g>
+  <g opacity="0.5">
+    <circle cx="398" cy="177" r="8" fill="currentColor" />
+    <circle cx="627" cy="848" r="6" fill="currentColor" />
+    <circle cx="258" cy="759" r="4" fill="currentColor" />
+    <circle cx="462" cy="863" r="4" fill="currentColor" />
+    <circle cx="778" cy="747" r="4" fill="currentColor" />
+    <circle cx="617" cy="173" r="4" fill="currentColor" />
+    <circle cx="781" cy="281" r="4" fill="currentColor" />
+    <circle cx="248" cy="275" r="2" fill="currentColor" />
+    <circle cx="845" cy="390" r="2" fill="currentColor" />
+    <circle cx="863" cy="562" r="4" fill="currentColor" />
+    <circle cx="161" cy="462" r="4" fill="currentColor" />
+    <circle cx="512" cy="512" r="354.5" stroke="currentColor" />
+  </g>
+  <g opacity="0.4">
+    <circle cx="512" cy="512" r="427.5" stroke="currentColor" />
+    <circle cx="749" cy="157" r="8" fill="currentColor" />
+    <circle cx="244" cy="845" r="6" fill="currentColor" />
+    <circle cx="87" cy="557" r="4" fill="currentColor" />
+    <circle cx="916" cy="652" r="4" fill="currentColor" />
+    <circle cx="728" cy="881" r="2" fill="currentColor" />
+    <circle cx="547" cy="938" r="2" fill="currentColor" />
+    <circle cx="939.5" cy="518" r="2" fill="currentColor" />
+    <circle cx="900" cy="331" r="4" fill="currentColor" />
+    <circle cx="465" cy="87" r="2" fill="currentColor" />
+    <circle cx="264" cy="164" r="4" fill="currentColor" />
+    <circle cx="132" cy="317" r="6" fill="currentColor" />
+    <circle cx="140" cy="723" r="4" fill="currentColor" />
+  </g>
+  <g opacity="0.3">
+    <circle cx="512" cy="512" r="499.5" stroke="currentColor" />
+    <circle cx="989" cy="363" r="2" fill="currentColor" />
+    <circle cx="591" cy="1005" r="4" fill="currentColor" />
+    <circle cx="13" cy="532" r="2" fill="currentColor" />
+    <circle cx="951" cy="751" r="2" fill="currentColor" />
+    <circle cx="258" cy="942" r="2" fill="currentColor" />
+    <circle cx="631" cy="27" r="4" fill="currentColor" />
+    <circle cx="913" cy="214" r="4" fill="currentColor" />
+    <circle cx="339" cy="43" r="2" fill="currentColor" />
+    <circle cx="173" cy="145" r="4" fill="currentColor" />
+  </g>
+  <circle cx="398" cy="443" r="6" fill="currentColor" />
+  <circle cx="627" cy="446" r="6" fill="currentColor" />
+  <circle cx="512" cy="646" r="6" fill="currentColor" />
+</svg>

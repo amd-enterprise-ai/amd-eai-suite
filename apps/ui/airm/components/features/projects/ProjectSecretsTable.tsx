@@ -10,7 +10,7 @@ import { ActionItem, TableColumns } from '@amdenterpriseai/types';
 import { CustomComparatorConfig } from '@amdenterpriseai/types';
 import { SecretsTableField } from '@amdenterpriseai/types';
 import { ClientSideDataFilter } from '@amdenterpriseai/types';
-import { ProjectSecretWithParentSecret } from '@amdenterpriseai/types';
+import { ProjectSecretWithParentSecret } from '@/types/secrets';
 import { SecretUseCase } from '@amdenterpriseai/types';
 import {
   ClientSideDataTable,
@@ -18,8 +18,8 @@ import {
   DateDisplay,
 } from '@amdenterpriseai/components';
 
-import { getProjectSecretStatusVariants } from '@amdenterpriseai/utils/app';
-import { ProjectSecretStatus } from '@amdenterpriseai/types';
+import { getProjectSecretStatusVariants } from '@/utils/project-secret-status-variants';
+import { ProjectSecretStatus } from '@/types/enums/secrets';
 import { StatusError } from '@amdenterpriseai/components';
 
 interface Props {

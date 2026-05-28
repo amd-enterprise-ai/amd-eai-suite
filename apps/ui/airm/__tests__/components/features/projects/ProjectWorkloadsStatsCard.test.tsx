@@ -4,7 +4,7 @@
 
 import { act, render, screen } from '@testing-library/react';
 
-import { WorkloadStatus } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 
 import { ProjectWorkloadsStatsCard } from '@/components/features/projects';
 

@@ -8,12 +8,13 @@
 
 FROM python:3.13 AS base
 
-# Helm binary install
+# Helm binary install (pinned version)
 WORKDIR /tmp
-RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-RUN chmod 700 get_helm.sh
-RUN ./get_helm.sh
-RUN rm get_helm.sh
+RUN HELM_VERSION=v3.17.3 && \
+    curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" -o helm.tar.gz && \
+    tar -xzf helm.tar.gz && \
+    mv linux-amd64/helm /usr/local/bin/helm && \
+    rm -rf helm.tar.gz linux-amd64
 
 # kubectl binary install
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"

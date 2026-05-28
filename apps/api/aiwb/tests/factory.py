@@ -45,7 +45,6 @@ from app.charts.schemas import ChartCreate
 from app.config import SUBMITTER_ANNOTATION
 from app.datasets.models import Dataset, DatasetType
 from app.dispatch.crds import K8sMetadata
-from app.models.models import InferenceModel, OnboardingStatus
 from app.namespaces.constants import NAMESPACE_ID_LABEL
 from app.namespaces.crds import Namespace
 from app.namespaces.schemas import (
@@ -277,12 +276,14 @@ def make_aim_service_k8s(
     routing_path: str | None = None,
     with_httproute: bool = False,
     as_response: bool = False,
+    conditions: list[dict[str, Any]] | None = None,
 ) -> AIMServiceResource | AIMServiceResponse:
     """Create an AIMServiceResource (K8s CRD) for testing.
 
     Args:
         with_httproute: If True, creates and attaches an HTTPRoute to the service
         as_response: If True, returns AIMServiceResponse (for router tests).
+        conditions: List of condition dicts with "type" and "status" keys.
     """
     wid = workload_id or uuid4()
     svc_name = name or f"wb-aim-{str(wid)[:8]}"
@@ -290,6 +291,8 @@ def make_aim_service_k8s(
     status_data: dict[str, Any] = {"status": status.value, "resolvedModel": {"name": model_ref}}
     if routing_path:
         status_data["routing"] = {"path": routing_path}
+    if conditions:
+        status_data["conditions"] = conditions
 
     spec_data: dict[str, Any] = {"model": {"name": model_ref}, "replicas": replicas}
     if min_replicas is not None:
@@ -422,97 +425,6 @@ async def create_dataset(
     await session.flush()
     await session.refresh(dataset)
     return dataset
-
-
-# ============================================================================
-# Model Factories
-# ============================================================================
-
-
-def make_inference_model(
-    id: UUID | None = None,
-    name: str = "Test Model",
-    namespace: str = "test-namespace",
-    model_weights_path: str = "test-model.bin",
-    canonical_name: str = "test/model",
-    onboarding_status: OnboardingStatus = OnboardingStatus.ready,
-    created_by: str = "test@example.com",
-) -> InferenceModel:
-    """
-    Create an InferenceModel object for testing (not persisted).
-
-    This factory creates a model object with proper timestamps without database interaction.
-    Useful for router tests where you need to mock service layer returns.
-
-    Args:
-        id: Optional UUID for the model (auto-generated if not provided)
-        name: Human-readable name for the model
-        namespace: Namespace the model belongs to
-        model_weights_path: Path to the model weights
-        canonical_name: Canonical name of the model (e.g., "meta-llama/Llama-3.1-8B")
-        onboarding_status: Onboarding status of the model
-        created_by: Email of the user creating the model
-
-    Returns:
-        InferenceModel instance (not persisted to database)
-    """
-
-    now = datetime.now(UTC)
-    return InferenceModel(
-        id=id or uuid4(),
-        name=name,
-        namespace=namespace,
-        model_weights_path=model_weights_path,
-        canonical_name=canonical_name,
-        onboarding_status=onboarding_status,
-        created_by=created_by,
-        updated_by=created_by,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-async def create_inference_model(
-    session: AsyncSession,
-    *,
-    id: UUID | None = None,
-    name: str = "Test Model",
-    namespace: str = "test-namespace",
-    model_weights_path: str = "test-model.bin",
-    canonical_name: str = "test/model",
-    onboarding_status: OnboardingStatus = OnboardingStatus.ready,
-    created_by: str = "test@example.com",
-) -> InferenceModel:
-    """
-    Create a test inference model in a namespace.
-
-    Args:
-        session: Database session
-        id: Optional UUID for the model (auto-generated if not provided)
-        name: Human-readable name for the model
-        namespace: Namespace the model belongs to
-        model_weights_path: Path to the model weights
-        canonical_name: Canonical name of the model (e.g., "meta-llama/Llama-3.1-8B")
-        onboarding_status: Onboarding status of the model
-        created_by: Email of the user creating the model
-
-    Returns:
-        The created InferenceModel instance
-    """
-    model = InferenceModel(
-        id=id or uuid4(),
-        name=name,
-        namespace=namespace,
-        model_weights_path=model_weights_path,
-        canonical_name=canonical_name,
-        onboarding_status=onboarding_status,
-        created_by=created_by,
-        updated_by=created_by,
-    )
-    session.add(model)
-    await session.flush()
-    await session.refresh(model)
-    return model
 
 
 # ============================================================================
@@ -811,7 +723,6 @@ async def create_workload(
     status: WorkloadStatus = WorkloadStatus.PENDING,
     chart: Chart | None = None,
     chart_id: UUID | None = None,
-    model_id: UUID | None = None,
     dataset_id: UUID | None = None,
     submitter: str = "test@example.com",
     manifest: str = DEFAULT_TEST_MANIFEST,
@@ -830,7 +741,6 @@ async def create_workload(
         status: Workload status
         chart: Chart object (if provided, chart_id is ignored)
         chart_id: Chart UUID (used if chart not provided)
-        model_id: Optional inference model ID
         dataset_id: Optional dataset ID
         submitter: Email of the submitter
         manifest: Kubernetes manifest
@@ -863,7 +773,6 @@ async def create_workload(
         type=workload_type,
         status=status,
         chart_id=chart_id,
-        model_id=model_id,
         dataset_id=dataset_id,
         created_by=submitter,
         updated_by=submitter,
@@ -890,7 +799,6 @@ def make_workload_mock(
     status: WorkloadStatus = WorkloadStatus.RUNNING,
     chart_id: UUID | None = None,
     chart_name: str = "test-chart",
-    model_id: UUID | None = None,
     dataset_id: UUID | None = None,
     created_by: str = "test@example.com",
     manifest: str = DEFAULT_TEST_MANIFEST,
@@ -910,7 +818,6 @@ def make_workload_mock(
         status: Workload status
         chart_id: UUID of the chart
         chart_name: Name of the chart (for mock chart relationship)
-        model_id: Optional inference model ID
         dataset_id: Optional dataset ID
         created_by: Email of the creator
         manifest: Kubernetes manifest
@@ -926,7 +833,6 @@ def make_workload_mock(
     mock.type = workload_type
     mock.status = status
     mock.chart_id = chart_id or uuid4()
-    mock.model_id = model_id
     mock.dataset_id = dataset_id
     mock.created_by = created_by
     mock.updated_by = created_by

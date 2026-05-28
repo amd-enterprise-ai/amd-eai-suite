@@ -25,16 +25,16 @@ ${TOAST_SUCCESS_SELECTOR}           [data-testid="toast-success"]
 *** Keywords ***
 Navigate To Secrets Page
     [Documentation]    Navigates to the Secrets page via sidebar link to preserve project context.
-    [Arguments]    ${base_url}
+    [Arguments]    ${base_url}    ${project}
 
     # Use sidebar navigation to avoid full page reload which resets project context
-    VAR    ${sidebar_link}    css=a[href="/secrets"]
+    VAR    ${sidebar_link}    css=a[href="/${project}/secrets"]
     ${link_visible}=    Run Keyword And Return Status
     ...    Wait For Elements State    ${sidebar_link}    visible    timeout=5s
     IF    ${link_visible}
         Click    ${sidebar_link}
     ELSE
-        Go To    ${base_url}${SECRETS_PATH}
+        Go To    ${base_url}/${project}${SECRETS_PATH}
     END
     VAR    ${table}    css=${SECRETS_TABLE_SELECTOR}
     Wait For Elements State    ${table}    visible    timeout=30s

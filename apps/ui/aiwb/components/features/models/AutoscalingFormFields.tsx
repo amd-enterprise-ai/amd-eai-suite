@@ -7,12 +7,15 @@
  * Used in both deployment drawer and workload settings drawer.
  */
 
-import { Input, SelectItem, Slider } from '@heroui/react';
+import { SelectItem } from '@heroui/react';
 import { useTranslation } from 'next-i18next';
-import { useEffect } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
-import { FormSelect } from '@amdenterpriseai/components';
+import {
+  FormNumberInput,
+  FormRangeSlider,
+  FormSelect,
+} from '@amdenterpriseai/components';
 
 import {
   AIM_MAX_REPLICAS,
@@ -49,12 +52,6 @@ export const AutoscalingFormFields = ({ form, className }: Props) => {
   const isCustomTargetType =
     targetType && !TARGET_TYPE_OPTION_KEYS.some((o) => o.key === targetType);
 
-  // Register minReplicas and maxReplicas fields on mount
-  useEffect(() => {
-    form.register('minReplicas');
-    form.register('maxReplicas');
-  }, [form]);
-
   const getScalingMetricDescription = () => {
     if (isCustomMetric) return '';
     const metric =
@@ -84,26 +81,15 @@ export const AutoscalingFormFields = ({ form, className }: Props) => {
             {minReplicas} - {maxReplicas}
           </span>
         </div>
-        <Slider
+        <FormRangeSlider
           data-testid="replica-range-slider"
           aria-label={t('replicaRange')}
+          form={form}
+          minName="minReplicas"
+          maxName="maxReplicas"
           step={1}
           minValue={1}
           maxValue={AIM_MAX_REPLICAS}
-          value={[minReplicas, maxReplicas]}
-          onChange={(value) => {
-            if (Array.isArray(value)) {
-              const [min, max] = value;
-              form.setValue('minReplicas', min, {
-                shouldValidate: true,
-                shouldDirty: true,
-              });
-              form.setValue('maxReplicas', max, {
-                shouldValidate: true,
-                shouldDirty: true,
-              });
-            }
-          }}
           className="max-w-full"
           size="sm"
         />
@@ -178,15 +164,13 @@ export const AutoscalingFormFields = ({ form, className }: Props) => {
           </FormSelect>
         </div>
         <div className="flex-1">
-          <Input
+          <FormNumberInput
             data-testid="target-value-input"
-            type="number"
+            form={form}
+            name="targetValue"
             label={t('targetValue.label')}
-            labelPlacement="outside"
-            variant="bordered"
-            min={1}
+            minValue={1}
             description={getTargetValueDescription()}
-            {...form.register('targetValue', { valueAsNumber: true })}
           />
         </div>
       </div>

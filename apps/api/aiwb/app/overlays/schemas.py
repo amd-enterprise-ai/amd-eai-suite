@@ -5,9 +5,17 @@
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from api_common.schemas import BaseEntityPublic
+from api_common.schemas import BaseEntityPublic, BaseModel
+
+
+class OverlayListQuery(BaseModel):
+    chart_id: UUID | None = Field(default=None, description="Optionally filter by chart ID")
+    canonical_name: str | None = Field(
+        default=None,
+        description="Optionally filter by overlays compatible to models with a specific canonical name. This also includes overlays with no canonical name specified.",
+    )
 
 
 class OverlayResponse(BaseEntityPublic):
@@ -17,8 +25,6 @@ class OverlayResponse(BaseEntityPublic):
     )
     chart_id: UUID
     overlay: dict[str, Any]
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class OverlayUpdate(BaseModel):

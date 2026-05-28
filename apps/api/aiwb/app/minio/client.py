@@ -9,8 +9,10 @@ from contextlib import contextmanager
 import urllib3
 from loguru import logger
 from minio import Minio
+from minio.datatypes import Object
 from minio.deleteobjects import DeleteObject
 from minio.error import S3Error
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from api_common.exceptions import (
     BaseApiException,
@@ -20,7 +22,7 @@ from api_common.exceptions import (
     ValidationException,
 )
 
-from .config import MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_URL
+from .config import MINIO_ACCESS_KEY, MINIO_MAX_ATTEMPTS, MINIO_MAX_WAIT, MINIO_MIN_WAIT, MINIO_SECRET_KEY, MINIO_URL
 from .exceptions import S3SyncError
 
 
@@ -66,6 +68,39 @@ class MinioClient:
 
     def download_object(self, bucket_name: str, object_name: str) -> bytes:
         return self.client.get_object(bucket_name, object_name).read()
+
+    def stream_object(self, bucket_name: str, object_name: str, chunk_size: int = 8192) -> Generator[bytes]:
+        """
+        Stream an object from S3 in chunks without loading entire file into memory.
+
+        Args:
+            bucket_name: Name of the S3 bucket
+            object_name: Object key/path in the bucket
+            chunk_size: Size of chunks to read (default 8KB)
+
+        Yields:
+            bytes: Chunks of the object data
+        """
+
+        # Retry only the initial connection — once streaming starts we cannot retry mid-stream.
+        @retry(
+            wait=wait_exponential(multiplier=1, min=MINIO_MIN_WAIT, max=MINIO_MAX_WAIT),
+            stop=stop_after_attempt(MINIO_MAX_ATTEMPTS),
+            reraise=True,
+        )
+        def connect():
+            return self.client.get_object(bucket_name, object_name)
+
+        response = connect()
+        try:
+            yield from response.stream(chunk_size)
+        finally:
+            response.close()
+            response.release_conn()
+
+    def stat_object(self, bucket_name: str, object_name: str) -> Object:
+        """Return metadata for an object without downloading it."""
+        return self.client.stat_object(bucket_name, object_name)
 
     def delete_object(self, bucket_name: str, object_name: str) -> None:
         """Delete an object from the specified bucket."""

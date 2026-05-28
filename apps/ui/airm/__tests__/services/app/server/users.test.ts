@@ -12,21 +12,17 @@ import {
   inviteUser,
 } from '@/services/server';
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { proxyRequest } from '@amdenterpriseai/utils/server';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { User } from '@amdenterpriseai/types';
+import { User } from '@/types/users';
 
 vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@amdenterpriseai/utils/app')>();
   return {
     ...actual,
-    convertSnakeToCamel: vi.fn((x) => x),
     getErrorMessage: vi.fn(async () => 'error message'),
   };
 });
@@ -65,7 +61,6 @@ describe('users service', () => {
         }),
       );
       expect(result).toEqual(mockJson);
-      expect(convertSnakeToCamel).toHaveBeenCalledWith(mockJson);
     });
 
     it('throws error on failure', async () => {
@@ -97,7 +92,6 @@ describe('users service', () => {
         }),
       );
       expect(result).toEqual(mockJson);
-      expect(convertSnakeToCamel).toHaveBeenCalledWith(mockJson);
     });
 
     it('throws error on failure', async () => {
@@ -165,7 +159,6 @@ describe('users service', () => {
         }),
       );
       expect(result).toEqual(mockJson);
-      expect(convertSnakeToCamel).toHaveBeenCalledWith(mockJson);
     });
 
     it('throws error on failure', async () => {

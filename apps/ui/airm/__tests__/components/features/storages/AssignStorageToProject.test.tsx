@@ -8,9 +8,9 @@ import React, { act } from 'react';
 import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 import { generateMockStorages } from '@/__mocks__/utils/storages-mock';
 
-import { Project } from '@amdenterpriseai/types';
-import { Storage } from '@amdenterpriseai/types';
-import { StorageStatus } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import { Storage } from '@/types/storages';
+import { StorageStatus } from '@/types/enums/storages';
 
 import { AssignStorageToProject } from '@/components/features/storages';
 

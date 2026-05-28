@@ -9,6 +9,7 @@ description: ExternalSecret resources for AIWB application secrets
 
 type: application
 
-version: 0.1.2
+version: 0.0.0
 
+# Placeholder overridden during release packaging
 appVersion: "0.0.0"

@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { SecretUseCase } from '@amdenterpriseai/types';
 import { DeployAIMDrawer } from '@/components/features/models/DeployAIMDrawer';
 import {
   mockAims,
@@ -10,10 +11,14 @@ import {
   mockMixedSupportAggregatedAim,
 } from '@/__mocks__/services/app/aims.data';
 import wrapper from '@/__tests__/ProviderWrapper';
-import { SecretType } from '@amdenterpriseai/types';
 import { fetchProjectSecrets, createProjectSecret } from '@/lib/app/secrets';
 import { Mock } from 'vitest';
-import { AIMClusterServiceTemplate, AIMMetric, AIMStatus } from '@/types/aims';
+import {
+  AIMClusterServiceTemplate,
+  AIMMetric,
+  AIMService,
+  AIMStatus,
+} from '@/types/aims';
 import * as aimsLib from '@/lib/app/aims';
 
 vi.mock('next-i18next', () => ({
@@ -33,22 +38,15 @@ vi.mock('@/components/shared/ModelIcons', () => ({
   ),
 }));
 
-vi.mock('@amdenterpriseai/components', async (importOriginal) => ({
-  ...(await importOriginal()),
-  HuggingFaceTokenSelector: () => (
-    <div data-testid="huggingface-token-selector">
-      <div>huggingFaceTokenDrawer.fields.existingToken.label</div>
-    </div>
-  ),
-}));
+const mockToast = {
+  success: vi.fn(),
+  error: vi.fn(),
+};
 
 vi.mock('@amdenterpriseai/hooks', async (importOriginal) => ({
   ...(await importOriginal()),
   useSystemToast: () => ({
-    toast: {
-      success: vi.fn(),
-      error: vi.fn(),
-    },
+    toast: mockToast,
   }),
 }));
 
@@ -79,15 +77,21 @@ const mockServiceTemplates: AIMClusterServiceTemplate[] = [
 ];
 
 describe('DeployAIMDrawer', () => {
+  let getAimClusterServiceTemplatesSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    (fetchProjectSecrets as Mock).mockResolvedValue({ projectSecrets: [] });
+    mockToast.success.mockClear();
+    mockToast.error.mockClear();
+    (fetchProjectSecrets as Mock).mockResolvedValue({ data: [] });
     (createProjectSecret as Mock).mockResolvedValue({
       id: 'new-secret-id',
       name: 'test-hf-token',
     });
     // Default: no service templates (no metrics available)
-    vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([]);
+    getAimClusterServiceTemplatesSpy = vi
+      .spyOn(aimsLib, 'getAimClusterServiceTemplates')
+      .mockResolvedValue([]);
   });
 
   it('renders drawer when open', () => {
@@ -108,7 +112,7 @@ describe('DeployAIMDrawer', () => {
     expect(screen.queryByText('deployAIMDrawer.title')).not.toBeInTheDocument();
   });
 
-  it('renders HuggingFace token field when isHfTokenRequired is true', () => {
+  it('renders HuggingFace token field when isHfTokenRequired is true', async () => {
     const aimWithTokenRequired = {
       ...mockAims[0],
       isHfTokenRequired: true,
@@ -117,18 +121,26 @@ describe('DeployAIMDrawer', () => {
     const aggregatedAim = {
       ...mockAggregatedAims[0],
       parsedAIMs: [aimWithTokenRequired],
+      latestAim: aimWithTokenRequired,
     };
     render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
       wrapper,
     });
 
-    // Check if HuggingFace token selector is present
+    await waitFor(() => {
+      expect(
+        screen.getByText('deployAIMDrawer.fields.huggingFaceToken.title'),
+      ).toBeInTheDocument();
+    });
     expect(
-      screen.getByText('huggingFaceTokenDrawer.fields.existingToken.label'),
+      screen.getByLabelText(/huggingFaceTokenDrawer.fields.name.label/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/huggingFaceTokenDrawer.fields.token.label/i),
     ).toBeInTheDocument();
   });
 
-  it('does not render HuggingFace token field when isHfTokenRequired is false', () => {
+  it('does not render HuggingFace token field when isHfTokenRequired is false', async () => {
     const aimWithoutTokenRequired = {
       ...mockAims[0],
       isHfTokenRequired: false,
@@ -143,9 +155,15 @@ describe('DeployAIMDrawer', () => {
       wrapper,
     });
 
-    // Check if HuggingFace token selector is not present
+    await waitFor(() => {
+      expect(screen.getByText('deployAIMDrawer.title')).toBeInTheDocument();
+    });
+
     expect(
-      screen.queryByText('huggingFaceTokenDrawer.fields.existingToken.label'),
+      screen.queryByText('deployAIMDrawer.fields.huggingFaceToken.title'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/huggingFaceTokenDrawer.fields.name.label/i),
     ).not.toBeInTheDocument();
   });
 
@@ -165,8 +183,7 @@ describe('DeployAIMDrawer', () => {
   });
 
   it('renders metric dropdown when service templates are available', async () => {
-    // Mock service templates with metrics
-    vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue(
+    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce(
       mockServiceTemplates,
     );
 
@@ -183,9 +200,6 @@ describe('DeployAIMDrawer', () => {
   });
 
   it('does not render metric dropdown when no service templates are available', async () => {
-    // Mock empty service templates
-    vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([]);
-
     const aggregatedAim = mockAggregatedAims[0];
     render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
       wrapper,
@@ -193,7 +207,7 @@ describe('DeployAIMDrawer', () => {
 
     // Wait for the query to complete
     await waitFor(() => {
-      expect(aimsLib.getAimServiceTemplates).toHaveBeenCalled();
+      expect(getAimClusterServiceTemplatesSpy).toHaveBeenCalled();
     });
 
     expect(
@@ -201,8 +215,40 @@ describe('DeployAIMDrawer', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('disables deploy button when no service templates are available', async () => {
+    const aggregatedAim = mockAggregatedAims[0];
+    render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
+      wrapper,
+    });
+
+    // Wait for the "no templates" error toast to ensure loading has finished
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        'deployAIMDrawer.notifications.noTemplatesDescription',
+      );
+    });
+
+    // Deploy button should be disabled after templates loading has settled
+    const deployButton = screen.getByText('deployAIMDrawer.actions.deploy');
+    expect(deployButton).toBeDisabled();
+  });
+
+  it('shows error toast when no service templates are available', async () => {
+    const aggregatedAim = mockAggregatedAims[0];
+    render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
+      wrapper,
+    });
+
+    // Error toast should be called
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        'deployAIMDrawer.notifications.noTemplatesDescription',
+      );
+    });
+  });
+
   it('does not render metric dropdown when all templates are NotAvailable', async () => {
-    vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([
+    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -221,7 +267,7 @@ describe('DeployAIMDrawer', () => {
     });
 
     await waitFor(() => {
-      expect(aimsLib.getAimServiceTemplates).toHaveBeenCalled();
+      expect(getAimClusterServiceTemplatesSpy).toHaveBeenCalled();
     });
 
     expect(
@@ -229,8 +275,139 @@ describe('DeployAIMDrawer', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('disables deploy button and shows error toast when all templates are NotAvailable', async () => {
+    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+      {
+        metadata: { name: 'template-latency', labels: {} },
+        spec: { modelName: 'test-model', metric: AIMMetric.Latency },
+        status: { status: 'NotAvailable' },
+      },
+      {
+        metadata: { name: 'template-throughput', labels: {} },
+        spec: { modelName: 'test-model', metric: AIMMetric.Throughput },
+        status: { status: 'NotAvailable' },
+      },
+    ]);
+
+    const aggregatedAim = mockAggregatedAims[0];
+    render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
+      wrapper,
+    });
+
+    // Error toast should be called
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        'deployAIMDrawer.notifications.noTemplatesDescription',
+      );
+    });
+
+    // Deploy button should be disabled after templates loading has settled
+    const deployButton = screen.getByText('deployAIMDrawer.actions.deploy');
+    expect(deployButton).toBeDisabled();
+  });
+
+  it('enables deploy button when ready templates are available', async () => {
+    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+      {
+        metadata: { name: 'template-latency', labels: {} },
+        spec: { modelName: 'test-model', metric: AIMMetric.Latency },
+        status: { status: 'Ready' },
+      },
+    ]);
+
+    const aggregatedAim = mockAggregatedAims[0];
+    render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
+      wrapper,
+    });
+
+    // Wait for deploy button to be enabled
+    const deployButton = await screen.findByText(
+      'deployAIMDrawer.actions.deploy',
+    );
+    await waitFor(() => {
+      expect(deployButton).not.toBeDisabled();
+    });
+
+    // Error toast should NOT be called
+    expect(mockToast.error).not.toHaveBeenCalled();
+  });
+
+  it('passes a single selected image pull secret to deployAim', async () => {
+    const deployAimSpy = vi
+      .spyOn(aimsLib, 'deployAim')
+      .mockResolvedValue(undefined as unknown as AIMService);
+
+    const base = mockAggregatedAims[0];
+    const parsedNoHf = base.parsedAIMs.map((a) => ({
+      ...a,
+      isHfTokenRequired: false,
+    }));
+    const aggregatedAim = {
+      ...base,
+      parsedAIMs: parsedNoHf,
+      latestAim: parsedNoHf[0],
+      aggregated: { ...base.aggregated, isHfTokenRequired: false },
+    };
+
+    const pullSecretName = 'registry-pull-one';
+    (fetchProjectSecrets as Mock).mockResolvedValue({
+      data: [
+        {
+          metadata: {
+            name: pullSecretName,
+            namespace: 'test-project',
+            creationTimestamp: '2023-01-01T00:00:00Z',
+          },
+          useCase: SecretUseCase.IMAGE_PULL_SECRET,
+        },
+      ],
+    });
+
+    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+      {
+        metadata: { name: 'template-latency', labels: {} },
+        spec: { modelName: 'test-model', metric: AIMMetric.Latency },
+        status: { status: 'Ready' },
+      },
+    ]);
+
+    render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
+      wrapper,
+    });
+
+    const deployButton = await screen.findByRole('button', {
+      name: 'deployAIMDrawer.actions.deploy',
+    });
+    await waitFor(() => {
+      expect(deployButton).not.toBeDisabled();
+    });
+
+    // Match FinetuneDrawer (data-testid + fireEvent); role-based queries time out for this Select in jsdom.
+    fireEvent.click(screen.getByTestId('deployAimImagePullSecretsSelect'));
+    fireEvent.click(
+      await screen.findByTestId(
+        `deployAimImagePullSecretOption-${pullSecretName}`,
+      ),
+    );
+
+    fireEvent.click(deployButton);
+
+    await waitFor(() => {
+      expect(deployAimSpy).toHaveBeenCalled();
+    });
+
+    expect(deployAimSpy).toHaveBeenCalledWith(
+      'test-project',
+      expect.objectContaining({
+        imagePullSecrets: [pullSecretName],
+      }),
+    );
+
+    deployAimSpy.mockRestore();
+  });
+
   it('only shows metrics from Ready templates, ignoring NotAvailable ones', async () => {
-    vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([
+    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -257,7 +434,7 @@ describe('DeployAIMDrawer', () => {
 
   it('renders metric dropdown with single metric option', async () => {
     // Mock single service template
-    vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([
+    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -279,7 +456,7 @@ describe('DeployAIMDrawer', () => {
 
   describe('unoptimized profile logic', () => {
     it('shows warning Alert when all templates are unoptimized (no profile)', async () => {
-      vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([
+      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
         {
           metadata: { name: 'template-latency', labels: {} },
           spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -304,7 +481,7 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('shows warning Alert when all templates have profile type other than optimized', async () => {
-      vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([
+      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
         {
           metadata: { name: 'template-latency', labels: {} },
           spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -328,7 +505,7 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('does not show warning Alert when at least one template is optimized and no metric selected', async () => {
-      vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([
+      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
         {
           metadata: { name: 'template-latency', labels: {} },
           spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -364,7 +541,7 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('shows Unoptimized profile tag in metric section when all profiles are unoptimized', async () => {
-      vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue(
+      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce(
         mockServiceTemplates,
       );
 
@@ -386,7 +563,7 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('only Ready templates are used for metrics (NotAvailable are excluded)', async () => {
-      vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([
+      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
         {
           metadata: { name: 'latency-ready', labels: {} },
           spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -420,7 +597,7 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('templates with undefined spec.metric do not affect metric options', async () => {
-      vi.spyOn(aimsLib, 'getAimServiceTemplates').mockResolvedValue([
+      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
         {
           metadata: { name: 'no-metric', labels: {} },
           spec: {

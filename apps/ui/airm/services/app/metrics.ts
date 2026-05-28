@@ -5,10 +5,8 @@
 import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import {
-  TimeSeriesResponse,
-  UtilizationResponse,
-} from '@amdenterpriseai/types';
+import { TimeSeriesResponse } from '@amdenterpriseai/types';
+import { UtilizationResponse } from '@/types/metrics';
 
 export const fetchGPUMemoryUtilization = async (
   start: Date,

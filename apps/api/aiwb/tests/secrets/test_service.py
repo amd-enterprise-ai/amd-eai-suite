@@ -11,10 +11,10 @@ import pytest
 from kubernetes_asyncio.client import ApiException
 
 from api_common.exceptions import ConflictException, NotFoundException, ValidationException
+from api_common.secrets import SecretUseCase
 from app.secrets import service
 from app.secrets.constants import AIRM_USE_CASE_LABEL, USE_CASE_LABEL
 from app.secrets.crds import K8sMetadata, KubernetesSecretResource
-from app.secrets.enums import SecretUseCase
 from app.secrets.schemas import SecretCreate
 
 

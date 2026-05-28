@@ -8,7 +8,7 @@ Documentation       High-level storage testing keywords.
 ...                 Uses the low-level API keywords from api/storage.resource to implement
 ...                 higher-level testing scenarios for storage management and project assignments.
 Resource            api/storage.resource
-Resource            common/resource_tracking.resource
+Resource            common/airm_resource_cleanup.resource
 Resource            resources/common/resource_lifecycle.resource
 Resource            airm_secrets.resource
 Resource            airm_projects.resource
@@ -38,14 +38,15 @@ A valid S3 storage spec exists
     ...    The spec includes bucket URL and credential field names
     ...    Uses Minio-compatible S3 URL format with cluster-internal service name
 
-    ${bucket_name}=    Evaluate    "e2e-test-bucket-" + str(int(__import__('time').time()))
+    ${unique_suffix}=    Generate Random String    8    [LOWER][NUMBERS]
+    VAR    ${bucket_name}    e2e-test-bucket-${unique_suffix}
 
     # Use cluster-internal Minio service name for pods to access
     # The headless service provides direct access to Minio pods
     &{s3_spec}=    Create dictionary
-    ...    bucket_url=http://default-minio-tenant-hl.minio-tenant-default.svc.cluster.local:9000/${bucket_name}
-    ...    access_key_name=ACCESS_KEY_ID
-    ...    secret_key_name=SECRET_ACCESS_KEY
+    ...    bucketUrl=http://default-minio-tenant-hl.minio-tenant-default.svc.cluster.local:9000/${bucket_name}
+    ...    accessKeyName=ACCESS_KEY_ID
+    ...    secretKeyName=SECRET_ACCESS_KEY
 
     Set test variable    ${TEST_VALID_S3_SPEC}    ${s3_spec}
     Log    Valid S3 storage spec created with bucket: ${bucket_name}    DEBUG
@@ -58,7 +59,8 @@ A secret for storage credentials exists
     Should not be equal    ${TEST_VALID_MANIFEST}    ${EMPTY}
     ...    msg=Valid secret manifest not set. Call 'a valid ExternalSecret manifest exists' first.
 
-    ${name}=    Evaluate    "e2e-storage-secret-" + str(int(__import__('time').time()))
+    ${unique_suffix}=    Generate Random String    8    [LOWER][NUMBERS]
+    VAR    ${name}    e2e-storage-secret-${unique_suffix}
 
     @{empty_project_ids}=    Create list
 
@@ -66,9 +68,9 @@ A secret for storage credentials exists
     ...    name=${name}
     ...    type=ExternalSecret
     ...    scope=Organization
-    ...    use_case=S3
+    ...    useCase=S3
     ...    manifest=${TEST_VALID_MANIFEST}
-    ...    project_ids=${empty_project_ids}
+    ...    projectIds=${empty_project_ids}
 
     ${response}=    Create secret
     ...    secret_data=${secret_data}
@@ -77,12 +79,7 @@ A secret for storage credentials exists
     ${secret_id}=    Get from dictionary    ${response.json()}    id
     Set test variable    ${TEST_STORAGE_SECRET_ID}    ${secret_id}
 
-    TRY
-        Append to list    ${CREATED_SECRET_IDS}    ${secret_id}
-        Log    Added secret ${secret_id} to cleanup list    DEBUG
-    EXCEPT
-        Log    CREATED_SECRET_IDS not available, secret won't be auto-cleaned    WARN
-    END
+    Track Secret For Cleanup    ${secret_id}
 
     Log    Created storage credential secret with ID: ${secret_id}    INFO
 
@@ -95,9 +92,12 @@ Storage is created without project assignment
     ...    Uses default configuration: type=S3, scope=Organization
     [Arguments]    ${storage_name}=${EMPTY}
 
-    ${name}=    Run keyword if    "${storage_name}" == "${EMPTY}"
-    ...    Evaluate    "e2e-storage-" + str(int(__import__('time').time()))
-    ...    ELSE    Set variable    ${storage_name}
+    IF    "${storage_name}" == "${EMPTY}"
+        ${unique_suffix}=    Generate Random String    8    [LOWER][NUMBERS]
+        VAR    ${name}    e2e-storage-${unique_suffix}
+    ELSE
+        VAR    ${name}    ${storage_name}
+    END
 
     Should not be equal    ${TEST_VALID_S3_SPEC}    ${None}
     ...    msg=Valid S3 spec not set. Call 'a valid S3 storage spec exists' first.
@@ -110,8 +110,8 @@ Storage is created without project assignment
     ...    name=${name}
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${TEST_STORAGE_SECRET_ID}
-    ...    project_ids=${empty_project_ids}
+    ...    secretId=${TEST_STORAGE_SECRET_ID}
+    ...    projectIds=${empty_project_ids}
     ...    spec=${TEST_VALID_S3_SPEC}
 
     ${response}=    Create storage
@@ -136,9 +136,12 @@ Storage is created and assigned to project
     [Documentation]    Creates a storage and assigns it to the current project
     [Arguments]    ${storage_name}=${EMPTY}
 
-    ${name}=    Run keyword if    "${storage_name}" == "${EMPTY}"
-    ...    Evaluate    "e2e-storage-" + str(int(__import__('time').time()))
-    ...    ELSE    Set variable    ${storage_name}
+    IF    "${storage_name}" == "${EMPTY}"
+        ${unique_suffix}=    Generate Random String    8    [LOWER][NUMBERS]
+        VAR    ${name}    e2e-storage-${unique_suffix}
+    ELSE
+        VAR    ${name}    ${storage_name}
+    END
 
     Should not be equal    ${TEST_VALID_S3_SPEC}    ${None}
     ...    msg=Valid S3 spec not set. Call 'a valid S3 storage spec exists' first.
@@ -153,8 +156,8 @@ Storage is created and assigned to project
     ...    name=${name}
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${TEST_STORAGE_SECRET_ID}
-    ...    project_ids=${project_ids}
+    ...    secretId=${TEST_STORAGE_SECRET_ID}
+    ...    projectIds=${project_ids}
     ...    spec=${TEST_VALID_S3_SPEC}
 
     ${response}=    Create storage
@@ -223,8 +226,8 @@ Attempting to create storage with same name
     ...    name=${storage_name}
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${TEST_STORAGE_SECRET_ID}
-    ...    project_ids=${empty_project_ids}
+    ...    secretId=${TEST_STORAGE_SECRET_ID}
+    ...    projectIds=${empty_project_ids}
     ...    spec=${TEST_VALID_S3_SPEC}
 
     ${response}=    Create storage
@@ -244,8 +247,8 @@ Attempting to create storage with invalid name
     ...    name=Invalid_Storage_Name!
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${TEST_STORAGE_SECRET_ID}
-    ...    project_ids=${empty_project_ids}
+    ...    secretId=${TEST_STORAGE_SECRET_ID}
+    ...    projectIds=${empty_project_ids}
     ...    spec=${TEST_VALID_S3_SPEC}
 
     ${response}=    Create storage
@@ -267,8 +270,8 @@ Attempting to create storage with non-existent secret
     ...    name=e2e-storage-fake-secret
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${fake_secret_id}
-    ...    project_ids=${empty_project_ids}
+    ...    secretId=${fake_secret_id}
+    ...    projectIds=${empty_project_ids}
     ...    spec=${TEST_VALID_S3_SPEC}
 
     ${response}=    Create storage
@@ -380,11 +383,12 @@ Storage status should be "${expected_status}"
         ${json}=    Set variable    ${storage_response.json()}
         ${status}=    Get from dictionary    ${json}    status
 
-        # Special case: Pending may transition to Synced very quickly
+        # Special case: Pending may transition to Synced or PartiallySynced very quickly
+        # PartiallySynced occurs when some project assignments are synced and others are still pending
         IF    "${expected_status}" == "Pending"
-            Should Be True    '${status}' in ['Pending', 'Synced']
-            ...    msg=Expected status 'Pending' or 'Synced', got '${status}'
-            Log    Storage status is ${status} (expected Pending, Synced allowed)    INFO
+            Should Be True    '${status}' in ['Pending', 'Synced', 'PartiallySynced']
+            ...    msg=Expected status 'Pending', 'Synced', or 'PartiallySynced', got '${status}'
+            Log    Storage status is ${status} (expected Pending, Synced/PartiallySynced allowed)    INFO
         ELSE
             Should be equal    ${status}    ${expected_status}
             ...    msg=Expected status '${expected_status}', got '${status}'
@@ -401,11 +405,12 @@ Storage status should be "${expected_status}" in response
     ${json}=    Set variable    ${TEST_RESPONSE.json()}
     ${status}=    Get from dictionary    ${json}    status
 
-    # Special case: Pending may transition to Synced very quickly
+    # Special case: Pending may transition to Synced or PartiallySynced very quickly
+    # PartiallySynced occurs when some project assignments are synced and others are still pending
     IF    "${expected_status}" == "Pending"
-        Should Be True    '${status}' in ['Pending', 'Synced']
-        ...    msg=Expected status 'Pending' or 'Synced' in response, got '${status}'
-        Log    Storage status in response is ${status} (expected Pending, Synced allowed)    INFO
+        Should Be True    '${status}' in ['Pending', 'Synced', 'PartiallySynced']
+        ...    msg=Expected status 'Pending', 'Synced', or 'PartiallySynced' in response, got '${status}'
+        Log    Storage status in response is ${status} (expected Pending, Synced/PartiallySynced allowed)    INFO
     ELSE
         Should be equal    ${status}    ${expected_status}
         ...    msg=Expected status '${expected_status}' in response, got '${status}'
@@ -438,7 +443,7 @@ Storage should have "${count}" project assignment
 
     ${fresh_response}=    Get storage    ${TEST_STORAGE_ID}    expected_status=200
     ${json}=    Set variable    ${fresh_response.json()}
-    ${project_storages}=    Get from dictionary    ${json}    project_storages
+    ${project_storages}=    Get from dictionary    ${json}    projectStorages
     ${actual_count}=    Get length    ${project_storages}
 
     Should be equal as integers    ${actual_count}    ${count_int}
@@ -452,7 +457,7 @@ All storage project assignments should be synced
     [Documentation]    Verifies all project storage assignments are in SYNCED status by fetching fresh state
     ${storage_response}=    Get storage    ${TEST_STORAGE_ID}    expected_status=200
     ${json}=    Set variable    ${storage_response.json()}
-    ${project_storages}=    Get from dictionary    ${json}    project_storages
+    ${project_storages}=    Get from dictionary    ${json}    projectStorages
 
     FOR    ${project_storage}    IN    @{project_storages}
         ${status}=    Get from dictionary    ${project_storage}    status
@@ -539,8 +544,8 @@ Storage with same name "${name}" can be created
     ...    name=${name}
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${TEST_STORAGE_SECRET_ID}
-    ...    project_ids=${empty_project_ids}
+    ...    secretId=${TEST_STORAGE_SECRET_ID}
+    ...    projectIds=${empty_project_ids}
     ...    spec=${TEST_VALID_S3_SPEC}
 
     ${response}=    Create storage
@@ -573,7 +578,7 @@ Get storage bucket URL
     Should not be equal    ${TEST_VALID_S3_SPEC}    ${None}
     ...    msg=TEST_VALID_S3_SPEC not set. Call 'a valid S3 storage spec exists' first.
 
-    ${bucket_url}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    bucket_url
+    ${bucket_url}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    bucketUrl
     RETURN    ${bucket_url}
 
 Test data "${data}" is written to S3 bucket
@@ -590,7 +595,7 @@ Test data "${data}" is written to S3 bucket
     ${storage_json}=    Set Variable    ${storage_response.json()}
 
     # Get the project storage to find the ConfigMap name
-    ${project_storages}=    Get from dictionary    ${storage_json}    project_storages
+    ${project_storages}=    Get from dictionary    ${storage_json}    projectStorages
     Should Not Be Empty    ${project_storages}    msg=No project storages found - storage must be assigned to project first
 
     ${project_storage}=    Set Variable    ${project_storages}[0]
@@ -600,9 +605,9 @@ Test data "${data}" is written to S3 bucket
     ${config_map_name}=    Set Variable    ${storage_name}-info-config-map
 
     # Get secret details from TEST_VALID_S3_SPEC
-    ${access_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    access_key_name
-    ${secret_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    secret_key_name
-    ${bucket_url}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    bucket_url
+    ${access_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    accessKeyName
+    ${secret_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    secretKeyName
+    ${bucket_url}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    bucketUrl
 
     # Get the ExternalSecret name from the secret used to create storage
     # For e2e tests, the ExternalSecret name matches the secret name pattern
@@ -681,8 +686,8 @@ S3 bucket data should still exist
     ...    name=${new_storage_name}
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${TEST_STORAGE_SECRET_ID}
-    ...    project_ids=${project_ids}
+    ...    secretId=${TEST_STORAGE_SECRET_ID}
+    ...    projectIds=${project_ids}
     ...    spec=${TEST_VALID_S3_SPEC}
 
     ${create_response}=    Create storage
@@ -704,8 +709,8 @@ S3 bucket data should still exist
     ${storage_name}=    Get from dictionary    ${storage_json}    name
     ${config_map_name}=    Set Variable    ${storage_name}-info-config-map
 
-    ${access_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    access_key_name
-    ${secret_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    secret_key_name
+    ${access_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    accessKeyName
+    ${secret_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    secretKeyName
 
     ${secret_response}=    Get secret    ${TEST_STORAGE_SECRET_ID}    expected_status=200
     ${secret_json}=    Set Variable    ${secret_response.json()}
@@ -764,9 +769,9 @@ New storage is created pointing to same bucket "${bucket_url}"
     ${name}=    Evaluate    "new-storage-same-bucket-" + str(int(__import__('time').time()))
 
     &{new_spec}=    Create dictionary
-    ...    bucket_url=${bucket_url}
-    ...    access_key_name=ACCESS_KEY_ID
-    ...    secret_key_name=SECRET_ACCESS_KEY
+    ...    bucketUrl=${bucket_url}
+    ...    accessKeyName=ACCESS_KEY_ID
+    ...    secretKeyName=SECRET_ACCESS_KEY
 
     @{empty_project_ids}=    Create list
 
@@ -774,8 +779,8 @@ New storage is created pointing to same bucket "${bucket_url}"
     ...    name=${name}
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${TEST_STORAGE_SECRET_ID}
-    ...    project_ids=${empty_project_ids}
+    ...    secretId=${TEST_STORAGE_SECRET_ID}
+    ...    projectIds=${empty_project_ids}
     ...    spec=${new_spec}
 
     ${response}=    Create storage
@@ -811,15 +816,15 @@ New storage can access data from previous storage "${expected_data}"
     ${storage_name}=    Get from dictionary    ${storage_json}    name
     ${config_map_name}=    Set Variable    ${storage_name}-info-config-map
 
-    ${access_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    access_key_name
-    ${secret_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    secret_key_name
+    ${access_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    accessKeyName
+    ${secret_key_name}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    secretKeyName
 
     ${secret_response}=    Get secret    ${TEST_STORAGE_SECRET_ID}    expected_status=200
     ${secret_json}=    Set Variable    ${secret_response.json()}
     ${external_secret_name}=    Get from dictionary    ${secret_json}    name
 
     # For local development, manually create ConfigMap and Secret
-    ${bucket_url}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    bucket_url
+    ${bucket_url}=    Get from dictionary    ${TEST_VALID_S3_SPEC}    bucketUrl
     Create Storage ConfigMap For Local Testing
     ...    ${TEST_PROJECT}[name]
     ...    ${config_map_name}

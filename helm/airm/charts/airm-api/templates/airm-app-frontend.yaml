@@ -62,7 +62,7 @@ spec:
                 secretKeyRef:
                   name: "{{ .Values.airm.keycloak.uiClientSecretName }}"
                   key: KEYCLOAK_SECRET
-          image: "{{ .Values.airm.frontend.image.repository }}:{{ .Values.airm.frontend.image.tag }}"
+          image: "{{ .Values.airm.frontend.image.repository }}:{{ .Values.airm.frontend.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: "{{ .Values.airm.frontend.image.pullPolicy }}"
           livenessProbe:
             failureThreshold: 3

@@ -116,7 +116,7 @@ describe('ClusterWorkloadsTable', () => {
       sort: [
         {
           direction: 'descending',
-          field: 'created_at',
+          field: 'createdAt',
         },
       ],
       filter: [
@@ -139,12 +139,9 @@ describe('ClusterWorkloadsTable', () => {
             'Running',
             'Complete',
             'Failed',
-            'Degraded',
             'Deleting',
-            'Unknown',
-            'Added',
-            'Downloading',
             'DeleteFailed',
+            'Unknown',
             'Terminated',
           ],
         },

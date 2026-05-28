@@ -12,7 +12,6 @@ from api_common.models import BaseEntity
 
 from ..charts.models import Chart
 from ..datasets.models import Dataset
-from ..models.models import InferenceModel
 from .enums import WorkloadStatus, WorkloadType
 
 
@@ -28,10 +27,6 @@ class Workload(BaseEntity):
         PGUUID(as_uuid=True), ForeignKey("charts.id", ondelete="CASCADE"), index=True, nullable=False
     )
     chart: Mapped[Chart] = relationship(lazy="joined")
-    model_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("inference_models.id", ondelete="SET NULL"), index=True, nullable=True
-    )
-    model: Mapped["InferenceModel | None"] = relationship(lazy="joined")
     dataset_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("datasets.id", ondelete="SET NULL"), index=True, nullable=True
     )

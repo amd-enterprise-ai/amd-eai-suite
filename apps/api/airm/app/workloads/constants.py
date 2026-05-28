@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from ..messaging.schemas import (
+from .enums import (
     AIMServiceStatus,
     ConfigMapStatus,
     CronJobStatus,

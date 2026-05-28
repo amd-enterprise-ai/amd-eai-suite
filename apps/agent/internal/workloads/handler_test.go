@@ -104,11 +104,11 @@ func TestWorkloadHandler_HandleDelete_NoResourcesPublishesDeletedStatus(t *testi
 	require.NoError(t, h.HandleDelete(context.Background(), msg))
 
 	require.Len(t, pub.published, 1)
-	statusMsg, ok := pub.published[0].(*messaging.WorkloadStatusMessage)
+	statusMsg, ok := pub.published[0].(*common.WorkloadStatusMessage)
 	require.True(t, ok, "expected WorkloadStatusMessage, got %T", pub.published[0])
 
 	assert.Equal(t, messaging.MessageTypeWorkloadStatusUpdate, statusMsg.MessageType)
-	assert.Equal(t, messaging.WorkloadStatusDeleted, statusMsg.Status)
+	assert.Equal(t, common.WorkloadStatusDeleted, statusMsg.Status)
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", statusMsg.WorkloadID)
 	require.NotNil(t, statusMsg.StatusReason)
 	assert.Contains(t, *statusMsg.StatusReason, "No resources found for deletion")
@@ -184,7 +184,7 @@ metadata:
     airm.silogen.ai/project-id: "33333333-3333-3333-3333-333333333333"
 `
 
-	createMsg := messaging.WorkloadMessage{
+	createMsg := common.WorkloadMessage{
 		MessageType: messaging.MessageTypeWorkload,
 		Manifest:    manifest,
 		UserToken:   "x",
@@ -197,13 +197,13 @@ metadata:
 	require.NoError(t, h.HandleCreate(context.Background(), msg))
 
 	require.Len(t, pub.published, 1)
-	compMsg, ok := pub.published[0].(*messaging.WorkloadComponentStatusMessage)
+	compMsg, ok := pub.published[0].(*common.WorkloadComponentStatusMessage)
 	require.True(t, ok, "expected WorkloadComponentStatusMessage, got %T", pub.published[0])
 
 	assert.Equal(t, messaging.MessageTypeWorkloadComponentStatusUpdate, compMsg.MessageType)
 	assert.Equal(t, "22222222-2222-2222-2222-222222222222", compMsg.ID)
 	assert.Equal(t, "cm1", compMsg.Name)
-	assert.Equal(t, messaging.WorkloadComponentKindConfigMap, compMsg.Kind)
+	assert.Equal(t, common.WorkloadComponentKindConfigMap, compMsg.Kind)
 	assert.Equal(t, "v1", compMsg.APIVersion)
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", compMsg.WorkloadID)
 	assert.Equal(t, "CreateFailed", compMsg.Status)

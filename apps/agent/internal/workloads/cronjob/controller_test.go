@@ -128,7 +128,7 @@ func TestReconcile_HandlesDeletion(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 	assert.Len(t, mock.Published, 1)
 
-	msg, ok := mock.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := mock.Published[0].(common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-cronjob", msg.Name)
 	assert.Equal(t, "Deleted", msg.Status)
@@ -149,7 +149,7 @@ func TestReconcile_CronJob_AutoDiscoveryBehavior(t *testing.T) {
 			autoDiscovered:         true,
 			submitter:              "system:serviceaccount:default:cronjob-creator",
 			expectedMsgCount:       2,
-			expectedSubmitter:      strPtr("default:cronjob-creator"),
+			expectedSubmitter:      testutils.Ptr("default:cronjob-creator"),
 			expectAutoDiscoveryMsg: true,
 		},
 		{
@@ -216,7 +216,7 @@ func TestReconcile_CronJob_AutoDiscoveryBehavior(t *testing.T) {
 			require.Len(t, mockPub.Published, tt.expectedMsgCount)
 
 			if tt.expectAutoDiscoveryMsg {
-				autoDiscMsg, ok := mockPub.Published[0].(*messaging.AutoDiscoveredWorkloadComponentMessage)
+				autoDiscMsg, ok := mockPub.Published[0].(*common.AutoDiscoveredWorkloadComponentMessage)
 				require.True(t, ok)
 				if tt.expectedSubmitter != nil {
 					assert.NotNil(t, autoDiscMsg.Submitter)
@@ -225,20 +225,16 @@ func TestReconcile_CronJob_AutoDiscoveryBehavior(t *testing.T) {
 					assert.Nil(t, autoDiscMsg.Submitter)
 				}
 
-				statusMsg, ok := mockPub.Published[1].(*messaging.WorkloadComponentStatusMessage)
+				statusMsg, ok := mockPub.Published[1].(*common.WorkloadComponentStatusMessage)
 				require.True(t, ok)
 				assert.Equal(t, "Ready", statusMsg.Status)
 			} else {
-				statusMsg, ok := mockPub.Published[0].(*messaging.WorkloadComponentStatusMessage)
+				statusMsg, ok := mockPub.Published[0].(*common.WorkloadComponentStatusMessage)
 				require.True(t, ok)
 				assert.Equal(t, "Ready", statusMsg.Status)
 			}
 		})
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func TestReconcile_CronJob_StatusPublishFailure(t *testing.T) {
@@ -357,7 +353,7 @@ func TestReconcile_CronJob_AutoDiscoveryPublishFailure(t *testing.T) {
 
 	mock := testutils.NewMockSelectiveFailingPublisher(
 		func(msg interface{}) bool {
-			_, isAutoDiscovery := msg.(*messaging.AutoDiscoveredWorkloadComponentMessage)
+			_, isAutoDiscovery := msg.(*common.AutoDiscoveredWorkloadComponentMessage)
 			return isAutoDiscovery
 		},
 		assert.AnError,

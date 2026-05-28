@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 ---
-# Namespace for e2e testing
+# Namespace for e2e test resources
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -22,15 +22,25 @@ data:
   KEYCLOAK_CLIENT_ID: "k8s"
   E2E_USERNAME: "devuser@{{ .Values.appDomain }}"
 ---
-# Secret with devuser password for e2e tests
-apiVersion: v1
-kind: Secret
+# External secret to sync devuser password for e2e tests
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
 metadata:
   name: e2e-user-credentials
   namespace: e2e-test-runner
-type: Opaque
-stringData:
-  E2E_PASSWORD: password
+spec:
+  data:
+    - remoteRef:
+        key: keycloak-initial-devuser-password
+        property: value
+      secretKey: E2E_PASSWORD
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: {{ .Values.secretStore.kind }}
+    name: {{ .Values.secretStore.name }}
+  target:
+    creationPolicy: Owner
+    name: e2e-user-credentials
 ---
 # External secret to sync Keycloak client secret for e2e tests
 apiVersion: external-secrets.io/v1beta1

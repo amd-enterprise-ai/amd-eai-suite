@@ -18,12 +18,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	kueuev1alpha1 "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 // buildKaiwoQueueConfigManifest creates a KaiwoQueueConfig matching the cluster allocation.
-func buildKaiwoQueueConfigManifest(msg *messaging.ClusterQuotasAllocationMessage) *kaiwov1alpha1.KaiwoQueueConfig {
+func buildKaiwoQueueConfigManifest(msg *ClusterQuotasAllocationMessage) *kaiwov1alpha1.KaiwoQueueConfig {
 	// Determine covered resources based on GPU vendor
 	coveredResources := []corev1.ResourceName{
 		CPUResource,
@@ -33,9 +32,9 @@ func buildKaiwoQueueConfigManifest(msg *messaging.ClusterQuotasAllocationMessage
 
 	if msg.GPUVendor != nil {
 		switch *msg.GPUVendor {
-		case messaging.GPUVendorNVIDIA:
+		case agent.GPUVendorNVIDIA:
 			coveredResources = append(coveredResources, NVIDIAGPUResource)
-		case messaging.GPUVendorAMD:
+		case agent.GPUVendorAMD:
 			coveredResources = append(coveredResources, AMDGPUResource)
 		}
 	}
@@ -63,9 +62,9 @@ func buildKaiwoQueueConfigManifest(msg *messaging.ClusterQuotasAllocationMessage
 				NominalQuota: resource.MustParse(fmt.Sprintf("%d", quota.GPUCount)),
 			}
 			switch *msg.GPUVendor {
-			case messaging.GPUVendorNVIDIA:
+			case agent.GPUVendorNVIDIA:
 				gpuResource.Name = NVIDIAGPUResource
-			case messaging.GPUVendorAMD:
+			case agent.GPUVendorAMD:
 				gpuResource.Name = AMDGPUResource
 			}
 			resources = append(resources, gpuResource)
@@ -136,19 +135,6 @@ func buildKaiwoQueueConfigManifest(msg *messaging.ClusterQuotasAllocationMessage
 			},
 			ClusterQueues:           clusterQueues,
 			WorkloadPriorityClasses: workloadPriorityClasses,
-			// Kueue needs this section for it to function, so hardcode it for now.
-			Topologies: []kaiwov1alpha1.Topology{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: DefaultTopologyName},
-					Spec: kaiwov1alpha1.TopologySpec{
-						Levels: []kueuev1alpha1.TopologyLevel{
-							{NodeLabel: TopologyLevelBlockNodeLabel},
-							{NodeLabel: TopologyLevelRackNodeLabel},
-							{NodeLabel: corev1.LabelHostname},
-						},
-					},
-				},
-			},
 		},
 	}
 }
@@ -163,10 +149,10 @@ func HandleDeletion(
 		return nil
 	}
 
-	statusMsg := &messaging.ClusterQuotasStatusMessage{
+	statusMsg := &ClusterQuotasStatusMessage{
 		MessageType:      messaging.MessageTypeClusterQuotasStatusMessage,
 		UpdatedAt:        time.Now(),
-		QuotaAllocations: []messaging.ClusterQuotaAllocation{},
+		QuotaAllocations: []ClusterQuotaAllocation{},
 	}
 	if err := publisher.Publish(ctx, statusMsg); err != nil {
 		return err
@@ -177,7 +163,7 @@ func HandleDeletion(
 
 func publishStatusUpdate(ctx context.Context, publisher messaging.MessagePublisher, config *kaiwov1alpha1.KaiwoQueueConfig) error {
 	log := ctrl.LoggerFrom(ctx)
-	var quotaAllocations []messaging.ClusterQuotaAllocation
+	var quotaAllocations []ClusterQuotaAllocation
 
 	for _, cq := range config.Spec.ClusterQueues {
 		namespaces := cq.Namespaces
@@ -185,7 +171,7 @@ func publishStatusUpdate(ctx context.Context, publisher messaging.MessagePublish
 			namespaces = []string{}
 		}
 
-		allocation := messaging.ClusterQuotaAllocation{
+		allocation := ClusterQuotaAllocation{
 			QuotaName:  cq.Name,
 			Namespaces: namespaces,
 		}
@@ -211,7 +197,7 @@ func publishStatusUpdate(ctx context.Context, publisher messaging.MessagePublish
 		quotaAllocations = append(quotaAllocations, allocation)
 	}
 
-	statusMsg := &messaging.ClusterQuotasStatusMessage{
+	statusMsg := &ClusterQuotasStatusMessage{
 		MessageType:      messaging.MessageTypeClusterQuotasStatusMessage,
 		UpdatedAt:        time.Now(),
 		QuotaAllocations: quotaAllocations,
@@ -231,7 +217,7 @@ func publishStatusUpdate(ctx context.Context, publisher messaging.MessagePublish
 
 func publishQuotasFailureMessage(ctx context.Context, publisher messaging.MessagePublisher, config *kaiwov1alpha1.KaiwoQueueConfig) error {
 	log := ctrl.LoggerFrom(ctx)
-	failureMessage := &messaging.ClusterQuotaFailureMessage{
+	failureMessage := &ClusterQuotaFailureMessage{
 		MessageType: messaging.MessageTypeClusterQuotasFailureMessage,
 		UpdatedAt:   time.Now(),
 		Reason:      "KaiwoQueueConfig status is failed",

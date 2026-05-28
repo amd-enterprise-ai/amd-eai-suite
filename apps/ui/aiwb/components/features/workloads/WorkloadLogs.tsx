@@ -6,19 +6,17 @@ import { Select, SelectItem, Spinner, Switch } from '@heroui/react';
 
 import { useTranslation } from 'next-i18next';
 
-import {
-  Workload,
-  WorkloadLogPagination,
-  WorkloadLogResponse,
-} from '@amdenterpriseai/types';
+import { Workload } from '@/types/workloads';
+import { WorkloadLogResponse } from '@/types/workloads';
 import type { ResourceMetrics } from '@/types/namespaces';
-import { LogLevel, LogType, WorkloadStatus } from '@amdenterpriseai/types';
+import { LogLevel, LogType, WorkloadStatus } from '@/types/enums/workloads';
+import { WorkloadLogPagination } from '@/types/workloads';
 
 import { useQuery } from '@tanstack/react-query';
 import { getWorkloadLogs } from '@/lib/app/workloads';
 import { getAimServiceLogs } from '@/lib/app/aims';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { LogEntry } from '@amdenterpriseai/types';
+import { LogEntry } from '@/types/workloads';
 import { throttle } from 'lodash';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 import { useWorkloadLogsStream } from '@/hooks/useWorkloadLogsStream';

@@ -12,17 +12,19 @@ Resource            resources/api/common.resource
 Resource            resources/authorization.resource
 Resource            airm_clusters.resource
 Resource            kubectl_verification.resource
-Resource            common/resource_tracking.resource
+Resource            kubectl_priority_class.resource
+Resource            common/airm_resource_cleanup.resource
 Resource            resources/common/resource_lifecycle.resource
 Resource            resources/common/resource_resolver.resource
 Library             Collections
 Library             String
 Library             BuiltIn
+Library             Process
 Library             TestPrefix
 
 
 *** Variables ***
-@{CREATED_PROJECT_IDS}      # List to track created projects for cleanup
+# CREATED_PROJECT_IDS is lazy-initialized by Track Project For Cleanup
 
 
 *** Keywords ***
@@ -41,10 +43,10 @@ Prepare Quota
     ${gpu_int}=    Convert To Integer    ${gpu_count}
 
     ${quota_data}=    Create Dictionary
-    ...    cpu_milli_cores=${cpu_int}
-    ...    memory_bytes=${mem_int}
-    ...    ephemeral_storage_bytes=${storage_int}
-    ...    gpu_count=${gpu_int}
+    ...    cpuMilliCores=${cpu_int}
+    ...    memoryBytes=${mem_int}
+    ...    ephemeralStorageBytes=${storage_int}
+    ...    gpuCount=${gpu_int}
 
     Set Test Variable    ${TEST_QUOTA_DATA}    ${quota_data}
 
@@ -67,16 +69,17 @@ Prepare Memory Quota Data
 
 Prepare Custom Quota Data
     [Documentation]    Prepares quota data with custom values for quota-specific tests.
-    ...                Defaults: 4 CPU cores, 4GB RAM, 4GB storage, 2 GPUs.
-    ...                DO NOT change to zeros - quota tests depend on these values.
-    [Arguments]    ${cpu_milli_cores}=4000    ${memory_bytes}=4294967296    ${ephemeral_storage_bytes}=4294967296    ${gpu_count}=2
+    ...                Defaults: 4 CPU cores, 4GB RAM, 4GB storage, 0 GPUs.
+    ...                DO NOT change CPU, memory, or storage to zeros - quota tests depend on non-zero values.
+    ...                GPU defaults to 0 because CI runners have no GPUs.
+    [Arguments]    ${cpu_milli_cores}=4000    ${memory_bytes}=4294967296    ${ephemeral_storage_bytes}=4294967296    ${gpu_count}=0
     ${quota_data}=    Prepare Quota    ${cpu_milli_cores}    ${memory_bytes}    ${ephemeral_storage_bytes}    ${gpu_count}
     RETURN    ${quota_data}
 
 Prepare Minimum Quota
     [Documentation]    Prepares minimum quota allocation for quota-specific tests.
     ...                Uses 1 CPU core, 1GB RAM, 1GB storage, 0 GPUs.
-    ...                DO NOT change to zeros - quota tests depend on these values.
+    ...                DO NOT change CPU, memory, or storage to zeros - quota tests depend on non-zero values.
     ${quota_data}=    Prepare Quota    cpu_milli_cores=1000    memory_bytes=1073741824    ephemeral_storage_bytes=1073741824    gpu_count=0
     RETURN    ${quota_data}
 
@@ -257,8 +260,16 @@ A Project Exists With Minimum Quota
 
 A Project Exists With Custom Quota
     [Documentation]    Creates a project with custom quota allocation
-    ${quota_data}=    Prepare Quota    cpu_milli_cores=4000    memory_bytes=4294967296    ephemeral_storage_bytes=4294967296    gpu_count=2
+    ${quota_data}=    Prepare Quota    cpu_milli_cores=4000    memory_bytes=4294967296    ephemeral_storage_bytes=4294967296    gpu_count=0
     Create Project With Validation    quota_data=${quota_data}
+
+A project with GPU pre-emption enabled exists
+    [Documentation]    Creates a project with GPU pre-emption enabled (default settings).
+    ...    Sets: TEST_PROJECT_ID, TEST_PROJECT, TEST_GPU_PREEMPTION_DATA
+    [Arguments]    ${threshold}=10    ${gracePeriod}=1800    ${policy}=OnPressure
+    A cluster exists in system
+    Project data with gpu preemption is prepared    threshold=${threshold}    gracePeriod=${gracePeriod}    policy=${policy}
+    Create project request is sent
 
 Project With GPU Quota Exists
     [Documentation]    Creates or finds project with sufficient GPU quota for AIM deployments
@@ -292,35 +303,31 @@ Project "${project_name}" Exists In System
     ${status}=    Get From Dictionary    ${project}    status
     ${project_id}=    Get From Dictionary    ${project}    id
 
-    # If being deleted or failed, delete and create new one
-    ${needs_recreation}=    Evaluate    "${status}" in ["Deleting", "Deleted", "Failed"]
-    IF    ${needs_recreation}
-        Log    Project "${project_name}" is ${status}, deleting and creating new one    INFO
-        # Try to delete the project (may fail if already deleting/deleted, that's ok)
+    # Handle non-active states explicitly
+    IF    "${status}" == "Deleting"
+        Log    Project "${project_name}" is Deleting, waiting for deletion to complete    INFO
+        Wait Until Project Deleted    ${project_id}    timeout=3 min
+        Log    Project "${project_name}" fully deleted, creating new one    INFO
+        Create Project With Validation    project_name=${project_name}
+        RETURN
+    ELSE IF    "${status}" in ["Deleted", "Failed"]
+        Log    Project "${project_name}" is ${status}, creating new one    INFO
         TRY
             Delete project    ${project_id}    expected_status=any
         EXCEPT
-            Log    Project ${project_id} deletion failed or already deleted, proceeding    DEBUG
+            Log    Project ${project_id} cleanup failed, proceeding    DEBUG
         END
-        # Wait for project to be fully deleted
-        Wait Until Project Deleted    ${project_id}
-        Log    Project "${project_name}" deleted, creating new one    INFO
+        Wait Until Project Deleted    ${project_id}    timeout=1 min
         Create Project With Validation    project_name=${project_name}
         RETURN
     END
 
-    # Project exists and is active - reuse it
+    # Project exists and is usable - reuse it
     Set Test Variable    ${TEST_PROJECT_ID}    ${project_id}
     Set Test Variable    ${TEST_PROJECT}    ${project}
 
     # Track for cleanup (ensures Suite Teardown deletes projects from interrupted runs)
-    ${tracking_list}=    Get Variable Value    ${CREATED_PROJECT_IDS}    ${None}
-    IF    $tracking_list != $None
-        ${already_tracked}=    Evaluate    "${project_id}" in $tracking_list
-        IF    not ${already_tracked}
-            Append To List    ${CREATED_PROJECT_IDS}    ${project_id}
-        END
-    END
+    Track Project For Cleanup    ${project_id}
 
     Log    Reusing existing project "${project_name}" (ID: ${TEST_PROJECT_ID})    INFO
 
@@ -377,12 +384,27 @@ Valid project data is prepared
     ${project_data}=    Create Dictionary
     ...    name=${project_name}
     ...    description=${project_description}
-    ...    cluster_id=${TEST_CLUSTER_ID}
+    ...    clusterId=${TEST_CLUSTER_ID}
     ...    quota=${TEST_QUOTA_DATA}
 
     Set Test Variable    ${TEST_PROJECT_DESC}    ${project_description}
     Set Test Variable    ${TEST_PROJECT_DATA}    ${project_data}
     Log    Prepared project data: ${project_name}    DEBUG
+
+Project data with gpu preemption is prepared
+    [Documentation]    Prepares a create-project payload with configurable GPU pre-emption settings.
+    ...    Sets: TEST_PROJECT_DATA, TEST_GPU_PREEMPTION_DATA
+    [Arguments]    ${threshold}=10    ${gracePeriod}=1800    ${policy}=OnPressure
+    Valid project data is prepared
+    ${gpu_preemption}=    Create Dictionary
+    ...    enabled=${TRUE}
+    ...    threshold=${threshold}
+    ...    gracePeriod=${gracePeriod}
+    ...    policy=${policy}
+    ${project_data}=    Copy Dictionary    ${TEST_PROJECT_DATA}
+    Set To Dictionary    ${project_data}    gpuPreemption=${gpu_preemption}
+    Set Test Variable    ${TEST_PROJECT_DATA}    ${project_data}
+    Set Test Variable    ${TEST_GPU_PREEMPTION_DATA}    ${gpu_preemption}
 
 Valid project data with quota is prepared
     [Documentation]    Prepares valid project data with the current quota configuration.
@@ -403,7 +425,7 @@ Valid project data with quota is prepared
     ${project_data}=    Create Dictionary
     ...    name=${project_name}
     ...    description=${project_description}
-    ...    cluster_id=${TEST_CLUSTER_ID}
+    ...    clusterId=${TEST_CLUSTER_ID}
     ...    quota=${TEST_QUOTA_DATA}
 
     Set Test Variable    ${TEST_PROJECT_DESC}    ${project_description}
@@ -417,11 +439,11 @@ Minimum Quota Data Is Prepared
 
 Custom Quota Data Is Prepared
     [Documentation]    Prepares custom quota allocation using unified approach
-    ${quota_data}=    Prepare Quota    cpu_milli_cores=4000    memory_bytes=4294967296    ephemeral_storage_bytes=4294967296    gpu_count=2
+    ${quota_data}=    Prepare Quota    cpu_milli_cores=4000    memory_bytes=4294967296    ephemeral_storage_bytes=4294967296    gpu_count=0
 
 Increased Quota Data Is Prepared
     [Documentation]    Prepares increased quota allocation data for project updates
-    ${quota_data}=    Prepare Quota    cpu_milli_cores=8000    memory_bytes=8589934592    ephemeral_storage_bytes=8589934592    gpu_count=4
+    ${quota_data}=    Prepare Quota    cpu_milli_cores=8000    memory_bytes=8589934592    ephemeral_storage_bytes=8589934592    gpu_count=0
     ${project_data}=    Create Dictionary
     ...    description=${TEST_PROJECT_DESC}
     ...    quota=${quota_data}
@@ -443,10 +465,10 @@ Updated CPU Quota Is Prepared
     ${cpu_int}=    Convert To Integer    6000
 
     ${quota_data}=    Create Dictionary
-    ...    cpu_milli_cores=${cpu_int}
-    ...    memory_bytes=${current_quota['memory_bytes']}
-    ...    ephemeral_storage_bytes=${current_quota['ephemeral_storage_bytes']}
-    ...    gpu_count=${current_quota['gpu_count']}
+    ...    cpuMilliCores=${cpu_int}
+    ...    memoryBytes=${current_quota['memoryBytes']}
+    ...    ephemeralStorageBytes=${current_quota['ephemeralStorageBytes']}
+    ...    gpuCount=${current_quota['gpuCount']}
     ${project_data}=    Create Dictionary
     ...    description=${TEST_PROJECT_DESC}
     ...    quota=${quota_data}
@@ -461,10 +483,10 @@ Updated Memory Quota Is Prepared
     ${memory_int}=    Convert To Integer    8589934592
 
     ${quota_data}=    Create Dictionary
-    ...    cpu_milli_cores=${current_quota['cpu_milli_cores']}
-    ...    memory_bytes=${memory_int}
-    ...    ephemeral_storage_bytes=${current_quota['ephemeral_storage_bytes']}
-    ...    gpu_count=${current_quota['gpu_count']}
+    ...    cpuMilliCores=${current_quota['cpuMilliCores']}
+    ...    memoryBytes=${memory_int}
+    ...    ephemeralStorageBytes=${current_quota['ephemeralStorageBytes']}
+    ...    gpuCount=${current_quota['gpuCount']}
     ${project_data}=    Create Dictionary
     ...    description=${TEST_PROJECT_DESC}
     ...    quota=${quota_data}
@@ -479,10 +501,10 @@ Updated GPU Quota Is Prepared
     ${gpu_int}=    Convert To Integer    3
 
     ${quota_data}=    Create Dictionary
-    ...    cpu_milli_cores=${current_quota['cpu_milli_cores']}
-    ...    memory_bytes=${current_quota['memory_bytes']}
-    ...    ephemeral_storage_bytes=${current_quota['ephemeral_storage_bytes']}
-    ...    gpu_count=${gpu_int}
+    ...    cpuMilliCores=${current_quota['cpuMilliCores']}
+    ...    memoryBytes=${current_quota['memoryBytes']}
+    ...    ephemeralStorageBytes=${current_quota['ephemeralStorageBytes']}
+    ...    gpuCount=${gpu_int}
     ${project_data}=    Create Dictionary
     ...    description=${TEST_PROJECT_DESC}
     ...    quota=${quota_data}
@@ -510,10 +532,10 @@ Updated project data with new description is prepared
     ${current_quota_response}=    Set Variable    ${project_response.json()['quota']}
 
     ${current_quota}=    Create Dictionary
-    ...    cpu_milli_cores=${current_quota_response['cpu_milli_cores']}
-    ...    memory_bytes=${current_quota_response['memory_bytes']}
-    ...    ephemeral_storage_bytes=${current_quota_response['ephemeral_storage_bytes']}
-    ...    gpu_count=${current_quota_response['gpu_count']}
+    ...    cpuMilliCores=${current_quota_response['cpuMilliCores']}
+    ...    memoryBytes=${current_quota_response['memoryBytes']}
+    ...    ephemeralStorageBytes=${current_quota_response['ephemeralStorageBytes']}
+    ...    gpuCount=${current_quota_response['gpuCount']}
 
     ${project_data}=    Create Dictionary
     ...    description=${new_description}
@@ -522,21 +544,81 @@ Updated project data with new description is prepared
     Set Test Variable    ${TEST_UPDATED_PROJECT_DESC}    ${new_description}
     Set Test Variable    ${TEST_PROJECT_DATA}    ${project_data}
 
+Updated project data with gpu preemption enabled is prepared
+    [Documentation]    Prepares update payload enabling GPU pre-emption with default values.
+    ...    Requires: TEST_PROJECT_ID
+    ...    Sets: TEST_PROJECT_DATA, TEST_GPU_PREEMPTION_DATA
+    [Arguments]    ${threshold}=10    ${gracePeriod}=1800    ${policy}=OnPressure
+    ${project_response}=    Get project    ${TEST_PROJECT_ID}    expected_status=200
+    VAR    ${current_quota_response}    ${project_response.json()['quota']}
+    ${current_quota}=    Create Dictionary
+    ...    cpuMilliCores=${current_quota_response['cpuMilliCores']}
+    ...    memoryBytes=${current_quota_response['memoryBytes']}
+    ...    ephemeralStorageBytes=${current_quota_response['ephemeralStorageBytes']}
+    ...    gpuCount=${current_quota_response['gpuCount']}
+    ${gpu_preemption}=    Create Dictionary
+    ...    enabled=${TRUE}
+    ...    threshold=${threshold}
+    ...    gracePeriod=${gracePeriod}
+    ...    policy=${policy}
+    ${project_data}=    Create Dictionary
+    ...    description=${project_response.json()['description']}
+    ...    quota=${current_quota}
+    ...    gpuPreemption=${gpu_preemption}
+    Set Test Variable    ${TEST_PROJECT_DATA}    ${project_data}
+    Set Test Variable    ${TEST_GPU_PREEMPTION_DATA}    ${gpu_preemption}
+
+Updated project data with gpu preemption disabled is prepared
+    [Documentation]    Prepares update payload disabling GPU pre-emption.
+    ...    Requires: TEST_PROJECT_ID
+    ...    Sets: TEST_PROJECT_DATA
+    ${project_response}=    Get project    ${TEST_PROJECT_ID}    expected_status=200
+    VAR    ${current_quota_response}    ${project_response.json()['quota']}
+    ${current_quota}=    Create Dictionary
+    ...    cpuMilliCores=${current_quota_response['cpuMilliCores']}
+    ...    memoryBytes=${current_quota_response['memoryBytes']}
+    ...    ephemeralStorageBytes=${current_quota_response['ephemeralStorageBytes']}
+    ...    gpuCount=${current_quota_response['gpuCount']}
+    ${gpu_preemption}=    Create Dictionary
+    ...    enabled=${FALSE}
+    ${project_data}=    Create Dictionary
+    ...    description=${project_response.json()['description']}
+    ...    quota=${current_quota}
+    ...    gpuPreemption=${gpu_preemption}
+    Set Test Variable    ${TEST_PROJECT_DATA}    ${project_data}
+
+Updated project data with new description preserving gpu preemption is prepared
+    [Documentation]    Prepares update payload with new description, preserving current GPU pre-emption and quota.
+    ...    Requires: TEST_PROJECT_ID
+    ...    Sets: TEST_PROJECT_DATA, TEST_UPDATED_PROJECT_DESC
+    VAR    ${new_description}    Updated project description for testing
+    ${project_response}=    Get project    ${TEST_PROJECT_ID}    expected_status=200
+    VAR    ${current_quota_response}    ${project_response.json()['quota']}
+    ${current_quota}=    Create Dictionary
+    ...    cpuMilliCores=${current_quota_response['cpuMilliCores']}
+    ...    memoryBytes=${current_quota_response['memoryBytes']}
+    ...    ephemeralStorageBytes=${current_quota_response['ephemeralStorageBytes']}
+    ...    gpuCount=${current_quota_response['gpuCount']}
+    ${project_data}=    Create Dictionary
+    ...    description=${new_description}
+    ...    quota=${current_quota}
+    ...    gpuPreemption=${project_response.json()['gpuPreemption']}
+    Set Test Variable    ${TEST_UPDATED_PROJECT_DESC}    ${new_description}
+    Set Test Variable    ${TEST_PROJECT_DATA}    ${project_data}
+
 Create project request is sent
     [Documentation]    Sends request to create a project using prepared test data.
     ...    Note: Waits for project to be fully provisioned before returning.
-    ...    Accepts both 200 and 201 status codes for compatibility across API versions.
     ...    Requires: TEST_PROJECT_DATA
     ...    Sets: TEST_PROJECT_ID, TEST_PROJECT, TEST_RESPONSE
-    ${creation_response}=    Create project    ${TEST_PROJECT_DATA}    expected_status=any
+    ${creation_response}=    Create project    ${TEST_PROJECT_DATA}    expected_status=200
 
     ${project_id}=    Get from dictionary    ${creation_response.json()}    id
     ${project_name}=    Get from dictionary    ${creation_response.json()}    name
     Set test variable    ${TEST_PROJECT_ID}    ${project_id}
 
     Log    Project created: ${project_name} (ID: ${project_id})    INFO
-    Append To List    ${CREATED_PROJECT_IDS}    ${project_id}
-    Log    Tracking project ${project_id} in cleanup list    DEBUG
+    Track Project For Cleanup    ${project_id}
 
     Wait Until Keyword Succeeds    2 min    2 sec
     ...    Verify project is fully provisioned
@@ -678,7 +760,7 @@ User is added to project
     Refresh kubectl and API tokens
     User should be member of project
     # Initialize TEST_QUERY_PARAMS with the project context for API calls
-    &{query_params}=    Create dictionary    project_id=${TEST_PROJECT_ID}
+    &{query_params}=    Create dictionary    projectId=${TEST_PROJECT_ID}
     Set test variable    &{TEST_QUERY_PARAMS}    &{query_params}
 
 Project should exist in database
@@ -696,10 +778,98 @@ Verify project exists in API
     Dictionary should contain key    ${db_response.json()}    id
     Dictionary should contain value    ${db_response.json()}    ${TEST_PROJECT_ID}
     Dictionary should contain key    ${db_response.json()}    name
-    Dictionary should contain key    ${db_response.json()}    created_at
+    Dictionary should contain key    ${db_response.json()}    createdAt
     Dictionary should contain key    ${db_response.json()}    quota
 
     Log    Project ${TEST_PROJECT_ID} verified in API    INFO
+
+Project GPU pre-emption should be disabled
+    [Documentation]    Verifies GPU pre-emption is disabled on the current project.
+    ...    Requires: TEST_PROJECT_ID
+    ${project_id}=    The project
+    ${response}=    Get project    ${project_id}    expected_status=200
+    ${gp}=    Get From Dictionary    ${response.json()}    gpuPreemption
+    ${enabled}=    Get From Dictionary    ${gp}    enabled
+    Should Not Be True    ${enabled}    msg=GPU pre-emption should be disabled but is enabled
+
+Project GPU pre-emption config should match
+    [Documentation]    Verifies GPU pre-emption config matches expected values.
+    ...    Fetches fresh project data from API to verify persisted state.
+    ...    Requires: TEST_PROJECT_ID
+    [Arguments]    ${enabled}=${TRUE}    ${threshold}=10    ${gracePeriod}=1800    ${policy}=OnPressure
+    ${project_id}=    The project
+    ${response}=    Get project    ${project_id}    expected_status=200
+    ${gp}=    Get From Dictionary    ${response.json()}    gpuPreemption
+    ${actual_enabled}=    Get From Dictionary    ${gp}    enabled
+    Should Be Equal    ${actual_enabled}    ${enabled}    msg=GPU pre-emption enabled: expected ${enabled}, got ${actual_enabled}
+    ${actual_threshold}=    Get From Dictionary    ${gp}    threshold
+    Should Be Equal As Integers    ${actual_threshold}    ${threshold}    msg=GPU pre-emption threshold: expected ${threshold}, got ${actual_threshold}
+    ${actual_grace}=    Get From Dictionary    ${gp}    gracePeriod
+    Should Be Equal As Integers    ${actual_grace}    ${gracePeriod}    msg=GPU pre-emption grace period: expected ${gracePeriod}, got ${actual_grace}
+    ${actual_policy}=    Get From Dictionary    ${gp}    policy
+    Should Be Equal    ${actual_policy}    ${policy}    msg=GPU pre-emption policy: expected ${policy}, got ${actual_policy}
+
+Clean Up GPU Pre-emption Test Resources
+    [Documentation]    Cleans up kubectl deployments and tracked resources from GPU pre-emption tests.
+    ${project}=    Get Variable Value    ${TEST_PROJECT}    ${None}
+    IF    $project != $None
+        ${namespace}=    Get From Dictionary    ${project}    name
+        Run Process    kubectl    delete    deployments    --all    -n    ${namespace}    --ignore-not-found\=true
+    END
+    Clean Up All Created Workloads
+    Clean Up All Created Projects
+
+GPU pre-emption is enabled on the project
+    [Documentation]    Enables GPU pre-emption on the current test project via update API.
+    ...    Requires: TEST_PROJECT_ID
+    ...    Sets: TEST_PROJECT_DATA, TEST_GPU_PREEMPTION_DATA
+    [Arguments]    ${threshold}=10    ${gracePeriod}=1800    ${policy}=OnPressure
+    Updated project data with gpu preemption enabled is prepared
+    ...    threshold=${threshold}    gracePeriod=${gracePeriod}    policy=${policy}
+    Update project request is sent
+    Project should transition to "ready"
+
+An idle GPU workload is running in the project
+    [Documentation]    Submits a GPU Deployment that sleeps (zero GPU utilization) and waits for it to run.
+    ...    Uses a Deployment because Kaiwo only tracks Deployment-backed GPU pods for idle pre-emption —
+    ...    plain batch Jobs are not visible to the Kaiwo idle pre-emption controller.
+    ...    Requires: TEST_PROJECT (with name attribute)
+    ...    Sets: TEST_IDLE_DEPLOY_NAME
+    VAR    ${namespace}    ${TEST_PROJECT}[name]
+
+    ${deploy_name}=    Submit GPU deployment via kubectl    ${namespace}
+
+    Set test variable    ${TEST_IDLE_DEPLOY_NAME}    ${deploy_name}
+
+    Kubectl deployment should be running    ${namespace}    ${deploy_name}    timeout=5 min
+    Log    Idle GPU Deployment ${deploy_name} is running in ${namespace}    INFO
+
+Verify idle workload pre-empted
+    [Documentation]    Checks if a GPU Deployment has been pre-empted by Kaiwo.
+    ...    Kaiwo creates GpuWorkload resources for each GPU-using Deployment pod and transitions
+    ...    their phase to Preempted or Deleted when idle workloads exceed the grace period.
+    [Arguments]    ${namespace}    ${deploy_name}
+
+    ${result}=    Run process    kubectl    get    gpuworkloads
+    ...    -n    ${namespace}
+    ...    -o    jsonpath\={.items[*].status.phase}
+
+    IF    "Preempted" in "${result.stdout}" or "Deleted" in "${result.stdout}"
+        Log    Deployment ${deploy_name} was pre-empted (GpuWorkload phases: ${result.stdout.strip()})    INFO
+        RETURN
+    END
+
+    Fail    Deployment ${deploy_name} not yet pre-empted. GpuWorkload phases: ${result.stdout.strip()}
+
+The workload should be pre-empted
+    [Documentation]    Verifies that the idle GPU Deployment has been pre-empted by Kaiwo.
+    ...    Polls with a long timeout since the grace period must elapse before pre-emption occurs.
+    ...    Requires: TEST_IDLE_DEPLOY_NAME, TEST_PROJECT
+    [Arguments]    ${timeout}=20 min
+    VAR    ${namespace}    ${TEST_PROJECT}[name]
+
+    Wait Until Keyword Succeeds    ${timeout}    15 sec
+    ...    Verify idle workload pre-empted    ${namespace}    ${TEST_IDLE_DEPLOY_NAME}
 
 The project should not exist in database
     [Documentation]    Verifies the project has soft delete status (Deleting or Deleted)
@@ -733,29 +903,29 @@ Verify project quota values
     ${db_response}=    Get project    ${TEST_PROJECT_ID}    expected_status=200
     ${quota}=    Set Variable    ${db_response.json()['quota']}
 
-    Should Be Equal As Integers    ${quota['cpu_milli_cores']}    ${TEST_QUOTA_DATA}[cpu_milli_cores]
-    Should Be Equal As Integers    ${quota['memory_bytes']}    ${TEST_QUOTA_DATA}[memory_bytes]
-    Should Be Equal As Integers    ${quota['ephemeral_storage_bytes']}    ${TEST_QUOTA_DATA}[ephemeral_storage_bytes]
-    Should Be Equal As Integers    ${quota['gpu_count']}    ${TEST_QUOTA_DATA}[gpu_count]
+    Should Be Equal As Integers    ${quota['cpuMilliCores']}    ${TEST_QUOTA_DATA}[cpuMilliCores]
+    Should Be Equal As Integers    ${quota['memoryBytes']}    ${TEST_QUOTA_DATA}[memoryBytes]
+    Should Be Equal As Integers    ${quota['ephemeralStorageBytes']}    ${TEST_QUOTA_DATA}[ephemeralStorageBytes]
+    Should Be Equal As Integers    ${quota['gpuCount']}    ${TEST_QUOTA_DATA}[gpuCount]
     Log    Project quota verified    DEBUG
 
 Project quota should match minimum values
     [Documentation]    Verifies project quota matches minimum allocation
     ${quota}=    Set Variable    ${TEST_RESPONSE.json()['quota']}
 
-    Should Be Equal As Integers    ${quota['cpu_milli_cores']}    ${TEST_QUOTA_DATA}[cpu_milli_cores]
-    Should Be Equal As Integers    ${quota['memory_bytes']}    ${TEST_QUOTA_DATA}[memory_bytes]
-    Should Be Equal As Integers    ${quota['ephemeral_storage_bytes']}    ${TEST_QUOTA_DATA}[ephemeral_storage_bytes]
-    Should Be Equal As Integers    ${quota['gpu_count']}    ${TEST_QUOTA_DATA}[gpu_count]
+    Should Be Equal As Integers    ${quota['cpuMilliCores']}    ${TEST_QUOTA_DATA}[cpuMilliCores]
+    Should Be Equal As Integers    ${quota['memoryBytes']}    ${TEST_QUOTA_DATA}[memoryBytes]
+    Should Be Equal As Integers    ${quota['ephemeralStorageBytes']}    ${TEST_QUOTA_DATA}[ephemeralStorageBytes]
+    Should Be Equal As Integers    ${quota['gpuCount']}    ${TEST_QUOTA_DATA}[gpuCount]
 
 Project quota should match custom values
     [Documentation]    Verifies project quota matches custom allocation
     ${quota}=    Set Variable    ${TEST_RESPONSE.json()['quota']}
 
-    Should Be Equal As Integers    ${quota['cpu_milli_cores']}    ${TEST_QUOTA_DATA}[cpu_milli_cores]
-    Should Be Equal As Integers    ${quota['memory_bytes']}    ${TEST_QUOTA_DATA}[memory_bytes]
-    Should Be Equal As Integers    ${quota['ephemeral_storage_bytes']}    ${TEST_QUOTA_DATA}[ephemeral_storage_bytes]
-    Should Be Equal As Integers    ${quota['gpu_count']}    ${TEST_QUOTA_DATA}[gpu_count]
+    Should Be Equal As Integers    ${quota['cpuMilliCores']}    ${TEST_QUOTA_DATA}[cpuMilliCores]
+    Should Be Equal As Integers    ${quota['memoryBytes']}    ${TEST_QUOTA_DATA}[memoryBytes]
+    Should Be Equal As Integers    ${quota['ephemeralStorageBytes']}    ${TEST_QUOTA_DATA}[ephemeralStorageBytes]
+    Should Be Equal As Integers    ${quota['gpuCount']}    ${TEST_QUOTA_DATA}[gpuCount]
 
 Project quota in database should match increased values
     [Documentation]    Verifies increased quota values in database
@@ -776,8 +946,8 @@ Verify CPU quota value
     Log    Polling project ${TEST_PROJECT_ID} CPU quota update    TRACE
     ${db_response}=    Get project    ${TEST_PROJECT_ID}    expected_status=200
     ${quota}=    Set Variable    ${db_response.json()['quota']}
-    Should Be Equal As Integers    ${quota['cpu_milli_cores']}    ${TEST_QUOTA_DATA}[cpu_milli_cores]
-    Log    CPU quota verified: ${TEST_QUOTA_DATA}[cpu_milli_cores]    DEBUG
+    Should Be Equal As Integers    ${quota['cpuMilliCores']}    ${TEST_QUOTA_DATA}[cpuMilliCores]
+    Log    CPU quota verified: ${TEST_QUOTA_DATA}[cpuMilliCores]    DEBUG
 
 Project memory quota in database should match updated value
     [Documentation]    Verifies memory quota is updated in database
@@ -790,8 +960,8 @@ Verify memory quota value
     Log    Polling project ${TEST_PROJECT_ID} memory quota update    TRACE
     ${db_response}=    Get project    ${TEST_PROJECT_ID}    expected_status=200
     ${quota}=    Set Variable    ${db_response.json()['quota']}
-    Should Be Equal As Integers    ${quota['memory_bytes']}    ${TEST_QUOTA_DATA}[memory_bytes]
-    Log    Memory quota verified: ${TEST_QUOTA_DATA}[memory_bytes]    DEBUG
+    Should Be Equal As Integers    ${quota['memoryBytes']}    ${TEST_QUOTA_DATA}[memoryBytes]
+    Log    Memory quota verified: ${TEST_QUOTA_DATA}[memoryBytes]    DEBUG
 
 Project GPU quota in database should match updated value
     [Documentation]    Verifies GPU quota is updated in database
@@ -804,8 +974,8 @@ Verify GPU quota value
     Log    Polling project ${TEST_PROJECT_ID} GPU quota update    TRACE
     ${db_response}=    Get project    ${TEST_PROJECT_ID}    expected_status=200
     ${quota}=    Set Variable    ${db_response.json()['quota']}
-    Should Be Equal As Integers    ${quota['gpu_count']}    ${TEST_QUOTA_DATA}[gpu_count]
-    Log    GPU quota verified: ${TEST_QUOTA_DATA}[gpu_count]    DEBUG
+    Should Be Equal As Integers    ${quota['gpuCount']}    ${TEST_QUOTA_DATA}[gpuCount]
+    Log    GPU quota verified: ${TEST_QUOTA_DATA}[gpuCount]    DEBUG
 
 Quota should have valid status
     [Documentation]    Verifies that quota has a valid status field
@@ -885,14 +1055,15 @@ User should not be member of project
 
 Clean Up All Created Projects With Wait
     [Documentation]    Extended cleanup that waits for complete project deletion
-    ...    Uses the standard cleanup from resource_tracking.resource but adds waiting
+    ...    Uses the standard cleanup from airm_resource_cleanup.resource but adds waiting
     ...    for complete deletion verification. This is project-specific behavior.
-    ${count}=    Get Length    ${CREATED_PROJECT_IDS}
-
-    Return From Keyword If    ${count} == 0    No projects to clean up
+    ${tracking_list}=    Get Variable Value    ${CREATED_PROJECT_IDS}    ${None}
+    IF    $tracking_list is None    RETURN
+    ${count}=    Get Length    ${tracking_list}
+    IF    ${count} == 0    RETURN    END
     Log    Starting cleanup of ${count} projects    INFO
 
-    FOR    ${project_id}    IN    @{CREATED_PROJECT_IDS}
+    FOR    ${project_id}    IN    @{tracking_list}
         TRY
             Log    Deleting project ${project_id}    INFO
             Delete project    ${project_id}    expected_status=any
@@ -902,7 +1073,7 @@ Clean Up All Created Projects With Wait
     END
 
     Log    Waiting for all ${count} project deletions to complete    INFO
-    FOR    ${project_id}    IN    @{CREATED_PROJECT_IDS}
+    FOR    ${project_id}    IN    @{tracking_list}
         TRY
             # Set project ID temporarily for verification (The project should not exist in database uses TEST_PROJECT_ID)
             ${original_test_project_id}=    Get Variable Value    ${TEST_PROJECT_ID}    ${None}
@@ -995,12 +1166,12 @@ Project status should be one of
         ${data}=    Set Variable    ${project_data}
     END
     ${project_status}=    Get From Dictionary    ${data}    status    default=Unknown
-    ${project_status_reason}=    Get From Dictionary    ${data}    status_reason    default=No reason provided
+    ${project_status_reason}=    Get From Dictionary    ${data}    statusReason    default=No reason provided
 
     # Get quota details for context
     ${quota}=    Get From Dictionary    ${data}    quota
     ${quota_status}=    Get From Dictionary    ${quota}    status    default=Unknown
-    ${quota_status_reason}=    Get From Dictionary    ${quota}    status_reason    default=No reason provided
+    ${quota_status_reason}=    Get From Dictionary    ${quota}    statusReason    default=No reason provided
 
     # Check if project status matches expected values (case-insensitive)
     @{expected_list}=    Split String    ${expected_statuses}    ,${SPACE}
@@ -1138,6 +1309,25 @@ Project namespace should have label matching project ID
     Namespace should have label    ${TEST_PROJECT}[name]    airm.silogen.ai/project-id    ${TEST_PROJECT_ID}
     Log    Namespace ${TEST_PROJECT}[name] has correct project ID label    INFO
 
+Project namespace should have GPU pre-emption annotations
+    [Documentation]    Verifies kaiwo GPU pre-emption annotations exist on the project namespace with expected values.
+    ...    Requires: TEST_PROJECT (with name attribute for namespace lookup)
+    [Arguments]    ${threshold}=10    ${gracePeriod}=1800s    ${policy}=OnPressure
+    VAR    ${namespace}    ${TEST_PROJECT}[name]
+    Namespace should have annotation    ${namespace}    kaiwo.silogen.ai/gpu-preemption.enabled    true
+    Namespace should have annotation    ${namespace}    kaiwo.silogen.ai/gpu-preemption.threshold    ${threshold}
+    Namespace should have annotation    ${namespace}    kaiwo.silogen.ai/gpu-preemption.grace-period    ${gracePeriod}
+    Namespace should have annotation    ${namespace}    kaiwo.silogen.ai/gpu-preemption.policy    ${policy}
+
+Project namespace should not have GPU pre-emption annotations
+    [Documentation]    Verifies kaiwo GPU pre-emption annotations do not exist on the project namespace.
+    ...    Requires: TEST_PROJECT (with name attribute for namespace lookup)
+    VAR    ${namespace}    ${TEST_PROJECT}[name]
+    Namespace should not have annotation    ${namespace}    kaiwo.silogen.ai/gpu-preemption.enabled
+    Namespace should not have annotation    ${namespace}    kaiwo.silogen.ai/gpu-preemption.threshold
+    Namespace should not have annotation    ${namespace}    kaiwo.silogen.ai/gpu-preemption.grace-period
+    Namespace should not have annotation    ${namespace}    kaiwo.silogen.ai/gpu-preemption.policy
+
 
 
 A secret is assigned to the project
@@ -1152,7 +1342,7 @@ A secret is assigned to the project
     ...    type=ExternalSecret
     ...    scope=Organization
     ...    manifest=${manifest}
-    ...    project_ids=${project_ids}
+    ...    projectIds=${project_ids}
 
     ${response}=    Create secret
     ...    secret_data=${secret_data}
@@ -1161,12 +1351,7 @@ A secret is assigned to the project
     ${secret_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_SECRET_ID}    ${secret_id}
 
-    TRY
-        Append To List    ${CREATED_SECRET_IDS}    ${secret_id}
-        Log    Tracking secret ${secret_id} in cleanup list    DEBUG
-    EXCEPT
-        Log    CREATED_SECRET_IDS list not initialized    WARN
-    END
+    Track Secret For Cleanup    ${secret_id}
 
     Log    Secret ${secret_id} assigned to project ${TEST_PROJECT_ID}    INFO
 
@@ -1180,7 +1365,7 @@ Verify secret assignment is synced
     Log    Polling secret ${TEST_SECRET_ID} assignment sync status    TRACE
     ${response}=    Get secret    ${TEST_SECRET_ID}    expected_status=200
     ${json}=    Set Variable    ${response.json()}
-    ${project_secrets}=    Get From Dictionary    ${json}    project_secrets
+    ${project_secrets}=    Get From Dictionary    ${json}    projectSecrets
 
     FOR    ${ps}    IN    @{project_secrets}
         ${project}=    Get From Dictionary    ${ps}    project
@@ -1219,7 +1404,7 @@ Verify secret is unassigned
 
     # Get current status
     ${status}=    Get From Dictionary    ${json}    status
-    ${project_secrets}=    Get From Dictionary    ${json}    project_secrets
+    ${project_secrets}=    Get From Dictionary    ${json}    projectSecrets
     ${count}=    Get Length    ${project_secrets}
 
     # Accept either SyncedError (namespace gone) or Unassigned (assignment cleaned)
@@ -1251,9 +1436,9 @@ A storage is assigned to the project
     ...    name=storage-secret-${TEST_PROJECT_ID}
     ...    type=ExternalSecret
     ...    scope=Organization
-    ...    use_case=S3
+    ...    useCase=S3
     ...    manifest=${manifest}
-    ...    project_ids=@{EMPTY}
+    ...    projectIds=@{EMPTY}
 
     ${secret_response}=    Create secret
     ...    secret_data=${secret_data}
@@ -1262,17 +1447,12 @@ A storage is assigned to the project
     ${storage_secret_id}=    Get From Dictionary    ${secret_response.json()}    id
     Set Test Variable    ${TEST_STORAGE_SECRET_ID}    ${storage_secret_id}
 
-    TRY
-        Append To List    ${CREATED_SECRET_IDS}    ${storage_secret_id}
-        Log    Tracking storage secret ${storage_secret_id} in cleanup list    DEBUG
-    EXCEPT
-        Log    CREATED_SECRET_IDS list not initialized    WARN
-    END
+    Track Secret For Cleanup    ${storage_secret_id}
 
     &{storage_spec}=    Create Dictionary
-    ...    bucket_url=https://s3.amazonaws.com/test-bucket-${TEST_PROJECT_ID}
-    ...    access_key_name=ACCESS_KEY_ID
-    ...    secret_key_name=SECRET_ACCESS_KEY
+    ...    bucketUrl=https://s3.amazonaws.com/test-bucket-${TEST_PROJECT_ID}
+    ...    accessKeyName=ACCESS_KEY_ID
+    ...    secretKeyName=SECRET_ACCESS_KEY
 
     @{project_ids}=    Create List    ${TEST_PROJECT_ID}
 
@@ -1280,8 +1460,8 @@ A storage is assigned to the project
     ...    name=test-project-storage-${TEST_PROJECT_ID}
     ...    type=S3
     ...    scope=Organization
-    ...    secret_id=${storage_secret_id}
-    ...    project_ids=${project_ids}
+    ...    secretId=${storage_secret_id}
+    ...    projectIds=${project_ids}
     ...    spec=${storage_spec}
 
     ${response}=    Create storage
@@ -1291,12 +1471,7 @@ A storage is assigned to the project
     ${storage_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_STORAGE_ID}    ${storage_id}
 
-    TRY
-        Append To List    ${CREATED_STORAGE_IDS}    ${storage_id}
-        Log    Tracking storage ${storage_id} in cleanup list    DEBUG
-    EXCEPT
-        Log    CREATED_STORAGE_IDS list not initialized    WARN
-    END
+    Track Storage For Cleanup    ${storage_id}
 
     Log    Storage ${storage_id} assigned to project ${TEST_PROJECT_ID}    INFO
 
@@ -1310,7 +1485,7 @@ Verify storage assignment is synced
     Log    Polling storage ${TEST_STORAGE_ID} assignment sync status    TRACE
     ${response}=    Get storage    ${TEST_STORAGE_ID}    expected_status=200
     ${json}=    Set Variable    ${response.json()}
-    ${project_storages}=    Get From Dictionary    ${json}    project_storages
+    ${project_storages}=    Get From Dictionary    ${json}    projectStorages
 
     FOR    ${ps}    IN    @{project_storages}
         ${project}=    Get From Dictionary    ${ps}    project
@@ -1355,7 +1530,7 @@ Verify storage is unassigned
 
     # Get current status
     ${status}=    Get From Dictionary    ${json}    status
-    ${project_storages}=    Get From Dictionary    ${json}    project_storages
+    ${project_storages}=    Get From Dictionary    ${json}    projectStorages
     ${count}=    Get Length    ${project_storages}
 
     # Accept either SyncedError (namespace gone) or Unassigned (assignment cleaned)
@@ -1403,12 +1578,7 @@ A workload is submitted to the project
     ${workload_id}=    Get From Dictionary    ${response.json()}    id
     Set Test Variable    ${TEST_WORKLOAD_ID}    ${workload_id}
 
-    TRY
-        Append To List    ${CREATED_WORKLOAD_IDS}    ${workload_id}
-        Log    Tracking workload ${workload_id} in cleanup list    DEBUG
-    EXCEPT
-        Log    CREATED_WORKLOAD_IDS list not initialized    WARN
-    END
+    Track Workload For Cleanup    ${workload_id}
 
     Log    Workload ${workload_id} submitted to project ${TEST_PROJECT_ID}    INFO
 
@@ -1507,10 +1677,10 @@ Project quota is set to
     ${current_desc}=    Set Variable    ${project_response.json()['description']}
 
     # Build updated quota preserving unspecified values
-    ${new_cpu}=    Set Variable If    $cpu_milli_cores != $None    ${cpu_milli_cores}    ${current_quota['cpu_milli_cores']}
-    ${new_memory}=    Set Variable If    $memory_bytes != $None    ${memory_bytes}    ${current_quota['memory_bytes']}
-    ${new_storage}=    Set Variable If    $ephemeral_storage_bytes != $None    ${ephemeral_storage_bytes}    ${current_quota['ephemeral_storage_bytes']}
-    ${new_gpu}=    Set Variable If    $gpu_count != $None    ${gpu_count}    ${current_quota['gpu_count']}
+    ${new_cpu}=    Set Variable If    $cpu_milli_cores != $None    ${cpu_milli_cores}    ${current_quota['cpuMilliCores']}
+    ${new_memory}=    Set Variable If    $memory_bytes != $None    ${memory_bytes}    ${current_quota['memoryBytes']}
+    ${new_storage}=    Set Variable If    $ephemeral_storage_bytes != $None    ${ephemeral_storage_bytes}    ${current_quota['ephemeralStorageBytes']}
+    ${new_gpu}=    Set Variable If    $gpu_count != $None    ${gpu_count}    ${current_quota['gpuCount']}
 
     # Minimums just prevent API rejection (0 CPU/memory with GPUs is invalid).
     # AIM pods need ~4 CPU + 32Gi memory per GPU — callers must set explicit values.
@@ -1521,10 +1691,10 @@ Project quota is set to
     END
 
     ${updated_quota}=    Create Dictionary
-    ...    cpu_milli_cores=${new_cpu}
-    ...    memory_bytes=${new_memory}
-    ...    ephemeral_storage_bytes=${new_storage}
-    ...    gpu_count=${new_gpu}
+    ...    cpuMilliCores=${new_cpu}
+    ...    memoryBytes=${new_memory}
+    ...    ephemeralStorageBytes=${new_storage}
+    ...    gpuCount=${new_gpu}
 
     ${project_data}=    Create Dictionary
     ...    description=${current_desc}
@@ -1546,10 +1716,10 @@ Verify project quota was updated
     ${db_response}=    Get project    ${TEST_PROJECT_ID}    expected_status=200
     ${quota}=    Set Variable    ${db_response.json()['quota']}
 
-    Should Be Equal As Integers    ${quota['cpu_milli_cores']}    ${TEST_QUOTA_DATA}[cpu_milli_cores]
-    Should Be Equal As Integers    ${quota['memory_bytes']}    ${TEST_QUOTA_DATA}[memory_bytes]
-    Should Be Equal As Integers    ${quota['ephemeral_storage_bytes']}    ${TEST_QUOTA_DATA}[ephemeral_storage_bytes]
-    Should Be Equal As Integers    ${quota['gpu_count']}    ${TEST_QUOTA_DATA}[gpu_count]
+    Should Be Equal As Integers    ${quota['cpuMilliCores']}    ${TEST_QUOTA_DATA}[cpuMilliCores]
+    Should Be Equal As Integers    ${quota['memoryBytes']}    ${TEST_QUOTA_DATA}[memoryBytes]
+    Should Be Equal As Integers    ${quota['ephemeralStorageBytes']}    ${TEST_QUOTA_DATA}[ephemeralStorageBytes]
+    Should Be Equal As Integers    ${quota['gpuCount']}    ${TEST_QUOTA_DATA}[gpuCount]
 
     Log    Quota update verified for project ${TEST_PROJECT_ID}    DEBUG
 
@@ -1594,6 +1764,6 @@ A Second Ready Project With User Access Exists
 Project query parameters are set up
     [Documentation]    Sets up query parameters with project ID for API calls
     Should Not Be Empty     ${TEST_PROJECT_ID}      msg=Project ID is required for query parameters setup.
-    ${query_params}=        Create Dictionary       project_id=${TEST_PROJECT_ID}
+    ${query_params}=        Create Dictionary       projectId=${TEST_PROJECT_ID}
     Set Test Variable       ${TEST_QUERY_PARAMS}         ${query_params}
     Log                     Query parameters set up with project ID: ${TEST_PROJECT_ID}    DEBUG

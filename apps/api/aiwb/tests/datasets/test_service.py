@@ -5,7 +5,7 @@
 """Datasets service tests."""
 
 import io
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -144,23 +144,33 @@ async def test_create_and_upload_dataset_validation_failure(
 
 @pytest.mark.asyncio
 async def test_download_dataset_file_success(db_session: AsyncSession, test_namespace: str, test_user: str) -> None:
-    """Test successful dataset file download."""
+    """Test successful dataset file download using streaming."""
     dataset = await factory.create_dataset(
         db_session, name="Download Test Dataset", path="download-test.jsonl", namespace=test_namespace
     )
 
     mock_file_content = b'{"text": "dataset content"}\n'
-    with patch("app.datasets.service.download_from_s3") as mock_download:
-        mock_download.return_value = ("download-test.jsonl", mock_file_content)
+
+    def mock_stream():
+        yield mock_file_content
+
+    with patch("app.datasets.service.download_from_s3_stream") as mock_download:
+        mock_download.return_value = mock_stream()
 
         mock_client = AsyncMock(spec=MinioClient)
+        mock_stat = MagicMock()
+        mock_stat.size = len(mock_file_content)
+        mock_client.stat_object.return_value = mock_stat
+
         response = await download_dataset_file(dataset.id, test_namespace, db_session, mock_client)
 
         assert response is not None
-        assert response.media_type == "application/jsonlines"
+        assert response.media_type == "application/jsonl; charset=utf-8"
         assert "download-test.jsonl" in response.headers["Content-Disposition"]
+        assert response.headers["Content-Length"] == str(len(mock_file_content))
 
         mock_download.assert_called_once_with(dataset, mock_client)
+        mock_client.stat_object.assert_called_once()
 
 
 @pytest.mark.asyncio

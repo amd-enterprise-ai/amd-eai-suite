@@ -24,7 +24,7 @@ A cluster exists in system
     # Find first healthy cluster with GPUs
     VAR    ${test_cluster}    ${None}
     FOR    ${c}    IN    @{clusters}
-        IF    '${c['status']}' == 'healthy' and ${c['available_resources']['gpu_count']} > 0
+        IF    '${c['status']}' == 'healthy' and ${c['availableResources']['gpuCount']} > 0
             ${test_cluster}=    Set variable    ${c}
             BREAK
         END
@@ -56,7 +56,7 @@ Get cluster GPU capacity
     # Find first healthy cluster with GPUs
     VAR    ${cluster}    ${None}
     FOR    ${c}    IN    @{clusters}
-        IF    '${c['status']}' == 'healthy' and ${c['available_resources']['gpu_count']} > 0
+        IF    '${c['status']}' == 'healthy' and ${c['availableResources']['gpuCount']} > 0
             ${cluster}=    Set variable    ${c}
             BREAK
         END
@@ -67,7 +67,7 @@ Get cluster GPU capacity
         ${cluster}=    Set variable    ${clusters[0]}
     END
 
-    ${gpu_count}=    Set variable    ${cluster['available_resources']['gpu_count']}
+    ${gpu_count}=    Set variable    ${cluster['availableResources']['gpuCount']}
     Log    Cluster ${cluster['name']} has ${gpu_count} total GPUs    INFO
     RETURN    ${gpu_count}
 
@@ -98,25 +98,25 @@ Verify Cluster Has Available Resources
     Should Not Be Empty    ${clusters}    msg=No clusters found in system
 
     ${cluster}=    Set Variable    ${clusters[0]}
-    ${available}=    Set Variable    ${cluster['available_resources']}
-    ${allocated}=    Set Variable    ${cluster['allocated_resources']}
+    ${available}=    Set Variable    ${cluster['availableResources']}
+    ${allocated}=    Set Variable    ${cluster['allocatedResources']}
 
     # Calculate REMAINING (unallocated) resources
-    ${remaining_cpu_milli}=    Evaluate    ${available['cpu_milli_cores']} - ${allocated['cpu_milli_cores']}
-    ${remaining_memory}=    Evaluate    ${available['memory_bytes']} - ${allocated['memory_bytes']}
-    ${remaining_storage}=    Evaluate    ${available['ephemeral_storage_bytes']} - ${allocated['ephemeral_storage_bytes']}
-    ${remaining_gpu}=    Evaluate    ${available['gpu_count']} - ${allocated['gpu_count']}
+    ${remaining_cpu_milli}=    Evaluate    ${available['cpuMilliCores']} - ${allocated['cpuMilliCores']}
+    ${remaining_memory}=    Evaluate    ${available['memoryBytes']} - ${allocated['memoryBytes']}
+    ${remaining_storage}=    Evaluate    ${available['ephemeralStorageBytes']} - ${allocated['ephemeralStorageBytes']}
+    ${remaining_gpu}=    Evaluate    ${available['gpuCount']} - ${allocated['gpuCount']}
 
     # Convert to human-readable values
     ${remaining_cpu_cores}=    Evaluate    ${remaining_cpu_milli} / 1000
     ${remaining_memory_gb}=    Evaluate    ${remaining_memory} / 1073741824
     ${remaining_storage_gb}=    Evaluate    ${remaining_storage} / 1073741824
 
-    ${total_cpu_cores}=    Evaluate    ${available['cpu_milli_cores']} / 1000
-    ${total_memory_gb}=    Evaluate    ${available['memory_bytes']} / 1073741824
-    ${total_storage_gb}=    Evaluate    ${available['ephemeral_storage_bytes']} / 1073741824
+    ${total_cpu_cores}=    Evaluate    ${available['cpuMilliCores']} / 1000
+    ${total_memory_gb}=    Evaluate    ${available['memoryBytes']} / 1073741824
+    ${total_storage_gb}=    Evaluate    ${available['ephemeralStorageBytes']} / 1073741824
 
-    Log    Cluster total capacity: ${total_cpu_cores} CPU cores, ${total_memory_gb} GB memory, ${total_storage_gb} GB storage, ${available['gpu_count']} GPUs    INFO
+    Log    Cluster total capacity: ${total_cpu_cores} CPU cores, ${total_memory_gb} GB memory, ${total_storage_gb} GB storage, ${available['gpuCount']} GPUs    INFO
     Log    Cluster remaining (unallocated): ${remaining_cpu_cores} CPU cores, ${remaining_memory_gb} GB memory, ${remaining_storage_gb} GB storage, ${remaining_gpu} GPUs    INFO
 
     # Check if sufficient REMAINING resources available

@@ -3,12 +3,13 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
+  "scripts": {
+    "format:fix": "biome format --write .",
+    "lint": "biome lint ."
+  },
   "exports": {
     ".": "./shared-styles.css",
     "./postcss": "./postcss.config.js"
-  },
-  "dependencies": {
-    "@amdenterpriseai/utils": "workspace:*"
   },
   "peerDependencies": {
     "react": "*",

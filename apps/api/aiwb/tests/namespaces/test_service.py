@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api_common.collections import SortDirection
+from api_common.collections import SortCondition, SortDirection
 from app.aims.crds import AIMServiceResource, AIMServiceSpec, AIMServiceStatusFields
 from app.aims.enums import AIMServiceStatus
 from app.dispatch.crds import K8sMetadata
@@ -614,8 +614,7 @@ async def test_get_namespace_workload_metrics_paginated_sorting(
             session=mock_db_session,
             namespace=namespace,
             prometheus_client=mock_prometheus_client,
-            sort_by="created_at",
-            sort_order=SortDirection.desc,
+            sort=[SortCondition(field="created_at", direction=SortDirection.desc)],
         )
 
         assert len(result_desc.data) == 3
@@ -629,8 +628,7 @@ async def test_get_namespace_workload_metrics_paginated_sorting(
             session=mock_db_session,
             namespace=namespace,
             prometheus_client=mock_prometheus_client,
-            sort_by="created_at",
-            sort_order=SortDirection.asc,
+            sort=[SortCondition(field="created_at", direction=SortDirection.asc)],
         )
 
         assert len(result_asc.data) == 3
@@ -685,8 +683,7 @@ async def test_get_namespace_workload_metrics_paginated_sorting_with_pagination(
             prometheus_client=mock_prometheus_client,
             page=1,
             page_size=2,
-            sort_by="created_at",
-            sort_order=SortDirection.desc,
+            sort=[SortCondition(field="created_at", direction=SortDirection.desc)],
         )
 
         # Should have newest 2 workloads (workload-4 and workload-3)
@@ -703,8 +700,7 @@ async def test_get_namespace_workload_metrics_paginated_sorting_with_pagination(
             prometheus_client=mock_prometheus_client,
             page=2,
             page_size=2,
-            sort_by="created_at",
-            sort_order=SortDirection.desc,
+            sort=[SortCondition(field="created_at", direction=SortDirection.desc)],
         )
 
         # Should have next 2 workloads (workload-2 and workload-1)
@@ -777,8 +773,7 @@ async def test_get_namespace_workload_metrics_paginated_sorting_by_status_across
             prometheus_client=mock_prometheus_client,
             page=1,
             page_size=4,
-            sort_by="status",
-            sort_order=SortDirection.desc,
+            sort=[SortCondition(field="status", direction=SortDirection.desc)],
         )
 
         # Page 2 should have the FAILED workload
@@ -789,8 +784,7 @@ async def test_get_namespace_workload_metrics_paginated_sorting_by_status_across
             prometheus_client=mock_prometheus_client,
             page=2,
             page_size=4,
-            sort_by="status",
-            sort_order=SortDirection.desc,
+            sort=[SortCondition(field="status", direction=SortDirection.desc)],
         )
 
         # Verify total is 5 across both pages

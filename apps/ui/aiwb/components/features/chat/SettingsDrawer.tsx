@@ -14,8 +14,8 @@ import {
 import React from 'react';
 
 import { useTranslation } from 'next-i18next';
-import { InferenceSettings } from '@amdenterpriseai/types';
-import { Workload } from '@amdenterpriseai/types';
+import { InferenceSettings } from '@/types/models';
+import { Workload } from '@/types/workloads';
 
 import { InputWrapper } from '@amdenterpriseai/components';
 import { TextAreaWrapper } from '@amdenterpriseai/components';

@@ -6,8 +6,8 @@ import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { Cluster } from '@amdenterpriseai/types';
-import { WorkloadsStats } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { WorkloadsStats } from '@/types/workloads';
 
 import { HorizontalStatisticsCards } from '@amdenterpriseai/components';
 

@@ -2,10 +2,10 @@
 #
 # SPDX-License-Identifier: MIT
 
-from enum import Enum
+from enum import StrEnum
 
 
-class MetricName(str, Enum):
+class MetricName(StrEnum):
     """Supported metric names for workload-level metric retrieval."""
 
     GPU_DEVICE_UTILIZATION = "gpu_device_utilization"
@@ -22,7 +22,7 @@ class MetricName(str, Enum):
     TOTAL_TOKENS = "total_tokens"
 
 
-class NamespaceMetricName(str, Enum):
+class NamespaceMetricName(StrEnum):
     """Supported metric names for namespace-level metric retrieval."""
 
     GPU_DEVICE_UTILIZATION = "gpu_device_utilization"

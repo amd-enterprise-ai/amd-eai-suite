@@ -8,11 +8,13 @@ from datetime import UTC, datetime
 from keycloak import KeycloakAdmin
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import ConflictException, ExternalServiceError, NotFoundException
+from api_common.models import set_updated_fields
+
 from ..projects.models import Project
 from ..projects.repository import get_projects, get_projects_by_names
 from ..users.repository import get_user_by_email
 from ..utilities.config import POST_REGISTRATION_REDIRECT_URL
-from ..utilities.exceptions import ConflictException, ExternalServiceError, NotFoundException
 from ..utilities.keycloak_admin import assign_roles_to_user as assign_roles_to_user_keycloak
 from ..utilities.keycloak_admin import (
     assign_users_to_group,
@@ -29,7 +31,6 @@ from ..utilities.keycloak_admin import (
 from ..utilities.keycloak_admin import delete_user as delete_user_from_keycloak
 from ..utilities.keycloak_admin import get_user_by_username as get_user_by_username_from_keycloak
 from ..utilities.keycloak_admin import get_users as get_users_from_keycloak
-from ..utilities.models import set_updated_fields
 from ..utilities.security import Roles
 from .models import User as UserModel
 from .repository import create_user as create_user_in_db

@@ -4,17 +4,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { proxyRequest } from '@amdenterpriseai/utils/server';
 
-import {
-  InvitedUsersResponse,
-  User,
-  UsersResponse,
-} from '@amdenterpriseai/types';
+import { InvitedUsersResponse } from '@/types/users';
+import { User, UsersResponse } from '@/types/users';
 
 export const getUsers = async (accessToken: string): Promise<UsersResponse> => {
   const url = `${process.env.AIRM_API_SERVICE_URL}/v1/users`;
@@ -26,8 +20,7 @@ export const getUsers = async (accessToken: string): Promise<UsersResponse> => {
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(`Failed to get users: ${await getErrorMessage(response)}`);
   }
@@ -46,8 +39,7 @@ export const getUser = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(`Failed to get user: ${await getErrorMessage(response)}`);
   }
@@ -84,8 +76,7 @@ export const getInvitedUsers = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(`Failed to get users: ${await getErrorMessage(response)}`);
   }

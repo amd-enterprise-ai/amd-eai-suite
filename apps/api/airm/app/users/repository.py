@@ -9,7 +9,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..utilities.exceptions import ConflictException
+from api_common.exceptions import ConflictException
+
 from .models import User
 
 

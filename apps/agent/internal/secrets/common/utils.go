@@ -22,15 +22,15 @@ type SecretData struct {
 	Name           string
 	SecretID       uuid.UUID
 	ProjectID      uuid.UUID
-	Kind           messaging.SecretKind
-	UseCase        *string
-	Scope          *messaging.SecretScope
+	Kind           SecretKind
+	UseCase        *SecretUseCase
+	Scope          *SecretScope
 	AutoDiscovered bool
 	Submitter      *string
 }
 
 // ExtractSecretData extracts autodiscovery metadata from a Kubernetes resource's labels and annotations.
-func ExtractSecretData(obj client.Object, kind messaging.SecretKind) (*SecretData, error) {
+func ExtractSecretData(obj client.Object, kind SecretKind) (*SecretData, error) {
 	labels := obj.GetLabels()
 	if labels == nil {
 		return nil, fmt.Errorf("resource has no labels")
@@ -74,7 +74,7 @@ func PublishAutoDiscoveryMessage(
 	publisher messaging.MessagePublisher,
 	data *SecretData,
 ) error {
-	msg := &messaging.AutoDiscoveredSecretMessage{
+	msg := &AutoDiscoveredSecretMessage{
 		MessageType: messaging.MessageTypeAutoDiscoveredSecret,
 		ProjectID:   data.ProjectID.String(),
 		SecretID:    data.SecretID.String(),
@@ -102,10 +102,9 @@ func ExtractSecretID(labels map[string]string) (string, bool) {
 }
 
 // GetSecretUseCaseFromLabels extracts and normalizes the use-case label value.
-// The comparison is case-insensitive so "huggingface" and "HuggingFace" both
-// resolve to the canonical "HuggingFace". Unrecognized values are passed through
-// as-is to avoid dropping use cases that only exist on the API side.
-func GetSecretUseCaseFromLabels(l map[string]string) *string {
+// The comparison is case-insensitive against AllSecretUseCases. Unrecognized values are
+// wrapped as SecretUseCase(raw) so they still flow to the API unchanged.
+func GetSecretUseCaseFromLabels(l map[string]string) *SecretUseCase {
 	if l == nil {
 		return nil
 	}
@@ -114,19 +113,20 @@ func GetSecretUseCaseFromLabels(l map[string]string) *string {
 		return nil
 	}
 
-	for _, candidate := range messaging.AllSecretUseCases {
+	for _, candidate := range AllSecretUseCases {
 		if strings.EqualFold(raw, string(candidate)) {
-			s := string(candidate)
-			return &s
+			uc := candidate
+			return &uc
 		}
 	}
-	return &raw
+	u := SecretUseCase(raw)
+	return &u
 }
 
 // GetSecretScopeFromLabels extracts the secret scope from a labels map.
 // The comparison is case-insensitive so both "Organization" and "organization" match.
 // Returns nil if the scope label is not present or unrecognized.
-func GetSecretScopeFromLabels(l map[string]string) *messaging.SecretScope {
+func GetSecretScopeFromLabels(l map[string]string) *SecretScope {
 	if l == nil {
 		return nil
 	}
@@ -135,7 +135,7 @@ func GetSecretScopeFromLabels(l map[string]string) *messaging.SecretScope {
 		return nil
 	}
 
-	for _, candidate := range messaging.AllSecretScopes {
+	for _, candidate := range AllSecretScopes {
 		if strings.EqualFold(raw, string(candidate)) {
 			return &candidate
 		}
@@ -147,11 +147,11 @@ func PublishStatus(
 	ctx context.Context,
 	publisher messaging.MessagePublisher,
 	projectSecretID string,
-	scope *messaging.SecretScope,
-	status messaging.ProjectSecretStatus,
+	scope *SecretScope,
+	status ProjectSecretStatus,
 	reason string,
 ) error {
-	msg := &messaging.ProjectSecretsUpdateMessage{
+	msg := &ProjectSecretsUpdateMessage{
 		MessageType:     messaging.MessageTypeProjectSecretsUpdate,
 		ProjectSecretID: projectSecretID,
 		SecretScope:     scope,
@@ -177,7 +177,7 @@ func HandleDeletion(
 	labels := obj.GetLabels()
 	if projectSecretID, ok := ExtractSecretID(labels); ok {
 		scope := GetSecretScopeFromLabels(labels)
-		if err := PublishStatus(ctx, publisher, projectSecretID, scope, messaging.ProjectSecretStatusDeleted, deletionReason); err != nil {
+		if err := PublishStatus(ctx, publisher, projectSecretID, scope, ProjectSecretStatusDeleted, deletionReason); err != nil {
 			return err
 		}
 	}

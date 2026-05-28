@@ -4,10 +4,11 @@
 
 from uuid import uuid4
 
+from app.clusters.messaging import ClusterNode, GPUInformation
 from app.clusters.models import Cluster
 from app.clusters.models import ClusterNode as ClusterNodeModel
 from app.clusters.utils import build_cluster_kube_config, flatten_for_db_comparison, has_node_changed
-from app.messaging.schemas import ClusterNode, GPUInformation, GPUVendor
+from app.utilities.enums import GPUVendor
 
 
 def test_flatten_for_db_comparison_without_gpu():
@@ -256,7 +257,7 @@ def test_build_cluster_kube_config():
     cluster = Cluster(
         id=uuid4(),
         name="test-cluster",
-        workloads_base_url="https://workloads.example.com",
+        workbench_base_url="https://aiwbui.example.com",
         kube_api_url="https://k8s.example.com:6443",
         created_by="test@example.com",
         updated_by="test@example.com",

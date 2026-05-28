@@ -278,6 +278,44 @@ RoleBinding should exist in namespace
     Should Be True    ${count} > 0
     ...    msg=No RoleBinding found in namespace ${namespace}
 
+Namespace should have annotation
+    [Documentation]    Verifies that a namespace has a specific annotation with expected value
+    [Arguments]    ${namespace}    ${annotation_key}    ${expected_value}
+
+    ${result}=    Run Process    kubectl    get    namespace    ${namespace}
+    ...    -o    json
+    ...    stderr=PIPE
+
+    Should Be Equal As Integers    ${result.rc}    0
+    ...    msg=Failed to get namespace ${namespace}. Error: ${result.stderr}
+
+    ${ns_json}=    Evaluate    json.loads(r'''${result.stdout}''')    modules=json
+    ${annotations}=    Get From Dictionary    ${ns_json['metadata']}    annotations    default={}
+
+    Dictionary Should Contain Key    ${annotations}    ${annotation_key}
+    ...    msg=Namespace ${namespace} does not have annotation ${annotation_key}
+
+    ${actual_value}=    Get From Dictionary    ${annotations}    ${annotation_key}
+    Should Be Equal    ${actual_value}    ${expected_value}
+    ...    msg=Annotation ${annotation_key} has value ${actual_value}, expected ${expected_value}
+
+Namespace should not have annotation
+    [Documentation]    Verifies that a namespace does not have a specific annotation
+    [Arguments]    ${namespace}    ${annotation_key}
+
+    ${result}=    Run Process    kubectl    get    namespace    ${namespace}
+    ...    -o    json
+    ...    stderr=PIPE
+
+    Should Be Equal As Integers    ${result.rc}    0
+    ...    msg=Failed to get namespace ${namespace}. Error: ${result.stderr}
+
+    ${ns_json}=    Evaluate    json.loads(r'''${result.stdout}''')    modules=json
+    ${annotations}=    Get From Dictionary    ${ns_json['metadata']}    annotations    default={}
+
+    Dictionary Should Not Contain Key    ${annotations}    ${annotation_key}
+    ...    msg=Namespace ${namespace} should not have annotation ${annotation_key} but it does
+
 Namespace should have label
     [Documentation]    Verifies that a namespace has a specific label with expected value
     [Arguments]    ${namespace}    ${label_key}    ${expected_value}
@@ -298,143 +336,3 @@ Namespace should have label
     ${actual_value}=    Get From Dictionary    ${labels}    ${label_key}
     Should Be Equal    ${actual_value}    ${expected_value}
     ...    msg=Label ${label_key} has value ${actual_value}, expected ${expected_value}
-
-MinIO credentials should exist in namespace
-    [Documentation]    Verifies that minio-credentials secret exists in the namespace
-    ...    Returns True if secret exists, False otherwise
-    [Arguments]    ${namespace}
-
-    ${result}=    Run Process    kubectl    get    secret    minio-credentials
-    ...    -n    ${namespace}
-    ...    stdout=DEVNULL    stderr=PIPE
-
-    ${exists}=    Evaluate    ${result.rc} == 0
-    RETURN    ${exists}
-
-Ensure MinIO credentials exist in namespace
-    [Documentation]    Ensures minio-credentials secret exists in the namespace
-    ...    Copies from kaiwo namespace if missing. This is required for workspace deployments.
-    ...    Logs a warning if copy fails due to permissions but secret already exists.
-    [Arguments]    ${namespace}
-
-    Log    Checking MinIO credentials in namespace ${namespace}    DEBUG
-
-    # Check if secret already exists
-    ${exists}=    MinIO credentials should exist in namespace    ${namespace}
-    IF    ${exists}
-        Log    MinIO credentials already exist in namespace ${namespace}    DEBUG
-        RETURN
-    END
-
-    Log    MinIO credentials missing, copying from kaiwo namespace    INFO
-
-    # Copy secret from kaiwo namespace
-    ${get_result}=    Run Process    kubectl    get    secret    minio-credentials
-    ...    -n    kaiwo
-    ...    -o    json
-    ...    stderr=PIPE
-
-    Should Be Equal As Integers    ${get_result.rc}    0
-    ...    msg=Failed to get minio-credentials from kaiwo namespace. Error: ${get_result.stderr}
-
-    # Remove metadata fields that shouldn't be copied and use create instead of apply
-    ${clean_result}=    Run Process    bash    -c
-    ...    echo '${get_result.stdout}' | jq 'del(.metadata.namespace, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.ownerReferences, .metadata.annotations)' | kubectl create -n ${namespace} -f -
-    ...    shell=True
-    ...    stderr=PIPE
-
-    Should Be Equal As Integers    ${clean_result.rc}    0
-    ...    msg=Failed to copy minio-credentials to namespace ${namespace}. Error: ${clean_result.stderr}
-
-    Log    MinIO credentials copied to namespace ${namespace}    INFO
-
-Remove MinIO credentials from namespace
-    [Documentation]    Removes minio-credentials secret from the namespace if it exists
-    ...    Used for testing workspace behavior without MinIO credentials
-    [Arguments]    ${namespace}
-
-    Log    Removing MinIO credentials from namespace ${namespace}    DEBUG
-
-    ${result}=    Run Process    kubectl    delete    secret    minio-credentials
-    ...    -n    ${namespace}
-    ...    --ignore-not-found=true
-    ...    stderr=PIPE
-
-    Should Be Equal As Integers    ${result.rc}    0
-    ...    msg=Failed to delete minio-credentials from namespace ${namespace}. Error: ${result.stderr}
-
-    Log    MinIO credentials removed from namespace ${namespace}    INFO
-
-User PVC should exist in namespace
-    [Documentation]    Verifies that user PVC exists in the namespace
-    ...    Returns True if PVC exists, False otherwise
-    [Arguments]    ${user_id}    ${namespace}
-
-    ${pvc_name}=    Set Variable    pvc-${user_id}
-
-    ${result}=    Run Process    kubectl    get    pvc    ${pvc_name}
-    ...    -n    ${namespace}
-    ...    stdout=DEVNULL    stderr=PIPE
-
-    ${exists}=    Evaluate    ${result.rc} == 0
-    RETURN    ${exists}
-
-Ensure user PVC exists in namespace
-    [Documentation]    Ensures user-specific PVC exists in the namespace
-    ...    Creates PVC if missing. This is required for workspace deployments.
-    [Arguments]    ${user_id}    ${namespace}
-
-    ${pvc_name}=    Set Variable    pvc-${user_id}
-    Log    Checking user PVC ${pvc_name} in namespace ${namespace}    DEBUG
-
-    # Check if PVC already exists
-    ${exists}=    User PVC should exist in namespace    ${user_id}    ${namespace}
-    IF    ${exists}
-        Log    User PVC ${pvc_name} already exists in namespace ${namespace}    DEBUG
-        RETURN
-    END
-
-    Log    User PVC ${pvc_name} missing, creating it    INFO
-
-    # Create PVC using kubectl with proper escaping
-    ${yaml}=    Catenate    SEPARATOR=\n
-    ...    apiVersion: v1
-    ...    kind: PersistentVolumeClaim
-    ...    metadata:
-    ...    ${SPACE}${SPACE}name: ${pvc_name}
-    ...    ${SPACE}${SPACE}namespace: ${namespace}
-    ...    spec:
-    ...    ${SPACE}${SPACE}accessModes:
-    ...    ${SPACE}${SPACE}${SPACE}${SPACE}- ReadWriteOnce
-    ...    ${SPACE}${SPACE}resources:
-    ...    ${SPACE}${SPACE}${SPACE}${SPACE}requests:
-    ...    ${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}${SPACE}storage: 100Gi
-    ...    ${SPACE}${SPACE}storageClassName: mlstorage
-
-    ${result}=    Run Process    bash    -c
-    ...    cat <<'EOF' | kubectl apply -f -\n${yaml}\nEOF
-    ...    shell=True
-    ...    stderr=PIPE
-
-    Should Be Equal As Integers    ${result.rc}    0
-    ...    msg=Failed to create user PVC ${pvc_name} in namespace ${namespace}. Error: ${result.stderr}
-
-    Log    User PVC ${pvc_name} created in namespace ${namespace}    INFO
-
-Remove user PVC from namespace
-    [Documentation]    Removes user PVC from the namespace if it exists
-    ...    Used for cleanup or testing workspace behavior without PVC
-    [Arguments]    ${user_id}    ${namespace}
-
-    ${pvc_name}=    Set Variable    pvc-${user_id}
-    Log    Removing user PVC ${pvc_name} from namespace ${namespace}    DEBUG
-
-    ${result}=    Run Process    kubectl    delete    pvc    ${pvc_name}
-    ...    -n    ${namespace}
-    ...    --ignore-not-found=true
-    ...    stderr=PIPE
-
-    Should Be Equal As Integers    ${result.rc}    0
-    ...    msg=Failed to delete user PVC ${pvc_name} from namespace ${namespace}. Error: ${result.stderr}
-
-    Log    User PVC ${pvc_name} removed from namespace ${namespace}    INFO

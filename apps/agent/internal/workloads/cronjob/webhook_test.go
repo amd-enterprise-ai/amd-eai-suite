@@ -12,13 +12,10 @@ import (
 	agent "github.com/silogen/agent/internal/common"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -29,7 +26,6 @@ import (
 const (
 	testNamespace            = "test-ns"
 	testProjectID            = "project-123"
-	testUID                  = "test-uid-12345"
 	testUsername             = "test-user@example.com"
 	jobTemplateLabelsPath    = "/spec/jobTemplate/metadata/labels"
 	jobTemplatePodLabelsPath = "/spec/jobTemplate/spec/template/metadata/labels"
@@ -109,28 +105,18 @@ func createCronJob(labels map[string]string) *batchv1.CronJob {
 
 func createAdmissionRequest(cronJob *batchv1.CronJob, oldCronJob *batchv1.CronJob) admission.Request {
 	raw, _ := json.Marshal(cronJob)
-
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID(testUID),
-			Kind:      metav1.GroupVersionKind{Group: "batch", Version: "v1", Kind: "CronJob"},
-			Namespace: testNamespace,
-			Name:      cronJob.Name,
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo: authenticationv1.UserInfo{
-				Username: testUsername,
-			},
-		},
-	}
-
+	var oldRaw []byte
 	if oldCronJob != nil {
-		oldRaw, _ := json.Marshal(oldCronJob)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldCronJob)
 	}
-
-	return req
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "batch", Version: "v1", Kind: "CronJob"},
+		testNamespace,
+		cronJob.Name,
+		raw,
+		oldRaw,
+		testUsername,
+	)
 }
 
 func TestCronJobWebhook(t *testing.T) {
@@ -294,6 +280,41 @@ func TestCronJobWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, s.expectedPatches)
 		})
 	}
+}
+
+func TestCronJobWebhook_PreservesUnknownSpecFields(t *testing.T) {
+	ns := createNamespace(map[string]string{agent.ProjectIDLabel: testProjectID})
+	wh := setupWebhook(ns)
+	cj := createCronJob(nil)
+
+	raw := testutils.AddUnknownKeyToJSON(t, cj)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "batch", Version: "v1", Kind: "CronJob"},
+		testNamespace, cj.Name, raw, nil, testUsername,
+	)
+	resp := wh.Handle(context.Background(), req)
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    testProjectID,
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      testUsername,
+		}),
+		addJobTemplateLabels(map[string]interface{}{
+			common.KueueNameLabel:   testNamespace,
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		addJobTemplatePodLabels(map[string]interface{}{
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
 }
 
 func TestCronJobWebhook_NamespaceNotFound(t *testing.T) {

@@ -15,9 +15,9 @@ import { dateComparator } from '@amdenterpriseai/utils/app';
 import { TableColumns } from '@amdenterpriseai/types';
 import { CustomComparatorConfig } from '@amdenterpriseai/types';
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { UserTableField } from '@amdenterpriseai/types';
+import { UserTableField } from '@/types/enums/user-table-fields';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import { User, UsersResponse } from '@amdenterpriseai/types';
+import { User, UsersResponse } from '@/types/users';
 
 import { InviteUserButton } from '@/components/features/users/InviteUserButton';
 import { ClientSideDataTable } from '@amdenterpriseai/components';

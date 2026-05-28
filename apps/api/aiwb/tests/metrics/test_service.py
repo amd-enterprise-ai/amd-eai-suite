@@ -9,7 +9,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from app.metrics.constants import GPU_POD_METRIC_LABEL, VLLM_POD_METRIC_LABEL
 from app.metrics.service import (
+    _pod_selector,
     get_e2e_latency_metric,
     get_gpu_device_utilization_metric,
     get_gpu_memory_utilization_metric,
@@ -231,3 +233,86 @@ async def test_scalar_metrics_return_valid_structure(
 
     assert hasattr(tokens_result, "data")
     assert isinstance(tokens_result.data, (int, float))
+
+
+# =============================================================================
+# _pod_selector
+# =============================================================================
+
+
+def test_pod_selector_returns_empty_string_when_no_pod_name() -> None:
+    """Returns empty string so callers can safely append it to any query."""
+    assert _pod_selector(None) == ""
+
+
+def test_pod_selector_returns_label_selector_with_default_label() -> None:
+    """Returns a formatted Prometheus label selector using service_instance_id."""
+    result = _pod_selector("pod-abc123")
+    assert result == f', {VLLM_POD_METRIC_LABEL}="pod-abc123"'
+
+
+def test_pod_selector_with_custom_label() -> None:
+    """Accepts an explicit label name for GPU metrics that use 'pod' instead."""
+    result = _pod_selector("pod-abc123", label=GPU_POD_METRIC_LABEL)
+    assert result == f', {GPU_POD_METRIC_LABEL}="pod-abc123"'
+
+
+# =============================================================================
+# pod_name filter in Prometheus queries
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_vllm_metric_includes_service_instance_id_when_pod_name_set(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    """When pod selector is provided, vLLM metric queries filter by service_instance_id."""
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[{"metric": {}, "value": [end.timestamp(), "10"]}])
+
+    await get_total_tokens_metric(
+        workload_id="wl-123",
+        prometheus_client=mock_prometheus_client,
+        pod=_pod_selector("pod-abc"),
+    )
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert f'{VLLM_POD_METRIC_LABEL}="pod-abc"' in query
+
+
+@pytest.mark.asyncio
+async def test_vllm_metric_omits_pod_filter_when_pod_name_not_set(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    """When no pod selector is given, the query contains no service_instance_id filter."""
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[{"metric": {}, "value": [end.timestamp(), "10"]}])
+
+    await get_total_tokens_metric(workload_id="wl-123", prometheus_client=mock_prometheus_client)
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert VLLM_POD_METRIC_LABEL not in query
+
+
+@pytest.mark.asyncio
+async def test_gpu_metric_includes_pod_label_when_pod_name_set(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    """GPU metrics use the 'pod' label (not service_instance_id) for per-replica filtering."""
+    start, end = time_range
+    mock_prometheus_client.custom_query_range = Mock(
+        return_value=[{"metric": {}, "values": [[start.timestamp(), "50"]]}]
+    )
+
+    await get_gpu_device_utilization_metric(
+        workload_id="wl-123",
+        start=start,
+        end=end,
+        step=60.0,
+        prometheus_client=mock_prometheus_client,
+        pod=_pod_selector("pod-abc", GPU_POD_METRIC_LABEL),
+    )
+
+    query = mock_prometheus_client.custom_query_range.call_args.kwargs["query"]
+    assert f'{GPU_POD_METRIC_LABEL}="pod-abc"' in query
+    assert VLLM_POD_METRIC_LABEL not in query

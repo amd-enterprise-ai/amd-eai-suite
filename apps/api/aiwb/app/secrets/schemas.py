@@ -2,11 +2,17 @@
 #
 # SPDX-License-Identifier: MIT
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import Field, computed_field
+
+from api_common.schemas import BaseModel
+from api_common.secrets import SecretUseCase
 
 from .constants import AIRM_USE_CASE_LABEL, USE_CASE_LABEL
 from .crds import KubernetesSecretResource
-from .enums import SecretUseCase
+
+
+class SecretListQuery(BaseModel):
+    use_case: SecretUseCase | None = Field(default=None, description="Filter by use case")
 
 
 class SecretResponse(KubernetesSecretResource):

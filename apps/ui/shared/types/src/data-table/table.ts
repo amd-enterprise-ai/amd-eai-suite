@@ -4,6 +4,7 @@
 
 import { ReactNode } from 'react';
 
+import { ActionFieldHintType } from '../enums/data-table';
 import { SortDirection } from '../enums/sort-direction';
 
 export type TableColumn<T> = {
@@ -19,6 +20,12 @@ export type TableColumn<T> = {
 
 export type TableColumns<T> = Array<TableColumn<T>>;
 
+export type ActionItemHint<T> = {
+  showHint: (entry: T) => boolean;
+  type: ActionFieldHintType;
+  message: string;
+};
+
 export type ActionItem<T> = {
   key: string;
   className?: string;
@@ -26,5 +33,8 @@ export type ActionItem<T> = {
   startContent?: ReactNode;
   color?: string;
   label: string;
+  description?: string;
+  showDivider?: boolean;
+  hint?: ActionItemHint<T>[];
   isDisabled?: boolean | ((item: T) => boolean);
 };

@@ -13,7 +13,7 @@ Library             String
 
 
 *** Variables ***
-# Override via environment variable: AIWB_UI_URL=https://aiwbui.app-dev.silogen.ai
+# Override via environment variable: AIWB_UI_URL=https://aiwbui.example.com
 ${AIWB_UI_URL}      ${EMPTY}
 
 
@@ -45,14 +45,14 @@ Derive UI URL from kubectl context
     [Documentation]    Derives the AIWB UI URL from the current kubectl context.
     ...                Extracts the cluster domain from the API server URL and constructs
     ...                the UI endpoint using the naming convention: aiwbui.<cluster-domain>.
-    ...                Example: https://k8s.app-dev.silogen.ai:6443 → https://aiwbui.app-dev.silogen.ai
+    ...                Example: https://k8s.example.com:6443 → https://aiwbui.example.com
 
     ${result}=    Run Process    kubectl    config    view    --minify    -o    jsonpath\={.clusters[0].cluster.server}
     IF    ${result.rc} != 0
         Fail    Failed to get cluster server from kubectl config: ${result.stderr}
     END
 
-    # Extract cluster domain: https://k8s.app-dev.silogen.ai:6443 → app-dev.silogen.ai
+    # Extract cluster domain: https://k8s.example.com:6443 → example.com
     VAR    ${server}    ${result.stdout}
     # Get hostname without protocol and port
     ${hostname}=    Evaluate    "${server}".split("//")[1].split(":")[0]

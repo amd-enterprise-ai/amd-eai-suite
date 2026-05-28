@@ -15,7 +15,8 @@ import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 import { generateMockSecrets } from '@/__mocks__/utils/secrets-mock';
 import { generateMockStorages } from '@/__mocks__/utils/storages-mock';
 
-import { StorageScope, StorageType } from '@amdenterpriseai/types';
+import { StorageScope } from '@/types/enums/storages';
+import { StorageType } from '@/types/enums/storages';
 import { SecretUseCase } from '@amdenterpriseai/types';
 
 import { AddS3Storage } from '@/components/features/storages/AddS3Storage';
@@ -30,6 +31,7 @@ const mockToast = {
 };
 vi.mock('@amdenterpriseai/hooks', () => ({
   useSystemToast: () => ({ toast: mockToast }),
+  // biome-ignore lint/style/useNamingConvention: framework convention
   __esModule: true,
 }));
 
@@ -472,15 +474,15 @@ describe('AddS3Storage', () => {
 
     await waitFor(() => {
       expect(createStorage).toHaveBeenCalledWith({
-        project_ids: ['project-001-uuid'],
+        projectIds: ['project-001-uuid'],
         name: 'test-storage-1',
-        secret_id: 'secret-001-uuid',
+        secretId: 'secret-001-uuid',
         scope: StorageScope.ORGANIZATION,
         type: StorageType.S3,
         spec: {
-          bucket_url: 'http://amd.com/bucket',
-          access_key_name: 'test-access-key',
-          secret_key_name: 'test-secret-key',
+          bucketUrl: 'http://amd.com/bucket',
+          accessKeyName: 'test-access-key',
+          secretKeyName: 'test-secret-key',
         },
       });
       expect(onClose).toHaveBeenCalled();

@@ -11,10 +11,10 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from api_common.exceptions import ForbiddenException, NotFoundException
 from app import app  # type: ignore
 from app.clusters.models import Cluster, ClusterNode
 from app.clusters.schemas import (
-    ClusterIn,
     ClusterKubeConfig,
     ClusterNodeResponse,
     ClusterNodes,
@@ -25,7 +25,6 @@ from app.clusters.schemas import (
     ClusterWithUserSecret,
     GPUInfo,
 )
-from app.messaging.schemas import GPUVendor, QuotaStatus, WorkloadStatus
 from app.metrics.schemas import (
     Datapoint,
     DatapointsWithMetadata,
@@ -46,9 +45,10 @@ from app.metrics.schemas import (
 )
 from app.projects.enums import ProjectStatus
 from app.projects.schemas import ProjectResponse, ProjectsWithResourceAllocation, ProjectWithResourceAllocation
+from app.quotas.enums import QuotaStatus
 from app.quotas.schemas import QuotaResponse
-from app.utilities.exceptions import ForbiddenException, NotFoundException
-from app.workloads.enums import WorkloadType
+from app.utilities.enums import GPUVendor
+from app.workloads.enums import WorkloadStatus, WorkloadType
 from app.workloads.schemas import WorkloadStatusCount, WorkloadStatusStats
 from tests.dependency_overrides import (
     ADMIN_FORBIDDEN_OVERRIDES,
@@ -133,7 +133,7 @@ default_timeseries_metrics = MetricsTimeseries(
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        workloads_base_url="https://example.com",
+        workbench_base_url="https://example.com",
         kube_api_url="https://k8s.example.com",
     ),
 )
@@ -142,22 +142,22 @@ async def test_create_cluster_success(_: Any) -> None:
     with TestClient(app) as client:
         response = client.post(
             "/v1/clusters",
-            json={"workloads_base_url": "https://example.com", "kube_api_url": "https://k8s.example.com"},
+            json={"workbenchBaseUrl": "https://example.com", "kubeApiUrl": "https://k8s.example.com"},
         )
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
         "id": "08ccd4e0-3bef-480c-8e08-a21f47f51421",
         "name": "cluster1",
-        "user_secret": "30495734986458367",
-        "last_heartbeat_at": None,
+        "userSecret": "30495734986458367",
+        "lastHeartbeatAt": None,
         "status": "verifying",
-        "created_at": "2025-01-01T12:00:00Z",
-        "updated_at": "2025-01-01T12:00:00Z",
-        "created_by": "test@example.com",
-        "updated_by": "test@example.com",
-        "workloads_base_url": "https://example.com",
-        "kube_api_url": "https://k8s.example.com",
+        "createdAt": "2025-01-01T12:00:00Z",
+        "updatedAt": "2025-01-01T12:00:00Z",
+        "createdBy": "test@example.com",
+        "updatedBy": "test@example.com",
+        "workbenchBaseUrl": "https://example.com",
+        "kubeApiUrl": "https://k8s.example.com",
     }
 
 
@@ -181,11 +181,11 @@ async def test_create_cluster_user_not_in_role() -> None:
 
 @pytest.mark.asyncio
 @patch("app.clusters.router.create_cluster_and_queues", side_effect=Exception())
-@patch("app.utilities.database.session_maker", return_value=AsyncMock())
+@patch("api_common.database.session_maker", return_value=AsyncMock())
 @override_dependencies(ADMIN_WITH_USER_TRACKING_OVERRIDES)
 async def test_create_cluster_exception(session_maker_mock: MagicMock, __: Any) -> None:
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.post("/v1/clusters", json={"workloads_base_url": "https://example.com"})
+        response = client.post("/v1/clusters", json={"workbenchBaseUrl": "https://example.com"})
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     session_maker_mock().rollback.assert_called_once()
 
@@ -213,15 +213,15 @@ async def test_create_cluster_no_base_url(_: Any) -> None:
     assert response.json() == {
         "id": "08ccd4e0-3bef-480c-8e08-a21f47f51421",
         "name": "cluster1",
-        "user_secret": "30495734986458367",
-        "last_heartbeat_at": None,
+        "userSecret": "30495734986458367",
+        "lastHeartbeatAt": None,
         "status": "verifying",
-        "created_at": "2025-01-01T12:00:00Z",
-        "updated_at": "2025-01-01T12:00:00Z",
-        "created_by": "test@example.com",
-        "updated_by": "test@example.com",
-        "workloads_base_url": None,
-        "kube_api_url": None,
+        "createdAt": "2025-01-01T12:00:00Z",
+        "updatedAt": "2025-01-01T12:00:00Z",
+        "createdBy": "test@example.com",
+        "updatedBy": "test@example.com",
+        "workbenchBaseUrl": None,
+        "kubeApiUrl": None,
     }
 
 
@@ -258,7 +258,7 @@ async def test_create_cluster_no_base_url(_: Any) -> None:
                 updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                 created_by="test@example.com",
                 updated_by="test@example.com",
-                workloads_base_url="https://example.com",
+                workbench_base_url="https://example.com",
                 kube_api_url="https://k8s.example.com",
             ),
             ClusterWithResources(
@@ -283,7 +283,7 @@ async def test_create_cluster_no_base_url(_: Any) -> None:
                 updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                 created_by="test@example.com",
                 updated_by="test@example.com",
-                workloads_base_url="https://example.com",
+                workbench_base_url="https://example.com",
                 kube_api_url="https://k8s.example.com",
             ),
         ]
@@ -301,33 +301,33 @@ async def test_get_clusters_platform_admin_success(_: Any, __: Any, ___: Any, mo
     assert response.json() == {
         "data": [
             {
-                "allocated_resources": {
-                    "cpu_milli_cores": 2000,
-                    "ephemeral_storage_bytes": 85899345920,
-                    "gpu_count": 6,
-                    "memory_bytes": 214748364800,
+                "allocatedResources": {
+                    "cpuMilliCores": 2000,
+                    "ephemeralStorageBytes": 85899345920,
+                    "gpuCount": 6,
+                    "memoryBytes": 214748364800,
                 },
-                "assigned_quota_count": 2,
-                "available_node_count": 2,
-                "available_resources": {
-                    "cpu_milli_cores": 4000,
-                    "ephemeral_storage_bytes": 107374182400,
-                    "gpu_count": 8,
-                    "memory_bytes": 429496729600,
+                "assignedQuotaCount": 2,
+                "availableNodeCount": 2,
+                "availableResources": {
+                    "cpuMilliCores": 4000,
+                    "ephemeralStorageBytes": 107374182400,
+                    "gpuCount": 8,
+                    "memoryBytes": 429496729600,
                 },
-                "gpu_info": {
-                    "memory_bytes_per_device": 68719476736,
+                "gpuInfo": {
+                    "memoryBytesPerDevice": 68719476736,
                     "name": "Instinct MI250X",
                     "type": "740c",
                     "vendor": "AMD",
                 },
                 "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
-                "last_heartbeat_at": "2025-03-10T12:00:00Z",
+                "lastHeartbeatAt": "2025-03-10T12:00:00Z",
                 "name": "cluster1",
                 "status": "healthy",
-                "total_node_count": 4,
-                "created_at": "2025-01-01T12:00:00Z",
-                "priority_classes": [
+                "totalNodeCount": 4,
+                "createdAt": "2025-01-01T12:00:00Z",
+                "priorityClasses": [
                     {
                         "name": "low",
                         "priority": -100,
@@ -341,38 +341,38 @@ async def test_get_clusters_platform_admin_success(_: Any, __: Any, ___: Any, mo
                         "priority": 100,
                     },
                 ],
-                "gpu_allocation_percentage": 75.0,
-                "cpu_allocation_percentage": 50.0,
-                "memory_allocation_percentage": 50.0,
-                "updated_at": "2025-01-01T12:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
-                "workloads_base_url": "https://example.com",
-                "kube_api_url": "https://k8s.example.com",
+                "gpuAllocationPercentage": 75.0,
+                "cpuAllocationPercentage": 50.0,
+                "memoryAllocationPercentage": 50.0,
+                "updatedAt": "2025-01-01T12:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
+                "workbenchBaseUrl": "https://example.com",
+                "kubeApiUrl": "https://k8s.example.com",
             },
             {
-                "allocated_resources": {
-                    "cpu_milli_cores": 2000,
-                    "ephemeral_storage_bytes": 85899345920,
-                    "gpu_count": 0,
-                    "memory_bytes": 214748364800,
+                "allocatedResources": {
+                    "cpuMilliCores": 2000,
+                    "ephemeralStorageBytes": 85899345920,
+                    "gpuCount": 0,
+                    "memoryBytes": 214748364800,
                 },
-                "assigned_quota_count": 1,
-                "available_node_count": 2,
-                "available_resources": {
-                    "cpu_milli_cores": 4000,
-                    "ephemeral_storage_bytes": 107374182400,
-                    "gpu_count": 0,
-                    "memory_bytes": 429496729600,
+                "assignedQuotaCount": 1,
+                "availableNodeCount": 2,
+                "availableResources": {
+                    "cpuMilliCores": 4000,
+                    "ephemeralStorageBytes": 107374182400,
+                    "gpuCount": 0,
+                    "memoryBytes": 429496729600,
                 },
-                "gpu_info": None,
+                "gpuInfo": None,
                 "id": "0aa18e92-002c-45b7-a06e-dcdb0277974d",
-                "last_heartbeat_at": None,
+                "lastHeartbeatAt": None,
                 "name": "cluster2",
                 "status": "verifying",
-                "total_node_count": 4,
-                "created_at": "2025-01-01T12:00:00Z",
-                "priority_classes": [
+                "totalNodeCount": 4,
+                "createdAt": "2025-01-01T12:00:00Z",
+                "priorityClasses": [
                     {
                         "name": "low",
                         "priority": -100,
@@ -386,14 +386,14 @@ async def test_get_clusters_platform_admin_success(_: Any, __: Any, ___: Any, mo
                         "priority": 100,
                     },
                 ],
-                "gpu_allocation_percentage": 0.0,
-                "cpu_allocation_percentage": 50.0,
-                "memory_allocation_percentage": 50.0,
-                "updated_at": "2025-01-01T12:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
-                "workloads_base_url": "https://example.com",
-                "kube_api_url": "https://k8s.example.com",
+                "gpuAllocationPercentage": 0.0,
+                "cpuAllocationPercentage": 50.0,
+                "memoryAllocationPercentage": 50.0,
+                "updatedAt": "2025-01-01T12:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
+                "workbenchBaseUrl": "https://example.com",
+                "kubeApiUrl": "https://k8s.example.com",
             },
         ]
     }
@@ -432,7 +432,7 @@ async def test_get_clusters_platform_admin_success(_: Any, __: Any, ___: Any, mo
                 updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                 created_by="test@example.com",
                 updated_by="test@example.com",
-                workloads_base_url="https://example.com",
+                workbench_base_url="https://example.com",
                 kube_api_url="https://k8s.example.com",
             ),
         ]
@@ -447,8 +447,8 @@ async def test_get_clusters_non_admin_success(_: Any, __: Any, ___: Any) -> None
     data = response.json()
     assert len(data["data"]) == 1
     assert data["data"][0]["name"] == "accessible_cluster"
-    assert data["data"][0]["available_resources"]["gpu_count"] == 8
-    assert data["data"][0]["allocated_resources"]["gpu_count"] == 4
+    assert data["data"][0]["availableResources"]["gpuCount"] == 8
+    assert data["data"][0]["allocatedResources"]["gpuCount"] == 4
 
 
 @pytest.mark.asyncio
@@ -461,7 +461,7 @@ async def test_get_clusters_non_admin_success(_: Any, __: Any, ___: Any) -> None
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        workloads_base_url="https://example.com",
+        workbench_base_url="https://example.com",
         kube_api_url="https://k8s.example.com",
     ),
 )
@@ -489,7 +489,7 @@ async def test_get_clusters_non_admin_success(_: Any, __: Any, ___: Any) -> None
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        workloads_base_url="https://example.com",
+        workbench_base_url="https://example.com",
         kube_api_url="https://k8s.example.com",
     ),
 )
@@ -500,33 +500,33 @@ async def test_get_cluster_success(_: Any, __: Any, ___: Any) -> None:
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
-        "allocated_resources": {
-            "cpu_milli_cores": 2000,
-            "ephemeral_storage_bytes": 85899345920,
-            "gpu_count": 6,
-            "memory_bytes": 214748364800,
+        "allocatedResources": {
+            "cpuMilliCores": 2000,
+            "ephemeralStorageBytes": 85899345920,
+            "gpuCount": 6,
+            "memoryBytes": 214748364800,
         },
-        "assigned_quota_count": 1,
-        "available_node_count": 2,
-        "available_resources": {
-            "cpu_milli_cores": 4000,
-            "ephemeral_storage_bytes": 107374182400,
-            "gpu_count": 8,
-            "memory_bytes": 429496729600,
+        "assignedQuotaCount": 1,
+        "availableNodeCount": 2,
+        "availableResources": {
+            "cpuMilliCores": 4000,
+            "ephemeralStorageBytes": 107374182400,
+            "gpuCount": 8,
+            "memoryBytes": 429496729600,
         },
-        "gpu_info": {
-            "memory_bytes_per_device": 68719476736,
+        "gpuInfo": {
+            "memoryBytesPerDevice": 68719476736,
             "name": "Instinct MI250X",
             "type": "740c",
             "vendor": "AMD",
         },
         "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
-        "last_heartbeat_at": "2025-03-10T12:00:00Z",
+        "lastHeartbeatAt": "2025-03-10T12:00:00Z",
         "name": "cluster1",
         "status": "unhealthy",
-        "total_node_count": 4,
-        "created_at": "2025-01-01T12:00:00Z",
-        "priority_classes": [
+        "totalNodeCount": 4,
+        "createdAt": "2025-01-01T12:00:00Z",
+        "priorityClasses": [
             {
                 "name": "low",
                 "priority": -100,
@@ -540,14 +540,14 @@ async def test_get_cluster_success(_: Any, __: Any, ___: Any) -> None:
                 "priority": 100,
             },
         ],
-        "gpu_allocation_percentage": 75.0,
-        "cpu_allocation_percentage": 50.0,
-        "memory_allocation_percentage": 50.0,
-        "updated_at": "2025-01-01T12:00:00Z",
-        "created_by": "test@example.com",
-        "updated_by": "test@example.com",
-        "workloads_base_url": "https://example.com",
-        "kube_api_url": "https://k8s.example.com",
+        "gpuAllocationPercentage": 75.0,
+        "cpuAllocationPercentage": 50.0,
+        "memoryAllocationPercentage": 50.0,
+        "updatedAt": "2025-01-01T12:00:00Z",
+        "createdBy": "test@example.com",
+        "updatedBy": "test@example.com",
+        "workbenchBaseUrl": "https://example.com",
+        "kubeApiUrl": "https://k8s.example.com",
     }
 
 
@@ -576,7 +576,7 @@ async def test_get_cluster_success(_: Any, __: Any, ___: Any) -> None:
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        workloads_base_url="https://example.com",
+        workbench_base_url="https://example.com",
         kube_api_url="https://k8s.example.com",
     ),
 )
@@ -588,45 +588,45 @@ async def test_get_cluster_team_member_success(_: Any, __: Any, ___: Any, ____: 
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
-        "allocated_resources": {
-            "cpu_milli_cores": 2000,
-            "ephemeral_storage_bytes": 85899345920,
-            "gpu_count": 6,
-            "memory_bytes": 214748364800,
+        "allocatedResources": {
+            "cpuMilliCores": 2000,
+            "ephemeralStorageBytes": 85899345920,
+            "gpuCount": 6,
+            "memoryBytes": 214748364800,
         },
-        "assigned_quota_count": 2,
-        "available_node_count": 2,
-        "available_resources": {
-            "cpu_milli_cores": 4000,
-            "ephemeral_storage_bytes": 107374182400,
-            "gpu_count": 8,
-            "memory_bytes": 429496729600,
+        "assignedQuotaCount": 2,
+        "availableNodeCount": 2,
+        "availableResources": {
+            "cpuMilliCores": 4000,
+            "ephemeralStorageBytes": 107374182400,
+            "gpuCount": 8,
+            "memoryBytes": 429496729600,
         },
-        "workloads_base_url": "https://example.com",
-        "kube_api_url": "https://k8s.example.com",
-        "created_at": "2025-01-01T12:00:00Z",
-        "created_by": "test@example.com",
-        "gpu_info": {
-            "memory_bytes_per_device": 68719476736,
+        "workbenchBaseUrl": "https://example.com",
+        "kubeApiUrl": "https://k8s.example.com",
+        "createdAt": "2025-01-01T12:00:00Z",
+        "createdBy": "test@example.com",
+        "gpuInfo": {
+            "memoryBytesPerDevice": 68719476736,
             "name": "Instinct MI250X",
             "type": "740c",
             "vendor": "AMD",
         },
         "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
-        "last_heartbeat_at": "2025-03-10T12:00:00Z",
+        "lastHeartbeatAt": "2025-03-10T12:00:00Z",
         "name": "cluster1",
-        "priority_classes": [
+        "priorityClasses": [
             {"name": "low", "priority": -100},
             {"name": "medium", "priority": 0},
             {"name": "high", "priority": 100},
         ],
-        "gpu_allocation_percentage": 75.0,
-        "cpu_allocation_percentage": 50.0,
-        "memory_allocation_percentage": 50.0,
+        "gpuAllocationPercentage": 75.0,
+        "cpuAllocationPercentage": 50.0,
+        "memoryAllocationPercentage": 50.0,
         "status": "unhealthy",
-        "total_node_count": 4,
-        "updated_at": "2025-01-01T12:00:00Z",
-        "updated_by": "test@example.com",
+        "totalNodeCount": 4,
+        "updatedAt": "2025-01-01T12:00:00Z",
+        "updatedBy": "test@example.com",
     }
 
 
@@ -651,7 +651,7 @@ async def test_get_cluster_team_member_no_access(_: Any, __: Any) -> None:
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        workloads_base_url="https://example.com",
+        workbench_base_url="https://example.com",
     ),
 )
 @patch("app.clusters.router.delete_cluster_from_db", return_value=None)
@@ -693,13 +693,13 @@ async def test_update_cluster_success(
     original_cluster = Cluster(
         id=cluster_id,
         name="original-cluster",
-        workloads_base_url="https://original.example.com",
+        workbench_base_url="https://original.example.com",
         kube_api_url="https://k8s.example.com",
     )
     updated_cluster = Cluster(
         id=cluster_id,
         name="original-cluster",  # name should not change
-        workloads_base_url="https://updated.example.com",
+        workbench_base_url="https://updated.example.com",
         kube_api_url="https://k8s.updated.example.com",
         updated_by="test-updater@example.com",
     )
@@ -709,7 +709,7 @@ async def test_update_cluster_success(
     mock_get_cluster_with_resources.return_value = ClusterWithResources(
         id=cluster_id,
         name="original-cluster",
-        workloads_base_url="https://updated.example.com",
+        workbench_base_url="https://updated.example.com",
         kube_api_url="https://k8s.updated.example.com",
         created_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         updated_at=datetime(2025, 1, 1, 12, 30, 0, tzinfo=UTC),
@@ -724,18 +724,18 @@ async def test_update_cluster_success(
     )
 
     # Make request
-    cluster_update = ClusterIn(
-        workloads_base_url="https://updated.example.com", kube_api_url="https://k8s.updated.example.com"
-    )
     with TestClient(app) as client:
-        response = client.put(f"/v1/clusters/{cluster_id}", json=cluster_update.model_dump())
+        response = client.put(
+            f"/v1/clusters/{cluster_id}",
+            json={"workbenchBaseUrl": "https://updated.example.com", "kubeApiUrl": "https://k8s.updated.example.com"},
+        )
 
     # Assertions
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["name"] == "original-cluster"  # name should not change
-    assert response.json()["workloads_base_url"] == "https://updated.example.com"
-    assert response.json()["kube_api_url"] == "https://k8s.updated.example.com"
-    assert response.json()["updated_by"] == "test-updater@example.com"
+    assert response.json()["workbenchBaseUrl"] == "https://updated.example.com"
+    assert response.json()["kubeApiUrl"] == "https://k8s.updated.example.com"
+    assert response.json()["updatedBy"] == "test-updater@example.com"
 
     mock_get_cluster_by_id.assert_called_once()
     mock_update_cluster_service.assert_called_once()
@@ -750,9 +750,11 @@ async def test_update_cluster_not_found(mock_get_cluster_by_id: MagicMock) -> No
     cluster_id = "0aa18e92-002c-45b7-a06e-dcdb0277974c"
 
     # Make request
-    cluster_update = ClusterIn(workloads_base_url="https://updated.example.com")
     with TestClient(app) as client:
-        response = client.put(f"/v1/clusters/{cluster_id}", json=cluster_update.model_dump())
+        response = client.put(
+            f"/v1/clusters/{cluster_id}",
+            json={"workbenchBaseUrl": "https://updated.example.com"},
+        )
 
     # Assertions
     assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -837,58 +839,58 @@ async def test_get_cluster_nodes_success(_: Any, __: Any) -> None:
     assert response.json() == {
         "data": [
             {
-                "cpu_milli_cores": 4000,
-                "ephemeral_storage_bytes": 107374182400,
-                "gpu_count": 8,
-                "gpu_info": {
-                    "memory_bytes_per_device": 68719476736,
+                "cpuMilliCores": 4000,
+                "ephemeralStorageBytes": 107374182400,
+                "gpuCount": 8,
+                "gpuInfo": {
+                    "memoryBytesPerDevice": 68719476736,
                     "name": "Instinct MI250X",
                     "type": "740c",
                     "vendor": "AMD",
                 },
                 "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
-                "memory_bytes": 429496729600,
+                "memoryBytes": 429496729600,
                 "name": "MI250 Node",
                 "status": "ready",
-                "updated_at": "2025-01-01T00:00:00Z",
+                "updatedAt": "2025-01-01T00:00:00Z",
             },
             {
-                "cpu_milli_cores": 4000,
-                "ephemeral_storage_bytes": 214748364800,
-                "gpu_count": 8,
-                "gpu_info": {
-                    "memory_bytes_per_device": 137438953472,
+                "cpuMilliCores": 4000,
+                "ephemeralStorageBytes": 214748364800,
+                "gpuCount": 8,
+                "gpuInfo": {
+                    "memoryBytesPerDevice": 137438953472,
                     "name": "Instinct MI300A",
                     "type": "74a0",
                     "vendor": "AMD",
                 },
                 "id": "01a18e92-002c-45b7-a06e-dcdb0277974c",
-                "memory_bytes": 85899345920,
+                "memoryBytes": 85899345920,
                 "name": "MI300 Node",
                 "status": "ready",
-                "updated_at": "2025-02-01T00:00:00Z",
+                "updatedAt": "2025-02-01T00:00:00Z",
             },
             {
-                "cpu_milli_cores": 16000,
-                "ephemeral_storage_bytes": 429496729600,
-                "gpu_count": 0,
-                "gpu_info": None,
+                "cpuMilliCores": 16000,
+                "ephemeralStorageBytes": 429496729600,
+                "gpuCount": 0,
+                "gpuInfo": None,
                 "id": "02a18e92-002c-45b7-a06e-dcdb0277974c",
-                "memory_bytes": 214748364800,
+                "memoryBytes": 214748364800,
                 "name": "CPU Healthy Node",
                 "status": "ready",
-                "updated_at": "2025-03-01T00:00:00Z",
+                "updatedAt": "2025-03-01T00:00:00Z",
             },
             {
-                "cpu_milli_cores": 16000,
-                "ephemeral_storage_bytes": 107374182400,
-                "gpu_count": 0,
-                "gpu_info": None,
+                "cpuMilliCores": 16000,
+                "ephemeralStorageBytes": 107374182400,
+                "gpuCount": 0,
+                "gpuInfo": None,
                 "id": "03a18e92-002c-45b7-a06e-dcdb0277974c",
-                "memory_bytes": 429496729600,
+                "memoryBytes": 429496729600,
                 "name": "CPU Unhealthy Node",
                 "status": "unreachable",
-                "updated_at": "2025-01-01T00:00:00Z",
+                "updatedAt": "2025-01-01T00:00:00Z",
             },
         ]
     }
@@ -982,7 +984,7 @@ async def test_get_cluster_node_success(_: Any, __: Any) -> None:
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["id"] == "0aa18e92-002c-45b7-a06e-dcdb0277974c"
     assert response.json()["name"] == "MI250 Node"
-    assert response.json()["gpu_info"]["vendor"] == "AMD"
+    assert response.json()["gpuInfo"]["vendor"] == "AMD"
 
 
 @pytest.mark.asyncio
@@ -1065,13 +1067,13 @@ async def test_get_clusters_stats_success(_: MagicMock, __: MagicMock) -> None:
         response = client.get("/v1/clusters/stats")
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
-        "allocated_gpu_count": 60,
-        "available_gpu_count": 80,
-        "available_node_count": 29,
-        "total_cluster_count": 3,
-        "total_gpu_count": 100,
-        "total_gpu_node_count": 20,
-        "total_node_count": 30,
+        "allocatedGpuCount": 60,
+        "availableGpuCount": 80,
+        "availableNodeCount": 29,
+        "totalClusterCount": 3,
+        "totalGpuCount": 100,
+        "totalGpuNodeCount": 20,
+        "totalNodeCount": 30,
     }
 
 
@@ -1097,13 +1099,13 @@ async def test_get_clusters_stats_non_admin_success(_: Any, __: Any, ___: Any) -
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
-        "allocated_gpu_count": 20,
-        "available_gpu_count": 32,
-        "available_node_count": 8,
-        "total_cluster_count": 1,
-        "total_gpu_count": 40,
-        "total_gpu_node_count": 5,
-        "total_node_count": 10,
+        "allocatedGpuCount": 20,
+        "availableGpuCount": 32,
+        "availableNodeCount": 8,
+        "totalClusterCount": 1,
+        "totalGpuCount": 40,
+        "totalGpuNodeCount": 5,
+        "totalNodeCount": 10,
     }
 
 
@@ -1131,7 +1133,7 @@ async def test_get_clusters_stats_non_admin_success(_: Any, __: Any, ___: Any) -
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    workloads_base_url="https://example.com",
+                    workbench_base_url="https://example.com",
                     kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
@@ -1181,7 +1183,7 @@ async def test_get_clusters_stats_non_admin_success(_: Any, __: Any, ___: Any) -
                     updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                     created_by="test@example.com",
                     updated_by="test@example.com",
-                    workloads_base_url="https://example.com",
+                    workbench_base_url="https://example.com",
                     kube_api_url="https://k8s.example.com:6443",
                     available_resources=ClusterResources(
                         cpu_milli_cores=8000,
@@ -1225,7 +1227,7 @@ async def test_get_clusters_stats_non_admin_success(_: Any, __: Any, ___: Any) -
         updated_at=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         created_by="test@example.com",
         updated_by="test@example.com",
-        workloads_base_url="https://example.com",
+        workbench_base_url="https://example.com",
     ),
 )
 @override_dependencies(USER_CLUSTER_SESSION_OVERRIDES)
@@ -1240,135 +1242,137 @@ async def test_get_cluster_projects_success(_: Any, __: Any) -> None:
                 "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
                 "name": "project1",
                 "description": "Description 1",
-                "cluster_id": "0aa18e92-102c-45b7-a06e-dcdb0277974c",
+                "clusterId": "0aa18e92-102c-45b7-a06e-dcdb0277974c",
                 "status": "Pending",
-                "status_reason": "Creating",
-                "created_at": "2025-01-01T12:00:00Z",
-                "updated_at": "2025-01-01T12:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
+                "statusReason": "Creating",
+                "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
+                "createdAt": "2025-01-01T12:00:00Z",
+                "updatedAt": "2025-01-01T12:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
                 "cluster": {
                     "id": "e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
-                    "created_at": "2025-01-01T12:00:00Z",
-                    "updated_at": "2025-01-01T12:00:00Z",
-                    "created_by": "test@example.com",
-                    "updated_by": "test@example.com",
-                    "workloads_base_url": "https://example.com",
-                    "kube_api_url": "https://k8s.example.com:6443",
+                    "createdAt": "2025-01-01T12:00:00Z",
+                    "updatedAt": "2025-01-01T12:00:00Z",
+                    "createdBy": "test@example.com",
+                    "updatedBy": "test@example.com",
+                    "workbenchBaseUrl": "https://example.com",
+                    "kubeApiUrl": "https://k8s.example.com:6443",
                     "name": "cluster1",
-                    "last_heartbeat_at": "2025-03-10T12:00:00Z",
-                    "available_resources": {
-                        "cpu_milli_cores": 8000,
-                        "memory_bytes": 17179869184,
-                        "ephemeral_storage_bytes": 107374182400,
-                        "gpu_count": 2,
+                    "lastHeartbeatAt": "2025-03-10T12:00:00Z",
+                    "availableResources": {
+                        "cpuMilliCores": 8000,
+                        "memoryBytes": 17179869184,
+                        "ephemeralStorageBytes": 107374182400,
+                        "gpuCount": 2,
                     },
-                    "allocated_resources": {
-                        "cpu_milli_cores": 1000,
-                        "memory_bytes": 1073741824,
-                        "ephemeral_storage_bytes": 5368709120,
-                        "gpu_count": 0,
+                    "allocatedResources": {
+                        "cpuMilliCores": 1000,
+                        "memoryBytes": 1073741824,
+                        "ephemeralStorageBytes": 5368709120,
+                        "gpuCount": 0,
                     },
-                    "total_node_count": 3,
-                    "available_node_count": 2,
-                    "assigned_quota_count": 1,
-                    "gpu_info": None,
+                    "totalNodeCount": 3,
+                    "availableNodeCount": 2,
+                    "assignedQuotaCount": 1,
+                    "gpuInfo": None,
                     "status": "unhealthy",
-                    "priority_classes": [
+                    "priorityClasses": [
                         {"name": "low", "priority": -100},
                         {"name": "medium", "priority": 0},
                         {"name": "high", "priority": 100},
                     ],
-                    "gpu_allocation_percentage": 0.0,
-                    "cpu_allocation_percentage": 12.5,
-                    "memory_allocation_percentage": 6.25,
+                    "gpuAllocationPercentage": 0.0,
+                    "cpuAllocationPercentage": 12.5,
+                    "memoryAllocationPercentage": 6.25,
                 },
                 "quota": {
-                    "cpu_milli_cores": 1000,
-                    "ephemeral_storage_bytes": 5368709120,
-                    "gpu_count": 0,
+                    "cpuMilliCores": 1000,
+                    "ephemeralStorageBytes": 5368709120,
+                    "gpuCount": 0,
                     "id": "0aa18e92-202c-45b7-a06e-dcdb0277974c",
-                    "memory_bytes": 1073741824,
+                    "memoryBytes": 1073741824,
                     "status": "Pending",
-                    "status_reason": None,
-                    "created_at": "2025-01-01T12:00:00Z",
-                    "updated_at": "2025-01-01T12:00:00Z",
-                    "created_by": "test_user",
-                    "updated_by": "test_user",
+                    "statusReason": None,
+                    "createdAt": "2025-01-01T12:00:00Z",
+                    "updatedAt": "2025-01-01T12:00:00Z",
+                    "createdBy": "test_user",
+                    "updatedBy": "test_user",
                 },
-                "gpu_allocation_percentage": 0.0,
-                "gpu_allocation_exceeded": False,
-                "cpu_allocation_percentage": 12.5,
-                "cpu_allocation_exceeded": False,
-                "memory_allocation_percentage": 6.25,
-                "memory_allocation_exceeded": False,
+                "gpuAllocationPercentage": 0.0,
+                "gpuAllocationExceeded": False,
+                "cpuAllocationPercentage": 12.5,
+                "cpuAllocationExceeded": False,
+                "memoryAllocationPercentage": 6.25,
+                "memoryAllocationExceeded": False,
             },
             {
                 "id": "65b44238-556d-4e59-82ea-ddfafc5491f3",
                 "name": "project2",
                 "description": "Description 2",
-                "cluster_id": "0aa18e92-302c-45b7-a06e-dcdb0277974c",
+                "clusterId": "0aa18e92-302c-45b7-a06e-dcdb0277974c",
                 "status": "Pending",
-                "status_reason": "Creating",
-                "created_at": "2025-01-01T12:00:00Z",
-                "updated_at": "2025-01-01T12:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
+                "statusReason": "Creating",
+                "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
+                "createdAt": "2025-01-01T12:00:00Z",
+                "updatedAt": "2025-01-01T12:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
                 "cluster": {
                     "id": "e60079a8-a2a2-4fe4-b5d6-480d03c2a666",
-                    "created_at": "2025-01-01T12:00:00Z",
-                    "updated_at": "2025-01-01T12:00:00Z",
-                    "created_by": "test@example.com",
-                    "updated_by": "test@example.com",
-                    "workloads_base_url": "https://example.com",
-                    "kube_api_url": "https://k8s.example.com:6443",
+                    "createdAt": "2025-01-01T12:00:00Z",
+                    "updatedAt": "2025-01-01T12:00:00Z",
+                    "createdBy": "test@example.com",
+                    "updatedBy": "test@example.com",
+                    "workbenchBaseUrl": "https://example.com",
+                    "kubeApiUrl": "https://k8s.example.com:6443",
                     "name": "cluster1",
-                    "last_heartbeat_at": "2025-03-10T12:00:00Z",
-                    "available_resources": {
-                        "cpu_milli_cores": 8000,
-                        "memory_bytes": 17179869184,
-                        "ephemeral_storage_bytes": 107374182400,
-                        "gpu_count": 2,
+                    "lastHeartbeatAt": "2025-03-10T12:00:00Z",
+                    "availableResources": {
+                        "cpuMilliCores": 8000,
+                        "memoryBytes": 17179869184,
+                        "ephemeralStorageBytes": 107374182400,
+                        "gpuCount": 2,
                     },
-                    "allocated_resources": {
-                        "cpu_milli_cores": 1000,
-                        "memory_bytes": 1073741824,
-                        "ephemeral_storage_bytes": 5368709120,
-                        "gpu_count": 0,
+                    "allocatedResources": {
+                        "cpuMilliCores": 1000,
+                        "memoryBytes": 1073741824,
+                        "ephemeralStorageBytes": 5368709120,
+                        "gpuCount": 0,
                     },
-                    "total_node_count": 3,
-                    "available_node_count": 2,
-                    "assigned_quota_count": 1,
-                    "gpu_info": None,
+                    "totalNodeCount": 3,
+                    "availableNodeCount": 2,
+                    "assignedQuotaCount": 1,
+                    "gpuInfo": None,
                     "status": "unhealthy",
-                    "priority_classes": [
+                    "priorityClasses": [
                         {"name": "low", "priority": -100},
                         {"name": "medium", "priority": 0},
                         {"name": "high", "priority": 100},
                     ],
-                    "gpu_allocation_percentage": 0.0,
-                    "cpu_allocation_percentage": 12.5,
-                    "memory_allocation_percentage": 6.25,
+                    "gpuAllocationPercentage": 0.0,
+                    "cpuAllocationPercentage": 12.5,
+                    "memoryAllocationPercentage": 6.25,
                 },
                 "quota": {
-                    "cpu_milli_cores": 2000,
-                    "ephemeral_storage_bytes": 10737418240,
-                    "gpu_count": 1,
+                    "cpuMilliCores": 2000,
+                    "ephemeralStorageBytes": 10737418240,
+                    "gpuCount": 1,
                     "id": "0aa18e92-402c-45b7-a06e-dcdb0277974c",
-                    "memory_bytes": 2147483648,
+                    "memoryBytes": 2147483648,
                     "status": "Pending",
-                    "status_reason": None,
-                    "created_at": "2025-01-01T12:00:00Z",
-                    "updated_at": "2025-01-01T12:00:00Z",
-                    "created_by": "test@example.com",
-                    "updated_by": "test@example.com",
+                    "statusReason": None,
+                    "createdAt": "2025-01-01T12:00:00Z",
+                    "updatedAt": "2025-01-01T12:00:00Z",
+                    "createdBy": "test@example.com",
+                    "updatedBy": "test@example.com",
                 },
-                "gpu_allocation_percentage": 50.0,
-                "gpu_allocation_exceeded": False,
-                "cpu_allocation_percentage": 25.0,
-                "cpu_allocation_exceeded": False,
-                "memory_allocation_percentage": 12.5,
-                "memory_allocation_exceeded": False,
+                "gpuAllocationPercentage": 50.0,
+                "gpuAllocationExceeded": False,
+                "cpuAllocationPercentage": 25.0,
+                "cpuAllocationExceeded": False,
+                "memoryAllocationPercentage": 12.5,
+                "memoryAllocationExceeded": False,
             },
         ]
     }
@@ -1429,7 +1433,7 @@ async def test_get_cluster_workload_stats_success(_: Any, __: Any) -> None:
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["name"] == "test-cluster"
-    assert data["total_workloads"] == 15
+    assert data["totalWorkloads"] == 15
     assert len(data["statusCounts"]) == 5
     status_counts = {sc["status"] for sc in data["statusCounts"]}
     assert "Running" in status_counts
@@ -1485,13 +1489,14 @@ async def test_get_gpu_device_utilization_timeseries_for_cluster_success(mock_dt
                         "description": "project 1",
                         "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
                         "name": "project1",
-                        "cluster_id": "0aa22e92-002c-41b7-a06e-dcdb0244974c",
+                        "clusterId": "0aa22e92-002c-41b7-a06e-dcdb0244974c",
                         "status": "Pending",
-                        "status_reason": "Creating",
-                        "created_at": "2025-03-10T10:00:00Z",
-                        "updated_at": "2025-03-10T10:00:00Z",
-                        "created_by": "test@example.com",
-                        "updated_by": "test@example.com",
+                        "statusReason": "Creating",
+                        "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
+                        "createdAt": "2025-03-10T10:00:00Z",
+                        "updatedAt": "2025-03-10T10:00:00Z",
+                        "createdBy": "test@example.com",
+                        "updatedBy": "test@example.com",
                     },
                 },
                 "values": [
@@ -1506,13 +1511,14 @@ async def test_get_gpu_device_utilization_timeseries_for_cluster_success(mock_dt
                         "description": "project 2",
                         "id": "19465a28-1649-4f55-887f-536dd36a47f8",
                         "name": "project2",
-                        "cluster_id": "1ab22e52-102c-31b7-a06e-dcdb0244974c",
+                        "clusterId": "1ab22e52-102c-31b7-a06e-dcdb0244974c",
                         "status": "Pending",
-                        "status_reason": "Creating",
-                        "created_at": "2025-03-10T10:00:00Z",
-                        "updated_at": "2025-03-10T10:00:00Z",
-                        "created_by": "test@example.com",
-                        "updated_by": "test@example.com",
+                        "statusReason": "Creating",
+                        "gpuPreemption": {"enabled": False, "threshold": None, "gracePeriod": None, "policy": None},
+                        "createdAt": "2025-03-10T10:00:00Z",
+                        "updatedAt": "2025-03-10T10:00:00Z",
+                        "createdBy": "test@example.com",
+                        "updatedBy": "test@example.com",
                     },
                 },
                 "values": [
@@ -1523,7 +1529,7 @@ async def test_get_gpu_device_utilization_timeseries_for_cluster_success(mock_dt
         ],
         "range": {
             "end": "2025-03-11T12:00:00Z",
-            "interval_seconds": 60,
+            "intervalSeconds": 60,
             "start": "2025-03-10T12:00:00Z",
             "timestamps": ["2025-03-10T12:00:00Z", "2025-03-10T12:01:00Z"],
         },
@@ -1581,7 +1587,7 @@ async def test_get_node_pcie_bandwidth_success(mock_dt: MagicMock, _: Any, mock_
                 gpu_id="0",
                 hostname="node-1",
                 metric=DeviceMetricTimeseries(
-                    series_label="pcie_bandwidth",
+                    series_label="pcieBandwidth",
                     values=[
                         Datapoint(timestamp=recent_pcie_test_start, value=100.0),
                         Datapoint(timestamp=recent_pcie_test_second_point, value=150.0),
@@ -1601,11 +1607,11 @@ async def test_get_node_pcie_bandwidth_success(mock_dt: MagicMock, _: Any, mock_
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert "gpu_devices" in data
-    assert len(data["gpu_devices"]) == 1
-    assert data["gpu_devices"][0]["gpu_uuid"] == "gpu-uuid-1"
-    assert data["gpu_devices"][0]["hostname"] == "node-1"
-    assert data["gpu_devices"][0]["metric"]["series_label"] == "pcie_bandwidth"
+    assert "gpuDevices" in data
+    assert len(data["gpuDevices"]) == 1
+    assert data["gpuDevices"][0]["gpuUuid"] == "gpu-uuid-1"
+    assert data["gpuDevices"][0]["hostname"] == "node-1"
+    assert data["gpuDevices"][0]["metric"]["seriesLabel"] == "pcieBandwidth"
     assert "range" in data
 
 
@@ -1663,7 +1669,7 @@ async def test_get_node_pcie_efficiency_success(mock_dt: MagicMock, _cluster_and
                 gpu_id="0",
                 hostname="node-1",
                 metric=DeviceMetricTimeseries(
-                    series_label="pcie_efficiency",
+                    series_label="pcieEfficiency",
                     values=[
                         Datapoint(timestamp=recent_pcie_test_start, value=75.5),
                         Datapoint(timestamp=recent_pcie_test_second_point, value=100.0),
@@ -1683,11 +1689,11 @@ async def test_get_node_pcie_efficiency_success(mock_dt: MagicMock, _cluster_and
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert "gpu_devices" in data
-    assert len(data["gpu_devices"]) == 1
-    assert data["gpu_devices"][0]["gpu_uuid"] == "gpu-uuid-1"
-    assert data["gpu_devices"][0]["hostname"] == "node-1"
-    assert data["gpu_devices"][0]["metric"]["series_label"] == "pcie_efficiency"
+    assert "gpuDevices" in data
+    assert len(data["gpuDevices"]) == 1
+    assert data["gpuDevices"][0]["gpuUuid"] == "gpu-uuid-1"
+    assert data["gpuDevices"][0]["hostname"] == "node-1"
+    assert data["gpuDevices"][0]["metric"]["seriesLabel"] == "pcieEfficiency"
     assert "range" in data
 
 
@@ -1763,10 +1769,10 @@ async def test_get_cluster_workloads_metrics_success(mock_get_cluster: MagicMock
     data = response.json()
     assert "data" in data
     assert len(data["data"]) == 1
-    assert data["data"][0]["display_name"] == "Mock Workload"
-    assert data["data"][0]["gpu_count"] == 4
+    assert data["data"][0]["displayName"] == "Mock Workload"
+    assert data["data"][0]["gpuCount"] == 4
     assert data["data"][0]["vram"] == 16384
-    assert data["data"][0]["run_time"] == 7200
+    assert data["data"][0]["runTime"] == 7200
 
 
 @pytest.mark.asyncio
@@ -1806,7 +1812,7 @@ async def test_get_cluster_workloads_metrics_not_in_role() -> None:
         id=uuid4(),
         name="test-cluster",
         kube_api_url="https://k8s.example.com:6443",
-        workloads_base_url="https://workloads.example.com",
+        workbench_base_url="https://aiwbui.example.com",
         created_by="test@example.com",
         updated_by="test@example.com",
     ),
@@ -1820,7 +1826,7 @@ async def test_get_cluster_kubeconfig_success(_: MagicMock, __: MagicMock) -> No
         response = client.get(f"/v1/clusters/{cluster_id}/kube-config")
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == {"kube_config": "config"}
+    assert response.json() == {"kubeConfig": "config"}
 
 
 @pytest.mark.asyncio
@@ -1860,7 +1866,7 @@ async def test_get_node_gpu_utilization_success() -> None:
                 gpu_id="0",
                 hostname="worker-1",
                 metric=DeviceMetricTimeseries(
-                    series_label="gpu_activity_pct",
+                    series_label="gpuActivityPct",
                     values=[
                         Datapoint(value=75.0, timestamp=start),
                         Datapoint(value=80.0, timestamp=end),
@@ -1889,10 +1895,10 @@ async def test_get_node_gpu_utilization_success() -> None:
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data["gpu_devices"]) == 1
-    assert data["gpu_devices"][0]["gpu_uuid"] == "gpu-aaa"
-    assert data["gpu_devices"][0]["metric"]["series_label"] == "gpu_activity_pct"
-    assert data["gpu_devices"][0]["metric"]["values"][0]["value"] == 75.0
+    assert len(data["gpuDevices"]) == 1
+    assert data["gpuDevices"][0]["gpuUuid"] == "gpu-aaa"
+    assert data["gpuDevices"][0]["metric"]["seriesLabel"] == "gpuActivityPct"
+    assert data["gpuDevices"][0]["metric"]["values"][0]["value"] == 75.0
 
 
 @pytest.mark.asyncio
@@ -2036,7 +2042,7 @@ async def test_get_node_gpu_memory_utilization_success() -> None:
                 gpu_id="0",
                 hostname="worker-1",
                 metric=DeviceMetricTimeseries(
-                    series_label="vram_utilization_pct",
+                    series_label="vramUtilizationPct",
                     values=[
                         Datapoint(value=62.5, timestamp=start),
                         Datapoint(value=70.0, timestamp=end),
@@ -2065,10 +2071,10 @@ async def test_get_node_gpu_memory_utilization_success() -> None:
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data["gpu_devices"]) == 1
-    assert data["gpu_devices"][0]["gpu_uuid"] == "gpu-aaa"
-    assert data["gpu_devices"][0]["metric"]["series_label"] == "vram_utilization_pct"
-    assert data["gpu_devices"][0]["metric"]["values"][0]["value"] == 62.5
+    assert len(data["gpuDevices"]) == 1
+    assert data["gpuDevices"][0]["gpuUuid"] == "gpu-aaa"
+    assert data["gpuDevices"][0]["metric"]["seriesLabel"] == "vramUtilizationPct"
+    assert data["gpuDevices"][0]["metric"]["values"][0]["value"] == 62.5
 
 
 @pytest.mark.asyncio
@@ -2087,7 +2093,7 @@ async def test_get_node_power_usage_success() -> None:
                 gpu_id="0",
                 hostname="worker-1",
                 metric=DeviceMetricTimeseries(
-                    series_label="power_watts",
+                    series_label="powerWatts",
                     values=[
                         Datapoint(value=19.5, timestamp=start),
                         Datapoint(value=20.1, timestamp=end),
@@ -2116,10 +2122,10 @@ async def test_get_node_power_usage_success() -> None:
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data["gpu_devices"]) == 1
-    assert data["gpu_devices"][0]["gpu_uuid"] == "gpu-aaa"
-    assert data["gpu_devices"][0]["metric"]["series_label"] == "power_watts"
-    assert data["gpu_devices"][0]["metric"]["values"][0]["value"] == 19.5
+    assert len(data["gpuDevices"]) == 1
+    assert data["gpuDevices"][0]["gpuUuid"] == "gpu-aaa"
+    assert data["gpuDevices"][0]["metric"]["seriesLabel"] == "powerWatts"
+    assert data["gpuDevices"][0]["metric"]["values"][0]["value"] == 19.5
 
 
 @pytest.mark.asyncio
@@ -2280,7 +2286,7 @@ async def test_get_node_gpu_clock_speed_success() -> None:
                 gpu_id="1",
                 hostname="worker-2",
                 metric=DeviceMetricTimeseries(
-                    series_label="clock_speed_mhz",
+                    series_label="clockSpeedMhz",
                     values=[
                         Datapoint(value=2100.0, timestamp=start),
                         Datapoint(value=1800.0, timestamp=end),
@@ -2309,10 +2315,10 @@ async def test_get_node_gpu_clock_speed_success() -> None:
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data["gpu_devices"]) == 1
-    assert data["gpu_devices"][0]["gpu_uuid"] == "gpu-bbb"
-    assert data["gpu_devices"][0]["metric"]["series_label"] == "clock_speed_mhz"
-    assert data["gpu_devices"][0]["metric"]["values"][0]["value"] == 2100.0
+    assert len(data["gpuDevices"]) == 1
+    assert data["gpuDevices"][0]["gpuUuid"] == "gpu-bbb"
+    assert data["gpuDevices"][0]["metric"]["seriesLabel"] == "clockSpeedMhz"
+    assert data["gpuDevices"][0]["metric"]["values"][0]["value"] == 2100.0
 
 
 @pytest.mark.asyncio
@@ -2362,15 +2368,15 @@ async def test_get_node_gpu_devices_success() -> None:
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data["gpu_devices"]) == 2
-    assert data["gpu_devices"][0]["gpu_uuid"] == "uuid-aaa"
-    assert data["gpu_devices"][0]["gpu_id"] == "0"
-    assert data["gpu_devices"][0]["product_name"] == "Instinct MI300"
-    assert data["gpu_devices"][0]["temperature"] == 63.5
-    assert data["gpu_devices"][0]["power_consumption"] == 19.5
-    assert data["gpu_devices"][0]["vram_utilization"] == 25.0
-    assert data["gpu_devices"][1]["gpu_uuid"] == "uuid-bbb"
-    assert data["gpu_devices"][1]["gpu_id"] == "1"
+    assert len(data["gpuDevices"]) == 2
+    assert data["gpuDevices"][0]["gpuUuid"] == "uuid-aaa"
+    assert data["gpuDevices"][0]["gpuId"] == "0"
+    assert data["gpuDevices"][0]["productName"] == "Instinct MI300"
+    assert data["gpuDevices"][0]["temperature"] == 63.5
+    assert data["gpuDevices"][0]["powerConsumption"] == 19.5
+    assert data["gpuDevices"][0]["vramUtilization"] == 25.0
+    assert data["gpuDevices"][1]["gpuUuid"] == "uuid-bbb"
+    assert data["gpuDevices"][1]["gpuId"] == "1"
 
 
 @pytest.mark.asyncio
@@ -2575,7 +2581,7 @@ async def test_get_node_memory_temperature_success() -> None:
                 gpu_id="1",
                 hostname="worker-2",
                 metric=DeviceMetricTimeseries(
-                    series_label="memory_temperature_celsius",
+                    series_label="memoryTemperatureCelsius",
                     values=[
                         Datapoint(value=68.0, timestamp=start),
                         Datapoint(value=70.2, timestamp=end),
@@ -2604,9 +2610,9 @@ async def test_get_node_memory_temperature_success() -> None:
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data["gpu_devices"]) == 1
-    assert data["gpu_devices"][0]["gpu_uuid"] == "gpu-bbb"
-    assert data["gpu_devices"][0]["metric"]["series_label"] == "memory_temperature_celsius"
+    assert len(data["gpuDevices"]) == 1
+    assert data["gpuDevices"][0]["gpuUuid"] == "gpu-bbb"
+    assert data["gpuDevices"][0]["metric"]["seriesLabel"] == "memoryTemperatureCelsius"
 
 
 @pytest.mark.asyncio
@@ -2814,9 +2820,9 @@ async def test_get_node_workloads_metrics_success() -> None:
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert len(data["data"]) == 1
-    assert data["data"][0]["display_name"] == "test-workload"
-    assert len(data["data"][0]["gpu_devices"]) == 2
-    assert data["data"][0]["gpu_devices"][0]["gpu_id"] == "0"
+    assert data["data"][0]["displayName"] == "test-workload"
+    assert len(data["data"][0]["gpuDevices"]) == 2
+    assert data["data"][0]["gpuDevices"][0]["gpuId"] == "0"
 
 
 @pytest.mark.asyncio
@@ -2858,7 +2864,7 @@ async def test_get_node_junction_temperature_success() -> None:
                 gpu_id="0",
                 hostname="worker-1",
                 metric=DeviceMetricTimeseries(
-                    series_label="junction_temperature_celsius",
+                    series_label="junctionTemperatureCelsius",
                     values=[
                         Datapoint(value=72.0, timestamp=start),
                         Datapoint(value=75.5, timestamp=end),
@@ -2887,10 +2893,10 @@ async def test_get_node_junction_temperature_success() -> None:
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert len(data["gpu_devices"]) == 1
-    assert data["gpu_devices"][0]["gpu_uuid"] == "gpu-aaa"
-    assert data["gpu_devices"][0]["metric"]["series_label"] == "junction_temperature_celsius"
-    assert data["gpu_devices"][0]["metric"]["values"][0]["value"] == 72.0
+    assert len(data["gpuDevices"]) == 1
+    assert data["gpuDevices"][0]["gpuUuid"] == "gpu-aaa"
+    assert data["gpuDevices"][0]["metric"]["seriesLabel"] == "junctionTemperatureCelsius"
+    assert data["gpuDevices"][0]["metric"]["values"][0]["value"] == 72.0
 
 
 @pytest.mark.asyncio

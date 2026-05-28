@@ -16,15 +16,16 @@ import { fetchOrganization } from '@/services/app';
 import { fetchProjects } from '@/services/app';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 
-import { Organization } from '@amdenterpriseai/types';
-import { ProjectWithMembers } from '@amdenterpriseai/types';
+import { Organization } from '@/types/organization';
+import { ProjectWithMembers } from '@/types/projects';
 
 import { InvitedUsers } from '@/components/features/projects';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock } from 'vitest';
+import { UserRole } from '@amdenterpriseai/types';
 
 vi.mock('@/services/app', async (importOriginal) => {
   return {
@@ -52,7 +53,7 @@ const mockProject: ProjectWithMembers = {
       id: 'user1',
       firstName: 'User 1',
       lastName: 'Last 1',
-      role: 'Team Member',
+      role: UserRole.TEAM_MEMBER,
       email: 'user1@example.com',
     },
   ],
@@ -60,12 +61,16 @@ const mockProject: ProjectWithMembers = {
     {
       id: 'user2',
       email: 'user2@example.com',
-      role: 'Platform Administrator',
+      role: UserRole.PLATFORM_ADMIN,
+      invitedAt: '2025-10-01T00:00:00Z',
+      invitedBy: 'test@example.com',
     },
     {
       id: 'user3',
       email: 'user3@example.com',
-      role: 'Team Member',
+      role: UserRole.TEAM_MEMBER,
+      invitedAt: '2025-10-01T00:00:00Z',
+      invitedBy: 'test@example.com',
     },
   ],
 };

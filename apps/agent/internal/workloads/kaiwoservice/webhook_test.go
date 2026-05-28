@@ -13,12 +13,9 @@ import (
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -31,7 +28,6 @@ import (
 const (
 	testNamespace = "test-ns"
 	testProjectID = "project-123"
-	testUID       = "test-uid-12345"
 	testUsername  = "test-user@example.com"
 )
 
@@ -97,28 +93,18 @@ func createKaiwoService(labels map[string]string, clusterQueue string) *kaiwov1a
 
 func createAdmissionRequest(kaiwoService *kaiwov1alpha1.KaiwoService, oldKaiwoService *kaiwov1alpha1.KaiwoService) admission.Request {
 	raw, _ := json.Marshal(kaiwoService)
-
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID(testUID),
-			Kind:      metav1.GroupVersionKind{Group: "kaiwo.silogen.ai", Version: "v1alpha1", Kind: "KaiwoService"},
-			Namespace: testNamespace,
-			Name:      kaiwoService.Name,
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo: authenticationv1.UserInfo{
-				Username: testUsername,
-			},
-		},
-	}
-
+	var oldRaw []byte
 	if oldKaiwoService != nil {
-		oldRaw, _ := json.Marshal(oldKaiwoService)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldKaiwoService)
 	}
-
-	return req
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "kaiwo.silogen.ai", Version: "v1alpha1", Kind: "KaiwoService"},
+		testNamespace,
+		kaiwoService.Name,
+		raw,
+		oldRaw,
+		testUsername,
+	)
 }
 
 func TestKaiwoServiceWebhook(t *testing.T) {
@@ -260,6 +246,33 @@ func TestKaiwoServiceWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, scenario.expectedPatches)
 		})
 	}
+}
+
+func TestKaiwoServiceWebhook_PreservesUnknownSpecFields(t *testing.T) {
+	ns := createNamespace(map[string]string{agent.ProjectIDLabel: testProjectID})
+	wh := setupWebhook(ns)
+	ks := createKaiwoService(nil, "")
+
+	raw := testutils.AddUnknownKeyToJSON(t, ks)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "kaiwo.silogen.ai", Version: "v1alpha1", Kind: "KaiwoService"},
+		testNamespace, ks.Name, raw, nil, testUsername,
+	)
+	resp := wh.Handle(context.Background(), req)
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    testProjectID,
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      testUsername,
+		}),
+		testutils.AddPatch("/spec/clusterQueue", testNamespace),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
 }
 
 func TestKaiwoServiceWebhook_NamespaceNotFound(t *testing.T) {

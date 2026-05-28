@@ -7,6 +7,7 @@ from enum import StrEnum
 
 class WorkloadStatus(StrEnum):
     PENDING = "Pending"
+    STARTING = "Starting"
     RUNNING = "Running"
     COMPLETE = "Complete"
     FAILED = "Failed"

@@ -10,9 +10,9 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from api_common.exceptions import ConflictException
 from app import app  # type: ignore
 from app.users.schemas import InvitedUser, InviteUser, UserResponse, UserRoleEnum
-from app.utilities.exceptions import ConflictException
 from app.utilities.security import Roles
 from tests.dependency_overrides import (
     ADMIN_EMAIL_WITH_KC_ADMIN_OVERRIDES,
@@ -48,16 +48,16 @@ async def test_get_users_success(_: MagicMock) -> None:
     assert response.json() == {
         "data": [
             {
-                "first_name": "John",
-                "last_name": "Doe",
+                "firstName": "John",
+                "lastName": "Doe",
                 "email": "john.doe@example.com",
                 "id": "0aa18e92-002c-45b7-a06e-dcdb0277974c",
                 "role": "Team Member",
-                "created_at": "2023-01-01T00:00:00Z",
-                "updated_at": "2023-01-01T00:00:00Z",
-                "created_by": "test@example.com",
-                "updated_by": "test@example.com",
-                "last_active_at": None,
+                "createdAt": "2023-01-01T00:00:00Z",
+                "updatedAt": "2023-01-01T00:00:00Z",
+                "createdBy": "test@example.com",
+                "updatedBy": "test@example.com",
+                "lastActiveAt": None,
             }
         ]
     }
@@ -93,16 +93,16 @@ async def test_create_user_success(mock_create_user: MagicMock) -> None:
     user_create = InviteUser(email="newuser@example.com", roles=[])
 
     with TestClient(app) as client:
-        response = client.post("/v1/users", json=user_create.model_dump())
+        response = client.post("/v1/users", json=user_create.model_dump(by_alias=True))
 
     assert response.status_code == status.HTTP_200_OK
 
     response_data = response.json()
     assert response_data["id"] == "0aa18e92-002c-45b7-a06e-dcdb0277974c"
     assert response_data["email"] == "newuser@example.com"
-    assert response_data["invited_by"] == "admin@example.com"
+    assert response_data["invitedBy"] == "admin@example.com"
     assert response_data["role"] == Roles.TEAM_MEMBER.value
-    assert "invited_at" in response_data
+    assert "invitedAt" in response_data
 
     mock_create_user.assert_called_once()
 
@@ -128,7 +128,7 @@ async def test_create_user_as_platform_admin(mock_create_user: MagicMock) -> Non
     user_create = InviteUser(email="newadmin@example.com", roles=[UserRoleEnum.PLATFORM_ADMIN])
 
     with TestClient(app) as client:
-        response = client.post("/v1/users", json=user_create.model_dump())
+        response = client.post("/v1/users", json=user_create.model_dump(by_alias=True))
 
     assert response.status_code == status.HTTP_200_OK
 
@@ -146,7 +146,7 @@ async def test_create_user_not_in_role() -> None:
     user_create = InviteUser(email="newuser@example.com", roles=[UserRoleEnum.PLATFORM_ADMIN])
 
     with TestClient(app) as client:
-        response = client.post("/v1/users", json=user_create.model_dump())
+        response = client.post("/v1/users", json=user_create.model_dump(by_alias=True))
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -161,7 +161,7 @@ async def test_create_user_duplicate_email(mock_create_user: MagicMock) -> None:
     user_create = InviteUser(email="existing@example.com", roles=[UserRoleEnum.PLATFORM_ADMIN])
 
     with TestClient(app) as client:
-        response = client.post("/v1/users", json=user_create.model_dump())
+        response = client.post("/v1/users", json=user_create.model_dump(by_alias=True))
 
     assert response.status_code == status.HTTP_409_CONFLICT
     assert response.json() == {"detail": "User with this email already exists."}

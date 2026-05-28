@@ -8,9 +8,9 @@ import {
   UsersResponse,
   InvitedUser,
   InvitedUsersResponse,
-} from '@amdenterpriseai/types';
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { QuotaStatus } from '@amdenterpriseai/types';
+} from '@/types/users';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { QuotaStatus } from '@/types/enums/quotas';
 
 const generateMockUsers = (count: number): Users => {
   return Array.from({ length: count }, (_, i) => ({

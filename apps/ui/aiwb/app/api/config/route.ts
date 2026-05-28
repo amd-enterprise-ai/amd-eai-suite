@@ -4,13 +4,29 @@
 
 import { NextResponse } from 'next/server';
 
-export async function GET() {
-  const config = {
-    isStandaloneMode:
-      (process.env.STANDALONE_MODE ?? '').trim().toLowerCase() === 'true',
-    // Make sure there are no extra spaces in the environment variables
-    defaultNamespace: process.env.DEFAULT_NAMESPACE?.trim() ?? null,
-  };
+import { isHttpUrl } from '@amdenterpriseai/utils/app';
 
+export async function GET() {
+  const isStandaloneMode =
+    (process.env.STANDALONE_MODE ?? '').trim().toLowerCase() === 'true';
+  const rawAirmAppUrl = process.env.AIRM_APP_URL?.trim();
+  const airmAppUrl =
+    rawAirmAppUrl && isHttpUrl(rawAirmAppUrl) ? rawAirmAppUrl : undefined;
+  const clusterAuthEnabled =
+    (process.env.CLUSTER_AUTH_ENABLED ?? 'true').trim().toLowerCase() !==
+    'false';
+  const config: {
+    isStandaloneMode: boolean;
+    defaultNamespace: string | null;
+    clusterAuthEnabled: boolean;
+    airmAppUrl?: string;
+  } = {
+    isStandaloneMode,
+    defaultNamespace: process.env.DEFAULT_NAMESPACE?.trim() ?? null,
+    clusterAuthEnabled,
+  };
+  if (!isStandaloneMode && airmAppUrl) {
+    config.airmAppUrl = airmAppUrl;
+  }
   return NextResponse.json({ config });
 }

@@ -6,15 +6,8 @@ from uuid import UUID
 
 import yaml
 
-from ..messaging.schemas import (
-    ExternalSecretManifest,
-    KubernetesSecretManifest,
-    ProjectSecretsCreateMessage,
-    ProjectSecretsDeleteMessage,
-    ProjectSecretStatus,
-    SecretKind,
-    SecretScope,
-)
+from api_common.exceptions import ValidationException
+
 from ..messaging.sender import MessageSender
 from ..projects.models import Project
 from ..projects.schemas import ProjectAssignment
@@ -25,8 +18,16 @@ from ..secrets.constants import (
     PROJECT_SECRET_SCOPE_LABEL,
     PROJECT_SECRET_USE_CASE_LABEL,
 )
-from ..utilities.exceptions import ValidationException
 from .enums import SecretStatus
+from .messaging import (
+    ExternalSecretManifest,
+    KubernetesSecretManifest,
+    ProjectSecretsCreateMessage,
+    ProjectSecretsDeleteMessage,
+    ProjectSecretStatus,
+    SecretKind,
+    SecretScope,
+)
 from .models import OrganizationScopedSecret, OrganizationSecretAssignment, ProjectScopedSecret
 from .schemas import (
     BaseSecretIn,

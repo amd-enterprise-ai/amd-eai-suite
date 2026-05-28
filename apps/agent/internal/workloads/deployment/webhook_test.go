@@ -13,13 +13,10 @@ import (
 	agent "github.com/silogen/agent/internal/common"
 	"github.com/silogen/agent/internal/testutils"
 	"github.com/stretchr/testify/require"
-	admissionv1 "k8s.io/api/admission/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -102,52 +99,46 @@ func createDeployment(namespace string, labels map[string]string) *appsv1.Deploy
 
 func createAdmissionRequest(deployment *appsv1.Deployment, oldDeployment *appsv1.Deployment) admission.Request {
 	raw, _ := json.Marshal(deployment)
-
-	req := admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:       types.UID("test-uid-12345"),
-			Kind:      metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
-			Namespace: deployment.Namespace,
-			Name:      deployment.Name,
-			Operation: admissionv1.Create,
-			Object:    runtime.RawExtension{Raw: raw},
-			UserInfo: authenticationv1.UserInfo{
-				Username: "test-user@example.com",
-			},
-		},
-	}
-
+	var oldRaw []byte
 	if oldDeployment != nil {
-		oldRaw, _ := json.Marshal(oldDeployment)
-		req.Operation = admissionv1.Update
-		req.OldObject = runtime.RawExtension{Raw: oldRaw}
+		oldRaw, _ = json.Marshal(oldDeployment)
 	}
+	return testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+		deployment.Namespace,
+		deployment.Name,
+		raw,
+		oldRaw,
+		"test-user@example.com",
+	)
+}
 
-	return req
+func expectedPatchesDeploymentAirmCreate() []testutils.ExpectedPatch {
+	return []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    "project-123",
+			common.KueueNameLabel:   "airm-test",
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      "test-user@example.com",
+		}),
+		testutils.AddPodTemplateLabelMatching(testutils.LabelSegmentWorkloadID, testutils.UUIDMatcher),
+		testutils.AddPodTemplateLabelMatching(testutils.LabelSegmentComponentID, testutils.UUIDMatcher),
+	}
 }
 
 func TestDeploymentWebhook(t *testing.T) {
 	scenarios := []testScenario{
 		{
-			name:           "CreateInAIRMNamespace",
-			namespaceName:  "airm-test",
-			projectID:      "project-123",
-			resourceLabels: nil,
-			expectedPatches: []testutils.ExpectedPatch{
-				testutils.AddMetadataLabels(map[string]interface{}{
-					agent.ProjectIDLabel:    "project-123",
-					common.KueueNameLabel:   "airm-test",
-					common.WorkloadIDLabel:  testutils.UUIDMatcher,
-					common.ComponentIDLabel: testutils.UUIDMatcher,
-				}),
-				testutils.AddMetadataAnnotations(map[string]interface{}{
-					agent.AutoDiscoveredAnnotation: "true",
-					agent.SubmitterAnnotation:      "test-user@example.com",
-				}),
-				testutils.AddPodTemplateLabelMatching(testutils.LabelSegmentWorkloadID, testutils.UUIDMatcher),
-				testutils.AddPodTemplateLabelMatching(testutils.LabelSegmentComponentID, testutils.UUIDMatcher),
-			},
-			allowed: true,
+			name:            "CreateInAIRMNamespace",
+			namespaceName:   "airm-test",
+			projectID:       "project-123",
+			resourceLabels:  nil,
+			expectedPatches: expectedPatchesDeploymentAirmCreate(),
+			allowed:         true,
 		},
 		{
 			name:            "CreateInNonAIRMNamespace",
@@ -308,6 +299,21 @@ func TestDeploymentWebhook(t *testing.T) {
 			testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, s.expectedPatches)
 		})
 	}
+}
+
+func TestDeploymentWebhook_PreservesUnknownSpecFields(t *testing.T) {
+	ns := createNamespace("airm-test", "project-123")
+	wh := setupTestWebhook(ns)
+	dep := createDeployment("airm-test", nil)
+
+	raw := testutils.AddUnknownKeyToJSON(t, dep)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+		dep.Namespace, dep.Name, raw, nil, "test-user@example.com",
+	)
+	resp := wh.Handle(context.Background(), req)
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatchesDeploymentAirmCreate())
 }
 
 func TestDeploymentWebhook_NamespaceNotFound(t *testing.T) {

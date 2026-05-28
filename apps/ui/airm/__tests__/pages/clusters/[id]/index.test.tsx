@@ -10,28 +10,51 @@ import {
   waitFor,
 } from '@testing-library/react';
 
-import { fetchGPUDeviceUtilizationByClusterId } from '@/services/app';
+import {
+  fetchGPUDeviceUtilizationByClusterId,
+  deleteCluster,
+  getClusterProjects,
+} from '@/services/app';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 
-import {
-  Cluster,
-  ClusterNode,
-  ClusterNodesResponse,
-} from '@amdenterpriseai/types';
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { WorkloadStatus } from '@amdenterpriseai/types';
-import { WorkloadStatusStatsResponse } from '@amdenterpriseai/types';
-import { ClusterProjectsResponse } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ClusterNodesResponse } from '@/types/clusters';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
+import { ClusterProjectsResponse } from '@/types/projects';
 
 import ClusterPage from '@/pages/clusters/[id]';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';
-import { ProjectStatus } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { ClusterNode } from '@/types/clusters';
 import { cloneDeep } from 'lodash';
-import { getClusterProjects } from '@/services/app';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
+import router from 'next/router';
+
+vi.mock('@/hooks/useAccessControl', () => ({
+  useAccessControl: vi.fn(),
+}));
+
+const adminAccessControl = {
+  isRoleManagementEnabled: true,
+  isInviteEnabled: true,
+  isAdministrator: true,
+  smtpEnabled: true,
+  isTempPasswordRequired: false,
+};
+
+const nonAdminAccessControl = {
+  isRoleManagementEnabled: false,
+  isInviteEnabled: false,
+  isAdministrator: false,
+  smtpEnabled: false,
+  isTempPasswordRequired: false,
+};
 
 const generateMockClusterNodes = (count: number): ClusterNode[] => {
   return Array.from({ length: count }, (_, i) => ({
@@ -67,15 +90,21 @@ vi.mock('@/services/app', async (importOriginal) => {
     getClusterWorkloadsStats: vi.fn(),
     fetchGPUDeviceUtilizationByClusterId: vi.fn(),
     getClusterProjects: vi.fn(),
+    deleteCluster: vi.fn(),
   };
 });
 
-vi.mock('next/router', () => ({
-  useRouter: () => ({
+vi.mock('next/router', () => {
+  const push = vi.fn();
+  const mockRouter = {
     query: { id: '1' },
-    push: vi.fn(),
-  }),
-}));
+    push,
+  };
+  return {
+    useRouter: () => mockRouter,
+    default: mockRouter,
+  };
+});
 
 const mockClusterNodesResponse: ClusterNodesResponse = {
   data: [],
@@ -88,7 +117,6 @@ const mockProjectsResponse: ClusterProjectsResponse = {
 const cluster: Cluster = {
   id: '1',
   name: 'cluster-1',
-
   lastHeartbeatAt: '2025-03-11T23:24:03.733668Z',
   availableResources: {
     cpuMilliCores: 16000,
@@ -116,9 +144,16 @@ const cluster: Cluster = {
   gpuAllocationPercentage: 75.0,
   cpuAllocationPercentage: 40.625,
   memoryAllocationPercentage: 10.0,
+  workbenchBaseUrl: 'https://workbench.example.com',
+  kubeApiUrl: 'https://kube-api.example.com',
 };
 
 describe('cluster', () => {
+  beforeEach(() => {
+    vi.mocked(useAccessControl).mockReturnValue(adminAccessControl);
+    vi.mocked(router.push).mockClear();
+  });
+
   it('should not crash the page', async () => {
     await act(() => {
       const { container } = render(
@@ -395,5 +430,367 @@ describe('cluster', () => {
     expect(getClusterProjects).toBeCalledTimes(2);
 
     vi.useRealTimers();
+  });
+
+  describe('Actions dropdown', () => {
+    it('should render Actions button', async () => {
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      expect(
+        screen.getByLabelText('common:list.actions.label'),
+      ).toBeInTheDocument();
+    });
+
+    it('should show dropdown menu items when Actions button is clicked', async () => {
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('workloads.actions.view')).toBeInTheDocument();
+        expect(screen.getByText('list.actions.edit.label')).toBeInTheDocument();
+        expect(screen.getByText('config.button')).toBeInTheDocument();
+        expect(
+          screen.getByText('actions.viewInAiwb.label'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText('list.actions.delete.label'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should show View Workloads action as disabled for non-administrators', async () => {
+      vi.mocked(useAccessControl).mockReturnValue(nonAdminAccessControl);
+
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await waitFor(() => {
+        const viewWorkloadsButton = screen.getByText('workloads.actions.view');
+        expect(
+          viewWorkloadsButton.closest('[data-disabled="true"]'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should show Edit action as disabled for non-administrators', async () => {
+      vi.mocked(useAccessControl).mockReturnValue(nonAdminAccessControl);
+
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await waitFor(() => {
+        const editButton = screen.getByText('list.actions.edit.label');
+        expect(
+          editButton.closest('[data-disabled="true"]'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should open external URL when View in AI Workbench is clicked', async () => {
+      const mockWindowOpen = vi.fn();
+      vi.spyOn(window, 'open').mockImplementationOnce(mockWindowOpen);
+
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByText('actions.viewInAiwb.label'));
+      });
+
+      expect(mockWindowOpen).toHaveBeenCalledWith(
+        'https://workbench.example.com',
+        '_blank',
+        'noopener,noreferrer',
+      );
+    });
+
+    it('should show View in AI Workbench as disabled when workbenchBaseUrl is missing', async () => {
+      const clusterWithoutWorkbench = {
+        ...cluster,
+        workbenchBaseUrl: undefined,
+      };
+
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={clusterWithoutWorkbench}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await waitFor(() => {
+        const viewInAiwbButton = screen.getByText('actions.viewInAiwb.label');
+        expect(
+          viewInAiwbButton.closest('[data-disabled="true"]'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should show View in AI Workbench as disabled when workbenchBaseUrl has invalid scheme', async () => {
+      const clusterWithInvalidUrl = {
+        ...cluster,
+        workbenchBaseUrl: 'ftp://invalid.example.com',
+      };
+
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={clusterWithInvalidUrl}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await waitFor(() => {
+        const viewInAiwbButton = screen.getByText('actions.viewInAiwb.label');
+        expect(
+          viewInAiwbButton.closest('[data-disabled="true"]'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should show View Config as disabled when kubeApiUrl is missing', async () => {
+      const clusterWithoutKubeApi = { ...cluster, kubeApiUrl: undefined };
+
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={clusterWithoutKubeApi}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await waitFor(() => {
+        const viewConfigButton = screen.getByText('config.button');
+        expect(
+          viewConfigButton.closest('[data-disabled="true"]'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should show Delete action as disabled for non-administrators', async () => {
+      vi.mocked(useAccessControl).mockReturnValue(nonAdminAccessControl);
+
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await waitFor(() => {
+        const deleteButton = screen.getByText('list.actions.delete.label');
+        expect(
+          deleteButton.closest('[data-disabled="true"]'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should navigate to workloads page when View Workloads is clicked by administrator', async () => {
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByText('workloads.actions.view'));
+      });
+
+      expect(router.push).toHaveBeenCalledWith('/clusters/1/workloads');
+    });
+
+    it('should open edit modal when Edit is clicked by administrator', async () => {
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByText('list.actions.edit.label'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('form.edit.title')).toBeInTheDocument();
+      });
+    });
+
+    it('should show delete confirmation modal when Delete is clicked by administrator', async () => {
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByText('list.actions.delete.label'));
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('list.actions.delete.confirmation.title'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should call deleteCluster API when delete is confirmed by administrator', async () => {
+      vi.mocked(deleteCluster).mockResolvedValueOnce(new Response());
+
+      await act(() => {
+        render(
+          <ClusterPage
+            cluster={cluster}
+            clusterNodesResponse={mockClusterNodesResponse}
+            projectsResponse={mockProjectsResponse}
+            workloadsStats={mockWorkloadsStats}
+          />,
+          { wrapper },
+        );
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByLabelText('common:list.actions.label'));
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByText('list.actions.delete.label'));
+      });
+
+      await act(() => {
+        fireEvent.click(screen.getByText('actions.confirm.title'));
+      });
+
+      await waitFor(() => {
+        expect(vi.mocked(deleteCluster)).toHaveBeenCalledWith(
+          '1',
+          expect.any(Object),
+        );
+      });
+    });
   });
 });

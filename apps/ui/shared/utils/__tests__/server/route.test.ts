@@ -10,18 +10,13 @@ import {
   proxyRequest,
 } from '@amdenterpriseai/utils/server';
 import { getServerSession } from 'next-auth';
-import { convertSnakeToCamel } from '../../src/app/api-helpers';
 
 vi.mock('next-auth', () => ({
   getServerSession: vi.fn(),
 }));
 
-vi.mock('../../src/app/api-helpers', () => ({
-  convertSnakeToCamel: vi.fn(),
-}));
-
 // Mock the logger
-vi.mock('../../src/server/logger', () => ({
+vi.mock('@/src/server/logger', () => ({
   default: () => ({
     error: vi.fn(),
     info: vi.fn(),
@@ -141,14 +136,11 @@ describe('proxyRequest', () => {
 
   it('should proxy GET requests with query params', async () => {
     const mockFetch = vi.mocked(global.fetch);
+    const responseBody = { camelCase: 'value' };
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: vi.fn().mockResolvedValue({ snake_case: 'value' }),
-    } as any);
-
-    vi.mocked(convertSnakeToCamel).mockReturnValue({
-      snakeCase: 'value',
+      json: vi.fn().mockResolvedValue(responseBody),
     } as any);
 
     const req = {
@@ -165,7 +157,7 @@ describe('proxyRequest', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer token' }),
       }),
     );
-    expect(result).toEqual({ snakeCase: 'value' });
+    expect(result).toEqual(responseBody);
   });
 
   it('should preserve existing query string on target url', async () => {
@@ -175,8 +167,6 @@ describe('proxyRequest', () => {
       status: 200,
       json: vi.fn().mockResolvedValue({ ok: true }),
     } as any);
-
-    vi.mocked(convertSnakeToCamel).mockReturnValue({ ok: true } as any);
 
     const req = {
       method: 'GET',
@@ -198,8 +188,6 @@ describe('proxyRequest', () => {
       status: 200,
       json: vi.fn().mockResolvedValue({ ok: true }),
     } as any);
-
-    vi.mocked(convertSnakeToCamel).mockReturnValue({ ok: true } as any);
 
     const req = {
       method: 'POST',

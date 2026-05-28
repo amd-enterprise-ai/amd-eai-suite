@@ -6,7 +6,7 @@ import { Card, CardBody } from '@heroui/react';
 import { IconExternalLink } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 
-import type { DocEntry } from './documentation-mapping';
+import type { DocEntry } from './RelevantDocs';
 
 type RelevantDocsCardProps = DocEntry;
 

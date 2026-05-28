@@ -4,32 +4,48 @@
 
 import { Button } from '@heroui/react';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
 import { usePathname } from 'next/navigation';
+import { useRouter } from 'next/router';
 
 import { isMenuItemActive } from '@amdenterpriseai/utils/app';
 
 import { SidebarItem } from '@amdenterpriseai/types';
 
 import { SidebarButton } from './SidebarButton';
+import { stripProjectPrefix } from './project-utils';
 
 interface Props {
   item: SidebarItem;
   isSidebarMini: boolean;
   defaultExpanded?: boolean;
+  projectPrefix?: string;
 }
 
 export const CollapsibleItem: React.FC<Props> = ({
   item,
   isSidebarMini,
   defaultExpanded,
+  projectPrefix,
 }) => {
   const { t } = useTranslation('common');
   const pathName = usePathname();
+  const router = useRouter();
 
-  const isActive = isMenuItemActive(item.href, pathName);
+  const pathWithoutProject = useMemo(
+    () =>
+      stripProjectPrefix(
+        pathName,
+        projectPrefix,
+        router.locale,
+        router.defaultLocale,
+      ),
+    [projectPrefix, pathName, router.locale, router.defaultLocale],
+  );
+
+  const isActive = isMenuItemActive(item.href, pathWithoutProject);
 
   // Simple local state for expansion, with default based on active state
   const [isExpanded, setIsExpanded] = useState<boolean>(
@@ -89,7 +105,7 @@ export const CollapsibleItem: React.FC<Props> = ({
       {item.subItems && (
         <div
           ref={contentRef}
-          className="overflow-hidden transition-all duration-300 ease-out"
+          className="transition-all duration-300 ease-out"
           style={{
             height: isExpanded ? `${contentHeight}px` : '0px',
             opacity: isExpanded ? 1 : 0,
@@ -106,6 +122,7 @@ export const CollapsibleItem: React.FC<Props> = ({
                   icon={subItem.icon}
                   isSidebarMini={isSidebarMini}
                   nested={true}
+                  projectPrefix={projectPrefix}
                 />
               </li>
             ))}

@@ -5,6 +5,11 @@
 from enum import StrEnum
 
 
+class GPUVendor(StrEnum):
+    NVIDIA = "NVIDIA"
+    AMD = "AMD"
+
+
 class Roles(StrEnum):
     """
     Enum class for the roles that can be set in the token.

@@ -13,6 +13,7 @@ from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakPostError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import ConflictException, ExternalServiceError, NotFoundException
 from app.users.repository import get_user, get_user_by_email
 from app.users.schemas import InviteUser, UserDetailsUpdate, UserResponse, UserRoleEnum, UserRolesUpdate
 from app.users.service import (
@@ -25,7 +26,6 @@ from app.users.service import (
     get_users,
     resend_invitation,
 )
-from app.utilities.exceptions import ConflictException, ExternalServiceError, NotFoundException
 from app.utilities.security import Roles
 from tests import factory  # type: ignore[attr-defined]
 

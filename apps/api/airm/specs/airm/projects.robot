@@ -13,11 +13,7 @@ Resource            ../resources/airm_workloads.resource
 Resource            resources/api/common.resource
 Library             Collections
 Library             Process
-Test Setup          Run Keywords
-...                 Initialize Project Tracking    AND
-...                 Initialize Secret ID Tracking    AND
-...                 Initialize Storage ID Tracking    AND
-...                 Initialize Workload Tracking
+Test Setup          Initialize Workload Tracking
 Test Teardown       Clean Up Test Resources
 
 *** Keywords ***

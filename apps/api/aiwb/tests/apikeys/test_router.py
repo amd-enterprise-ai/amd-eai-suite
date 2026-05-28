@@ -68,7 +68,7 @@ def test_create_api_key_success() -> None:
         with TestClient(app) as client:
             response = client.post(
                 "/v1/namespaces/test-namespace/api-keys",
-                json={"name": "New Key", "ttl": "24h", "renewable": True, "num_uses": 0, "meta": {}},
+                json={"name": "New Key", "ttl": "24h", "renewable": True, "numUses": 0, "meta": {}},
             )
 
     assert response.status_code == status.HTTP_200_OK
@@ -126,7 +126,7 @@ def test_renew_api_key_success() -> None:
             response = client.post(f"/v1/namespaces/test-namespace/api-keys/{uuid4()}/renew")
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["lease_duration"] == 3600
+    assert response.json()["leaseDuration"] == 3600
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
@@ -139,7 +139,7 @@ def test_bind_api_key_to_group_success() -> None:
         with TestClient(app) as client:
             response = client.post(
                 f"/v1/namespaces/test-namespace/api-keys/{uuid4()}/bind-group",
-                json={"group_id": group_id},
+                json={"groupId": group_id},
             )
 
     assert response.status_code == status.HTTP_200_OK
@@ -154,7 +154,7 @@ def test_unbind_api_key_from_group_success() -> None:
         with TestClient(app) as client:
             response = client.post(
                 f"/v1/namespaces/test-namespace/api-keys/{uuid4()}/unbind-group",
-                json={"group_id": "test-group"},
+                json={"groupId": "test-group"},
             )
 
     assert response.status_code == status.HTTP_200_OK
@@ -211,7 +211,7 @@ def test_update_api_key_bindings_success() -> None:
         with TestClient(app) as client:
             response = client.patch(
                 f"/v1/namespaces/test-namespace/api-keys/{api_key_id}",
-                json={"aim_ids": [str(uuid4()), str(uuid4())]},
+                json={"aimIds": [str(uuid4()), str(uuid4())]},
             )
 
     assert response.status_code == status.HTTP_200_OK

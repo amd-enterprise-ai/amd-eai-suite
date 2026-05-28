@@ -252,13 +252,11 @@ describe('FormInput', () => {
 
     expect(usernameInput).toHaveValue('changeduser');
 
-    // Reset form using the button
     await act(async () => {
       fireEvent.click(screen.getByText('Reset'));
     });
 
-    // Verify reset to initial value
-    expect(usernameInput).toHaveValue('initialuser');
+    expect(screen.getByLabelText('Username')).toHaveValue('initialuser');
   });
 
   it('applies custom className correctly', () => {

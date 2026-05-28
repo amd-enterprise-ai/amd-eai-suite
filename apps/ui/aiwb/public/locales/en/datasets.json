@@ -53,6 +53,20 @@
       }
     }
   },
+  "download": {
+    "error": "Failed to download the dataset",
+    "indicator": {
+      "preparing": {
+        "title": "Preparing download",
+        "subtitle": "Please be patient. Closing or refreshing the browser interrupts the download."
+      },
+      "done": {
+        "title": "Download ready",
+        "subtitle": "Your browser has started the download process."
+      },
+      "dismiss": "Dismiss"
+    }
+  },
   "actions": {
     "upload": "Upload",
     "refresh": "Refresh",

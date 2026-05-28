@@ -33,6 +33,7 @@ interface Props {
   namespace: string;
   workloadId: string;
   timeRange: TimeRange;
+  podName?: string;
   width?: number;
 }
 
@@ -41,6 +42,7 @@ export const TimeseriesMetricCard: React.FC<Props> = ({
   namespace,
   workloadId,
   timeRange,
+  podName,
   width = 460,
 }) => {
   const { t } = useTranslation('workloads');
@@ -55,6 +57,7 @@ export const TimeseriesMetricCard: React.FC<Props> = ({
       workloadId,
       'metrics',
       metric,
+      podName,
       {
         start: timeRange.start.toISOString(),
         end: timeRange.end.toISOString(),
@@ -67,6 +70,7 @@ export const TimeseriesMetricCard: React.FC<Props> = ({
         start: timeRange.start,
         end: timeRange.end,
         metric,
+        podName,
       }),
   });
 

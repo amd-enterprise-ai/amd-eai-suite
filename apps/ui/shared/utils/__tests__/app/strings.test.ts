@@ -164,7 +164,7 @@ describe('displayHumanReadableMegaBytes', () => {
   });
 
   it('should handle zero megabytes', () => {
-    expect(displayHumanReadableMegaBytes(0)).toBe('0 Bytes');
+    expect(displayHumanReadableMegaBytes(0)).toBe('0 B');
   });
 
   it('should convert large megabyte values to GB', () => {

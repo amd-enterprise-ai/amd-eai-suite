@@ -2,4 +2,4 @@
 //
 // SPDX-License-Identifier: MIT
 
-export * from './Stepper';
+export { default as Stepper } from './Stepper';

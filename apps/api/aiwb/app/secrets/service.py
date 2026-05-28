@@ -9,9 +9,9 @@ from kubernetes_asyncio.client import ApiException
 from loguru import logger
 
 from api_common.exceptions import ConflictException, NotFoundException, ValidationException
+from api_common.secrets import SecretUseCase
 
 from ..dispatch.kube_client import KubernetesClient
-from .enums import SecretUseCase
 from .gateway import (
     create_kubernetes_secret,
     delete_kubernetes_secret,

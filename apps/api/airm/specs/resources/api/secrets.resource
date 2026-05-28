@@ -30,7 +30,7 @@ Create secret
     ...    - type: Secret type (External)
     ...    - scope: Secret scope (Organization)
     ...    - manifest: ExternalSecret YAML manifest
-    ...    - project_ids: List of project UUIDs to assign to (optional)
+    ...    - projectIds: List of project UUIDs to assign to (optional)
     ...
     ...    Returns:
     ...    response: API response containing the created secret
@@ -43,12 +43,12 @@ Create secret
     TRY
         ${endpoint}=    Secrets endpoint
         ${secret_name}=    Get From Dictionary    ${secret_data}    name
-        ${project_ids}=    Get From Dictionary    ${secret_data}    project_ids    ${EMPTY}
+        ${project_ids}=    Get From Dictionary    ${secret_data}    projectIds    ${EMPTY}
 
         Log    API request: POST ${endpoint}    DEBUG
         Log    Request body: ${secret_data}    DEBUG
 
-        ${response}=    POST On Session    ${API_SESSION}    ${endpoint}
+        ${response}=    Safe Post Request    ${endpoint}
         ...    json=${secret_data}
         ...    expected_status=${expected_status}
 
@@ -122,7 +122,7 @@ Get secrets
 
         Log    API request: GET ${endpoint}    DEBUG
 
-        ${response}=    GET On Session    ${API_SESSION}    ${endpoint}
+        ${response}=    Safe Get Request    ${endpoint}
         ...    expected_status=${expected_status}
 
         Log    API response: status=${response.status_code}    DEBUG
@@ -157,7 +157,7 @@ Delete secret
 
         Log    API request: DELETE ${endpoint}/${secret_id}    DEBUG
 
-        ${response}=    DELETE On Session    ${API_SESSION}    ${endpoint}/${secret_id}
+        ${response}=    Safe Delete Request    ${endpoint}/${secret_id}
         ...    expected_status=${expected_status}
 
         Log    API response: status=${response.status_code}    DEBUG
@@ -186,12 +186,12 @@ Assign secret to projects
 
     TRY
         ${endpoint}=    Secrets endpoint
-        &{assignment_data}=    Create Dictionary    project_ids=${project_ids}
+        &{assignment_data}=    Create Dictionary    projectIds=${project_ids}
 
         Log    API request: PUT ${endpoint}/${secret_id}/assign    DEBUG
         Log    Request body: ${assignment_data}    DEBUG
 
-        ${response}=    PUT On Session    ${API_SESSION}    ${endpoint}/${secret_id}/assign
+        ${response}=    Safe Put Request    ${endpoint}/${secret_id}/assign
         ...    json=${assignment_data}
         ...    expected_status=${expected_status}
 

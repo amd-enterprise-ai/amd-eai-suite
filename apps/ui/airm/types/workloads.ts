@@ -2,29 +2,46 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  Workload,
-  WorkloadStatus,
-  WorkloadType,
-  SnakeCaseKeys,
-  ServerCollectionMetadata,
-} from '@amdenterpriseai/types';
+import type { ServerCollectionMetadata } from '@amdenterpriseai/types';
+import { WorkloadStatus } from './enums/workloads';
 
-export type WorkloadWithMetrics = {
+import { WorkloadType } from '@amdenterpriseai/types';
+
+export type ProjectUtilization = {
+  date: string;
+  memoryUsage: number;
+  deviceUsage: number;
+};
+
+export interface Workload {
   id: string;
+  type: WorkloadType | null;
+  displayName: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy?: string | null;
+  status: WorkloadStatus;
   projectId: string;
   clusterId: string;
-  status: WorkloadStatus;
-  displayName: string | null;
-  type: WorkloadType | null;
+}
+
+export type WorkloadsStats = {
+  runningWorkloadsCount: number;
+  pendingWorkloadsCount: number;
+};
+
+export interface WorkloadFilterItem {
+  key: string;
+  label: string;
+  showDivider?: boolean;
+}
+
+export type WorkloadWithMetrics = Workload & {
   gpuCount: number;
   vram: number;
   runTime?: number;
-  createdAt: string;
-  createdBy: string;
 };
-
-export type WorkloadWithMetricsServer = SnakeCaseKeys<WorkloadWithMetrics>;
 
 export type ProjectWorkloadsMetricsResponse = {
   data: WorkloadWithMetrics[];
@@ -103,9 +120,9 @@ export type WorkloadGpuDeviceSnapshot = {
   hostname: string;
   displayLabel?: string;
   vramUtilizationPct: number | null;
-  junctionTemperatureC: number | null;
+  gpuUtilizationPct: number | null;
   powerUsageW: number | null;
   vramUtilizationSeries?: { time: string; value: number }[];
-  junctionTemperatureSeries?: { time: string; value: number }[];
+  gpuUtilizationSeries?: { time: string; value: number }[];
   powerUsageSeries?: { time: string; value: number }[];
 };

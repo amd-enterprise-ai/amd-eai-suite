@@ -7,7 +7,9 @@ import { GetServerSidePropsContext } from 'next';
 
 import { getServerSession } from 'next-auth';
 
-import ApiKeysPage, { getServerSideProps } from '@/pages/api-keys/index';
+import ApiKeysPage, {
+  getServerSideProps,
+} from '@/pages/[project]/api-keys/index';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 
@@ -25,6 +27,7 @@ vi.mock('next-i18next/serverSideTranslations', () => ({
 vi.mock('@/contexts/ProjectContext', () => ({
   useProject: () => ({
     activeProject: 'project1',
+    clusterAuthEnabled: true,
     projects: [{ id: 'project1', name: 'Project 1' }],
     isLoading: false,
     setActiveProject: vi.fn(),

@@ -19,8 +19,14 @@ from pathlib import Path
 
 import jwt
 import requests
+import urllib3
 import yaml
 from loguru import logger
+
+# Suppress InsecureRequestWarning when making requests with verify=False.
+# All dev/test clusters use self-signed certificates; this Python library cannot
+# read Robot Framework variables, so SSL verification is always disabled here.
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class KubeconfigAuth:
@@ -172,7 +178,7 @@ class KubeconfigAuth:
             "grant_type": "password",
             "username": creds["username"],
             "password": creds["password"],
-            "scope": "openid profile email organization",
+            "scope": "openid profile email",
         }
 
         try:
@@ -182,6 +188,7 @@ class KubeconfigAuth:
                 data=payload,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=30,
+                verify=False,
             )
 
             if response.status_code == 200:

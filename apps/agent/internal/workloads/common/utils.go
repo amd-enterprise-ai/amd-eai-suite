@@ -153,16 +153,16 @@ func resourceInterfaceFromMapping(
 }
 
 // ParseDeleteWorkloadMessage parses and validates a DeleteWorkloadMessage from the raw message payload.
-func ParseDeleteWorkloadMessage(msg *messaging.RawMessage) (messaging.DeleteWorkloadMessage, error) {
-	var deleteMsg messaging.DeleteWorkloadMessage
+func ParseDeleteWorkloadMessage(msg *messaging.RawMessage) (DeleteWorkloadMessage, error) {
+	var deleteMsg DeleteWorkloadMessage
 	if err := json.Unmarshal(msg.Payload, &deleteMsg); err != nil {
-		return messaging.DeleteWorkloadMessage{}, fmt.Errorf("failed to parse DeleteWorkloadMessage: %w", err)
+		return DeleteWorkloadMessage{}, fmt.Errorf("failed to parse DeleteWorkloadMessage: %w", err)
 	}
 	if deleteMsg.WorkloadID == "" {
-		return messaging.DeleteWorkloadMessage{}, fmt.Errorf("workload_id is required")
+		return DeleteWorkloadMessage{}, fmt.Errorf("workload_id is required")
 	}
 	if _, err := uuid.Parse(deleteMsg.WorkloadID); err != nil {
-		return messaging.DeleteWorkloadMessage{}, fmt.Errorf("invalid workload_id: %w", err)
+		return DeleteWorkloadMessage{}, fmt.Errorf("invalid workload_id: %w", err)
 	}
 	return deleteMsg, nil
 }

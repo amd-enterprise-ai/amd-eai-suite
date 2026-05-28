@@ -5,6 +5,7 @@
 package testutils
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -12,6 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
+	admissionv1 "k8s.io/api/admission/v1"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // MatcherFunc matches actual patch values when exact equality is not desired (e.g. UUIDs).
@@ -38,8 +45,13 @@ const (
 	LabelSegmentSecretScope = "airm.silogen.ai~1secret-scope"
 
 	AnnotationSegmentAutoDiscovered = "airm.silogen.ai~1auto-discovered"
-	AnnotationSegmentSubmitter      = "airm.silogen.ai~1submitter"
 )
+
+const TestAdmissionUID types.UID = "test-uid-12345"
+
+const UnknownRetentionJSONKey = "xAirMUnknownSpecRetention"
+
+var UnknownRetentionJSONValue = map[string]interface{}{"kept": true}
 
 type ExpectedPatch struct {
 	Operation string
@@ -149,4 +161,37 @@ func MetadataAnnotationsPath(segment string) string {
 
 func PodTemplateLabelsPath(segment string) string {
 	return "/spec/template/metadata/labels/" + segment
+}
+
+func AdmissionTestCreateRequest(
+	kind metav1.GroupVersionKind, namespace, name string, objectRaw []byte, oldObjectRaw []byte, username string,
+) admission.Request {
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			UID:       TestAdmissionUID,
+			Kind:      kind,
+			Namespace: namespace,
+			Name:      name,
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: objectRaw},
+			UserInfo:  authenticationv1.UserInfo{Username: username},
+		},
+	}
+	if oldObjectRaw != nil {
+		req.Operation = admissionv1.Update
+		req.OldObject = runtime.RawExtension{Raw: oldObjectRaw}
+	}
+	return req
+}
+
+func AddUnknownKeyToJSON(t *testing.T, obj interface{}) []byte {
+	t.Helper()
+	raw, err := json.Marshal(obj)
+	require.NoError(t, err)
+	var root map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &root))
+	root[UnknownRetentionJSONKey] = UnknownRetentionJSONValue
+	out, err := json.Marshal(root)
+	require.NoError(t, err)
+	return out
 }

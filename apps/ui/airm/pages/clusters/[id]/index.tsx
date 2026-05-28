@@ -8,10 +8,21 @@ import {
   Card,
   CardBody,
   CardHeader,
-  Tooltip,
+  Dropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownTrigger,
   useDisclosure,
 } from '@heroui/react';
-import { useQuery } from '@tanstack/react-query';
+import {
+  IconChevronDown,
+  IconExternalLink,
+  IconTrash,
+  IconEdit,
+  IconFileSettings,
+  IconEye,
+} from '@tabler/icons-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { getServerSession } from 'next-auth';
@@ -20,11 +31,12 @@ import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useRouter } from 'next/router';
 
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSystemToast } from '@amdenterpriseai/hooks';
 
 import {
+  deleteCluster as deleteClusterAPI,
   getCluster as fetchCluster,
   getClusterNodes as fetchClusterNodes,
-  fetchSubmittableProjects,
 } from '@/services/app';
 import { fetchGPUDeviceUtilizationByClusterId } from '@/services/app';
 import { getClusterProjects as fetchClusterProjects } from '@/services/app';
@@ -36,41 +48,44 @@ import {
 } from '@/services/server';
 import { getClusterWorkloadsStats } from '@/services/server';
 
+import { doesProjectDataNeedToBeRefreshed } from '@/utils/projects';
 import {
-  doesProjectDataNeedToBeRefreshed,
   getTickGap,
+  isHttpUrl,
   rollupTimeSeriesData,
   transformTimeSeriesDataToChartData,
 } from '@amdenterpriseai/utils/app';
 import { getFilteredData } from '@amdenterpriseai/utils/app';
 import { displayFixedNumber } from '@amdenterpriseai/utils/app';
 import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 
-import {
-  Cluster,
-  ClusterNode,
-  ClusterNodesResponse,
-  ProjectsResponse,
-} from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ClusterNodesResponse } from '@/types/clusters';
+import { ProjectsResponse } from '@/types/projects';
 import { FilterComponentType } from '@amdenterpriseai/types';
+import { ClusterNode } from '@/types/clusters';
 import { TimeRangePeriod } from '@amdenterpriseai/types';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import {
-  TimeRange,
-  TimeSeriesResponse,
-  WorkloadStatusStatsResponse,
-} from '@amdenterpriseai/types';
-import { ClusterProjectsResponse, Project } from '@amdenterpriseai/types';
+import { TimeRange, TimeSeriesResponse } from '@amdenterpriseai/types';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
+import { ClusterProjectsResponse, Project } from '@/types/projects';
 
-import { ClusterStats } from '@/components/features/clusters';
+import { ClusterStats, EditCluster } from '@/components/features/clusters';
 import { ClusterNodesTable } from '@/components/features/clusters/ClusterNodes';
 import { ProjectTable } from '@/components/features/projects';
-import { BarChart } from '@amdenterpriseai/components';
+import {
+  Alert,
+  BarChart,
+  ConfirmationModal,
+} from '@amdenterpriseai/components';
 import { ChartTimeSelector } from '@amdenterpriseai/components';
 import { ActionsToolbar } from '@amdenterpriseai/components';
-
-import { isEqual } from 'lodash';
+import { APIRequestError } from '@amdenterpriseai/utils/app';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 import ClusterKubeConfig from '@/components/features/clusters/ClusterKubeConfig';
 import { ActionButton } from '@amdenterpriseai/components';
@@ -84,7 +99,7 @@ interface Props {
   workloadsStats: WorkloadStatusStatsResponse;
 }
 
-const ClusterPage: React.FC<Props> = ({
+const ClusterPage: React.FC<Props> & WithDocumentationLink = ({
   cluster,
   clusterNodesResponse,
   projectsResponse,
@@ -93,7 +108,39 @@ const ClusterPage: React.FC<Props> = ({
   const router = useRouter();
   const { id } = router.query;
   const { t } = useTranslation(translationKeySet);
+  const { toast } = useSystemToast();
   const { isAdministrator } = useAccessControl();
+  const queryClient = useQueryClient();
+
+  const {
+    isOpen: isEditClusterOpen,
+    onOpen: onEditClusterOpen,
+    onOpenChange: onEditClusterOpenChange,
+  } = useDisclosure();
+
+  const {
+    isOpen: isDeleteClusterModalOpen,
+    onOpen: onDeleteClusterModalOpen,
+    onOpenChange: onDeleteClusterModalOpenChange,
+  } = useDisclosure();
+
+  const { mutate: deleteCluster, isPending: isDeleteClusterPending } =
+    useMutation({
+      mutationFn: deleteClusterAPI,
+      onSuccess: () => {
+        onDeleteClusterModalOpenChange();
+        queryClient.invalidateQueries({ queryKey: ['clusters'] });
+        toast.success(t('list.actions.delete.notification.success'));
+        router.push('/clusters');
+      },
+      onError: (error) => {
+        onDeleteClusterModalOpenChange();
+        toast.error(
+          t('list.actions.delete.notification.error'),
+          error as APIRequestError,
+        );
+      },
+    });
 
   const [clusterNodesFilters, setClusterNodesFilters] = useState<
     ClientSideDataFilter<ClusterNode>[]
@@ -141,7 +188,6 @@ const ClusterPage: React.FC<Props> = ({
   const {
     data: gpuDeviceUsageData,
     isFetching: isGPUDeviceUsageDataFetching,
-    refetch: refreshGPUDeviceUsageData,
     dataUpdatedAt: gpuDeviceUsageDataUpdatedAt,
   } = useQuery<TimeSeriesResponse>({
     queryKey: [
@@ -230,15 +276,8 @@ const ClusterPage: React.FC<Props> = ({
   );
 
   const handleChartsRefresh = useCallback(() => {
-    const newRange = getCurrentTimeRange(currentTimePeriod.current);
-    if (isEqual(newRange, timeRange)) {
-      // Time range is the same, just refresh the data
-      refreshGPUDeviceUsageData();
-    } else {
-      // Time range has changed, set the new time range and react-query will auto refetch the data
-      setTimeRange(newRange);
-    }
-  }, [refreshGPUDeviceUsageData, timeRange]);
+    setTimeRange(getCurrentTimeRange(currentTimePeriod.current));
+  }, []);
 
   const handleFilterChange = useCallback(
     (filters: FilterValueMap) => {
@@ -291,30 +330,104 @@ const ClusterPage: React.FC<Props> = ({
           filterConfig={filterConfig}
           onFilterChange={handleFilterChange}
           endContent={
-            <div className="flex gap-2">
-              {isAdministrator && (
+            <Dropdown>
+              <DropdownTrigger>
                 <ActionButton
+                  aria-label={t('common:list.actions.label') || ''}
+                  endContent={<IconChevronDown size={16} />}
+                >
+                  {t('common:list.actions.label')}
+                </ActionButton>
+              </DropdownTrigger>
+              <DropdownMenu
+                aria-label={t('common:list.actions.label') || ''}
+                disabledKeys={[
+                  ...(!clusterData?.kubeApiUrl ? ['viewConfig'] : []),
+                  ...(!clusterData?.workbenchBaseUrl ||
+                  !isHttpUrl(clusterData.workbenchBaseUrl)
+                    ? ['viewInAiwb']
+                    : []),
+                  ...(!isAdministrator
+                    ? ['edit', 'delete', 'viewWorkloads']
+                    : []),
+                  'teamMemberAlert',
+                ]}
+              >
+                {!isAdministrator ? (
+                  <DropdownItem
+                    key="teamMemberAlert"
+                    isReadOnly
+                    className="opacity-100"
+                  >
+                    <Alert
+                      color="warning"
+                      classNames={{
+                        base: 'p-2',
+                        title: 'text-xs leading-3.5',
+                        description: 'text-xs leading-tight',
+                      }}
+                      radius="sm"
+                      title={t('actions.teamMemberAlert.title')}
+                      hideIcon
+                      className="w-[240px]"
+                      description={t('actions.teamMemberAlert.description')}
+                    />
+                  </DropdownItem>
+                ) : null}
+                <DropdownItem
                   aria-label={t('workloads.actions.view') || ''}
                   onPress={() => router.push(`/clusters/${id}/workloads`)}
+                  key="viewWorkloads"
+                  startContent={<IconEye />}
                 >
                   {t('workloads.actions.view')}
-                </ActionButton>
-              )}
-              <Tooltip
-                content={t('config.disabled')}
-                isDisabled={!!cluster.kubeApiUrl}
-              >
-                <span>
-                  <ActionButton
-                    aria-label={t('config.button') || ''}
-                    onPress={onClusterKubeConfigOpen}
-                    isDisabled={!cluster.kubeApiUrl}
-                  >
-                    {t('config.button')}
-                  </ActionButton>
-                </span>
-              </Tooltip>
-            </div>
+                </DropdownItem>
+                <DropdownItem
+                  key="edit"
+                  onPress={onEditClusterOpen}
+                  startContent={<IconEdit />}
+                >
+                  {t('list.actions.edit.label')}
+                </DropdownItem>
+
+                <DropdownItem
+                  key="viewConfig"
+                  onPress={onClusterKubeConfigOpen}
+                  startContent={<IconFileSettings />}
+                >
+                  {t('config.button')}
+                </DropdownItem>
+                <DropdownItem
+                  key="viewInAiwb"
+                  onPress={() => {
+                    if (
+                      clusterData?.workbenchBaseUrl &&
+                      isHttpUrl(clusterData.workbenchBaseUrl)
+                    ) {
+                      window.open(
+                        clusterData.workbenchBaseUrl,
+                        '_blank',
+                        'noopener,noreferrer',
+                      );
+                    }
+                  }}
+                  showDivider
+                  startContent={<IconExternalLink />}
+                >
+                  {t('actions.viewInAiwb.label')}
+                </DropdownItem>
+
+                <DropdownItem
+                  key="delete"
+                  className="text-danger"
+                  color="danger"
+                  onPress={onDeleteClusterModalOpen}
+                  startContent={<IconTrash />}
+                >
+                  {t('list.actions.delete.label')}
+                </DropdownItem>
+              </DropdownMenu>
+            </Dropdown>
           }
         />
       </div>
@@ -375,9 +488,27 @@ const ClusterPage: React.FC<Props> = ({
         onOpenChange={onClusterKubeConfigChange}
         cluster={clusterData}
       />
+
+      <EditCluster
+        isOpen={isEditClusterOpen}
+        onOpenChange={onEditClusterOpenChange}
+        cluster={clusterData}
+      />
+
+      <ConfirmationModal
+        confirmationButtonColor="danger"
+        description={t('list.actions.delete.confirmation.description')}
+        title={t('list.actions.delete.confirmation.title')}
+        isOpen={isDeleteClusterModalOpen}
+        loading={isDeleteClusterPending}
+        onConfirm={() => deleteCluster(clusterData.id)}
+        onClose={onDeleteClusterModalOpenChange}
+      />
     </div>
   );
 };
+
+ClusterPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/clusters/overview.html`;
 
 export default ClusterPage;
 

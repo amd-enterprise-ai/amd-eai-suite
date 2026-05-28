@@ -136,8 +136,12 @@ describe('ChatInfoCard Component', () => {
       );
 
       const chatIcon = screen.getByTestId('bubble-text-icon');
-      expect(chatIcon).toHaveAttribute('data-size', '28');
-      expect(chatIcon).toHaveClass('text-primary-600', 'dark:text-primary-300');
+      expect(chatIcon).toHaveClass(
+        'w-5',
+        'h-5',
+        'text-primary-600',
+        'dark:text-primary-300',
+      );
     });
   });
 
@@ -189,8 +193,9 @@ describe('ChatInfoCard Component', () => {
       );
 
       const compareIcon = screen.getByTestId('git-compare-icon');
-      expect(compareIcon).toHaveAttribute('data-size', '28');
       expect(compareIcon).toHaveClass(
+        'w-5',
+        'h-5',
         'text-primary-600',
         'dark:text-primary-300',
       );
@@ -207,15 +212,10 @@ describe('ChatInfoCard Component', () => {
 
       const card = screen.getByTestId('card');
       expect(card).toHaveClass(
-        'hidden',
-        'md:block',
-        'fixed',
-        'top-1/2',
         'max-w-[600px]',
-        'mx-8',
-        'p-8',
+        'mx-4',
+        'p-5',
         'shadow-none',
-        '-translate-y-1/2',
         'border',
         'border-default-200',
         'dark:border-default-300',
@@ -230,7 +230,7 @@ describe('ChatInfoCard Component', () => {
       );
 
       const cardBody = screen.getByTestId('card-body');
-      expect(cardBody).toHaveClass('flex', 'flex-col', 'gap-3', 'items-start');
+      expect(cardBody).toHaveClass('flex', 'flex-col', 'gap-2', 'items-start');
     });
 
     it('renders icon container with correct styling', () => {
@@ -255,7 +255,7 @@ describe('ChatInfoCard Component', () => {
       );
 
       const title = screen.getByRole('heading', { level: 2 });
-      expect(title).toHaveClass('font-bold', 'text-2xl', 'text-default-800');
+      expect(title).toHaveClass('font-bold', 'text-xl', 'text-default-800');
       expect(title).toHaveTextContent('Chat Mode');
     });
 
@@ -267,7 +267,7 @@ describe('ChatInfoCard Component', () => {
       );
 
       const listItems = screen.getAllByRole('listitem');
-      expect(listItems).toHaveLength(2);
+      expect(listItems).toHaveLength(3);
     });
 
     it('renders unordered list with correct styling', () => {
@@ -313,7 +313,7 @@ describe('ChatInfoCard Component', () => {
       expect(list).toBeInTheDocument();
 
       const listItems = screen.getAllByRole('listitem');
-      expect(listItems).toHaveLength(2);
+      expect(listItems).toHaveLength(3);
     });
 
     it('icons have accessible titles', () => {
@@ -338,7 +338,7 @@ describe('ChatInfoCard Component', () => {
   });
 
   describe('Responsive Design', () => {
-    it('is hidden on mobile devices', () => {
+    it('card variant is visible (visibility controlled by parent layout)', () => {
       render(
         <ProviderWrapper>
           <ChatInfoCard mode="chat" />
@@ -346,7 +346,8 @@ describe('ChatInfoCard Component', () => {
       );
 
       const card = screen.getByTestId('card');
-      expect(card).toHaveClass('hidden', 'md:block');
+      expect(card).toBeVisible();
+      expect(card).toHaveClass('max-w-[600px]');
     });
 
     it('has responsive maximum width', () => {
@@ -360,7 +361,7 @@ describe('ChatInfoCard Component', () => {
       expect(card).toHaveClass('max-w-[600px]');
     });
 
-    it('has proper positioning for different screen sizes', () => {
+    it('applies horizontal margin class to the card', () => {
       render(
         <ProviderWrapper>
           <ChatInfoCard mode="chat" />
@@ -368,7 +369,61 @@ describe('ChatInfoCard Component', () => {
       );
 
       const card = screen.getByTestId('card');
-      expect(card).toHaveClass('fixed', 'top-1/2', '-translate-y-1/2', 'mx-8');
+      expect(card).toHaveClass('mx-4');
+    });
+  });
+
+  describe('belowDesktop variant', () => {
+    it('renders content without a Card wrapper', () => {
+      render(
+        <ProviderWrapper>
+          <ChatInfoCard mode="chat" variant="belowDesktop" />
+        </ProviderWrapper>,
+      );
+
+      expect(screen.queryByTestId('card')).not.toBeInTheDocument();
+      expect(screen.getByText('Chat Mode')).toBeInTheDocument();
+    });
+
+    it('renders title and description for chat mode', () => {
+      render(
+        <ProviderWrapper>
+          <ChatInfoCard mode="chat" variant="belowDesktop" />
+        </ProviderWrapper>,
+      );
+
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(
+        'Chat Mode',
+      );
+      expect(
+        screen.getByText(
+          'Start a conversation with your AI assistant. Ask questions, get help, or have a discussion.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('renders title and description for compare mode', () => {
+      render(
+        <ProviderWrapper>
+          <ChatInfoCard mode="compare" variant="belowDesktop" />
+        </ProviderWrapper>,
+      );
+
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(
+        'Compare Mode',
+      );
+      expect(screen.getByTestId('git-compare-icon')).toBeInTheDocument();
+    });
+
+    it('renders tips as a list', () => {
+      render(
+        <ProviderWrapper>
+          <ChatInfoCard mode="chat" variant="belowDesktop" />
+        </ProviderWrapper>,
+      );
+
+      const listItems = screen.getAllByRole('listitem');
+      expect(listItems).toHaveLength(2);
     });
   });
 

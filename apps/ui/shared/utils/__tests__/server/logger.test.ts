@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from 'vitest';
-import getLogger from '../../src/server/logger';
+import getLogger from '@/src/server/logger';
 
 describe('getLogger', () => {
   it('should return a winston logger instance', () => {

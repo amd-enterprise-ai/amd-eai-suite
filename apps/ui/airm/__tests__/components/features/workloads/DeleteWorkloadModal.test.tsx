@@ -4,12 +4,10 @@
 
 import { render, screen, fireEvent } from '@testing-library/react';
 
-import {
-  WorkloadStatus,
-  WorkloadType,
-  ProjectStatus,
-} from '@amdenterpriseai/types';
-import type { Workload } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { ProjectStatus } from '@/types/enums/projects';
+import type { Workload } from '@/types/workloads';
 
 import type { WorkloadWithMetrics } from '@/types/workloads';
 
@@ -32,20 +30,13 @@ vi.mock('next-i18next', async (importOriginal) => {
 const mockWorkload: Workload = {
   id: 'wl-001',
   type: WorkloadType.INFERENCE,
-  name: 'my-workload',
   displayName: 'My Workload',
   createdBy: 'user@example.com',
   createdAt: '2025-10-01T00:00:00Z',
   updatedAt: '2025-10-01T01:00:00Z',
   status: WorkloadStatus.RUNNING,
-  project: {
-    id: 'proj-1',
-    name: 'test-project',
-    description: '',
-    status: ProjectStatus.READY,
-    statusReason: null,
-    clusterId: 'cluster-1',
-  },
+  clusterId: 'cluster-1',
+  projectId: 'proj-1',
 };
 
 const mockWorkloadWithMetrics: WorkloadWithMetrics = {
@@ -59,6 +50,7 @@ const mockWorkloadWithMetrics: WorkloadWithMetrics = {
   vram: 128,
   createdAt: '2025-10-01T00:00:00Z',
   createdBy: 'user@example.com',
+  updatedAt: '2025-10-01T01:00:00Z',
 };
 
 describe('DeleteWorkloadModal', () => {

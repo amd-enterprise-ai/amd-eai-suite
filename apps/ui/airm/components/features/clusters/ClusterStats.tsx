@@ -6,9 +6,9 @@ import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { Cluster } from '@amdenterpriseai/types';
-import { WorkloadStatus } from '@amdenterpriseai/types';
-import { WorkloadStatusStatsResponse } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
 
 import { HorizontalStatisticsCards } from '@amdenterpriseai/components';
 

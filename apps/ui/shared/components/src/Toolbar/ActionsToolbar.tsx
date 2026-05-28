@@ -48,7 +48,7 @@ export const ActionsToolbar = ({
           <div className="flex items-center gap-3 sm:justify-start justify-end ml-auto lg:ml-0 order-1 lg:order-2">
             {endContent}
           </div>
-          <div className="w-full border-b border-gray-300 lg:hidden order-1 lg:order-2"></div>
+          <div className="w-full border-b border-default-200 dark:border-default-100 lg:hidden order-1 lg:order-2"></div>
         </>
       ) : null}
     </Toolbar>

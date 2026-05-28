@@ -16,12 +16,14 @@ import {
   fetchProjectGPUMemoryUtilization,
   fetchProjectWorkloadsStatuses,
   fetchProjectWorkloadsMetrics,
+  deleteProject,
 } from '@/services/app';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { QuotaStatus } from '@amdenterpriseai/types';
-import { ProjectWithMembers } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { ProjectStatus } from '@/types/enums/projects';
+import { QuotaStatus } from '@/types/enums/quotas';
+import { GPU_PREEMPTION_DISABLED, ProjectWithMembers } from '@/types/projects';
 
 import ProjectPage from '@/pages/projects/[id]';
 
@@ -52,6 +54,7 @@ const generateMockProjects = (count: number): ProjectWithMembers[] => {
     },
     users: [],
     invitedUsers: [],
+    gpuPreemption: GPU_PREEMPTION_DISABLED,
   }));
 };
 
@@ -66,6 +69,7 @@ vi.mock('@/services/app', async (importOriginal) => {
     fetchProjectAverageGPUIdleTime: vi.fn(),
     fetchProjectSecrets: vi.fn(),
     fetchProjectStorages: vi.fn(),
+    deleteProject: vi.fn(),
   };
 });
 
@@ -78,16 +82,24 @@ vi.mock('next/router', () => ({
   }),
 }));
 
-vi.mock('@amdenterpriseai/hooks', async (importOriginal) => ({
-  ...(await importOriginal()),
-  useAccessControl: vi.fn(() => ({
-    isRoleManagementEnabled: true,
-    isInviteEnabled: true,
-    isAdministrator: true,
-  })),
+vi.mock('@/hooks/useAccessControl', () => ({
+  useAccessControl: vi.fn(),
 }));
 
+const adminAccessControl = {
+  isRoleManagementEnabled: true,
+  isInviteEnabled: true,
+  isAdministrator: true,
+  smtpEnabled: true,
+  isTempPasswordRequired: false,
+};
+
 describe('projects page', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useAccessControl).mockReturnValue(adminAccessControl);
+  });
+
   const renderProjectPage = (
     props?: Partial<React.ComponentProps<typeof ProjectPage>>,
   ) => {
@@ -202,15 +214,22 @@ describe('projects page', () => {
     expect(fetchProjectGPUDeviceUtilization as Mock).toBeCalledTimes(2);
   });
 
-  it('should navigate to project settings when settings button is clicked', () => {
-    act(() => {
+  it('should navigate to project settings when edit settings is clicked from dropdown', async () => {
+    await act(async () => {
       renderProjectPage({
         project: generateMockProjects(1)[0],
       });
     });
 
-    const settingsButton = screen.getByText('dashboard.action.projectSettings');
-    fireEvent.click(settingsButton);
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    const editSettingsItem = screen.getByText('dashboard.action.editSettings');
+    await act(async () => {
+      fireEvent.click(editSettingsItem);
+    });
 
     expect(mockPush).toHaveBeenCalledWith('/projects/1/edit');
   });
@@ -222,7 +241,6 @@ describe('projects page', () => {
       });
     });
 
-    // Verify the time selector component is rendered
     await waitFor(() => {
       expect(screen.getByText('data.refresh')).toBeInTheDocument();
     });
@@ -235,8 +253,246 @@ describe('projects page', () => {
       });
     });
 
-    // Check for overview sections
     expect(screen.getByText('dashboard.overview.title')).toBeInTheDocument();
     expect(screen.getByText('dashboard.workloads.title')).toBeInTheDocument();
+  });
+
+  it('should render dropdown menu with all action items', async () => {
+    const projectWithWorkbench = {
+      ...generateMockProjects(1)[0],
+      cluster: {
+        ...generateMockProjects(1)[0].cluster,
+        workbenchBaseUrl: 'https://workbench.example.com',
+      },
+    };
+
+    await act(async () => {
+      renderProjectPage({ project: projectWithWorkbench });
+    });
+
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    expect(
+      screen.getByText('dashboard.action.editSettings'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('dashboard.action.viewInAiwb')).toBeInTheDocument();
+    expect(screen.getByText('dashboard.action.delete')).toBeInTheDocument();
+  });
+
+  it('should open workbench URL in new window when viewInAiwb is clicked', async () => {
+    const windowOpenSpy = vi
+      .spyOn(window, 'open')
+      .mockImplementation(() => null);
+    const projectWithWorkbench = {
+      ...generateMockProjects(1)[0],
+      cluster: {
+        ...generateMockProjects(1)[0].cluster,
+        workbenchBaseUrl: 'https://workbench.example.com',
+      },
+    };
+
+    await act(async () => {
+      renderProjectPage({ project: projectWithWorkbench });
+    });
+
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    const viewInAiwbItem = screen.getByText('dashboard.action.viewInAiwb');
+    await act(async () => {
+      fireEvent.click(viewInAiwbItem);
+    });
+
+    expect(windowOpenSpy).toHaveBeenCalledWith(
+      `https://workbench.example.com/${projectWithWorkbench.name}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+
+    windowOpenSpy.mockRestore();
+  });
+
+  it('should strip trailing slashes from workbench URL to avoid double-slash', async () => {
+    const windowOpenSpy = vi
+      .spyOn(window, 'open')
+      .mockImplementation(() => null);
+    const projectWithTrailingSlash = {
+      ...generateMockProjects(1)[0],
+      cluster: {
+        ...generateMockProjects(1)[0].cluster,
+        workbenchBaseUrl: 'https://workbench.example.com/',
+      },
+    };
+
+    await act(async () => {
+      renderProjectPage({ project: projectWithTrailingSlash });
+    });
+
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    const viewInAiwbItem = screen.getByText('dashboard.action.viewInAiwb');
+    await act(async () => {
+      fireEvent.click(viewInAiwbItem);
+    });
+
+    expect(windowOpenSpy).toHaveBeenCalledWith(
+      `https://workbench.example.com/${projectWithTrailingSlash.name}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+
+    windowOpenSpy.mockRestore();
+  });
+
+  it('should show viewInAiwb as disabled when workbenchBaseUrl has invalid scheme', async () => {
+    const projectWithInvalidUrl = {
+      ...generateMockProjects(1)[0],
+      cluster: {
+        ...generateMockProjects(1)[0].cluster,
+        workbenchBaseUrl: 'ftp://invalid.example.com',
+      },
+    };
+
+    await act(async () => {
+      renderProjectPage({ project: projectWithInvalidUrl });
+    });
+
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    await waitFor(() => {
+      const viewInAiwbItem = screen.getByText('dashboard.action.viewInAiwb');
+      expect(
+        viewInAiwbItem.closest('[data-disabled="true"]'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('should show delete confirmation modal when delete is clicked', async () => {
+    await act(async () => {
+      renderProjectPage({
+        project: generateMockProjects(1)[0],
+      });
+    });
+
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    const deleteItem = screen.getByText('dashboard.action.delete');
+    await act(async () => {
+      fireEvent.click(deleteItem);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('settings.delete.confirmation.title'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('should call deleteProject API when delete is confirmed', async () => {
+    await act(async () => {
+      renderProjectPage({
+        project: generateMockProjects(1)[0],
+      });
+    });
+
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    const deleteItem = screen.getByText('dashboard.action.delete');
+    await act(async () => {
+      fireEvent.click(deleteItem);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('settings.delete.confirmation.title'),
+      ).toBeInTheDocument();
+    });
+
+    const confirmButton = screen.getByText('actions.confirm.title');
+    await act(async () => {
+      fireEvent.click(confirmButton);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(deleteProject)).toHaveBeenCalledWith(
+        '1',
+        expect.any(Object),
+      );
+    });
+  });
+});
+
+describe('projects page - non-admin', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useAccessControl).mockReturnValue({
+      ...adminAccessControl,
+      isAdministrator: false,
+    });
+  });
+
+  const renderProjectPage = (
+    props?: Partial<React.ComponentProps<typeof ProjectPage>>,
+  ) => {
+    return render(
+      <ProjectPage
+        project={props?.project ?? generateMockProjects(1)[0]}
+        {...props}
+      />,
+      { wrapper },
+    );
+  };
+
+  it('should show team member alert for non-administrators', async () => {
+    await act(async () => {
+      renderProjectPage({
+        project: generateMockProjects(1)[0],
+      });
+    });
+
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    expect(
+      screen.getByText('dashboard.action.teamMemberAlert.title'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('dashboard.action.teamMemberAlert.description'),
+    ).toBeInTheDocument();
+  });
+
+  it('should disable delete action for non-administrators', async () => {
+    await act(async () => {
+      renderProjectPage({
+        project: generateMockProjects(1)[0],
+      });
+    });
+
+    const actionsButton = screen.getByText('dashboard.action.label');
+    await act(async () => {
+      fireEvent.click(actionsButton);
+    });
+
+    const deleteItem = screen.getByText('dashboard.action.delete');
+    expect(deleteItem.closest('[data-disabled="true"]')).toBeInTheDocument();
   });
 });

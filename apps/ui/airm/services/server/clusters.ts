@@ -2,20 +2,17 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 
+import { Cluster } from '@/types/clusters';
 import {
-  Cluster,
   ClusterNode,
   ClusterNodesResponse,
   ClusterStatsResponse,
   ClustersResponse,
-} from '@amdenterpriseai/types';
-import { WorkloadStatusStatsResponse } from '@amdenterpriseai/types';
-import { ClusterProjectsResponse } from '@amdenterpriseai/types';
+} from '@/types/clusters';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
+import { ClusterProjectsResponse } from '@/types/projects';
 
 export const getClusters = async (
   accessToken: string,
@@ -29,8 +26,7 @@ export const getClusters = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get clusters: ${await getErrorMessage(response)}`,
@@ -51,8 +47,7 @@ export const getCluster = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get cluster: ${await getErrorMessage(response)}`,
@@ -73,8 +68,7 @@ export const getClusterNodes = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get cluster nodes: ${await getErrorMessage(response)}`,
@@ -96,8 +90,7 @@ export const getClusterNode = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get cluster node: ${await getErrorMessage(response)}`,
@@ -118,8 +111,7 @@ export const getClusterProjects = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get cluster quota: ${await getErrorMessage(response)}`,
@@ -139,8 +131,7 @@ export const getClusterStats = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get cluster: ${await getErrorMessage(response)}`,
@@ -161,8 +152,7 @@ export const getClusterWorkloadsStatusStats = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get cluster workload status stats: ${await getErrorMessage(response)}`,

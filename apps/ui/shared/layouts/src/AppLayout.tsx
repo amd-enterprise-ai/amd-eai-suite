@@ -5,11 +5,11 @@
 import React from 'react';
 
 import Head from 'next/head';
+import { CollectionElement } from '@react-types/shared';
 
 import { PageBreadcrumbs, SidebarItem } from '@amdenterpriseai/types';
 
-import { Sidebar } from '@amdenterpriseai/components';
-import { AppBar } from '@amdenterpriseai/components';
+import { AppBar, Sidebar } from '@amdenterpriseai/components';
 
 interface Props {
   children: React.ReactNode;
@@ -17,6 +17,9 @@ interface Props {
   appTitle: string;
   menuItems: SidebarItem[];
   toolbarEndContent?: React.ReactNode;
+  additionalMenuItems?: CollectionElement<object>;
+  documentationHref?: string;
+  projectPrefix?: string;
 }
 
 export const AppLayout = ({
@@ -25,6 +28,9 @@ export const AppLayout = ({
   appTitle,
   menuItems,
   toolbarEndContent,
+  additionalMenuItems,
+  documentationHref,
+  projectPrefix,
 }: Props) => {
   return (
     <>
@@ -38,12 +44,19 @@ export const AppLayout = ({
         <link rel="icon" type="image/vnd.microsoft.icon" href="/favicon.ico" />
       </Head>
       <div className="flex overflow-hidden bg-linear-to-b bg-white dark:bg-default-50">
-        <Sidebar appTitle={appTitle} menuItems={menuItems} />
+        <Sidebar
+          appTitle={appTitle}
+          menuItems={menuItems}
+          projectPrefix={projectPrefix}
+        />
         <main className="flex flex-col w-full overflow-x-hidden h-screen">
           <AppBar
             pageBreadcrumb={pageBreadcrumb}
             menuItems={menuItems}
             endContent={toolbarEndContent}
+            additionalMenuItems={additionalMenuItems}
+            documentationHref={documentationHref}
+            projectPrefix={projectPrefix}
           />
           <div className="flex-1 md:mb-0 lg:pb-0 max-h-screen overflow-y-auto h-full px-4 md:px-6 lg:px-8">
             {children}

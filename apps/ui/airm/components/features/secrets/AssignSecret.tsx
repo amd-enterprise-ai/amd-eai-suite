@@ -15,8 +15,8 @@ import { updateSecretAssignment } from '@/services/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { FormField } from '@amdenterpriseai/types';
-import { Project } from '@amdenterpriseai/types';
-import { AssignSecretFormData, Secret } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import { AssignSecretFormData, Secret } from '@/types/secrets';
 
 import { DrawerForm } from '@amdenterpriseai/components';
 import { FormFieldComponent } from '@amdenterpriseai/components';
@@ -52,7 +52,7 @@ export const AssignSecret: React.FC<Props> = ({
         throw new Error('Secret is null');
       }
       return updateSecretAssignment(secret.id, {
-        project_ids: data.projectIds,
+        projectIds: data.projectIds,
       });
     },
     onSuccess: () => {

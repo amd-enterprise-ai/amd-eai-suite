@@ -14,11 +14,8 @@ Resource            resources/aiwb_secrets.resource
 Resource            resources/airm_projects.resource
 Resource            resources/airm_secrets.resource
 
-Suite Setup         Initialize Project Tracking
-Suite Teardown      Clean Up All Created Projects
-Test Setup          Run Keywords
-...                 Initialize AIWB Secret Tracking
-...                 AND    Initialize Secret ID Tracking
+Suite Teardown      Clean Up All Tracked Resources
+Test Setup          Initialize AIWB Secret Tracking
 Test Teardown       Run Keywords
 ...                 Clean Up All Created AIWB Secrets
 ...                 AND    Clean Up All Created Secrets
@@ -44,7 +41,7 @@ List secrets for namespace
     Then AIWB secret list should contain "2" secrets
 
 Filter secrets by use case
-    [Documentation]    Verify use_case filtering returns only matching secrets
+    [Documentation]    Verify useCase filtering returns only matching secrets
     [Tags]    secret    list
 
     Given a ready project with user access exists

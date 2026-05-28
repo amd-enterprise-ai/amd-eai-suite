@@ -8,8 +8,27 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { RelevantDocs } from '@amdenterpriseai/components';
+import type { DocEntry } from '@amdenterpriseai/components';
 
 const mockSetStoredKeys = vi.fn();
+
+const testDocs: DocEntry[] = [
+  {
+    title: 'Chat',
+    description: 'Test deployments and inspect debug output.',
+    url: 'https://example.com/chat',
+  },
+  {
+    title: 'Compare Models',
+    description: 'Compare responses across models.',
+    url: 'https://example.com/compare',
+  },
+  {
+    title: 'Deploy a Model',
+    description: 'Deploy a model and run inference.',
+    url: 'https://example.com/deploy',
+  },
+];
 
 vi.mock('next-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: {} }),
@@ -85,13 +104,13 @@ describe('RelevantDocs', () => {
     vi.clearAllMocks();
   });
 
-  it('returns null when page has no entries', () => {
-    const { container } = render(<RelevantDocs page="unknown-page" />);
+  it('returns null when docs is empty', () => {
+    const { container } = render(<RelevantDocs docs={[]} />);
     expect(container.firstChild).toBeNull();
   });
 
   it('renders accordion with Documentation title and doc cards for page with entries', () => {
-    render(<RelevantDocs page="chat" />);
+    render(<RelevantDocs docs={testDocs} />);
     expect(screen.getByTestId('accordion')).toBeTruthy();
     expect(screen.getByTestId('accordion-item-title').textContent).toBe(
       'title',
@@ -101,14 +120,14 @@ describe('RelevantDocs', () => {
 
   it('persists collapsed state when accordion is toggled closed', async () => {
     const user = userEvent.setup();
-    render(<RelevantDocs page="chat" />);
+    render(<RelevantDocs docs={testDocs} />);
     await user.click(screen.getByTestId('accordion-toggle'));
     expect(mockSetStoredKeys).toHaveBeenCalledWith([]);
   });
 
   it('persists expanded state when accordion is toggled open', async () => {
     const user = userEvent.setup();
-    render(<RelevantDocs page="chat" />);
+    render(<RelevantDocs docs={testDocs} />);
     await user.click(screen.getByTestId('accordion-toggle'));
     expect(mockSetStoredKeys).toHaveBeenCalledWith([]);
     mockSetStoredKeys.mockClear();

@@ -7,19 +7,17 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..messaging.schemas import (
-    ConfigMapStatus,
-    KubernetesMetadata,
-    ProjectSecretStatus,
-    ProjectStorageStatus,
-    StorageInfoConfigMapManifest,
-)
+from api_common.exceptions import ValidationException
+
 from ..projects.enums import ProjectStatus
 from ..projects.repository import get_project_by_id
+from ..secrets.enums import ProjectSecretStatus
 from ..secrets.models import OrganizationSecretAssignment
-from ..utilities.exceptions import ValidationException
+from ..utilities.messaging import KubernetesMetadata
+from ..workloads.enums import ConfigMapStatus
 from .constants import PROJECT_STORAGE_ID_LABEL
-from .enums import StorageStatus
+from .enums import ProjectStorageStatus, StorageStatus
+from .messaging import StorageInfoConfigMapManifest
 from .models import ProjectStorage as ProjectStorageModel
 from .models import Storage as StorageModel
 
@@ -117,11 +115,11 @@ def resolve_storage_status(
     if any(ps.status == ProjectStorageStatus.DELETE_FAILED for ps in project_storages):
         return StorageStatus.DELETE_FAILED, "Some project storages failed to be deleted"
 
-    # Any FAILED → status = FAILED; optionally list project names
+    # Any FAILED → status = FAILED
     if any(ps.status == ProjectStorageStatus.FAILED for ps in project_storages):
         return StorageStatus.FAILED, "Some project storages are in a failed state"
 
-    # Any SYNCED_ERROR or UNKNOWN → status = SYNCED_ERROR; optionally list names
+    # Any SYNCED_ERROR or UNKNOWN → status = SYNCED_ERROR
     if any(ps.status in (ProjectStorageStatus.SYNCED_ERROR, ProjectStorageStatus.UNKNOWN) for ps in project_storages):
         return StorageStatus.SYNCED_ERROR, "Some project storages have failed to sync"
 
@@ -136,6 +134,10 @@ def resolve_storage_status(
     # Partially synced
     if any(ps.status == ProjectStorageStatus.SYNCED for ps in project_storages):
         return StorageStatus.PARTIALLY_SYNCED, None
+
+    # All Pending
+    if all(ps.status == ProjectStorageStatus.PENDING for ps in project_storages):
+        return StorageStatus.PENDING, None
 
     # Fallback
     return StorageStatus.SYNCED_ERROR, "Unknown Project storage states detected."

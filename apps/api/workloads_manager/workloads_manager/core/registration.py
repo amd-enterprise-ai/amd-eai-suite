@@ -9,7 +9,6 @@ from pathlib import Path
 import httpx
 import yaml
 from loguru import logger
-from pydantic import ValidationError
 
 from .. import config
 from ..core.workloads import get_workloads
@@ -197,25 +196,26 @@ def get_overlay_id(chart_id: str, canonical_name: str | None, api_url: httpx.URL
     return None
 
 
+def _get_canonical_name(rel_path_str: str, content: str, stem: str) -> str | None:
+    """Return the canonical name for an overlay file, or None for non-model overlays."""
+    if not rel_path_str.startswith("overrides/models/"):
+        return None
+
+    fallback = stem.replace("_", "/").replace(":", "/")
+    try:
+        raw_data = yaml.safe_load(content)
+        if raw_data and isinstance(raw_data, dict):
+            return OverlayData(**raw_data).canonical_name or fallback
+    except Exception as e:
+        logger.warning(f"Could not parse YAML from {stem}: {e}")
+    return fallback
+
+
 def process_single_overlay(overlay_file: Path, rel_path_str: str, api_url: httpx.URL, chart_id: str) -> tuple[str, str]:
     """Process a single overlay file and return (status, file_id)."""
     try:
         content = overlay_file.read_text(encoding="utf-8")
-
-        # Get canonical name only for model files
-        canonical_name = None
-        if rel_path_str.startswith("overrides/models/"):
-            try:
-                raw_data = yaml.safe_load(content)
-                if raw_data and isinstance(raw_data, dict):
-                    overlay_data = OverlayData(**raw_data)
-                    canonical_name = overlay_data.canonical_name
-            except (ValidationError, Exception) as e:
-                logger.warning(f"Could not parse YAML from {overlay_file.name}: {e}")
-
-            if not canonical_name:
-                # Fallback to filename-based canonical name
-                canonical_name = overlay_file.stem.replace("_", "/").replace(":", "/")
+        canonical_name = _get_canonical_name(rel_path_str, content, overlay_file.stem)
 
         # Upload overlay directly
         with temp_file_with_content(content, suffix=".yaml") as temp_path:

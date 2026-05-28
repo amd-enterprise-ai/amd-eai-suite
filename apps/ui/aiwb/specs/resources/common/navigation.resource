@@ -9,6 +9,15 @@ Documentation       Site-wide navigation keywords for AIWB UI.
 
 
 *** Keywords ***
+Navigate To Project Page
+    [Documentation]    Navigates directly to the project URL and waits for the app to load.
+    ...                Used after login flows where the user needs to land in a specific project
+    ...                context (e.g., new users who have no previously selected namespace).
+    [Arguments]    ${base_url}    ${project_name}
+
+    Go To    ${base_url}/${project_name}
+    Wait For Elements State    css=main    visible    timeout=30s
+
 Select project
     [Documentation]    Selects a project from the project selector dropdown in the header.
     ...                Skips selection if the project is already active.

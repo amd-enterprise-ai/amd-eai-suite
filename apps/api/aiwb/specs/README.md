@@ -129,31 +129,52 @@ Library     libraries.KubeConnection
 The `aim_catalog.robot` suite auto-discovers AIM models from the cluster and tests each one (deploy → verify → inference → metrics → undeploy).
 
 ```bash
-# Run full catalog
+# Run full catalog (all models from cluster)
 uv run --project .. robot --argumentfile arguments.txt aim_catalog.robot
 
+# Run a specific release list from a config file (see config/ for examples)
+uv run --project .. robot --argumentfile arguments.txt \
+  --variable AIM_CATALOG_FILTER:config/silogen-0.11.0.txt \
+  aim_catalog.robot
+
+# Test a specific docker image ref inline (no config file needed)
+uv run --project .. robot --argumentfile arguments.txt \
+  --variable "AIM_CATALOG_FILTER:ghcr.io/silogen/aim-openai-gpt-oss-20b:0.11.0" \
+  aim_catalog.robot
+
+# Test multiple models inline (comma-separated)
+uv run --project .. robot --argumentfile arguments.txt \
+  --variable "AIM_CATALOG_FILTER:ghcr.io/silogen/aim-openai-gpt-oss-20b:0.11.0,ghcr.io/silogen/aim-qwen-qwen3-32b:0.11.0" \
+  aim_catalog.robot
+
 # Test a specific model (use INCLUDE_TAGS — --test doesn't work with dynamically generated tests)
-uv run --project .. robot --argumentfile arguments.txt --variable INCLUDE_TAGS:model:Qwen3-32B aim_catalog.robot
+uv run --project .. robot --argumentfile arguments.txt \
+  --variable INCLUDE_TAGS:model:Qwen3-32B \
+  aim_catalog.robot
 
 # Skip models requiring HuggingFace token
-uv run --project .. robot --argumentfile arguments.txt --variable EXCLUDE_TAGS:requires-hf-token aim_catalog.robot
+uv run --project .. robot --argumentfile arguments.txt \
+  --variable EXCLUDE_TAGS:requires-hf-token \
+  aim_catalog.robot
 
 # Test only version 0.8.5
-uv run --project .. robot --argumentfile arguments.txt --variable AIM_VERSION:0.8.5 aim_catalog.robot
+uv run --project .. robot --argumentfile arguments.txt \
+  --variable AIM_VERSION:0.8.5 \
+  aim_catalog.robot
 
 # Test versions >= 0.9.0
-uv run --project .. robot --argumentfile arguments.txt --variable AIM_VERSION:>=0.9.0 aim_catalog.robot
-
-# Filter by version tag (alternative to AIM_VERSION)
-uv run --project .. robot --argumentfile arguments.txt --variable INCLUDE_TAGS:version:0.8.5 aim_catalog.robot
+uv run --project .. robot --argumentfile arguments.txt \
+  --variable AIM_VERSION:>=0.9.0 \
+  aim_catalog.robot
 ```
 
-| Variable         | Required         | Description                                                            |
-| ---------------- | ---------------- | ---------------------------------------------------------------------- |
-| `HF_TOKEN`       | For gated models | HuggingFace token for meta-llama and similar gated models              |
-| `AIM_VERSION`    | Optional         | Version filter: `0.8.5` (exact), `>=0.9.0` (range), `latest` (default) |
-| `AIWB_API_URL`   | Optional         | Override API URL (auto-resolved from cluster)                          |
-| `AIWB_API_TOKEN` | Optional         | Override OIDC token (auto-acquired from kubectl)                       |
+| Variable             | Required         | Description                                                                                                                                                                                                                                                            |
+| -------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HF_TOKEN`           | For gated models | HuggingFace token for meta-llama and similar gated models                                                                                                                                                                                                              |
+| `AIM_CATALOG_FILTER` | Optional         | File path or inline comma-separated model spec. Accepts `model_image:aim_version` (e.g., `ghcr.io/silogen/aim-openai-gpt-oss-20b:0.11.0`) or HuggingFace model ID (e.g., `openai/gpt-oss-20b`). Can be a `.txt` config file (see `config/`) or passed inline via flag. |
+| `AIM_VERSION`        | Optional         | Version filter: `0.8.5` (exact), `>=0.9.0` (range), `latest` (default)                                                                                                                                                                                                 |
+| `AIWB_API_URL`       | Optional         | Override API URL (auto-resolved from cluster)                                                                                                                                                                                                                          |
+| `AIWB_API_TOKEN`     | Optional         | Override OIDC token (auto-acquired from kubectl)                                                                                                                                                                                                                       |
 
 See [CLAUDE.md](CLAUDE.md) for model discovery details and filtering options.
 

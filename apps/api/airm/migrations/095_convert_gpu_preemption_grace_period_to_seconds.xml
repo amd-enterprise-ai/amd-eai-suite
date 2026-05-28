@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="convert-gpu-preemption-grace-period-to-seconds" author="airm">
+        <comment>gpu_preemption_grace_period was stored in whole minutes; API and DB now use seconds.</comment>
+        <sql>
+            UPDATE projects
+            SET gpu_preemption_grace_period = gpu_preemption_grace_period * 60
+            WHERE gpu_preemption_grace_period IS NOT NULL;
+        </sql>
+    </changeSet>
+</databaseChangeLog>

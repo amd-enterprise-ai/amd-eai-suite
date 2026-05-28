@@ -99,7 +99,7 @@ func TestReconcile_AddsFinalizerToNewResource(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -142,7 +142,7 @@ func TestReconcile_DoesNotDuplicateFinalizer(t *testing.T) {
 
 	// Verify status message was published
 	assert.Len(t, mock.Published, 1)
-	statusMsg, ok := mock.Published[0].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[0].(*common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -178,7 +178,7 @@ func TestReconcile_HandlesDeletionWithValidLabels(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 	assert.Len(t, mock.Published, 1)
 
-	msg, ok := mock.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := mock.Published[0].(common.WorkloadComponentStatusMessage)
 	assert.True(t, ok)
 	assert.Equal(t, "test-kaiwojob", msg.Name)
 	assert.Equal(t, "Deleted", msg.Status)
@@ -273,13 +273,13 @@ func TestReconcile_PublishesAutoDiscoveryMessage(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 	require.Len(t, mock.Published, 2)
 
-	autoMsg, ok := mock.Published[0].(*messaging.AutoDiscoveredWorkloadComponentMessage)
+	autoMsg, ok := mock.Published[0].(*common.AutoDiscoveredWorkloadComponentMessage)
 	require.True(t, ok)
 	assert.Equal(t, kj.Name, autoMsg.Name)
 	assert.NotNil(t, autoMsg.Submitter)
 	assert.Contains(t, *autoMsg.Submitter, "ns:my-sa")
 
-	statusMsg, ok := mock.Published[1].(*messaging.WorkloadComponentStatusMessage)
+	statusMsg, ok := mock.Published[1].(*common.WorkloadComponentStatusMessage)
 	require.True(t, ok)
 	assert.NotEmpty(t, statusMsg.Status)
 }
@@ -307,7 +307,7 @@ func TestReconcile_AutoDiscoveryPublishFailure_ReturnsError(t *testing.T) {
 
 	pubErr := errors.New("auto-discovery publish failed")
 	publisher := testutils.NewMockSelectiveFailingPublisher(func(message interface{}) bool {
-		_, ok := message.(*messaging.AutoDiscoveredWorkloadComponentMessage)
+		_, ok := message.(*common.AutoDiscoveredWorkloadComponentMessage)
 		return ok
 	}, pubErr)
 	r := setupReconcilerWithPublisher(publisher, kj)
@@ -340,7 +340,7 @@ func TestReconcile_StatusPublishFailure_ReturnsError(t *testing.T) {
 
 	pubErr := errors.New("status publish failed")
 	publisher := testutils.NewMockSelectiveFailingPublisher(func(message interface{}) bool {
-		_, ok := message.(*messaging.WorkloadComponentStatusMessage)
+		_, ok := message.(*common.WorkloadComponentStatusMessage)
 		return ok
 	}, pubErr)
 	r := setupReconcilerWithPublisher(publisher, kj)

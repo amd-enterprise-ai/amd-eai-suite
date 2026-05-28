@@ -6,7 +6,7 @@ import { fetchOrganization } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { Organization } from '@amdenterpriseai/types';
+import { Organization } from '@/types/organization';
 
 // Mock dependencies
 vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {

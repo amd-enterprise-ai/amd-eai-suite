@@ -18,11 +18,10 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from api_common.exceptions import ConflictException
 from app import app  # type: ignore
-from app.messaging.schemas import SecretKind, SecretScope
-from app.secrets.enums import SecretStatus
+from app.secrets.enums import SecretKind, SecretScope, SecretStatus
 from app.secrets.schemas import Secrets, SecretWithProjects
-from app.utilities.exceptions import ConflictException
 from tests.dependency_overrides import ADMIN_OVERRIDES, override_dependencies
 
 
@@ -76,7 +75,7 @@ def test_create_secret_success():
         "name": "my-secret",
         "type": SecretKind.EXTERNAL_SECRET.value,
         "scope": SecretScope.ORGANIZATION.value,
-        "project_ids": [str(mock_project_id)],
+        "projectIds": [str(mock_project_id)],
         "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: my-secret",
     }
 
@@ -122,7 +121,7 @@ def test_create_secret_conflict():
         "name": "duplicate-secret",
         "type": SecretKind.EXTERNAL_SECRET.value,
         "scope": SecretScope.ORGANIZATION.value,
-        "project_ids": [],
+        "projectIds": [],
         "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: duplicate-secret",
     }
 
@@ -299,7 +298,7 @@ def test_assign_secret_success():
         mock_get.return_value = mock_secret
 
         with TestClient(app) as client:
-            response = client.put(f"/v1/secrets/{secret_id}/assign", json={"project_ids": [str(project_id)]})
+            response = client.put(f"/v1/secrets/{secret_id}/assign", json={"projectIds": [str(project_id)]})
 
     assert response.status_code == status.HTTP_200_OK
     mock_get.assert_called_once()
@@ -316,7 +315,7 @@ def test_assign_secret_not_found():
         mock_get.return_value = None
 
         with TestClient(app) as client:
-            response = client.put(f"/v1/secrets/{non_existent_id}/assign", json={"project_ids": [str(project_id)]})
+            response = client.put(f"/v1/secrets/{non_existent_id}/assign", json={"projectIds": [str(project_id)]})
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert "not found" in response.json()["detail"]
@@ -340,7 +339,7 @@ def test_assign_secret_validation_error():
         mock_update.side_effect = ValueError("No changes in project assignments")
 
         with TestClient(app) as client:
-            response = client.put(f"/v1/secrets/{secret_id}/assign", json={"project_ids": [str(project_id)]})
+            response = client.put(f"/v1/secrets/{secret_id}/assign", json={"projectIds": [str(project_id)]})
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "No changes" in response.json()["detail"]
@@ -355,7 +354,7 @@ def test_create_organization_secret_success():
         "name": "org-secret",
         "type": SecretKind.EXTERNAL_SECRET.value,
         "scope": SecretScope.ORGANIZATION.value,
-        "project_ids": [str(mock_project_id)],
+        "projectIds": [str(mock_project_id)],
         "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: org-secret",
     }
 
@@ -402,7 +401,7 @@ def test_create_organization_secret_project_not_found():
         "name": "org-secret",
         "type": SecretKind.EXTERNAL_SECRET.value,
         "scope": SecretScope.ORGANIZATION.value,
-        "project_ids": [str(mock_project_id)],
+        "projectIds": [str(mock_project_id)],
         "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: org-secret",
     }
 
@@ -425,7 +424,7 @@ def test_create_organization_secret_conflict():
         "name": "org-secret-dup",
         "type": SecretKind.EXTERNAL_SECRET.value,
         "scope": SecretScope.ORGANIZATION.value,
-        "project_ids": [str(mock_project_id)],
+        "projectIds": [str(mock_project_id)],
         "manifest": "apiVersion: external-secrets.io/v1beta1\nkind: ExternalSecret\nmetadata:\n  name: org-secret-dup",
     }
 

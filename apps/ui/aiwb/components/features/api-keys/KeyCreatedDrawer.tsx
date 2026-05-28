@@ -14,7 +14,7 @@ import {
 import { IconCopy } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 
-import { ApiKeyWithFullKey } from '@amdenterpriseai/types';
+import { ApiKeyWithFullKey } from '@/types/api-keys';
 
 import { useSystemToast } from '@amdenterpriseai/hooks';
 import { Alert } from '@amdenterpriseai/components';

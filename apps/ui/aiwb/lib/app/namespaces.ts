@@ -8,9 +8,9 @@ import {
   TimeSeriesResponse,
   SortDirection,
   ServerSideSortDirection,
-  WorkloadStatus,
   WorkloadType,
 } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 import type {
   NamespaceMetricsResponse,
   NamespacesResponse,
@@ -19,9 +19,9 @@ import type {
 
 // Map UI field names to backend field names
 const FIELD_NAME_MAP: Record<string, string> = {
-  createdAt: 'created_at',
-  createdBy: 'created_by',
-  displayName: 'display_name',
+  createdAt: 'createdAt',
+  createdBy: 'createdBy',
+  displayName: 'displayName',
   name: 'name',
   type: 'type',
   status: 'status',
@@ -57,9 +57,6 @@ export const fetchNamespaceMetrics = async (
   if (sortBy) {
     const backendField = FIELD_NAME_MAP[sortBy] ?? sortBy;
     params.set('sortBy', backendField);
-  }
-
-  if (sortOrder) {
     params.set(
       'sortOrder',
       sortOrder === SortDirection.ASC
@@ -69,11 +66,11 @@ export const fetchNamespaceMetrics = async (
   }
 
   for (const type of workloadTypes ?? []) {
-    params.append('workload_type', type);
+    params.append('workloadType', type);
   }
 
   for (const status of statusFilter ?? []) {
-    params.append('status_filter', status);
+    params.append('statusFilter', status);
   }
 
   const response = await fetch(

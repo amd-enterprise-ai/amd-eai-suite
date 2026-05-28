@@ -2,6 +2,22 @@
 
 // SPDX-License-Identifier: MIT
 
+/** Label set on AIMService resources backed by a namespace-scoped fine-tuned AIMModel. */
+export const FINE_TUNED_LABEL = 'aiwb.apps.eai.amd.com/fine-tuned';
+
+/** Labels stamped on AIMModel CRs by the finetuning pipeline. */
+export const AIM_MODEL_NAME_LABEL = 'aiwb.apps.eai.amd.com/model-name';
+export const AIM_MODEL_WORKLOAD_ID_LABEL = 'airm.silogen.ai/workload-id';
+
+/**
+ * Annotation on fine-tuned AIMService CRs carrying the slash-preserved canonical
+ * (base model) name — e.g. `meta-llama/Llama-3.2-1B-Instruct`. Annotation rather
+ * than label because K8s labels can't contain `/`. Used by the connect modal to
+ * render copy-paste-able code samples that match what vLLM is actually serving as.
+ */
+export const AIM_CANONICAL_NAME_ANNOTATION =
+  'aiwb.apps.eai.amd.com/canonical-name';
+
 /**
  * AimWorkloadStatus: Frontend-friendly deployment status for UI display
  *
@@ -16,6 +32,7 @@ export enum AIMWorkloadStatus {
   DEGRADED = 'degraded',
   NOT_DEPLOYED = 'not_deployed',
   PENDING = 'pending',
+  STARTING = 'starting',
   FAILED = 'failed',
   DELETED = 'deleted',
 }
@@ -59,9 +76,9 @@ export enum AIMServiceStatus {
 }
 
 export type AIMClusterModelMetadataAnnotations = {
-  aimEaiAmdComSourceRegistry: string; // e.g. docker.io
-  aimEaiAmdComSourceRepository: string; // e.g. amdenterpriseai/aim-mistralai-mixtral-8x7b-instruct-v0-1
-  aimEaiAmdComSourceTag: string; // e.g. 0.8.4
+  'aim.eai.amd.com/source-registry': string; // e.g. docker.io
+  'aim.eai.amd.com/source-repository': string; // e.g. amdenterpriseai/aim-mistralai-mixtral-8x7b-instruct-v0-1
+  'aim.eai.amd.com/source-tag': string; // e.g. 0.8.4
 };
 
 /**
@@ -90,7 +107,34 @@ export type AIMClusterModel = {
     status: AIMStatus;
     imageMetadata: AIMImageMetadata;
   };
-  resourceName: string;
+};
+
+/** Namespace-scoped AIMModel as returned by GET /namespaces/{ns}/aims/models/{id} */
+export type AIMModel = {
+  metadata: {
+    name: string;
+    namespace: string | null;
+    uid: string;
+    labels: Record<string, string>;
+    annotations: Record<string, string>;
+    creationTimestamp: string;
+    ownerReferences: {
+      apiVersion: string;
+      blockOwnerDeletion: boolean;
+      kind: string;
+      name: string;
+      uid: string;
+    }[];
+  };
+  spec: {
+    image: string;
+    modelSources: { modelId: string; sourceUri: string }[];
+  };
+  status: {
+    status: string;
+    conditions: AIMServiceCondition[];
+    imageMetadata: AIMImageMetadata;
+  };
 };
 
 export type AIMServiceRuntime = {
@@ -177,7 +221,6 @@ export type AIMService = {
     resolvedModel?: { name?: string };
     resolvedTemplate?: { name?: string };
   };
-  resourceName: string;
   clusterAuthGroupId: string | null;
   endpoints: {
     internal: string;
@@ -197,10 +240,9 @@ export type AIMServiceHistoryResponse = {
 };
 
 export type ParsedAIM = {
-  resourceName: string;
   model: string;
   imageReference: string;
-  anotations: AIMClusterModelMetadataAnnotations;
+  annotations: Record<string, string>;
   description: {
     short: string;
     full: string;
@@ -209,7 +251,7 @@ export type ParsedAIM = {
   imageVersion: string;
   canonicalName: string;
   tags: string[];
-  status: AIMStatus;
+  status: AIMStatus | string;
   workloadStatuses: AIMWorkloadStatus[];
   isPreview: boolean;
   isHfTokenRequired: boolean;
@@ -276,6 +318,12 @@ export type AIMDeployPayload = {
   minReplicas?: number;
   maxReplicas?: number;
   autoScaling?: AutoscalingPolicyConfig;
+
+  // AIMServiceOverrides / template selection (advanced profile params)
+  precision?: string;
+  gpuModel?: string;
+  gpuCount?: number;
+  templateName?: string;
 };
 
 export type UpdateScalingPolicyPayload = {
@@ -323,6 +371,19 @@ export enum AIMMetric {
 
 /** Runtime profile type from AIMClusterServiceTemplate discovery. Only 'optimized' is treated as optimized. */
 
+/** Canonical `metadata.type` value from discovery (see `AIMClusterServiceTemplateProfileMetadata`). */
+export const AIM_PROFILE_TYPE_OPTIMIZED = 'optimized' as const;
+
+/** Profile metadata from AIMClusterServiceTemplate status.profile (discovery). */
+export type AIMClusterServiceTemplateProfileMetadata = {
+  type?: 'optimized' | 'preview' | 'unoptimized';
+  engine?: string;
+  gpu?: string;
+  gpuCount?: number;
+  metric?: string;
+  precision?: string;
+};
+
 /**
  * AIMClusterServiceTemplate represents an optimization profile for an AIM
  * Contains metric type (latency/throughput) and GPU requirements
@@ -340,11 +401,26 @@ export type AIMClusterServiceTemplate = {
     status: 'Ready' | 'NotAvailable';
     /** Runtime profile from discovery. */
     profile?: {
-      metadata?: {
-        type?: 'optimized' | 'preview' | 'unoptimized';
-      };
+      metadata?: AIMClusterServiceTemplateProfileMetadata;
     };
   };
+};
+
+/**
+ * Namespace-scoped AIMServiceTemplate CRD resource.
+ *
+ * Returned by GET /namespaces/{namespace}/models/{model_name}/templates.
+ * Represents a deployment configuration template for a fine-tuned AIMModel,
+ * auto-created by the AIM Engine when the model is ready.
+ */
+export type AIMNamespaceServiceTemplate = {
+  metadata: { name: string };
+  spec: {
+    modelName: string;
+    metric: string | null;
+    precision: string | null;
+  };
+  status: Record<string, unknown>;
 };
 
 /**
@@ -353,33 +429,53 @@ export type AIMClusterServiceTemplate = {
 export type AIMImageMetadata = {
   model: {
     canonicalName: string;
+    descriptionFull?: string;
     hfTokenRequired: boolean | null;
     source: string;
     tags: string[];
     title: string;
     variants: string[];
   };
-  originalLabels: {
-    comAmdAimDescriptionFull: string;
-    comAmdAimHfTokenRequired: string;
-    comAmdAimModelCanonicalName: string;
-    comAmdAimModelPublisher: string;
-    comAmdAimModelRecommendedDeployments: string;
-    comAmdAimModelSource: string;
-    comAmdAimModelTags: string;
-    comAmdAimModelVariants: string;
-    comAmdAimReleaseNotes: string;
-    comAmdAimTitle: string;
-    orgOpencontainersImageAuthors: string;
-    orgOpencontainersImageCreated: string;
-    orgOpencontainersImageDescription: string;
-    orgOpencontainersImageDocumentation: string;
-    orgOpencontainersImageLicenses: string;
-    orgOpencontainersImageRefName: string;
-    orgOpencontainersImageRevision: string;
-    orgOpencontainersImageSource: string;
-    orgOpencontainersImageTitle: string;
-    orgOpencontainersImageVendor: string;
-    orgOpencontainersImageVersion: string;
+  oci?: {
+    description?: string;
+    version?: string;
+    title?: string;
+    licenses?: string;
+    vendor?: string;
+    authors?: string;
+    source?: string;
+    documentation?: string;
+    created?: string;
+    revision?: string;
   };
 };
+
+export interface AimServiceReplica {
+  metadata: {
+    name: string;
+    creationTimestamp?: string;
+  };
+  status?: {
+    phase?: string;
+    podIp?: string;
+    containerStatuses?: {
+      ready?: boolean;
+      restartCount?: number;
+      state?: Record<string, unknown>;
+    }[];
+    conditions?: {
+      type?: string;
+      status?: string;
+      reason?: string;
+      message?: string;
+    }[];
+  };
+  spec?: {
+    nodeName?: string;
+    containers?: {
+      resources?: {
+        limits?: Record<string, string>;
+      };
+    }[];
+  };
+}

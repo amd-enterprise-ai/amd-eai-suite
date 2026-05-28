@@ -81,7 +81,7 @@ func TestReconcile_AddsFinalizer(t *testing.T) {
 
 	// Should publish status
 	require.Len(t, mockPub.Published, 1)
-	statusMsg, ok := mockPub.Published[0].(*messaging.ClusterQuotasStatusMessage)
+	statusMsg, ok := mockPub.Published[0].(*ClusterQuotasStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, messaging.MessageTypeClusterQuotasStatusMessage, statusMsg.MessageType)
 }
@@ -151,7 +151,7 @@ func TestReconcile_PublishesStatusUpdate(t *testing.T) {
 
 	// Should publish status with quota allocations
 	require.Len(t, mockPub.Published, 1)
-	statusMsg, ok := mockPub.Published[0].(*messaging.ClusterQuotasStatusMessage)
+	statusMsg, ok := mockPub.Published[0].(*ClusterQuotasStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, messaging.MessageTypeClusterQuotasStatusMessage, statusMsg.MessageType)
 	assert.Len(t, statusMsg.QuotaAllocations, 2)
@@ -198,7 +198,7 @@ func TestReconcile_DeletionPublishesEmptyQuotas(t *testing.T) {
 
 	// Should publish empty quota allocations
 	require.Len(t, mockPub.Published, 1)
-	statusMsg, ok := mockPub.Published[0].(*messaging.ClusterQuotasStatusMessage)
+	statusMsg, ok := mockPub.Published[0].(*ClusterQuotasStatusMessage)
 	require.True(t, ok)
 	assert.Equal(t, messaging.MessageTypeClusterQuotasStatusMessage, statusMsg.MessageType)
 	assert.Empty(t, statusMsg.QuotaAllocations)
@@ -251,7 +251,7 @@ func TestReconcile_FailedStatusPublishesFailureMessage(t *testing.T) {
 
 	// Should publish failure message
 	require.Len(t, mockPub.Published, 1)
-	failureMsg, ok := mockPub.Published[0].(*messaging.ClusterQuotaFailureMessage)
+	failureMsg, ok := mockPub.Published[0].(*ClusterQuotaFailureMessage)
 	require.True(t, ok)
 	assert.Equal(t, messaging.MessageTypeClusterQuotasFailureMessage, failureMsg.MessageType)
 	assert.WithinDuration(t, time.Now(), failureMsg.UpdatedAt, 2*time.Second)

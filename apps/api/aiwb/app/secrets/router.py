@@ -4,15 +4,14 @@
 
 from textwrap import dedent
 
-from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, status
 
 from api_common.auth.security import get_user_email
-from api_common.schemas import ListResponse
+from api_common.schemas import ListResponse, QueryParam
 
 from ..dispatch.kube_client import KubernetesClient, get_kube_client
 from ..namespaces.security import ensure_access_to_workbench_namespace
-from .enums import SecretUseCase
-from .schemas import SecretCreate, SecretResponse
+from .schemas import SecretCreate, SecretListQuery, SecretResponse
 from .service import create_secret, delete_secret, get_secret_details, list_secrets_for_namespace
 
 router = APIRouter(tags=["Secrets"])
@@ -34,9 +33,9 @@ router = APIRouter(tags=["Secrets"])
     response_model=ListResponse[SecretResponse],
 )
 async def get_secrets(
+    query: QueryParam[SecretListQuery],
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     kube_client: KubernetesClient = Depends(get_kube_client),
-    use_case: SecretUseCase | None = Query(None, description="Filter by use case"),
 ) -> ListResponse[SecretResponse]:
     """
     Get all secrets for a namespace.
@@ -46,7 +45,7 @@ async def get_secrets(
     secrets = await list_secrets_for_namespace(
         kube_client=kube_client,
         namespace=namespace,
-        use_case=use_case,
+        use_case=query.use_case,
     )
     return ListResponse(data=secrets)
 

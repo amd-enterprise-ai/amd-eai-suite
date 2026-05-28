@@ -10,11 +10,14 @@ import {
   waitFor,
 } from '@testing-library/react';
 
-import { Cluster } from '@amdenterpriseai/types';
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { QuotaResource, QuotaStatus } from '@amdenterpriseai/types';
-import { ProjectWithResourceAllocation } from '@amdenterpriseai/types';
+import { Cluster } from '@/types/clusters';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { ProjectStatus } from '@/types/enums/projects';
+import { QuotaResource, QuotaStatus } from '@/types/enums/quotas';
+import {
+  GPU_PREEMPTION_DISABLED,
+  ProjectWithResourceAllocation,
+} from '@/types/projects';
 
 import ProjectsPage from '@/pages/projects';
 
@@ -61,6 +64,7 @@ const generateMockProjects = (
     gpuAllocationExceeded: false,
     cpuAllocationExceeded: false,
     memoryAllocationExceeded: false,
+    gpuPreemption: GPU_PREEMPTION_DISABLED,
   }));
 };
 

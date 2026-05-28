@@ -4,7 +4,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { LogEntry, WorkloadLogParams } from '@amdenterpriseai/types';
+import { LogEntry } from '@/types/workloads';
+import { WorkloadLogParams } from '@/types/workloads';
 
 export interface UseWorkloadLogsStreamOptions {
   namespace: string;
@@ -30,9 +31,9 @@ const buildStreamUrl = (
   params: WorkloadLogParams = {},
 ): string => {
   const urlParams = new URLSearchParams();
-  if (params.startDate) urlParams.append('start_date', params.startDate);
+  if (params.startDate) urlParams.append('startTime', params.startDate);
   if (params.level) urlParams.append('level', params.level);
-  if (params.logType) urlParams.append('log_type', params.logType);
+  if (params.logType) urlParams.append('logType', params.logType);
 
   const queryString = urlParams.toString();
   return `/api/namespaces/${namespace}/workloads/${workloadId}/logs/stream${queryString ? `?${queryString}` : ''}`;

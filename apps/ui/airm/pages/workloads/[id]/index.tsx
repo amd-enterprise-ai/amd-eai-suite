@@ -5,19 +5,28 @@
 import { Card, CardBody, Button } from '@heroui/react';
 import { IconArrowLeft, IconTrash } from '@tabler/icons-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useIsFetching,
+} from '@tanstack/react-query';
 import { GetServerSidePropsContext } from 'next';
 import { getServerSession } from 'next-auth';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useRouter } from 'next/router';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import {
+  useIsLoading,
+  useLastQueryUpdated,
+  useSystemToast,
+} from '@amdenterpriseai/hooks';
 
 import {
   getWorkloadMetrics,
   getWorkloadVramUtilization,
-  getWorkloadJunctionTemperature,
+  getWorkloadGpuUtilization,
   getWorkloadPowerUsage,
   deleteWorkload,
 } from '@/services/app';
@@ -26,14 +35,20 @@ import { getWorkload } from '@/services/server/workloads';
 import { formatDeviceName } from '@/components/features/clusters/NodeWorkloadsTable/WorkloadGpuDevicesDetail';
 import { getClusterNodes } from '@/services/server/clusters';
 
-import { getWorkloadStatusVariants } from '@amdenterpriseai/utils/app';
+import { getWorkloadStatusVariants } from '@/utils/workloads';
 import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
+import {
+  DOCS_RESOURCE_MANAGER_BASE,
+  WithDocumentationLink,
+} from '@amdenterpriseai/utils/app';
 import { authOptions } from '@amdenterpriseai/utils/server';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { TimeRangePeriod, ClusterNode } from '@amdenterpriseai/types';
+import { TimeRangePeriod } from '@amdenterpriseai/types';
+import { ClusterNode } from '@/types/clusters';
 
 import { WorkloadResponse, WorkloadMetricsDetails } from '@/types/workloads';
+import { WorkloadStatus } from '@/types/enums/workloads';
 
 import { ChartTimeSelector } from '@amdenterpriseai/components';
 import { StatusDisplay } from '@amdenterpriseai/components';
@@ -51,7 +66,10 @@ interface Props {
   clusterNodes: ClusterNode[];
 }
 
-const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
+const WorkloadDetailPage: React.FC<Props> & WithDocumentationLink = ({
+  workload,
+  clusterNodes,
+}) => {
   const { t } = useTranslation(['workloads', 'common']);
   const { t: workloadsT } = useTranslation('workloads');
   const router = useRouter();
@@ -80,11 +98,11 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
     start: timeRange.start.toISOString(),
     end: timeRange.end.toISOString(),
   };
+  const queryKeyBase = ['workload', id as string] as const;
 
   const vramQuery = useQuery({
     queryKey: [
-      'workload',
-      id,
+      ...queryKeyBase,
       'vram-utilization',
       gpuMetricsParams.start,
       gpuMetricsParams.end,
@@ -93,23 +111,20 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
     enabled: !!id,
   });
 
-  const temperatureQuery = useQuery({
+  const gpuUtilizationQuery = useQuery({
     queryKey: [
-      'workload',
-      id,
-      'junction-temperature',
+      ...queryKeyBase,
+      'gpu-utilization',
       gpuMetricsParams.start,
       gpuMetricsParams.end,
     ],
-    queryFn: () =>
-      getWorkloadJunctionTemperature(id as string, gpuMetricsParams),
+    queryFn: () => getWorkloadGpuUtilization(id as string, gpuMetricsParams),
     enabled: !!id,
   });
 
   const powerQuery = useQuery({
     queryKey: [
-      'workload',
-      id,
+      ...queryKeyBase,
       'power-usage',
       gpuMetricsParams.start,
       gpuMetricsParams.end,
@@ -118,18 +133,14 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
     enabled: !!id,
   });
 
-  const isGpuMetricsLoading =
-    vramQuery.isLoading || temperatureQuery.isLoading || powerQuery.isLoading;
-  const isGpuMetricsFetching =
-    vramQuery.isFetching ||
-    temperatureQuery.isFetching ||
-    powerQuery.isFetching;
-  const gpuMetricsUpdatedAt =
-    Math.max(
-      vramQuery.dataUpdatedAt ?? 0,
-      temperatureQuery.dataUpdatedAt ?? 0,
-      powerQuery.dataUpdatedAt ?? 0,
-    ) || undefined;
+  const isFetchingMetrics =
+    useIsFetching({
+      queryKey: queryKeyBase,
+    }) > 0;
+
+  const isLoadingMetrics = useIsLoading(queryKeyBase);
+
+  const lastUpdated = useLastQueryUpdated(queryKeyBase);
 
   const gpuDevices = useMemo(() => {
     const toSeries = (values: { value: number; timestamp: string }[]) =>
@@ -138,15 +149,15 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
       values.length > 0 ? values[values.length - 1].value : null;
 
     const vramDevices = vramQuery.data?.gpuDevices ?? [];
-    const tempDevices = temperatureQuery.data?.gpuDevices ?? [];
+    const gpuUtilDevices = gpuUtilizationQuery.data?.gpuDevices ?? [];
     const powerDevices = powerQuery.data?.gpuDevices ?? [];
 
     const vramByUuid = new Map(vramDevices.map((d) => [d.gpuUuid, d]));
-    const tempByUuid = new Map(tempDevices.map((d) => [d.gpuUuid, d]));
+    const gpuUtilByUuid = new Map(gpuUtilDevices.map((d) => [d.gpuUuid, d]));
     const powerByUuid = new Map(powerDevices.map((d) => [d.gpuUuid, d]));
 
     const uniqueDevices = new Map(
-      [...vramDevices, ...tempDevices, ...powerDevices].map((d) => [
+      [...vramDevices, ...gpuUtilDevices, ...powerDevices].map((d) => [
         d.gpuUuid,
         { gpuUuid: d.gpuUuid, gpuId: d.gpuId, hostname: d.hostname },
       ]),
@@ -155,16 +166,16 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
     return Array.from(uniqueDevices.values())
       .map((base) => {
         const vram = vramByUuid.get(base.gpuUuid)?.metric?.values ?? [];
-        const temp = tempByUuid.get(base.gpuUuid)?.metric?.values ?? [];
+        const gpuUtil = gpuUtilByUuid.get(base.gpuUuid)?.metric?.values ?? [];
         const power = powerByUuid.get(base.gpuUuid)?.metric?.values ?? [];
         return {
           ...base,
           displayLabel: formatDeviceName(base),
           vramUtilizationPct: latestValue(vram),
-          junctionTemperatureC: latestValue(temp),
+          gpuUtilizationPct: latestValue(gpuUtil),
           powerUsageW: latestValue(power),
           vramUtilizationSeries: toSeries(vram),
-          junctionTemperatureSeries: toSeries(temp),
+          gpuUtilizationSeries: toSeries(gpuUtil),
           powerUsageSeries: toSeries(power),
         };
       })
@@ -173,7 +184,7 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
           a.hostname.localeCompare(b.hostname) ||
           parseInt(a.gpuId, 10) - parseInt(b.gpuId, 10),
       );
-  }, [vramQuery.data, temperatureQuery.data, powerQuery.data]);
+  }, [vramQuery.data, gpuUtilizationQuery.data, powerQuery.data]);
 
   const nodesByHostname = useMemo(
     () =>
@@ -215,10 +226,9 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
   }, [refetchWorkloadMetrics]);
 
   const hasGpuMetrics = gpuDevices.length > 0;
-  const showGpuLoadingPlaceholder =
-    isGpuMetricsLoading && gpuDevices.length === 0;
+  const showGpuLoadingPlaceholder = isLoadingMetrics && gpuDevices.length === 0;
 
-  const moduleName = workload.displayName || workload.name;
+  const moduleName = workload.displayName || '';
 
   return (
     <div className="inline-flex flex-col w-full max-w-6xl mx-auto p-4 md:p-6 gap-6">
@@ -246,6 +256,10 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
             variant="flat"
             size="sm"
             startContent={<IconTrash size={16} />}
+            isDisabled={[
+              WorkloadStatus.DELETING,
+              WorkloadStatus.DELETED,
+            ].includes(workload.status)}
             onPress={() => setIsDeleteModalOpen(true)}
           >
             {t('workloads:details.actions.delete')}
@@ -263,10 +277,8 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
             <ChartTimeSelector
               onTimeRangeChange={handleTimeRangeChange}
               onChartsRefresh={handleChartsRefresh}
-              isFetching={isGpuMetricsFetching}
-              lastFetchedTimestamp={
-                gpuMetricsUpdatedAt ? new Date(gpuMetricsUpdatedAt) : undefined
-              }
+              isFetching={isFetchingMetrics}
+              lastFetchedTimestamp={lastUpdated}
               initialTimePeriod={TimeRangePeriod['1H']}
             />
           </div>
@@ -286,7 +298,7 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
             devices={gpuDevices}
             nodesByHostname={nodesByHostname}
             clusterId={workload?.clusterId}
-            isFetching={isGpuMetricsFetching}
+            isFetching={isFetchingMetrics}
           />
         )}
       </section>
@@ -299,7 +311,7 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex flex-col gap-4 md:w-1/2">
             <WorkloadBasicInfoCard
-              name={workload.displayName || workload.name}
+              name={workload.displayName || ''}
               workloadId={workload.id}
               createdBy={workload.createdBy}
             />
@@ -331,6 +343,8 @@ const WorkloadDetailPage: React.FC<Props> = ({ workload, clusterNodes }) => {
     </div>
   );
 };
+
+WorkloadDetailPage.documentationLink = `${DOCS_RESOURCE_MANAGER_BASE}/workloads/workload-detail.html`;
 
 export default WorkloadDetailPage;
 

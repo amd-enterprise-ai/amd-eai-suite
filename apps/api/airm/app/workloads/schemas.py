@@ -4,11 +4,11 @@
 
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, Field
 
-from ..messaging.schemas import WorkloadComponentKind, WorkloadComponentStatus, WorkloadStatus
-from ..utilities.schema import BaseEntityPublic
-from .enums import WorkloadType
+from api_common.schemas import BaseEntityPublic, BaseModel
+
+from .enums import WorkloadComponentKind, WorkloadComponentStatus, WorkloadStatus, WorkloadType
 
 
 class WorkloadResponse(BaseEntityPublic):
@@ -17,8 +17,6 @@ class WorkloadResponse(BaseEntityPublic):
     status: WorkloadStatus = Field(description="The status of the workload")
     display_name: str | None = Field(None, description="The display name of the workload")
     type: WorkloadType | None = Field(None, description="The type of the workload")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class Workloads(BaseModel):
@@ -31,8 +29,6 @@ class WorkloadComponent(BaseEntityPublic):
     api_version: str = Field(description="The component API version.")
     status: WorkloadComponentStatus = Field(description="The status of the component.")
     status_reason: str | None = Field(None, description="Details if any about the status")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkloadWithComponents(WorkloadResponse):
@@ -74,4 +70,4 @@ class WorkloadStatusCount(BaseModel):
 class WorkloadStatusStats(BaseModel):
     name: str = Field(description="The name of the entity (project or cluster).", min_length=2, max_length=64)
     total_workloads: int = Field(description="The total number of workloads.")
-    statusCounts: list[WorkloadStatusCount] = Field(description="The total count of workloads grouped by status.")
+    status_counts: list[WorkloadStatusCount] = Field(description="The total count of workloads grouped by status.")

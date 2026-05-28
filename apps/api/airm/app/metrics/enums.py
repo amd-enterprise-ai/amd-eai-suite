@@ -7,5 +7,5 @@ from enum import StrEnum
 
 class WorkloadDeviceMetricKind(StrEnum):
     VRAM_UTILIZATION = "vram_utilization"
-    JUNCTION_TEMPERATURE = "junction_temperature"
+    GPU_UTILIZATION = "gpu_utilization"
     POWER_USAGE = "power_usage"

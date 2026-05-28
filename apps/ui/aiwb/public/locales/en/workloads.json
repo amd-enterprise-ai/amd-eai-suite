@@ -19,6 +19,15 @@
       "failed": "Failed",
       "pending": "Pending"
     },
+    "profile": {
+      "title": "Profile",
+      "performanceMetric": "Performance metric",
+      "accelerator": "Accelerator",
+      "acceleratorCount": "Accelerator count",
+      "precision": "Precision",
+      "automatic": "(automatic)",
+      "unoptimizedNotice": "Unoptimized profile. The performance might be worse compared to hardware-optimized models."
+    },
     "fields": {
       "updatedAt": "Updated at",
       "externalHost": "External host",
@@ -65,7 +74,11 @@
       },
       "kvCacheUsage": {
         "title": "KV Cache usage",
-        "description": "Amount of key-value cache used by the workload during inference."
+        "description": "Percentage of key-value cache capacity used by the workload during inference."
+      },
+      "replicaSelector": {
+        "label": "Filter by replica",
+        "allReplicas": "All replicas"
       },
       "gpuConsumption": {
         "title": "GPU consumption",
@@ -79,15 +92,19 @@
     "breadcrumb": "Workload details"
   },
   "status": {
+    "Added": "Added",
+    "Pending": "Pending",
+    "Starting": "Starting",
+    "Running": "Running",
     "Complete": "Complete",
     "Failed": "Failed",
     "Degraded": "Degraded",
     "Deleting": "Deleting",
     "Deleted": "Deleted",
-    "Pending": "Pending",
-    "Running": "Running",
-    "Unknown": "Unknown",
-    "Starting": "Starting"
+    "DeleteFailed": "Delete Failed",
+    "Downloading": "Downloading",
+    "Terminated": "Terminated",
+    "Unknown": "Unknown"
   },
   "type": {
     "MODEL_DOWNLOAD": "Model download",
@@ -163,7 +180,8 @@
         "description": "Description",
         "image": "Image",
         "resourceName": "Resource name",
-        "containerVersion": "Container version"
+        "containerVersion": "Container version",
+        "baseModel": "Base model"
       },
       "cluster": {
         "title": "Cluster",

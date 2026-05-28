@@ -5,8 +5,9 @@
 from unittest.mock import patch
 from uuid import uuid4
 
-from fastapi import Response, status
+from fastapi import status
 from fastapi.testclient import TestClient
+from starlette.responses import StreamingResponse
 
 from api_common.exceptions import NotFoundException
 from app import app  # type: ignore[attr-defined]
@@ -127,12 +128,16 @@ def test_get_dataset_not_found():
 
 @override_dependencies(MINIO_OVERRIDES)
 def test_download_dataset_success():
-    """Test downloading a dataset file."""
+    """Test downloading a dataset file with streaming."""
     dataset_id = uuid4()
 
-    mock_response = Response(
-        content=b'{"text": "test"}\n',
-        media_type="application/jsonlines",
+    # Mock streaming response
+    def mock_stream():
+        yield b'{"text": "test"}\n'
+
+    mock_response = StreamingResponse(
+        mock_stream(),
+        media_type="application/jsonl; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="test-dataset.jsonl"'},
     )
 
@@ -143,7 +148,7 @@ def test_download_dataset_success():
             response = client.get(f"/v1/namespaces/test-namespace/datasets/{dataset_id}/download")
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.headers["content-type"] == "application/jsonlines"
+    assert response.headers["content-type"] == "application/jsonl; charset=utf-8"
     assert "test-dataset.jsonl" in response.headers.get("content-disposition", "")
 
 

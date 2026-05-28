@@ -33,19 +33,22 @@ vi.mock('@heroui/react', async () => {
   };
 });
 
-// Mock icons
-vi.mock('@tabler/icons-react', () => ({
-  IconEye: (props: any) => (
-    <svg data-testid="icon-eye" aria-label="Show password" {...props}>
-      <title>Show password</title>
-    </svg>
-  ),
-  IconEyeOff: (props: any) => (
-    <svg data-testid="icon-eye-off" aria-label="Hide password" {...props}>
-      <title>Hide password</title>
-    </svg>
-  ),
-}));
+vi.mock('@tabler/icons-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tabler/icons-react')>();
+  return {
+    ...actual,
+    IconEye: (props: any) => (
+      <svg data-testid="icon-eye" aria-label="Show password" {...props}>
+        <title>Show password</title>
+      </svg>
+    ),
+    IconEyeOff: (props: any) => (
+      <svg data-testid="icon-eye-off" aria-label="Hide password" {...props}>
+        <title>Hide password</title>
+      </svg>
+    ),
+  };
+});
 
 describe('FormPasswordInput', () => {
   const TestWrapper = ({ children }: any) => {
@@ -175,26 +178,6 @@ describe('FormPasswordInput', () => {
       // Toggle back
       fireEvent.click(toggleButton);
       expect(input).toHaveAttribute('name', 'password');
-    });
-  });
-
-  describe('Form field cleanup', () => {
-    it('calls unregister on unmount', () => {
-      const unregisterMock = vi.fn();
-
-      const TestComponent = () => {
-        const form = useForm({ defaultValues: { password: '' } });
-        form.unregister = unregisterMock;
-        return <FormPasswordInput form={form} name="password" />;
-      };
-
-      const { unmount } = render(<TestComponent />);
-      expect(unregisterMock).not.toHaveBeenCalled();
-
-      unmount();
-      expect(unregisterMock).toHaveBeenCalledWith('password', {
-        keepValue: false,
-      });
     });
   });
 

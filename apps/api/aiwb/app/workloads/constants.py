@@ -12,10 +12,13 @@ from .enums import WorkloadStatus
 # Workload label keys for tracking and discovery
 WORKLOAD_ID_LABEL = f"{EAI_APPS_METADATA_PREFIX}/workload-id"
 MODEL_ID_LABEL = f"{AIWB_METADATA_PREFIX}/model-id"
+MODEL_NAME_LABEL = f"{AIWB_METADATA_PREFIX}/model-name"
+CANONICAL_NAME_LABEL = f"{AIWB_METADATA_PREFIX}/canonical-name"
 DATASET_ID_LABEL = f"{AIWB_METADATA_PREFIX}/dataset-id"
 CHART_ID_LABEL = f"{AIWB_METADATA_PREFIX}/chart-id"
 DISPLAY_NAME_LABEL = f"{AIWB_METADATA_PREFIX}/display-name"
 WORKLOAD_TYPE_LABEL = f"{EAI_APPS_METADATA_PREFIX}/workload-type"
+
 
 # Workload resource kinds
 DEPLOYMENT_RESOURCE = "Deployment"
@@ -45,11 +48,15 @@ WORKLOAD_RESOURCES = [
     KubernetesResource("batch/v1", "CronJob", "cronjobs"),
     KubernetesResource("networking.k8s.io/v1", "Ingress", "ingresses"),
     KubernetesResource("gateway.networking.k8s.io/v1", "HTTPRoute", "httproutes"),
+    KubernetesResource("rbac.authorization.k8s.io/v1", "Role", "roles"),
+    KubernetesResource("rbac.authorization.k8s.io/v1", "RoleBinding", "rolebindings"),
+    KubernetesResource("v1", "ServiceAccount", "serviceaccounts"),
 ]
 
 # Status filters for workloads (excludes DELETED)
 ACTIVE_WORKLOAD_STATUSES = [
     WorkloadStatus.PENDING,
+    WorkloadStatus.STARTING,
     WorkloadStatus.RUNNING,
     WorkloadStatus.COMPLETE,
     WorkloadStatus.FAILED,

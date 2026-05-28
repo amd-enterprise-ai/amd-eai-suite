@@ -10,12 +10,19 @@ import pytest
 from keycloak import KeycloakAdmin
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.messaging.schemas import NamespaceStatus, ProjectSecretStatus, ProjectStorageStatus, QuotaStatus, SecretScope
+from api_common.exceptions import ConflictException, NotFoundException, UnhealthyException, ValidationException
 from app.messaging.sender import MessageSender
+from app.namespaces.enums import NamespaceStatus
 from app.namespaces.repository import get_namespace_by_project_and_cluster
-from app.projects.enums import ProjectStatus
+from app.projects.enums import GpuPreemptionPolicy, ProjectStatus
 from app.projects.repository import get_project_by_id, get_project_by_name
-from app.projects.schemas import ProjectCreate, ProjectEdit, Projects, ProjectsWithResourceAllocation
+from app.projects.schemas import (
+    GpuPreemptionConfig,
+    ProjectCreate,
+    ProjectEdit,
+    Projects,
+    ProjectsWithResourceAllocation,
+)
 from app.projects.service import (
     add_users_to_project_and_keycloak_group,
     create_project,
@@ -29,12 +36,12 @@ from app.projects.service import (
     update_project,
     update_project_status_from_components,
 )
+from app.quotas.enums import QuotaStatus
 from app.quotas.schemas import QuotaBase
-from app.secrets.enums import SecretStatus
+from app.secrets.enums import ProjectSecretStatus, SecretScope, SecretStatus
 from app.secrets.repository import get_secret
-from app.storages.enums import StorageStatus
+from app.storages.enums import ProjectStorageStatus, StorageStatus
 from app.storages.repository import get_storage_by_id
-from app.utilities.exceptions import ConflictException, NotFoundException, UnhealthyException, ValidationException
 from tests import factory  # type: ignore[attr-defined]
 
 
@@ -54,7 +61,6 @@ async def test_create_project(db_session: AsyncSession) -> None:
             memory_bytes=0,
             ephemeral_storage_bytes=0,
             gpu_count=0,
-            description="test quota",
         ),
     )
     creator = "test_creator"
@@ -81,13 +87,55 @@ async def test_create_project(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_project_with_gpu_preemption(db_session: AsyncSession) -> None:
+    """Test that gpu preemption fields are persisted during project creation."""
+    cluster = await factory.create_cluster(db_session, name="PreemptCluster")
+    cluster.last_heartbeat_at = datetime.now(tz=UTC)
+    await db_session.flush()
+
+    project_data = ProjectCreate(
+        name="preempt-project",
+        description="A project with GPU preemption",
+        cluster_id=cluster.id,
+        quota=QuotaBase(
+            cpu_milli_cores=0,
+            memory_bytes=0,
+            ephemeral_storage_bytes=0,
+            gpu_count=0,
+        ),
+        gpu_preemption=GpuPreemptionConfig(
+            enabled=True,
+            threshold=75,
+            grace_period=1800,
+            policy=GpuPreemptionPolicy.ALWAYS,
+        ),
+    )
+
+    kc_admin = AsyncMock(spec=KeycloakAdmin)
+    mock_message_sender = AsyncMock(spec=MessageSender)
+
+    with patch("app.projects.service.create_group", return_value="aabbccdd-1234-5678-9abc-def012345678"):
+        project = await create_project(kc_admin, db_session, mock_message_sender, cluster, project_data, "creator")
+
+    assert project.gpu_preemption_enabled is True
+    assert project.gpu_preemption_threshold == 75
+    assert project.gpu_preemption_grace_period == 1800
+    assert project.gpu_preemption_policy == GpuPreemptionPolicy.ALWAYS
+
+    stored = await get_project_by_name(db_session, "preempt-project")
+    assert stored is not None
+    assert stored.gpu_preemption_enabled is True
+    assert stored.gpu_preemption_policy == GpuPreemptionPolicy.ALWAYS
+
+
+@pytest.mark.asyncio
 async def test_create_project_unhealthy_cluster(db_session: AsyncSession) -> None:
     """Test that creating a project for an unhealthy cluster raises UnhealthyException."""
     # Create cluster with old heartbeat (unhealthy)
     cluster = await factory.create_cluster(
         db_session,
         name="TestCluster",
-        workloads_base_url="https://test-cluster.example.com",
+        workbench_base_url="https://test-cluster.example.com",
     )
     cluster.last_heartbeat_at = datetime.now(tz=UTC) - timedelta(10)
     await db_session.flush()
@@ -101,7 +149,6 @@ async def test_create_project_unhealthy_cluster(db_session: AsyncSession) -> Non
             memory_bytes=0,
             ephemeral_storage_bytes=0,
             gpu_count=0,
-            description="test quota",
         ),
     )
     creator = "test_creator"
@@ -138,7 +185,6 @@ async def test_create_project_duplicate_name(db_session: AsyncSession) -> None:
             memory_bytes=0,
             ephemeral_storage_bytes=0,
             gpu_count=0,
-            description="test quota",
         ),
     )
     creator = "test_creator"
@@ -173,7 +219,6 @@ async def test_create_project_too_many_projects(db_session: AsyncSession) -> Non
             memory_bytes=0,
             ephemeral_storage_bytes=0,
             gpu_count=0,
-            description="test quota",
         ),
     )
     creator = "test_creator"
@@ -215,7 +260,6 @@ async def test_create_project_namespace_collision_with_unmanaged(db_session: Asy
             memory_bytes=0,
             ephemeral_storage_bytes=0,
             gpu_count=0,
-            description="test quota",
         ),
     )
 
@@ -260,7 +304,6 @@ async def test_create_project_namespace_collision_with_managed(db_session: Async
             memory_bytes=0,
             ephemeral_storage_bytes=0,
             gpu_count=10,
-            description="test quota",
         ),
     )
 
@@ -294,8 +337,8 @@ async def test_update_project(db_session: AsyncSession) -> None:
             memory_bytes=0,
             ephemeral_storage_bytes=0,
             gpu_count=10,
-            description="test quota",
         ),
+        gpu_preemption=GpuPreemptionConfig(),
     )
 
     mock_message_sender = AsyncMock(spec=MessageSender)
@@ -307,6 +350,42 @@ async def test_update_project(db_session: AsyncSession) -> None:
     assert project.quota.gpu_count == 10
 
     mock_message_sender.enqueue.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_project_conflict_when_deleting(db_session: AsyncSession) -> None:
+    env = await factory.create_basic_test_environment(db_session, create_project_quota=True)
+    await factory.create_cluster_node(
+        db_session,
+        env.cluster,
+        cpu_milli_cores=16000,
+        memory_bytes=64 * 1024**3,
+        ephemeral_storage_bytes=200 * 1024**3,
+        gpu_count=10,
+    )
+
+    env.project.status = ProjectStatus.DELETING
+    await db_session.flush()
+
+    project_data = ProjectEdit(
+        description="Should not apply",
+        quota=QuotaBase(
+            cpu_milli_cores=0,
+            memory_bytes=0,
+            ephemeral_storage_bytes=0,
+            gpu_count=10,
+            description="test quota",
+        ),
+        gpu_preemption=GpuPreemptionConfig(),
+    )
+
+    mock_message_sender = AsyncMock(spec=MessageSender)
+
+    with pytest.raises(ConflictException) as exc_info:
+        await update_project(db_session, mock_message_sender, env.project, project_data, "test")
+
+    assert "deletion" in str(exc_info.value).lower()
+    mock_message_sender.enqueue.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -832,3 +911,82 @@ async def test_delete_project_recalculates_storage_status(db_session: AsyncSessi
 
     refreshed_storage = await get_storage_by_id(db_session, storage2.id)
     assert refreshed_storage.status == StorageStatus.UNASSIGNED
+
+
+@pytest.mark.asyncio
+async def test_update_project_sends_namespace_update_when_preemption_changes(db_session: AsyncSession) -> None:
+    """A namespace update message is sent when gpu preemption config changes."""
+    env = await factory.create_basic_test_environment(db_session, create_project_quota=True)
+    await factory.create_cluster_node(
+        db_session,
+        env.cluster,
+        cpu_milli_cores=16000,
+        memory_bytes=64 * 1024**3,
+        ephemeral_storage_bytes=200 * 1024**3,
+        gpu_count=10,
+    )
+
+    project_data = ProjectEdit(
+        description="A new project description",
+        quota=QuotaBase(
+            cpu_milli_cores=0,
+            memory_bytes=0,
+            ephemeral_storage_bytes=0,
+            gpu_count=0,
+        ),
+        gpu_preemption=GpuPreemptionConfig(
+            enabled=True, threshold=50, grace_period=900, policy=GpuPreemptionPolicy.ON_PRESSURE
+        ),
+    )
+
+    mock_message_sender = AsyncMock(spec=MessageSender)
+
+    await update_project(db_session, mock_message_sender, env.project, project_data, "test")
+
+    # One call for quota, one for namespace preemption update
+    assert mock_message_sender.enqueue.call_count == 2
+    namespace_call = next(
+        call
+        for call in mock_message_sender.enqueue.call_args_list
+        if call.args[1].message_type == "project_namespace_update"
+    )
+    assert namespace_call.args[0] == env.project.cluster_id
+    annotations = namespace_call.args[1].namespace_manifest.metadata.annotations
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.enabled"] == "true"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.threshold"] == "50"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.grace-period"] == "900s"
+    assert annotations["kaiwo.silogen.ai/gpu-preemption.policy"] == "OnPressure"
+
+
+@pytest.mark.asyncio
+async def test_update_project_no_namespace_update_when_preemption_unchanged(db_session: AsyncSession) -> None:
+    """No namespace update message is sent when gpu preemption config is unchanged."""
+    env = await factory.create_basic_test_environment(db_session, create_project_quota=True)
+    await factory.create_cluster_node(
+        db_session,
+        env.cluster,
+        cpu_milli_cores=16000,
+        memory_bytes=64 * 1024**3,
+        ephemeral_storage_bytes=200 * 1024**3,
+        gpu_count=10,
+    )
+
+    # Factory creates project with gpu_preemption_enabled=False — send same disabled config
+    project_data = ProjectEdit(
+        description="A new project description",
+        quota=QuotaBase(
+            cpu_milli_cores=0,
+            memory_bytes=0,
+            ephemeral_storage_bytes=0,
+            gpu_count=0,
+        ),
+        gpu_preemption=GpuPreemptionConfig(enabled=False),
+    )
+
+    mock_message_sender = AsyncMock(spec=MessageSender)
+
+    await update_project(db_session, mock_message_sender, env.project, project_data, "test")
+
+    # Only the quota message — no namespace update
+    assert mock_message_sender.enqueue.call_count == 1
+    assert mock_message_sender.enqueue.call_args.args[1].message_type != "project_namespace_update"

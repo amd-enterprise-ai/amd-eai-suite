@@ -7,7 +7,6 @@ Documentation       Test scenarios for Catalog API charts endpoints.
 ...                 Verifies chart creation, listing and deletion operations.
 Resource    resources/aiwb_charts.resource
 Library             OperatingSystem
-Test Setup          Initialize Chart Tracking
 Test Teardown       Clean Up All Created Charts
 
 
@@ -41,6 +40,15 @@ List charts with pagination
     ...                     page_size=2
     Then response status should be 200
     And total count should be greater than 2
+
+Update existing chart
+    [Documentation]    Verify that an existing chart can be updated with new files
+    [Tags]                  charts                  update
+
+    Given a chart exists
+    When update chart request is sent
+    Then response status should be 200
+    And chart should be updated
 
 Delete existing chart
     [Documentation]    Verify that an existing chart can be deleted

@@ -110,6 +110,11 @@ vi.mock('@/components/shared/ModelIcons', () => ({
   ),
 }));
 
+// Mock RequestSoftware to avoid loading its bg.svg asset in jsdom
+vi.mock('@/components/shared/RequestSoftware/RequestSoftware', () => ({
+  RequestSoftware: () => <div data-testid="request-software" />,
+}));
+
 // Mock NestedDropdown to make dropdown testable
 vi.mock('@amdenterpriseai/components', async (importOriginal) => ({
   ...(await importOriginal()),

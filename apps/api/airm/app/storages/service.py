@@ -9,19 +9,15 @@ import yaml
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import ConflictException, NotFoundException, ValidationException
+from api_common.secrets import SecretUseCase
+
 from ..clusters.models import Cluster
-from ..messaging.schemas import (
-    ConfigMapStatus,
-    ProjectS3StorageCreateMessage,
-    ProjectStorageDeleteMessage,
-    ProjectStorageStatus,
-    ProjectStorageUpdateMessage,
-    SecretScope,
-)
 from ..messaging.sender import MessageSender
 from ..projects.models import Project
-from ..projects.schemas import ProjectAssignment, ProjectResponse
-from ..secrets.enums import SecretUseCase
+from ..projects.schemas import ProjectAssignment
+from ..projects.utils import map_to_project_response
+from ..secrets.enums import SecretScope
 from ..secrets.models import OrganizationSecretAssignment
 from ..secrets.repository import (
     create_organization_secret_assignment,
@@ -33,8 +29,13 @@ from ..secrets.utils import (
     parse_manifest_yaml_to_model,
     publish_project_secret_creation_message,
 )
-from ..utilities.exceptions import ConflictException, NotFoundException, ValidationException
-from .enums import StorageStatus
+from ..workloads.enums import ConfigMapStatus
+from .enums import ProjectStorageStatus, StorageStatus
+from .messaging import (
+    ProjectS3StorageCreateMessage,
+    ProjectStorageDeleteMessage,
+    ProjectStorageUpdateMessage,
+)
 from .models import ProjectStorage as ProjectStorageModel
 from .models import Storage as StorageModel
 from .repository import (
@@ -155,7 +156,7 @@ async def create_storage(
         project_storages=[
             ProjectAssignment(
                 id=ps.id,
-                project=ProjectResponse.model_validate(ps.project) if ps.project else None,
+                project=map_to_project_response(ps.project) if ps.project else None,
                 status=ps.status,
                 status_reason=ps.status_reason,
                 created_at=ps.created_at,

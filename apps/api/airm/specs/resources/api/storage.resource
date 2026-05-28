@@ -38,7 +38,7 @@ Get storages
 
     ${endpoint}=    Storage endpoint
     Log    GET ${endpoint}    DEBUG
-    ${response}=    GET on session    ${API_SESSION}    ${endpoint}
+    ${response}=    Safe Get Request    ${endpoint}
     ...    expected_status=${expected_status}
     Log    Response status: ${response.status_code}    DEBUG
     RETURN    ${response}
@@ -124,12 +124,12 @@ Create storage
     ...    - name: Storage name (DNS subdomain format)
     ...    - type: Storage type (e.g., "S3")
     ...    - scope: Storage scope (e.g., "Organization")
-    ...    - secret_id: UUID of secret containing credentials
-    ...    - project_ids: List of project UUIDs to assign to (optional)
+    ...    - secretId: UUID of secret containing credentials
+    ...    - projectIds: List of project UUIDs to assign to (optional)
     ...    - spec: Storage-specific configuration (e.g., S3 bucket details)
     ...
     ...    Returns:
-    ...    Response object with .json() containing created storage with project_storages
+    ...    Response object with .json() containing created storage with projectStorages
     [Arguments]    ${storage_data}    ${expected_status}=200
     Create API session    airm
 
@@ -138,7 +138,7 @@ Create storage
         ${name}=    Get from dictionary    ${storage_data}    name
         Log    POST ${endpoint} - Creating storage '${name}'    DEBUG
         Log    Request body: ${storage_data}    DEBUG
-        ${response}=    POST on session    ${API_SESSION}    ${endpoint}
+        ${response}=    Safe Post Request    ${endpoint}
         ...    json=${storage_data}
         ...    expected_status=${expected_status}
         Log    Response status: ${response.status_code}    DEBUG
@@ -168,7 +168,7 @@ Delete storage
     TRY
         ${endpoint}=    Storage by id endpoint    ${storage_id}
         Log    DELETE ${endpoint}    DEBUG
-        ${response}=    DELETE on session    ${API_SESSION}    ${endpoint}
+        ${response}=    Safe Delete Request    ${endpoint}
         ...    expected_status=${expected_status}
         Log    Response status: ${response.status_code}    DEBUG
         IF    ${response.status_code} == 204
@@ -194,14 +194,14 @@ Assign storage to projects
     [Arguments]    ${storage_id}    ${project_ids}    ${expected_status}=200
     Create API session    airm
 
-    ${assignment_data}=    Create dictionary    project_ids=${project_ids}
+    ${assignment_data}=    Create dictionary    projectIds=${project_ids}
 
     TRY
         ${endpoint}=    Storage assign endpoint    ${storage_id}
         ${project_count}=    Get length    ${project_ids}
         Log    PUT ${endpoint} - Assigning ${project_count} project(s)    DEBUG
         Log    Request body: ${assignment_data}    DEBUG
-        ${response}=    PUT on session    ${API_SESSION}    ${endpoint}
+        ${response}=    Safe Put Request    ${endpoint}
         ...    json=${assignment_data}
         ...    expected_status=${expected_status}
         Log    Response status: ${response.status_code}    DEBUG

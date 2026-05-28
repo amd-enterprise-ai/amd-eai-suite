@@ -2,12 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 
-import { Organization } from '@amdenterpriseai/types';
+import { Organization } from '@/types/organization';
 
 export async function getCurrentUserOrganizationDetails(
   token: string,
@@ -28,7 +25,7 @@ export async function getCurrentUserOrganizationDetails(
     }
 
     const data = await response.json();
-    return convertSnakeToCamel(data) as Organization;
+    return data as Organization;
   } catch (error) {
     console.error('Error fetching current user organization details:', error);
     throw error;

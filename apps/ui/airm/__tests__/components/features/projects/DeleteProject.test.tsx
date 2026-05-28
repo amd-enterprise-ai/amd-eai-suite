@@ -12,11 +12,11 @@ import {
 
 import { deleteProject } from '@/services/app';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { QuotaStatus } from '@amdenterpriseai/types';
-import { ProjectWithResourceAllocation } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { QuotaStatus } from '@/types/enums/quotas';
+import { ProjectWithResourceAllocation } from '@/types/projects';
 
 import DeleteProject from '@/components/features/projects/DeleteProject';
 

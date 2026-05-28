@@ -166,6 +166,16 @@ const BaseDataTable = <T, K extends keyof T, C>({
         ),
     [idKey, frameSize],
   );
+  // TODO: Remove the shallow copy of the data when HeroUI is updated
+  // HeroUI Table caches cell render results and skips re-invoking them when
+  // only disabledKeys changes. Shallow-copying each item produces new object
+  // references that the collection treats as changed, forcing cellRenderer to
+  // be called again with the current isRowDisabled result.
+  const tableItems = useMemo(
+    () =>
+      isLoading ? emptyDataPlaceholder : data.map((item) => ({ ...item })),
+    [isLoading, emptyDataPlaceholder, data, computedDisabledKeys],
+  );
 
   return (
     <div className={className}>
@@ -270,7 +280,7 @@ const BaseDataTable = <T, K extends keyof T, C>({
           emptyContent={t(
             `list.${translationKeyPrefix ? `${translationKeyPrefix}.` : ''}empty.description`,
           )}
-          items={isLoading ? emptyDataPlaceholder : data}
+          items={tableItems}
           isLoading={isFetching}
         >
           {(item) => (

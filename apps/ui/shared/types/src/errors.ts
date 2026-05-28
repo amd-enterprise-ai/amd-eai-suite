@@ -17,4 +17,5 @@ export enum ErrorCodes {
   NO_ACTIVE_PROJECT = 'noActiveProject',
   FETCH_FAILED = 'fetchFailed',
   SERVICE_ERROR = 'service',
+  PROJECT_NOT_FOUND = 'projectNotFound',
 }

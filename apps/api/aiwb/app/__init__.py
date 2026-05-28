@@ -41,7 +41,6 @@ from api_common.exceptions import (
     ValidationException,
 )
 from api_common.fastapi import (
-    api_exception_handler,
     base_api_exception_handler,
     conflict_exception_handler,
     exception_group_handler,
@@ -58,6 +57,7 @@ from api_common.fastapi import (
     value_error_handler,
 )
 from api_common.health.router import router as health_router
+from api_common.middleware import CamelCaseMiddleware
 
 from .aims.router import router as aims_router
 from .aims.syncer import sync_aim_services
@@ -65,11 +65,13 @@ from .apikeys.router import router as apikeys_router
 from .charts.router import router as charts_router
 from .cluster.router import router as cluster_router
 from .cluster_auth.client import init_cluster_auth_client
+from .cluster_auth.config import CLUSTER_AUTH_ENABLED
 from .config import LOG_LEVEL
 from .datasets.router import router as datasets_router
 from .dispatch import poller
 from .dispatch.config import load_k8s_config
 from .dispatch.kube_client import close_dynamic_client, init_kube_client
+from .exceptions import api_exception_handler
 from .logs.client import close_loki_client, init_loki_client
 from .metrics.client import init_prometheus_client
 from .minio import init_minio_client
@@ -115,12 +117,15 @@ async def init_services(app_state: FastAPI) -> None:
     except Exception as e:
         logger.exception("Failed to initialize Loki client", e)
 
-    try:
-        # Initialize cluster-auth client and store in app.state
-        app_state.cluster_auth_client = init_cluster_auth_client()
-    except Exception as e:
-        logger.warning("Failed to initialize cluster-auth client - API key operations will not be available: %s", e)
+    if CLUSTER_AUTH_ENABLED:
+        try:
+            app_state.cluster_auth_client = init_cluster_auth_client()
+        except Exception as e:
+            logger.warning("Failed to initialize cluster-auth client - API key operations will not be available: %s", e)
+            app_state.cluster_auth_client = None
+    else:
         app_state.cluster_auth_client = None
+        logger.info("cluster-auth is disabled (CLUSTER_AUTH_ENABLED=false) — API key endpoints will return 503")
 
 
 async def start_pollers() -> None:
@@ -201,6 +206,8 @@ api_secured_router.include_router(workloads_router, prefix="/v1")
 api_secured_router.include_router(workspaces_router, prefix="/v1")
 api_secured_router.include_router(secrets_router, prefix="/v1")
 api_secured_router.include_router(apikeys_router, prefix="/v1")
+
+app.add_middleware(CamelCaseMiddleware, exclude_path_suffixes=["/chat"])
 
 app.include_router(api_unsecured_router)
 app.include_router(api_secured_router)

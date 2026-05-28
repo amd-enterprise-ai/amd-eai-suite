@@ -47,7 +47,7 @@ func (r *NodeReconciler) handleUpdate(ctx context.Context, node *corev1.Node) (c
 	clusterNode := mapNodeToClusterNode(node)
 
 	// Create update message
-	msg := &messaging.ClusterNodeUpdateMessage{
+	msg := &ClusterNodeUpdateMessage{
 		MessageType: messaging.MessageTypeClusterNodeUpdate,
 		ClusterNode: clusterNode,
 		UpdatedAt:   time.Now(),
@@ -76,7 +76,7 @@ func (r *NodeReconciler) handleDeletion(ctx context.Context, nodeName string) (c
 	log.Info("node deletion detected", "node", nodeName)
 
 	// Create delete message
-	msg := &messaging.ClusterNodeDeleteMessage{
+	msg := &ClusterNodeDeleteMessage{
 		MessageType: messaging.MessageTypeClusterNodeDelete,
 		Name:        nodeName,
 		UpdatedAt:   time.Now(),

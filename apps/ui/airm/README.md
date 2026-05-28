@@ -20,8 +20,8 @@ The app has various settings and features that can be set or toggled using envir
 - NEXTAUTH_URL: the url the app will run on. This is used by next-auth for authentication. See the `.env.local.example` file.
 - KEYCLOAK_ID: ID for the keycloak client used by next-auth for authentication
 - KEYCLOAK_SECRET: the secret for the keycloak authentication client used by next-auth for authentication
-- KEYCLOAK_ISSUER: the URL to the Keycloak issuer (something like https://auth.dev.silogen.ai/realms/airm with the realms)
-- AIRM_API_SERVICE_URL: the URL for the AIRM SERVICE API (`https://airm-api.dev.silogen.ai` for current dev environment) for local development set to `http://localhost:8001`
+- KEYCLOAK_ISSUER: the URL to the Keycloak issuer (e.g., `https://kc.<your-domain>/realms/airm`)
+- AIRM_API_SERVICE_URL: the URL for the AIRM SERVICE API (for local development set to `http://localhost:8001`)
 
 ## Running locally
 
@@ -50,19 +50,9 @@ Here are the instructions for running locally:
 
 > **Note:** The default username and password is `devuser@amd.com` and `password`.
 
-## Setup pre-commit for linting and formatting
+## Code quality hooks
 
-Just be sure to be in the root of the repo and run the following command:
-
-```bash
-pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
-```
-
-This will install the pre-commit hooks and will run the formatting and linting before each commit and run tests before pushing.
-
-### How to skip the pre-commit hooks
-
-Just add the `--no-verify` or `-n` flag to the `git commit` command.
+See [Repository Setup](../../../README.md#repository-setup) for installing prek hooks. Use `git commit --no-verify` or `git push --no-verify` to skip hooks for a single command.
 
 ## Running tests locally
 

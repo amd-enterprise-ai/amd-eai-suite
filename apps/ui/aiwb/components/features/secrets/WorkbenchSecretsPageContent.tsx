@@ -13,7 +13,11 @@ import DeleteSecretModal from './DeleteSecretModal';
 import { SecretsTable } from './SecretsTable';
 
 import { fetchProjectSecrets } from '@/lib/app/secrets';
-import { RelevantDocs } from '@amdenterpriseai/components';
+import {
+  RelevantDocs,
+  AiwbDocsPage,
+  aiwbDocumentationMapping,
+} from '@amdenterpriseai/components';
 import { FilterComponentType, FilterValueMap } from '@amdenterpriseai/types';
 import { useProject } from '@/contexts/ProjectContext';
 import { SecretResponseData } from '@/types/secrets';
@@ -160,7 +164,7 @@ export const WorkbenchSecretsPageContent: React.FC = () => {
           queryKeyToInvalidate={['project', activeProject!, 'secrets']}
         />
       </div>
-      <RelevantDocs page="secrets" />
+      <RelevantDocs docs={aiwbDocumentationMapping[AiwbDocsPage.SECRETS]} />
     </div>
   );
 };

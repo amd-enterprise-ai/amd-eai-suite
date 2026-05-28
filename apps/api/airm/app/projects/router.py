@@ -7,10 +7,21 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, Path, Query, status
 from prometheus_api_client import PrometheusConnect
 from pydantic import AwareDatetime
+from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.collections import (
+    FilterCondition,
+    PaginationConditions,
+    SortCondition,
+    get_filter_query_params,
+    get_pagination_query_params,
+    get_sort_query_params,
+)
+from api_common.exceptions import NotFoundException, ValidationException
+from api_common.secrets import SecretUseCase
+
 from ..clusters.service import get_cluster_by_id, get_cluster_with_resources
-from ..messaging.schemas import SecretKind
 from ..messaging.sender import MessageSender, get_message_sender
 from ..metrics.schemas import (
     MetricsScalarWithRange,
@@ -34,7 +45,7 @@ from ..metrics.service import (
     get_prometheus_client,
     get_workloads_metrics_by_project,
 )
-from ..secrets.enums import SecretUseCase
+from ..secrets.enums import SecretKind
 from ..secrets.models import OrganizationScopedSecret, ProjectScopedSecret
 from ..secrets.repository import (
     get_organization_scoped_secret,
@@ -57,19 +68,8 @@ from ..storages.service import (
     get_project_storages_in_project,
     submit_delete_project_storage,
 )
-from ..utilities.collections.dependencies import (
-    get_filter_query_params,
-    get_pagination_query_params,
-    get_sort_query_params,
-)
-from ..utilities.collections.schemas import (
-    FilterCondition,
-    PaginationConditions,
-    SortCondition,
-)
 from ..utilities.database import get_session
 from ..utilities.enums import Roles
-from ..utilities.exceptions import NotFoundException, ValidationException
 from ..utilities.keycloak_admin import (
     KeycloakAdmin,
     get_kc_admin,
@@ -110,6 +110,7 @@ from .service import (
 from .service import create_project as create_project_in_db
 from .service import get_submittable_projects as get_submittable_projects_from_db
 from .service import update_project as update_project_in_db
+from .utils import map_to_project_response
 
 router = APIRouter(tags=["Projects"])
 
@@ -208,7 +209,7 @@ async def create_project(
         project=project_in,
         creator=user,
     )
-    return ProjectResponse.model_validate(project_db)
+    return map_to_project_response(project_db)
 
 
 @router.put(
@@ -233,7 +234,7 @@ async def update_project(
 ) -> ProjectResponse:
     project = await get_project_by_id(session, project_id)
     project_updated = await update_project_in_db(session, message_sender, project, project_edit, user)
-    return ProjectResponse.model_validate(project_updated)
+    return map_to_project_response(project_updated)
 
 
 @router.delete(
@@ -524,8 +525,16 @@ async def get_project_secrets(
     _: None = Depends(ensure_user_can_view_project),
     session: AsyncSession = Depends(get_session),
     project_id: UUID = Path(description="The unique ID of the project to retrieve secrets for"),
-    use_case: SecretUseCase | None = Query(None, description="Filter secrets by use case"),
-    secret_type: SecretKind | None = Query(None, description="Filter secrets by type"),
+    use_case: SecretUseCase | None = Query(
+        None,
+        description="Filter secrets by use case",
+        alias=to_camel("use_case"),
+    ),
+    secret_type: SecretKind | None = Query(
+        None,
+        description="Filter secrets by type",
+        alias=to_camel("secret_type"),
+    ),
 ) -> ProjectSecretsWithParentSecret:
     project = await get_project_by_id(session, project_id)
 

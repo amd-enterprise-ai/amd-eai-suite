@@ -4,17 +4,13 @@
 
 import { getStorages } from '@/services/server';
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 
 vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@amdenterpriseai/utils/app')>();
   return {
     ...actual,
-    convertSnakeToCamel: vi.fn(),
     getErrorMessage: vi.fn(),
   };
 });
@@ -24,8 +20,7 @@ const OLD_ENV = process.env;
 describe('getStorages', () => {
   const accessToken = 'test-token';
   const apiUrl = 'https://api.example.com';
-  const mockResponseData = { data: [{ id: 1, name: 'test_storage' }] };
-  const camelData = { data: [{ id: 1, name: 'testStorage' }] };
+  const mockResponseData = { data: [{ id: 1, name: 'testStorage' }] };
 
   beforeEach(() => {
     vi.resetModules();
@@ -33,9 +28,7 @@ describe('getStorages', () => {
     vi.clearAllMocks();
   });
 
-  it('should fetch storages and return camel-cased data on success', async () => {
-    (convertSnakeToCamel as any).mockReturnValue(camelData);
-
+  it('should fetch storages and return camelCase data on success', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(mockResponseData),
@@ -52,8 +45,7 @@ describe('getStorages', () => {
         },
       }),
     );
-    expect(convertSnakeToCamel).toHaveBeenCalledWith(mockResponseData);
-    expect(result).toEqual(camelData);
+    expect(result).toEqual(mockResponseData);
   });
 
   it('should throw an error with message from getErrorMessage on failure', async () => {

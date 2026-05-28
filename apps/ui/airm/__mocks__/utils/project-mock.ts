@@ -2,13 +2,15 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { QuotaStatus } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { ProjectStatus } from '@/types/enums/projects';
+import { QuotaStatus } from '@/types/enums/quotas';
 import {
+  GPU_PREEMPTION_DISABLED,
   ProjectWithMembers,
   ProjectWithResourceAllocation,
-} from '@amdenterpriseai/types';
+} from '@/types/projects';
+import { UserRole } from '@amdenterpriseai/types';
 
 export const generateMockProjects = (
   count: number,
@@ -39,6 +41,7 @@ export const generateMockProjects = (
     gpuAllocationExceeded: false,
     cpuAllocationExceeded: false,
     memoryAllocationExceeded: false,
+    gpuPreemption: GPU_PREEMPTION_DISABLED,
   }));
 };
 
@@ -52,13 +55,15 @@ export const generateMockProjectWithMembers = (
       id: (i + 1).toString(),
       firstName: `${(i + 1).toString()} First`,
       lastName: `${(i + 1).toString()} Last`,
-      role: 'Team Member',
+      role: UserRole.TEAM_MEMBER,
       email: `${(i + 1).toString()}@example.com`,
     })),
     invitedUsers: Array.from({ length: invitedUserCount }, (_, i) => ({
       id: `i${i + 1}`,
       email: `${(i + 1).toString()}@example.com`,
-      role: 'Team Member',
+      role: UserRole.TEAM_MEMBER,
+      invitedAt: '2025-10-01T00:00:00Z',
+      invitedBy: 'test@example.com',
     })),
   };
 };

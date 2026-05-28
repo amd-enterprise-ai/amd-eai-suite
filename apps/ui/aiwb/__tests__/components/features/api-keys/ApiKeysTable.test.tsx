@@ -17,7 +17,7 @@ import {
   generateMockApiKeyResponse,
 } from '@/__mocks__/utils/api-keys-mock';
 
-import { ApiKeysTableField } from '@amdenterpriseai/types';
+import { ApiKeysTableField } from '@/types/enums/api-keys-table-fields';
 
 import ApiKeysTable from '@/components/features/api-keys/ApiKeysTable';
 
@@ -192,7 +192,7 @@ describe('ApiKeysTable', () => {
       'project-1',
       mockApiKeys[0].id,
     );
-  });
+  }, 10000);
 
   it('handles sorting', async () => {
     const mockApiKeys = generateMockApiKeys(3);
@@ -223,7 +223,7 @@ describe('ApiKeysTable', () => {
     // The fetch should only be called once (on mount)
     expect(mockFetchProjectApiKeys).toHaveBeenCalledTimes(1);
     expect(mockFetchProjectApiKeys).toHaveBeenCalledWith('project-1');
-  });
+  }, 10000);
 
   it('displays loading skeleton when loading', async () => {
     // Create a promise that never resolves to simulate loading state

@@ -15,8 +15,8 @@ dev = [
     "robotframework-browser>=19.0.0",
     "robotframework-requests>=0.9.7",
     "robotframework-jsonlibrary>=0.5",
-    "PyJWT>=2.10.1",
+    "PyJWT>=2.12.0",
     "PyYAML>=6.0.2",
-    "kubernetes>=31.0.0",
+    "kubernetes>=35.0.0",
     "loguru>=0.7.3",
 ]

@@ -66,7 +66,13 @@ spec:
               value: {{ if .Values.standAloneMode }}"true"{{ else }}"false"{{ end }}
             - name: DEFAULT_NAMESPACE
               value: {{ .Values.defaultNamespace | quote }}
-          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+            - name: CLUSTER_AUTH_ENABLED
+              value: {{ .Values.clusterAuth.enabled | quote }}
+            {{- if not .Values.standAloneMode }}
+            - name: AIRM_APP_URL
+              value: {{ include "aiwb.airmAppUrl" . | quote }}
+            {{- end }}
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: "{{ .Values.frontend.image.pullPolicy }}"
           livenessProbe:
             failureThreshold: 3

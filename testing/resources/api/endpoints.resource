@@ -13,6 +13,11 @@ Library             Collections
 
 
 *** Variables ***
+# Disable SSL certificate verification by default. All dev/test clusters use self-signed
+# certificates, and Python 3.13's stricter OpenSSL rejects them. Override with
+# --variable VERIFY_SSL:${TRUE} on the command line when real certificate validation is needed.
+${VERIFY_SSL}               ${FALSE}
+
 # Per-service base URL cache: dictionary mapping service name to resolved base URL.
 # Populated on first call per service, avoids repeated kubectl and health check calls.
 &{SERVICE_BASE_URLS}
@@ -59,7 +64,7 @@ Service API Endpoint
             # Use discovered public HTTPS endpoint - fail if not accessible
             VAR    ${public_url}       https://${service_name}api.${discovered_domain}
             TRY
-                ${test_response}=   GET             ${public_url}/v1/health    expected_status=200    timeout=10
+                ${test_response}=   GET             ${public_url}/v1/health    expected_status=200    timeout=10    verify=${VERIFY_SSL}
                 Log                 Public endpoint accessible: ${public_url}    level=INFO
             EXCEPT    AS    ${error}
                 Fail    ${service_name} public endpoint ${public_url}/v1/health is not accessible. Error: ${error}

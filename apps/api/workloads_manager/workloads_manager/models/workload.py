@@ -184,18 +184,22 @@ class Workload:
         return chart_files
 
     def get_overlay_files(self) -> list[tuple[Path, str]]:
-        """Get list of overlay files for processing (YAML files in allowed overlay directories)."""
-        overlay_files = []
-        for file_path, rel_path_str in self._iter_files():
-            # Only include overlay files that are allowed and YAML
-            if (
-                self._is_allowed_file(rel_path_str)
-                and rel_path_str.startswith("overrides/")
-                and not rel_path_str.startswith("overrides/dev-center/")
-                and rel_path_str.endswith((".yaml", ".yml"))
-            ):
-                overlay_files.append((file_path, rel_path_str))
-        return overlay_files
+        """Get YAML files at any depth under overlay directories (overrides/* entries in ALLOWED_CHART_PATHS).
+
+        Subdirectories are included. Deployability filtering moved to consumers
+        (AIWB cross-references each recipe's aimManifest.aimId against live
+        AIMClusterServiceTemplate resources at request time), so registration
+        no longer hides recipes based on directory layout.
+        """
+        overlay_dirs = [
+            Path(p.rstrip("/")) for p in config.ALLOWED_CHART_PATHS if p.rstrip("/").startswith("overrides/")
+        ]
+        return [
+            (file_path, rel_path_str)
+            for file_path, rel_path_str in self._iter_files()
+            if rel_path_str.endswith((".yaml", ".yml"))
+            and any(overlay_dir in Path(rel_path_str).parents for overlay_dir in overlay_dirs)
+        ]
 
     def get_chart_upload_data(self) -> dict[str, list[Path]] | None:
         """Get files data for chart upload in the format expected by make_api_request."""

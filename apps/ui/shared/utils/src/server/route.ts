@@ -8,8 +8,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authOptions } from './auth';
 import getLogger from './logger';
 
-import { convertSnakeToCamel } from '../app/api-helpers';
-
 const logger = getLogger();
 
 export class RouteError extends Error {
@@ -71,7 +69,6 @@ export async function proxyRequest(
   req: NextRequest,
   url: string,
   accessToken: string,
-  preserveValuesFor: string[] = [],
 ) {
   /*
     Proxy request from Next.JS API to a provided URL. This function preserves
@@ -116,8 +113,7 @@ export async function proxyRequest(
       return { status: 204 };
     } else {
       const body = await response.json();
-      // Some nested objects should not be converted to camel case.
-      return convertSnakeToCamel(body, preserveValuesFor);
+      return body;
     }
   } else {
     const error = await response.text();

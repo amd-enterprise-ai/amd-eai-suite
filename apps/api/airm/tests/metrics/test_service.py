@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import re
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
@@ -10,8 +11,8 @@ import pytest
 from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.collections import PaginationConditions
 from app.clusters.models import Cluster
-from app.messaging.schemas import WorkloadStatus
 from app.metrics.constants import (
     PROJECT_ID_METRIC_LABEL,
 )
@@ -34,7 +35,7 @@ from app.metrics.service import (
     get_avg_gpu_idle_time_for_project,
     get_current_utilization,
     get_gpu_and_node_counts_for_workload,
-    get_gpu_device_junction_temperature_for_workload,
+    get_gpu_device_gpu_utilization_for_workload,
     get_gpu_device_power_usage_for_workload,
     get_gpu_device_utilization_for_cluster_by_workload_id,
     get_gpu_device_utilization_for_project_by_workload_id,
@@ -52,6 +53,7 @@ from app.metrics.service import (
     get_node_gpu_utilization,
     get_node_gpu_vram_utilization,
     get_node_names_for_workload,
+    get_node_power_usage,
     get_pcie_bandwidth_timeseries_for_node,
     get_pcie_efficiency_timeseries_for_node,
     get_workloads_metrics_by_cluster,
@@ -61,9 +63,9 @@ from app.metrics.service import (
 )
 from app.projects.enums import ProjectStatus
 from app.projects.models import Project
-from app.projects.schemas import ProjectResponse
+from app.projects.utils import map_to_project_response
 from app.quotas.models import Quota
-from app.utilities.collections.schemas import PaginationConditions
+from app.workloads.enums import WorkloadStatus
 from app.workloads.models import Workload
 
 
@@ -76,6 +78,7 @@ from app.workloads.models import Workload
             name="Group1",
             description="Test Group 1",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             created_at=datetime(2023, 1, 1, tzinfo=UTC),
             updated_at=datetime(2023, 1, 1, tzinfo=UTC),
             created_by="test@example.com",
@@ -86,6 +89,7 @@ from app.workloads.models import Workload
             name="Group2",
             description="Test Group 2",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             created_at=datetime(2023, 1, 1, tzinfo=UTC),
             updated_at=datetime(2023, 1, 1, tzinfo=UTC),
             created_by="test@example.com",
@@ -149,6 +153,7 @@ scalar(
             name="Group1",
             description="Test Group 1",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             created_at=datetime(2023, 1, 1, tzinfo=UTC),
             updated_at=datetime(2023, 1, 1, tzinfo=UTC),
             created_by="test@example.com",
@@ -159,6 +164,7 @@ scalar(
             name="Group2",
             description="Test Group 2",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             created_at=datetime(2023, 1, 1, tzinfo=UTC),
             updated_at=datetime(2023, 1, 1, tzinfo=UTC),
             created_by="test@example.com",
@@ -222,6 +228,7 @@ scalar(
             name="Group1",
             description="Test Group 1",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             created_at=datetime(2023, 1, 1, tzinfo=UTC),
             updated_at=datetime(2023, 1, 1, tzinfo=UTC),
             created_by="test@example.com",
@@ -232,6 +239,7 @@ scalar(
             name="Group2",
             description="Test Group 2",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             created_at=datetime(2023, 1, 1, tzinfo=UTC),
             updated_at=datetime(2023, 1, 1, tzinfo=UTC),
             created_by="test@example.com",
@@ -313,6 +321,7 @@ scalar(
                 name="Test Project",
                 description="Test Description",
                 status=ProjectStatus.READY,
+                gpu_preemption_enabled=False,
                 cluster_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
                 created_at=datetime(2023, 1, 1, tzinfo=UTC),
                 updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -333,6 +342,7 @@ scalar(
                 name="Test Project",
                 description="Test Description",
                 status=ProjectStatus.READY,
+                gpu_preemption_enabled=False,
                 cluster_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
                 created_at=datetime(2023, 1, 1, tzinfo=UTC),
                 updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -353,6 +363,7 @@ scalar(
                 name="Test Project",
                 description="Test Description",
                 status=ProjectStatus.READY,
+                gpu_preemption_enabled=False,
                 cluster_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
                 created_at=datetime(2023, 1, 1, tzinfo=UTC),
                 updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -370,6 +381,7 @@ scalar(
             name="group1",
             description="Test Group 1",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             cluster_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
             created_at=datetime(2023, 1, 1, tzinfo=UTC),
             updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -381,6 +393,7 @@ scalar(
             name="group2",
             description="Test Group 2",
             status=ProjectStatus.READY,
+            gpu_preemption_enabled=False,
             cluster_id="f33bf805-2a5f-4f01-8e3b-339fd8c9e092",
             created_at=datetime(2023, 1, 1, tzinfo=UTC),
             updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -463,6 +476,7 @@ async def test_get_metrics_for_workloads_in_project() -> None:
         id=uuid4(),
         name="Test Project",
         status=ProjectStatus.READY,
+        gpu_preemption_enabled=False,
         cluster_id="b4884301-b87c-4e4a-89bc-e60f458f176d",
         created_at=datetime(2023, 1, 1, tzinfo=UTC),
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -582,6 +596,7 @@ async def test_get_gpu_device_utilization_timeseries_for_project(
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
         created_by="test@example.com",
         status=ProjectStatus.READY,
+        gpu_preemption_enabled=False,
         updated_by="test@example.com",
         cluster=Cluster(id="b4884301-b87c-4e4a-89bc-e60f458f176d", name="Test Cluster"),
     )
@@ -594,9 +609,7 @@ async def test_get_gpu_device_utilization_timeseries_for_project(
         MetricsTimeseries(
             data=[
                 DatapointsWithMetadata(
-                    metadata=ProjectDatapointMetadata(
-                        label="utilized_gpus", project=ProjectResponse.model_validate(project)
-                    ),
+                    metadata=ProjectDatapointMetadata(label="utilizedGpus", project=map_to_project_response(project)),
                     values=[Datapoint(value=5.0, timestamp=start), Datapoint(value=10.0, timestamp=end)],
                 )
             ],
@@ -605,9 +618,7 @@ async def test_get_gpu_device_utilization_timeseries_for_project(
         MetricsTimeseries(
             data=[
                 DatapointsWithMetadata(
-                    metadata=ProjectDatapointMetadata(
-                        label="allocated_gpus", project=ProjectResponse.model_validate(project)
-                    ),
+                    metadata=ProjectDatapointMetadata(label="allocatedGpus", project=map_to_project_response(project)),
                     values=[Datapoint(value=8.0, timestamp=start), Datapoint(value=10.0, timestamp=end)],
                 )
             ],
@@ -658,6 +669,7 @@ async def test_get_gpu_memory_utilization_timeseries_for_project(
         name="test-project",
         description="Test description",
         status=ProjectStatus.READY,
+        gpu_preemption_enabled=False,
         cluster_id="b4884301-b87c-4e4a-89bc-e60f458f176d",
         created_at=datetime(2023, 1, 1, tzinfo=UTC),
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
@@ -675,7 +687,7 @@ async def test_get_gpu_memory_utilization_timeseries_for_project(
             data=[
                 DatapointsWithMetadata(
                     metadata=ProjectDatapointMetadata(
-                        label="utilized_gpu_vram", project=ProjectResponse.model_validate(project)
+                        label="utilizedGpuVram", project=map_to_project_response(project)
                     ),
                     values=[Datapoint(value=5.0, timestamp=start), Datapoint(value=10.0, timestamp=end)],
                 )
@@ -686,7 +698,7 @@ async def test_get_gpu_memory_utilization_timeseries_for_project(
             data=[
                 DatapointsWithMetadata(
                     metadata=ProjectDatapointMetadata(
-                        label="allocated_gpu_vram", project=ProjectResponse.model_validate(project)
+                        label="allocatedGpuVram", project=map_to_project_response(project)
                     ),
                     values=[Datapoint(value=8.0, timestamp=start), Datapoint(value=10.0, timestamp=end)],
                 )
@@ -735,6 +747,7 @@ async def test_get_avg_gpu_idle_time_for_project(mock_custom_query: AsyncMock) -
         name="Test Project",
         description="Test description",
         status=ProjectStatus.READY,
+        gpu_preemption_enabled=False,
         created_at=datetime(2023, 1, 1, tzinfo=UTC),
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
         created_by="test@example.com",
@@ -800,6 +813,7 @@ async def test_get_average_pending_time_for_workloads_in_project_created_between
     project = Project(
         id=uuid4(),
         status=ProjectStatus.READY,
+        gpu_preemption_enabled=False,
         created_at=datetime(2023, 1, 1, tzinfo=UTC),
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
         created_by="test@example.com",
@@ -827,6 +841,7 @@ async def test_get_average_pending_time_for_workloads_in_project_created_between
     project = Project(
         id=uuid4(),
         status=ProjectStatus.READY,
+        gpu_preemption_enabled=False,
         created_at=datetime(2023, 1, 1, tzinfo=UTC),
         updated_at=datetime(2023, 1, 1, tzinfo=UTC),
         created_by="test@example.com",
@@ -1035,7 +1050,7 @@ async def test_get_gpu_device_vram_utilization_for_workload(
     assert isinstance(result, GpuDeviceSingleMetricResponse)
     assert len(result.gpu_devices) == 1
     assert result.gpu_devices[0].gpu_uuid == "gpu-1"
-    assert result.gpu_devices[0].metric.series_label == "vram_utilization_pct"
+    assert result.gpu_devices[0].metric.series_label == "vramUtilizationPct"
     assert result.gpu_devices[0].metric.values[0].value == 65.0
     assert isinstance(result.range, MetricsTimeRange)
     assert result.range.start == start
@@ -1055,7 +1070,7 @@ async def test_get_gpu_device_vram_utilization_for_workload(
 @patch("app.metrics.service.parse_device_range_timeseries", autospec=True)
 @patch("app.metrics.service.get_step_for_range_query", return_value=300)
 @patch("app.metrics.service.get_aggregation_lookback_for_metrics", return_value="5m")
-async def test_get_gpu_device_junction_temperature_for_workload(
+async def test_get_gpu_device_gpu_utilization_for_workload(
     mock_lookback: MagicMock,
     mock_step: MagicMock,
     mock_parse: MagicMock,
@@ -1071,17 +1086,17 @@ async def test_get_gpu_device_junction_temperature_for_workload(
     device_key = ("gpu-1", "node-1", "0")
     mock_parse.return_value = {device_key: [Datapoint(timestamp=start, value=42.5)]}
 
-    result = await get_gpu_device_junction_temperature_for_workload(
+    result = await get_gpu_device_gpu_utilization_for_workload(
         workload_id, prometheus_client_mock, start=start, end=end
     )
 
     assert isinstance(result, GpuDeviceSingleMetricResponse)
     assert len(result.gpu_devices) == 1
-    assert result.gpu_devices[0].metric.series_label == "junction_temperature_celsius"
+    assert result.gpu_devices[0].metric.series_label == "gpuActivityPct"
     assert result.gpu_devices[0].metric.values[0].value == 42.5
 
     query = mock_query_range.call_args[1]["query"]
-    assert "gpu_junction_temperature" in query
+    assert "gpu_gfx_activity" in query
 
 
 @pytest.mark.asyncio
@@ -1109,11 +1124,13 @@ async def test_get_gpu_device_power_usage_for_workload(
 
     assert isinstance(result, GpuDeviceSingleMetricResponse)
     assert len(result.gpu_devices) == 1
-    assert result.gpu_devices[0].metric.series_label == "power_watts"
+    assert result.gpu_devices[0].metric.series_label == "powerWatts"
     assert result.gpu_devices[0].metric.values[0].value == 120.0
 
     query = mock_query_range.call_args[1]["query"]
     assert "gpu_package_power" in query
+    assert "gpu_average_package_power" in query
+    assert re.search(r"\bor\b", query)
 
 
 @pytest.mark.asyncio
@@ -1170,7 +1187,7 @@ async def test_get_gpu_device_single_metric_multiple_devices(
     dp = Datapoint(timestamp=start, value=10.0)
     mock_parse.return_value = {key_a: [dp], key_b: [dp]}
 
-    result = await get_gpu_device_junction_temperature_for_workload(
+    result = await get_gpu_device_gpu_utilization_for_workload(
         workload_id, prometheus_client_mock, start=start, end=end
     )
 
@@ -1210,7 +1227,7 @@ async def test_get_node_gpu_utilization(
     assert isinstance(result, GpuDeviceSingleMetricResponse)
     assert len(result.gpu_devices) == 1
     assert result.gpu_devices[0].gpu_uuid == "gpu-1"
-    assert result.gpu_devices[0].metric.series_label == "gpu_activity_pct"
+    assert result.gpu_devices[0].metric.series_label == "gpuActivityPct"
     assert result.gpu_devices[0].metric.values[0].value == 75.0
     assert result.range.start == start
     assert result.range.end == end
@@ -1379,7 +1396,7 @@ async def test_get_node_gpu_vram_utilization(
     assert isinstance(result, GpuDeviceSingleMetricResponse)
     assert len(result.gpu_devices) == 1
     assert result.gpu_devices[0].gpu_uuid == "gpu-1"
-    assert result.gpu_devices[0].metric.series_label == "vram_utilization_pct"
+    assert result.gpu_devices[0].metric.series_label == "vramUtilizationPct"
     assert result.gpu_devices[0].metric.values[0].value == 62.5
     assert result.range.start == start
     assert result.range.end == end
@@ -1502,7 +1519,9 @@ async def test_get_node_gpu_devices_with_metrics(mock_query: AsyncMock) -> None:
     assert mock_query.call_count == 3
     queries = [call[1]["query"] for call in mock_query.call_args_list]
     assert any("gpu_junction_temperature" in q for q in queries)
-    assert any("gpu_package_power" in q for q in queries)
+    assert any(
+        "gpu_package_power" in q and "gpu_average_package_power" in q and re.search(r"\bor\b", q) for q in queries
+    )
     assert any("gpu_used_vram" in q and "gpu_total_vram" in q for q in queries)
     for q in queries:
         assert 'hostname="worker-1"' in q
@@ -1597,11 +1616,9 @@ async def test_get_workloads_on_node_with_gpu_devices_returns_filtered_workloads
     ]
     prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
 
-    workload_ids, devices = await get_workloads_on_node_with_gpu_devices(
-        "worker-1", "my-cluster", prometheus_client_mock
-    )
+    devices = await get_workloads_on_node_with_gpu_devices("worker-1", "my-cluster", prometheus_client_mock)
 
-    assert set(workload_ids) == {"wid-aaa", "wid-bbb"}
+    assert set(devices.keys()) == {"wid-aaa", "wid-bbb"}
     assert "wid-ccc" not in devices
     assert len(devices["wid-aaa"]) == 3
     assert len(devices["wid-bbb"]) == 1
@@ -1618,11 +1635,8 @@ async def test_get_workloads_on_node_with_gpu_devices_empty(
     mock_query.return_value = []
     prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
 
-    workload_ids, devices = await get_workloads_on_node_with_gpu_devices(
-        "idle-worker", "my-cluster", prometheus_client_mock
-    )
+    devices = await get_workloads_on_node_with_gpu_devices("idle-worker", "my-cluster", prometheus_client_mock)
 
-    assert workload_ids == []
     assert devices == {}
 
 
@@ -1636,11 +1650,8 @@ async def test_get_workloads_on_node_with_gpu_devices_deduplicates(
     ]
     prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
 
-    workload_ids, devices = await get_workloads_on_node_with_gpu_devices(
-        "worker-1", "my-cluster", prometheus_client_mock
-    )
+    devices = await get_workloads_on_node_with_gpu_devices("worker-1", "my-cluster", prometheus_client_mock)
 
-    assert workload_ids == ["wid-aaa"]
     assert len(devices["wid-aaa"]) == 1
 
 
@@ -1656,15 +1667,12 @@ async def test_get_workloads_metrics_by_node(
     cluster_id = uuid4()
     project_id = uuid4()
 
-    mock_get_node_devices.return_value = (
-        [str(workload_id)],
-        {
-            str(workload_id): [
-                WorkloadGpuDevice(gpu_id="0", hostname="worker-1"),
-                WorkloadGpuDevice(gpu_id="1", hostname="worker-1"),
-            ]
-        },
-    )
+    mock_get_node_devices.return_value = {
+        str(workload_id): [
+            WorkloadGpuDevice(gpu_id="0", hostname="worker-1"),
+            WorkloadGpuDevice(gpu_id="1", hostname="worker-1"),
+        ]
+    }
 
     mock_workload = MagicMock(spec=Workload)
     mock_workload.id = workload_id
@@ -1715,7 +1723,7 @@ async def test_get_workloads_metrics_by_node(
 async def test_get_workloads_metrics_by_node_no_workloads(
     mock_get_node_devices: AsyncMock,
 ) -> None:
-    mock_get_node_devices.return_value = ([], {})
+    mock_get_node_devices.return_value = {}
     prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
     session_mock = AsyncMock(spec=AsyncSession)
 
@@ -1728,6 +1736,49 @@ async def test_get_workloads_metrics_by_node_no_workloads(
     )
 
     assert result.data == []
+
+
+@pytest.mark.asyncio
+@patch("app.metrics.service.a_custom_query_range", autospec=True)
+@patch("app.metrics.service.parse_device_range_timeseries", autospec=True)
+@patch("app.metrics.service.get_step_for_range_query", return_value=300)
+@patch("app.metrics.service.get_aggregation_lookback_for_metrics", return_value="5m")
+async def test_get_node_power_usage_queries_both_power_metrics(
+    mock_lookback: MagicMock,
+    mock_step: MagicMock,
+    mock_parse: MagicMock,
+    mock_query_range: AsyncMock,
+) -> None:
+    """AMD exporters emit gpu_package_power (MI3xx) XOR gpu_average_package_power (MI2xx);
+    the PromQL `or` returns whichever the exporter has without per-family dispatch."""
+    prometheus_client_mock = AsyncMock(spec=PrometheusConnect)
+    now = datetime.now(UTC)
+    start = (now - timedelta(hours=1)).replace(microsecond=0)
+    end = now.replace(microsecond=0)
+
+    mock_query_range.return_value = [{"metric": {"gpu_uuid": "gpu-1"}, "values": []}]
+    device_key = ("gpu-1", "worker-1", "0")
+    mock_parse.return_value = {device_key: [Datapoint(timestamp=start, value=195.0)]}
+
+    result = await get_node_power_usage(
+        node_name="worker-1",
+        cluster_name="my-cluster",
+        prometheus_client=prometheus_client_mock,
+        start=start,
+        end=end,
+    )
+
+    assert isinstance(result, GpuDeviceSingleMetricResponse)
+    assert len(result.gpu_devices) == 1
+    assert result.gpu_devices[0].metric.series_label == "powerWatts"
+    assert result.gpu_devices[0].metric.values[0].value == 195.0
+
+    query = mock_query_range.call_args[1]["query"]
+    assert "gpu_package_power" in query
+    assert "gpu_average_package_power" in query
+    assert re.search(r"\bor\b", query)
+    assert 'hostname="worker-1"' in query
+    assert 'kube_cluster_name="my-cluster"' in query
 
 
 @pytest.mark.asyncio
@@ -1761,7 +1812,7 @@ async def test_get_node_gpu_junction_temperature(
     assert isinstance(result, GpuDeviceSingleMetricResponse)
     assert len(result.gpu_devices) == 1
     assert result.gpu_devices[0].gpu_uuid == "gpu-1"
-    assert result.gpu_devices[0].metric.series_label == "junction_temperature_celsius"
+    assert result.gpu_devices[0].metric.series_label == "junctionTemperatureCelsius"
     assert result.gpu_devices[0].metric.values[0].value == 72.5
     assert result.range.start == start
     assert result.range.end == end
@@ -1846,7 +1897,7 @@ async def test_get_pcie_bandwidth_timeseries_for_node_success(
     assert result.gpu_devices[0].gpu_uuid == "gpu-1"
     assert result.gpu_devices[0].gpu_id == "0"
     assert result.gpu_devices[0].hostname == "worker-1"
-    assert result.gpu_devices[0].metric.series_label == "pcie_bandwidth"
+    assert result.gpu_devices[0].metric.series_label == "pcieBandwidth"
     assert [v.value for v in result.gpu_devices[0].metric.values] == [1.5, 2.0]
     assert result.range.start == start
     assert result.range.end == end
@@ -2044,7 +2095,7 @@ async def test_get_node_gpu_memory_temperature(
     assert isinstance(result, GpuDeviceSingleMetricResponse)
     assert len(result.gpu_devices) == 1
     assert result.gpu_devices[0].gpu_uuid == "gpu-1"
-    assert result.gpu_devices[0].metric.series_label == "memory_temperature_celsius"
+    assert result.gpu_devices[0].metric.series_label == "memoryTemperatureCelsius"
     assert result.gpu_devices[0].metric.values[0].value == 68.0
     assert result.range.start == start
     assert result.range.end == end

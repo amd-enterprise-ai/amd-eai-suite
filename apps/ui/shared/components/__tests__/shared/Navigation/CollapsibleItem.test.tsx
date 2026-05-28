@@ -22,13 +22,23 @@ vi.mock('next-i18next', () => ({
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/current-path'),
 }));
-
-// Mock the utility function
-vi.mock('@amdenterpriseai/utils/app', () => ({
-  isMenuItemActive: vi.fn((href: string, path: string) => {
-    return href === '/active-item';
+vi.mock('next/router', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    query: {},
   }),
 }));
+
+vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/utils/app')>();
+  return {
+    ...actual,
+    isMenuItemActive: vi.fn((href: string, path: string) => {
+      return href === '/active-item';
+    }),
+  };
+});
 
 const mockItem: SidebarItem = {
   href: '/test-item',

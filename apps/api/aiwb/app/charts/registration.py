@@ -89,7 +89,7 @@ async def register_workloads() -> None:
                             canonical_name=canonical_name,
                             creator="system",
                         )
-            logger.info(f"Registration complete: {created} created, {updated} updated workloads")
+            logger.info(f"Registration complete: {created} created, {updated} updated")
         except Exception as e:
             await session.rollback()
             logger.exception("Registration failed")

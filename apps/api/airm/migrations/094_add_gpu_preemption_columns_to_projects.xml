@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="add-gpu-preemption-columns-to-projects" author="volen">
+        <addColumn tableName="projects">
+            <column name="gpu_preemption_enabled" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="gpu_preemption_threshold" type="integer">
+                <constraints nullable="true"/>
+            </column>
+            <column name="gpu_preemption_grace_period" type="integer">
+                <constraints nullable="true"/>
+            </column>
+            <column name="gpu_preemption_policy" type="character varying">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

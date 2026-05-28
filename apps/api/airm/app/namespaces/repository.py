@@ -8,8 +8,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..messaging.schemas import NamespaceStatus
-from ..utilities.models import set_updated_fields
+from api_common.models import set_updated_fields
+
+from .enums import NamespaceStatus
 from .models import Namespace
 
 

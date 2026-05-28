@@ -4,12 +4,12 @@
 import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
+import { AssignSecretRequest } from '@/types/secrets';
 import {
-  AssignSecretRequest,
   CreateProjectSecretRequest,
   CreateSecretRequest,
   SecretsResponse,
-} from '@amdenterpriseai/types';
+} from '@/types/secrets';
 
 export const fetchSecrets = async (): Promise<SecretsResponse> => {
   const response = await fetch('/api/secrets');

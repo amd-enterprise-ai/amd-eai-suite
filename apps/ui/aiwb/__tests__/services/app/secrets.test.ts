@@ -46,18 +46,18 @@ describe('secrets service', () => {
       expect(getErrorMessage).toHaveBeenCalled();
     });
 
-    it('appends use_case query param when useCase is provided', async () => {
+    it('appends useCase query param when useCase is provided', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: mockJson.mockResolvedValueOnce({ data: [] }),
       });
       await fetchProjectSecrets('proj1', 'ImagePullSecret');
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/proj1/secrets?use_case=ImagePullSecret',
+        '/api/namespaces/proj1/secrets?useCase=ImagePullSecret',
       );
     });
 
-    it('does not append use_case query param when useCase is omitted', async () => {
+    it('does not append useCase query param when useCase is omitted', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: mockJson.mockResolvedValueOnce({ data: [] }),

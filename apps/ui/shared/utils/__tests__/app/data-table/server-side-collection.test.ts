@@ -16,9 +16,9 @@ import { describe, expect, it } from 'vitest';
 type TestType = { name: string; age: number };
 
 describe('buildQueryParams', () => {
-  it('should include page and page_size params', () => {
+  it('should include page and pageSize params', () => {
     const result = buildQueryParams<TestType>(2, 25);
-    expect(result).toBe('page=2&page_size=25');
+    expect(result).toBe('page=2&pageSize=25');
   });
 
   it('should include filter param when filter is provided', () => {
@@ -56,7 +56,7 @@ describe('buildQueryParams', () => {
     const result = buildQueryParams<TestType>(3, 5, filter, sort);
     const params = new URLSearchParams(result);
     expect(params.get('page')).toBe('3');
-    expect(params.get('page_size')).toBe('5');
+    expect(params.get('pageSize')).toBe('5');
     expect(params.get('filter')).toBe(JSON.stringify(filter));
     const parsedSort = JSON.parse(params.get('sort')!);
     expect(parsedSort[0].direction).toBe(ServerSideSortDirection.DESC);

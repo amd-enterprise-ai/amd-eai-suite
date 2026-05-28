@@ -13,9 +13,10 @@ import {
 import { addUsersToProject, deleteUserFromProject } from '@/services/app';
 import { fetchInvitedUsers, fetchUsers } from '@/services/app';
 
-import { generateMockProjects } from '../../../../__mocks__/utils/project-mock';
+import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 
-import { ProjectWithMembers, UserRole } from '@amdenterpriseai/types';
+import { UserRole } from '@amdenterpriseai/types';
+import { ProjectWithMembers } from '@/types/projects';
 
 import { Members } from '@/components/features/projects';
 
@@ -96,14 +97,16 @@ const mockProjectWithMembers: ProjectWithMembers = {
       id: 'user1',
       firstName: 'Biba',
       lastName: 'Bobin',
-      role: 'Team Member',
+      role: UserRole.TEAM_MEMBER,
       email: 'biba.bobin@company.com',
     },
   ],
   invitedUsers: [
     {
       id: 'invUser1',
-      role: 'Platform Administrator',
+      role: UserRole.PLATFORM_ADMIN,
+      invitedAt: '2025-10-01T00:00:00Z',
+      invitedBy: 'test@example.com',
       email: 'invUser1@company.com',
     },
   ],
@@ -116,28 +119,28 @@ const mockProjectWithMultipleMembers: ProjectWithMembers = {
       id: 'user1',
       firstName: 'Biba',
       lastName: 'Bobin',
-      role: 'Team Member',
+      role: UserRole.TEAM_MEMBER,
       email: 'biba.bobin@company.com',
     },
     {
       id: 'user2',
       firstName: 'Boba',
       lastName: 'Bibin',
-      role: 'Project Manager',
+      role: UserRole.TEAM_MEMBER,
       email: 'boba.bibin@company.com',
     },
     {
       id: 'user3',
       firstName: 'Pupa',
       lastName: 'Lupin',
-      role: 'Developer',
+      role: UserRole.TEAM_MEMBER,
       email: 'pupa.lupin@company.com',
     },
     {
       id: 'user4',
       firstName: 'Lupa',
       lastName: 'Pupin',
-      role: 'Designer',
+      role: UserRole.TEAM_MEMBER,
       email: 'lupa.pupin@company.com',
     },
   ],
@@ -339,21 +342,21 @@ describe('Members', () => {
         id: 'userA',
         firstName: 'alice',
         lastName: 'Zephyr',
-        role: 'Engineer',
+        role: UserRole.TEAM_MEMBER,
         email: 'alice@company.com',
       },
       {
         id: 'userB',
         firstName: 'Bob',
         lastName: 'Yellow',
-        role: 'Engineer',
+        role: UserRole.TEAM_MEMBER,
         email: 'bob@company.com',
       },
       {
         id: 'userC',
         firstName: 'charlie',
         lastName: 'alpha',
-        role: 'Engineer',
+        role: UserRole.TEAM_MEMBER,
         email: 'charlie@company.com',
       },
     ];
@@ -609,7 +612,7 @@ describe('Members', () => {
             id: 'test-user-id',
             firstName: 'Test',
             lastName: 'User',
-            role: 'Team Member',
+            role: UserRole.TEAM_MEMBER,
             email: 'test@example.com',
           },
         ],
@@ -654,7 +657,7 @@ describe('Members', () => {
             id: 'different-user-id',
             firstName: 'Different',
             lastName: 'User',
-            role: 'Team Member',
+            role: UserRole.TEAM_MEMBER,
             email: 'different@example.com',
           },
         ],
@@ -910,7 +913,7 @@ describe('Members', () => {
             id: 'test-user-id',
             firstName: 'Test',
             lastName: 'User',
-            role: 'Team Member',
+            role: UserRole.TEAM_MEMBER,
             email: 'test@example.com',
           },
         ],

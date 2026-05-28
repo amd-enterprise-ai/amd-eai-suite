@@ -40,7 +40,7 @@ func HandleDeletion(
 
 	labels := obj.GetLabels()
 	if storageID, ok := labels[ProjectStorageIDLabel]; ok {
-		if err := publishStorageStatus(ctx, publisher, storageID, messaging.ConfigMapStatusDeleted, "ConfigMap deleted."); err != nil {
+		if err := publishStorageStatus(ctx, publisher, storageID, ConfigMapStatusDeleted, "ConfigMap deleted."); err != nil {
 			return err
 		}
 	}
@@ -48,8 +48,8 @@ func HandleDeletion(
 	return agent.RemoveFinalizer(ctx, c, obj, ConfigMapFinalizer)
 }
 
-func publishStorageStatus(ctx context.Context, publisher messaging.MessagePublisher, storageID string, status messaging.ConfigMapStatus, reason string) error {
-	msg := &messaging.ProjectStorageUpdateMessage{
+func publishStorageStatus(ctx context.Context, publisher messaging.MessagePublisher, storageID string, status ConfigMapStatus, reason string) error {
+	msg := &ProjectStorageUpdateMessage{
 		MessageType:      messaging.MessageTypeProjectStorageUpdate,
 		ProjectStorageID: storageID,
 		Status:           status,

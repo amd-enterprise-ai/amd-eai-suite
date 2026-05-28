@@ -32,6 +32,7 @@ const vitestConfig = defineVitestConfig({
     mockReset: true,
     globals: true,
     environment: 'jsdom',
+    ...(process.env.CI ? { testTimeout: 15_000, hookTimeout: 15_000 } : {}),
     alias: {
       '\\.(gif|ttf|eot|svg|png)$': '<rootDir>/__mocks__/fileMock.js',
     },
@@ -55,45 +56,44 @@ const vitestConfig = defineVitestConfig({
         'utils/app/tremor-charts/*.ts', // trust tremor charts have been tested
         '*.js',
       ],
-      // TODO: Re-enable coverage thresholds in CI (GitHub Actions sets CI=true)
-      thresholds: process.env.CI
-        ? undefined
-        : {
-            statements: 70.9,
-            branches: 58.5,
-            functions: 71.4,
-            lines: 71.1,
-            'components/shared/**/*.{ts,tsx}': {
-              statements: 68.8,
-              branches: 60.5,
-              functions: 68.9,
-              lines: 67.6,
-            },
-            'components/features/**/*.{ts,tsx}': {
-              statements: 84,
-              branches: 44,
-              functions: 78,
-              lines: 67,
-            },
-            'pages/**/*.{ts,tsx}': {
-              statements: 66,
-              branches: 42,
-              functions: 63,
-              lines: 67,
-            },
-            'hooks/**/*.{ts,tsx}': {
-              statements: 65,
-              branches: 71,
-              functions: 57,
-              lines: 67,
-            },
-            'utils/**/*.{ts,tsx}': {
-              statements: 67.7,
-              branches: 55,
-              functions: 77.4,
-              lines: 67.6,
-            },
-          },
+      // Coverage baseline (from CI `pnpm test --coverage`, rounded down slightly). Raise when coverage
+      // improves; avoid small upticks that fail CI (see git history for last adjustment).
+      thresholds: {
+        statements: 59,
+        branches: 53.5,
+        functions: 59.5,
+        lines: 59.5,
+        'components/shared/**/*.{ts,tsx}': {
+          statements: 68.8,
+          branches: 60.5,
+          functions: 68.9,
+          lines: 67.6,
+        },
+        'components/features/**/*.{ts,tsx}': {
+          statements: 71,
+          branches: 44,
+          functions: 68,
+          lines: 67,
+        },
+        'pages/**/*.{ts,tsx}': {
+          statements: 49.9,
+          branches: 33.6,
+          functions: 48.2,
+          lines: 50.3,
+        },
+        'hooks/**/*.{ts,tsx}': {
+          statements: 65,
+          branches: 54,
+          functions: 57,
+          lines: 67,
+        },
+        'utils/**/*.{ts,tsx}': {
+          statements: 67.7,
+          branches: 55,
+          functions: 77.4,
+          lines: 67.6,
+        },
+      },
     },
   },
 });

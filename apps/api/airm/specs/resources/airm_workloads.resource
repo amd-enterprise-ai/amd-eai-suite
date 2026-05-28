@@ -13,7 +13,7 @@ Resource            api/workloads.resource
 Resource            resources/api/common.resource
 Resource            airm_projects.resource
 Resource            airm_clusters.resource
-Resource            common/resource_tracking.resource
+Resource            common/airm_resource_cleanup.resource
 Resource            resources/common/resource_lifecycle.resource
 Resource            resources/common/resource_resolver.resource
 Library             Collections
@@ -23,7 +23,7 @@ Library             OperatingSystem
 
 
 *** Variables ***
-@{CREATED_WORKLOAD_IDS}         # List to track created workload IDs from AIRM API for cleanup
+# CREATED_WORKLOAD_IDS is lazy-initialized by Track Workload For Cleanup
 @{CREATED_HELM_RELEASES}        # List to track helm releases for cleanup
 ${TEST_WORKLOAD_RELEASE_NAME}   ${EMPTY}
 ${TEST_WORKLOAD_ID}             ${EMPTY}
@@ -31,13 +31,11 @@ ${TEST_WORKLOAD_ID}             ${EMPTY}
 
 *** Keywords ***
 Initialize Workload Tracking
-    [Documentation]    Resets the lists of created workloads and helm releases
-    ...    Note: This extends the basic tracking from resource_tracking.resource
-    ...    by also tracking helm releases
-    Initialize Workload ID Tracking
+    [Documentation]    Initializes helm release tracking list.
+    ...    Workload IDs are lazy-initialized by Track Workload For Cleanup.
     @{empty_releases}=    Create List
     Set Suite Variable    ${CREATED_HELM_RELEASES}    ${empty_releases}
-    Log    Workload and helm release tracking initialized    DEBUG
+    Log    Helm release tracking initialized    DEBUG
 
 # Given keywords - Setup and data preparation
 
@@ -58,12 +56,13 @@ A simple test workload is prepared
 
 A long-running workload is prepared
     [Documentation]    Prepares a long-running test workload configuration.
-    ...    Returns: config dict with release_name, chart_path, and type.
+    ...    Returns: config dict with release_name, chart_path, type, and sleep_duration.
     ${unique_suffix}=    Generate Random String    6    [LOWER][NUMBERS]
     ${config}=    Create Dictionary
     ...    release_name=test-longrun-${unique_suffix}
     ...    chart_path=${CURDIR}/../test_workloads/long-running
     ...    type=long-running
+    ...    sleep_duration=300
     RETURN    ${config}
 
 A failing workload is prepared
@@ -157,12 +156,12 @@ Find workload in AIRM API
 
     FOR    ${workload}    IN    @{workloads}
         ${workload_id}=    Get From Dictionary    ${workload}    id
-        ${display_name}=    Get From Dictionary    ${workload}    display_name    default=${EMPTY}
+        ${display_name}=    Get From Dictionary    ${workload}    displayName    default=${EMPTY}
 
         # Match by display_name (this is the correct field per API schema)
         IF    '${display_name}' == '${release_name}'
             Set Test Variable    ${TEST_WORKLOAD_ID}    ${workload_id}
-            Append To List    ${CREATED_WORKLOAD_IDS}    ${workload_id}
+            Track Workload For Cleanup    ${workload_id}
             Log    Discovered workload ${release_name} in AIRM API with ID: ${workload_id}    INFO
             RETURN
         END
@@ -289,11 +288,7 @@ Verify workload not found
     Resource Should Not Exist    Get workload    ${TEST_WORKLOAD_ID}
 
 # Cleanup keywords
-# MOVED TO resource_tracking.resource - Commented out to avoid duplicate keyword
-# Clean Up All Created Workloads
-#     [Documentation]    Deletes all workloads created during test execution
-#     ...    Extends the basic cleanup from resource_tracking.resource
-#     ...    by also handling helm releases
+# Clean Up All Created Workloads is defined in airm_resource_cleanup.resource
 #     ${workload_count}=    Get Length    ${CREATED_WORKLOAD_IDS}
 #     ${release_count}=    Get Length    ${CREATED_HELM_RELEASES}
 #
@@ -401,20 +396,23 @@ Verify GPU capacity is exhausted
 
 Cluster GPU resources are exhausted with workloads
     [Documentation]    Given keyword: Exhausts cluster GPU capacity with workloads of specified priority
-    ...    Submits jobs until cluster resources are exhausted (some will be suspended)
-    ...    Uses cluster GPU capacity to ensure we fill the cluster, not just project quota
+    ...    Submits one more single-GPU job than physical cluster GPU count (N+1) so the scheduler cannot
+    ...    admit every workload; at least one job stays suspended. That satisfies Verify GPU capacity is exhausted,
+    ...    which requires a suspended job and was flaky when the loop only submitted N jobs (all could run).
+    ...    Uses cluster GPU capacity to fill the cluster, not just project quota (cohort borrowing).
     [Arguments]    ${priority_class}=low
 
-    # Get cluster GPU capacity to fill the entire cluster (via cohort borrowing)
+    # Physical GPU slots in the cluster; submit N+1 single-GPU jobs to force quota pressure.
     ${cluster_gpu_capacity}=    Get cluster GPU capacity
+    ${job_target_count}=    Evaluate    int(${cluster_gpu_capacity}) + 1
 
     @{job_names}=    Create List
 
-    FOR    ${i}    IN RANGE    ${cluster_gpu_capacity}
+    FOR    ${i}    IN RANGE    ${job_target_count}
         ${job_name}=    Submit GPU job with priority class via kubectl
         ...    ${TEST_PROJECT}[name]    ${1}    ${priority_class}
         Append To List    ${job_names}    ${job_name}
-        Log    Submitted ${priority_class} priority job ${i+1}/${cluster_gpu_capacity}: ${job_name}    INFO
+        Log    Submitted ${priority_class} priority job ${i+1}/${job_target_count}: ${job_name}    INFO
     END
 
     # Wait for Kueue to admit jobs until capacity is exhausted
@@ -430,7 +428,7 @@ Cluster GPU resources are exhausted with workloads
         Set test variable    @{TEST_HIGH_PRIORITY_JOB_NAMES}    @{job_names}
     END
 
-    Log    Cluster GPU resources exhausted with ${cluster_gpu_capacity} ${priority_class} priority workloads    INFO
+    Log    Cluster GPU resources exhausted (${job_target_count} ${priority_class} priority jobs, ${cluster_gpu_capacity} GPU slots)    INFO
 
 A "${priority_class}" priority GPU workload is submitted
     [Documentation]    When keyword: Submits a GPU workload with specified priority class.
@@ -588,7 +586,7 @@ Workload is submitted with manifest via AIRM API
     Set Test Variable       ${TEST_WORKLOAD_ID}    ${workload_id}
     Set Test Variable       ${TEST_RESPONSE}    ${response}
 
-    Append To List          ${CREATED_WORKLOAD_IDS}    ${workload_id}
+    Track Workload For Cleanup    ${workload_id}
 
     Log                     Submitted workload with manifest via AIRM API, ID: ${workload_id}    INFO
     RETURN    ${response}
@@ -635,7 +633,7 @@ Workload should have valid ID and status via API
     # Count workloads belonging to current project
     ${project_workload_count}=    Set Variable    ${0}
     FOR    ${workload}    IN    @{all_workloads}
-        IF    "${workload['project_id']}" == "${TEST_PROJECT_ID}"
+        IF    "${workload['projectId']}" == "${TEST_PROJECT_ID}"
             ${project_workload_count}=    Evaluate    ${project_workload_count} + 1
         END
     END

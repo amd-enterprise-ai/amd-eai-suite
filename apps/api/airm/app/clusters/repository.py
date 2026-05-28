@@ -9,9 +9,10 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..messaging.schemas import ClusterNode as ClusterNodeIn
-from ..utilities.exceptions import ConflictException
-from ..utilities.models import set_updated_fields
+from api_common.exceptions import ConflictException
+from api_common.models import set_updated_fields
+
+from .messaging import ClusterNode as ClusterNodeMessage
 from .models import Cluster, ClusterNode
 from .schemas import ClusterIn, ClusterNameEdit
 from .utils import flatten_for_db_comparison
@@ -92,7 +93,7 @@ async def delete_cluster_nodes(session: AsyncSession, cluster_nodes: list[Cluste
 
 
 async def create_cluster_nodes(
-    session: AsyncSession, cluster: Cluster, nodes: list[ClusterNodeIn], creator: str, created_at: datetime
+    session: AsyncSession, cluster: Cluster, nodes: list[ClusterNodeMessage], creator: str, created_at: datetime
 ) -> list[ClusterNode]:
     new_nodes = [
         ClusterNode(
@@ -117,7 +118,7 @@ async def create_cluster_nodes(
 
 
 async def update_cluster_node(
-    session: AsyncSession, cluster_node: ClusterNode, edits: ClusterNodeIn, updater: str, updated_at: datetime
+    session: AsyncSession, cluster_node: ClusterNode, edits: ClusterNodeMessage, updater: str, updated_at: datetime
 ) -> ClusterNode:
     for key, value in flatten_for_db_comparison(edits).items():
         setattr(cluster_node, key, value)

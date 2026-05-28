@@ -2,45 +2,20 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { SecretScope, SecretType, SecretUseCase } from '@amdenterpriseai/types';
-import { CreateSecretRequest } from '@amdenterpriseai/types';
+import { SecretUseCase } from '@amdenterpriseai/types';
+import { CreateSecretRequest } from '@/types/secrets';
 import { z } from 'zod';
-
-export const generateHuggingFaceSecretManifest = (
-  secretName: string,
-  token: string,
-): string => {
-  const encodedToken = Buffer.from(token, 'utf-8').toString('base64');
-
-  const manifest = {
-    apiVersion: 'v1',
-    kind: 'Secret',
-    metadata: {
-      name: secretName,
-    },
-    type: 'Opaque',
-    data: {
-      token: encodedToken,
-    },
-  };
-
-  return JSON.stringify(manifest, null, 2);
-};
 
 export const createHuggingFaceSecretRequest = (
   name: string,
   token: string,
-  projectIds: string[],
 ): CreateSecretRequest => {
-  const manifest = generateHuggingFaceSecretManifest(name, token);
-
   return {
     name,
-    type: SecretType.KUBERNETES_SECRET,
-    scope: SecretScope.PROJECT,
-    use_case: SecretUseCase.HUGGING_FACE,
-    manifest,
-    project_ids: projectIds,
+    useCase: SecretUseCase.HUGGING_FACE,
+    data: {
+      token: Buffer.from(token, 'utf-8').toString('base64'),
+    },
   };
 };
 

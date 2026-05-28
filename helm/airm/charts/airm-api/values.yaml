@@ -38,6 +38,7 @@ airm:
   postgresql:
     host: "airm-infra-cnpg-cnpg-rw.airm.svc.cluster.local"
     port: 5432
+    database: airm
     userSecretName: "airm-cnpg-user"
   rabbitmq:
     host: "airm-infra-rabbitmq-rabbitmq.airm.svc.cluster.local"
@@ -50,7 +51,7 @@ airm:
   frontend:
     image:
       repository: amdenterpriseai/airm-ui
-      tag: 1.0.2
+      tag: ""
       pullPolicy: IfNotPresent
     servicePort: 80
     resources:
@@ -64,7 +65,7 @@ airm:
   backend:
     image:
       repository: amdenterpriseai/airm-api
-      tag: 1.0.2
+      tag: ""
       pullPolicy: IfNotPresent
 
     servicePort: 80

@@ -5,7 +5,6 @@
   "helper": "Automatically adjust the number of replicas based on demand to optimize resource usage and performance.",
   "description": "Automatically adjust the number of replicas based on demand to optimize resource usage and performance. Scaling up typically takes around 30 seconds, while the scale-down stabilization period is configured at 300 seconds.",
   "replicaRange": "Replica range",
-  "replicas": "Replicas",
   "replicasMinimum": "Replicas (minimum {{count}})",
   "scalingMetric": {
     "label": "Scaling metric",
@@ -55,6 +54,29 @@
       "averageValue": "Scale up when average metric per pod exceeds this value."
     }
   },
+  "podPhase": {
+    "running": "Running",
+    "pending": "Pending",
+    "succeeded": "Succeeded",
+    "failed": "Failed",
+    "unknown": "Unknown"
+  },
+  "replicas": {
+    "toggle": "Toggle replicas table"
+  },
+  "list": {
+    "replicas": {
+      "headers": {
+        "name": { "title": "Replica Name" },
+        "status": { "title": "Status" },
+        "gpuCount": { "title": "GPUs" },
+        "createdAt": { "title": "Created At" }
+      },
+      "empty": {
+        "description": "No replicas found."
+      }
+    }
+  },
   "actions": {
     "cancel": "Cancel",
     "save": "Save",
@@ -63,6 +85,7 @@
   "notifications": {
     "noWorkloadId": "No workload ID provided",
     "updateSuccess": "Scaling settings updated successfully",
-    "updateError": "Failed to update scaling settings"
+    "updateError": "Failed to update scaling settings",
+    "convergenceTimeout": "Settings saved, but the changes have not been fully applied yet. Please refresh the page to check the latest status."
   }
 }

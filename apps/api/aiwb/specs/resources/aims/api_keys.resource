@@ -45,6 +45,9 @@ An AIM model is running
     ${endpoints}=    Get from dictionary    ${json}    endpoints
     ${external_url}=    Get from dictionary    ${endpoints}    external
     Set test variable    ${TEST_AIM_EXTERNAL_HOST}    ${external_url}
+    # Extract cluster auth group ID for API key assignment
+    ${cluster_auth_group_id}=    Get from dictionary    ${json}    clusterAuthGroupId
+    Set test variable    ${TEST_AIM_AUTH_GROUP_ID}    ${cluster_auth_group_id}
 
 An AIM model is running with api key
     [Documentation]    Ensure AIMS model is running and has API key assigned
@@ -62,7 +65,7 @@ An AIM model is running with api key
 # API Key Assignment Keywords for AIMS
 Api key is assigned to AIMS model
     [Documentation]    Assign API key to AIMS model using AIWB API
-    ...    Uses PATCH /api-keys/{api_key_id} endpoint with aim_ids parameter (AIM service IDs)
+    ...    Uses PATCH /api-keys/{api_key_id} endpoint with aimIds parameter (AIM service IDs)
     ...    The API internally maps AIM service IDs to cluster auth group IDs
     ...    Can specify api_key and aim_id or use defaults (TEST_API_KEY, TEST_AIM_ID)
     [Arguments]    ${api_key}=${TEST_API_KEY}    ${aim_id}=${TEST_AIM_ID}
@@ -75,7 +78,7 @@ Api key is assigned to AIMS model
 
     # Update API key bindings via AIWB API with AIM service ID
     @{aim_ids}=    Create list    ${aim_id}
-    ${update_data}=    Create dictionary    aim_ids=${aim_ids}
+    ${update_data}=    Create dictionary    aimIds=${aim_ids}
 
     ${namespace}=    Get Project Namespace
     ${response}=    Update api key
@@ -208,7 +211,7 @@ Api key should not be bound to redeployed AIM
     # Get the NEW deployment's auth group ID
     ${response}=    Get AIM Service By ID    ${TEST_AIM_ID}    expected_status=200
     ${json}=    Set variable    ${response.json()}
-    ${new_auth_group}=    Get from dictionary    ${json}    cluster_auth_group_id
+    ${new_auth_group}=    Get from dictionary    ${json}    clusterAuthGroupId
 
     # Get the key's current group bindings
     ${namespace}=    Get Project Namespace

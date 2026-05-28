@@ -15,16 +15,11 @@ const (
 
 	KaiwoQueueConfigDefaultName = "kaiwo"
 	KaiwoQueueConfigResource    = "kaiwoqueueconfigs"
-	DefaultResourceFlavourName  = "default"
+	DefaultResourceFlavourName  = "default-resource-flavor"
 	DefaultCohortName           = "kaiwo"
 	AMDGPUResource              = "amd.com/gpu"
 	NVIDIAGPUResource           = "nvidia.com/gpu"
 	CPUResource                 = "cpu"
 	MemoryResource              = "memory"
 	EphemeralStorageResource    = "ephemeral-storage"
-
-	// Default topology for Kueue topology-aware scheduling
-	DefaultTopologyName         = "default-topology"
-	TopologyLevelBlockNodeLabel = "kaiwo/topology-block"
-	TopologyLevelRackNodeLabel  = "kaiwo/topology-rack"
 )

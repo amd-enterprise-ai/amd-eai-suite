@@ -11,6 +11,15 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.exceptions import ExternalServiceError, NotFoundException, ValidationException
+from app.aims.constants import AIM_COND_HTTP_ROUTE_READY, AIM_COND_INFERENCE_SERVICE_READY
+from app.aims.crds import (
+    AIMModelResource,
+    AIMModelSource,
+    AIMModelSpec,
+    AIMModelStatusFields,
+    AIMServiceResource,
+    AIMServiceSpec,
+)
 from app.aims.enums import AIMServiceStatus
 from app.aims.schemas import AIMDeployRequest
 from app.aims.service import (
@@ -28,6 +37,8 @@ from app.aims.service import (
     undeploy_aim,
     update_aim_scaling_policy,
 )
+from app.dispatch.crds import K8sMetadata
+from app.workloads.constants import MODEL_NAME_LABEL
 from tests.factory import (
     create_aim_service_db,
     make_aim_cluster_model,
@@ -57,7 +68,7 @@ async def test_get_aim_by_resource_name_success(kube_client: MagicMock) -> None:
     aim = make_aim_cluster_model(name="my-aim")
     with patch("app.aims.service.get_aim_by_name", return_value=aim):
         result = await get_aim_by_resource_name(kube_client, "my-aim")
-    assert result.resource_name == "my-aim"
+    assert result.metadata.name == "my-aim"
 
 
 @pytest.mark.asyncio
@@ -112,9 +123,49 @@ async def test_deploy_aim_not_found_raises_error(kube_client: MagicMock) -> None
 
     with (
         patch("app.aims.service.get_aim_by_name", return_value=None),
-        pytest.raises(NotFoundException, match="AIM model 'nonexistent-model' not found"),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=None),
+        pytest.raises(NotFoundException, match="'nonexistent-model' not found"),
     ):
         await deploy_aim(kube_client, req, "ns", "user", mock_cluster_auth_client)
+
+
+@pytest.mark.asyncio
+async def test_deploy_finetuned_aim_propagates_aimmodel_labels(kube_client: MagicMock) -> None:
+    """User-given name comes from AIMModel labels; canonical name (slash-preserved) comes from spec.modelSources."""
+    model_labels = {
+        MODEL_NAME_LABEL: "my-finetune",
+        # System labels — present on AIMModel but must not reach the gateway call
+        "airm.silogen.ai/workload-id": str(uuid4()),
+        "app.kubernetes.io/managed-by": "aim-model-controller",
+    }
+    aim_model = AIMModelResource(
+        metadata=K8sMetadata(name="wb-finetune-job", namespace="ns", labels=model_labels),
+        spec=AIMModelSpec(
+            model_sources=[AIMModelSource(model_id="Qwen/Qwen2.5-0.5B-Instruct", source_uri="s3://bucket/path")]
+        ),
+        status=AIMModelStatusFields(),
+    )
+    req = AIMDeployRequest(model="wb-finetune-job")
+    mock_cluster_auth_client = AsyncMock()
+    mock_cluster_auth_client.create_group.return_value = {"id": "group-id"}
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=aim_model),
+        patch("app.aims.service._create_cluster_auth_group_for_aim", return_value="group-id"),
+        patch("app.aims.service.create_fine_tuned_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", mock_cluster_auth_client)
+
+        call_kwargs = mock_create.call_args.kwargs
+        # User-given name comes from MODEL_NAME_LABEL on the AIMModel.
+        assert call_kwargs["display_name"] == "my-finetune"
+        # Canonical name comes from spec.model_sources (slash-preserved).
+        assert call_kwargs["canonical_name"] == "Qwen/Qwen2.5-0.5B-Instruct"
 
 
 @pytest.mark.asyncio
@@ -362,7 +413,11 @@ async def test_update_aim_scaling_policy_external_error(kube_client: MagicMock) 
 @pytest.mark.asyncio
 async def test_list_chattable_aim_services(kube_client: MagicMock) -> None:
     """Test listing chattable services."""
-    svc = make_aim_service_k8s()
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
+    svc = make_aim_service_k8s(conditions=conditions)
     with patch("app.aims.service.get_aim_services_from_k8s", return_value=[svc]):
         result = await list_chattable_aim_services(kube_client, "ns")
     assert len(result) == 1
@@ -375,7 +430,16 @@ async def test_list_chattable_aim_services(kube_client: MagicMock) -> None:
 async def test_chat_with_aim_service_success(kube_client: MagicMock, mock_request: MagicMock) -> None:
     """Test successful chat with AIM service."""
     service_id = uuid4()
-    svc = make_aim_service_k8s(workload_id=service_id, status=AIMServiceStatus.RUNNING, model_ref="llama")
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
+    svc = make_aim_service_k8s(
+        workload_id=service_id,
+        status=AIMServiceStatus.RUNNING,
+        model_ref="llama",
+        conditions=conditions,
+    )
 
     # Mock the endpoints dict that AIMServiceResponse will compute
     with (
@@ -418,7 +482,16 @@ async def test_chat_with_aim_service_not_chattable(kube_client: MagicMock, mock_
 async def test_chat_with_aim_service_no_endpoint(kube_client: MagicMock, mock_request: MagicMock) -> None:
     """Test raises ValidationException when no internal endpoint available."""
     service_id = uuid4()
-    svc = make_aim_service_k8s(workload_id=service_id, status=AIMServiceStatus.RUNNING, model_ref="llama")
+    conditions = [
+        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
+        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
+    ]
+    svc = make_aim_service_k8s(
+        workload_id=service_id,
+        status=AIMServiceStatus.RUNNING,
+        model_ref="llama",
+        conditions=conditions,
+    )
 
     with (
         patch("app.aims.service.get_aim_service_from_k8s", return_value=svc),

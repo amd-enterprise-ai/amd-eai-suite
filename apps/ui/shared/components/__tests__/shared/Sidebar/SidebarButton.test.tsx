@@ -9,6 +9,12 @@ import { SidebarButton } from '@amdenterpriseai/components';
 import '@testing-library/jest-dom';
 
 describe('SidebarButton', () => {
+  vi.mock('next/router', () => ({
+    useRouter: () => ({
+      push: vi.fn(),
+      query: {},
+    }),
+  }));
   const mockHref = '/example';
 
   it('should render link with text and icon when href is provided', () => {

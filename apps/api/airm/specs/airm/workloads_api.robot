@@ -13,9 +13,6 @@ Resource            ../resources/airm_clusters.resource
 Resource            resources/api/common.resource
 Resource            ../resources/api/workloads.resource
 Library             Collections
-Test Setup          Run Keywords
-...                 Initialize Project Tracking    AND
-...                 Initialize Workload ID Tracking
 Test Teardown       Clean Up Workload API Test Resources
 
 *** Keywords ***

@@ -4,7 +4,8 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import { Model, ModelOnboardingStatus } from '@amdenterpriseai/types';
+import { Model } from '@/types/models';
+import { ModelOnboardingStatus } from '@/types/models';
 
 import DeleteModelModal from '@/components/features/models/DeleteModelModal';
 
@@ -13,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockModel: Model = {
   id: '3',
   name: 'Test Model',
+  resourceName: 'test-model-cr',
   createdAt: '2023-01-02T00:00:00Z',
   modelWeightsPath: '/dev/null',
   createdBy: 'Test',
@@ -21,23 +23,25 @@ const mockModel: Model = {
 };
 
 describe('DeleteModelModal', () => {
-  let onOpenChangeMock: ReturnType<typeof vi.fn<(isOpen: boolean) => void>>;
+  let onCloseMock: ReturnType<typeof vi.fn<() => void>>;
   let onConfirmActionMock: ReturnType<
-    typeof vi.fn<({ id }: { id: string }) => void>
+    typeof vi.fn<({ name }: { name: string }) => void>
   >;
 
   beforeEach(() => {
-    onOpenChangeMock = vi.fn<(isOpen: boolean) => void>();
-    onConfirmActionMock = vi.fn<({ id }: { id: string }) => void>();
+    onCloseMock = vi.fn<() => void>();
+    onConfirmActionMock = vi.fn<({ name }: { name: string }) => void>();
   });
 
   it('should not render if isOpen is false', () => {
     render(
       <DeleteModelModal
         isOpen={false}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={mockModel}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
     expect(
@@ -49,9 +53,11 @@ describe('DeleteModelModal', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={undefined}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
     expect(
@@ -63,9 +69,11 @@ describe('DeleteModelModal', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={mockModel}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
 
@@ -74,13 +82,15 @@ describe('DeleteModelModal', () => {
     ).toBeInTheDocument();
   });
 
-  it('should call onConfirmAction and onOpenChange when confirm button is clicked', () => {
+  it('should call onConfirmAction when confirm button is clicked', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={mockModel}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
 
@@ -88,18 +98,21 @@ describe('DeleteModelModal', () => {
     fireEvent.click(confirmButton);
 
     expect(onConfirmActionMock).toHaveBeenCalledTimes(1);
-    expect(onConfirmActionMock).toHaveBeenCalledWith({ id: mockModel.id });
-    expect(onOpenChangeMock).toHaveBeenCalledTimes(1);
-    expect(onOpenChangeMock).toHaveBeenCalledWith(false);
+    expect(onConfirmActionMock).toHaveBeenCalledWith({
+      name: mockModel.resourceName,
+    });
+    expect(onCloseMock).not.toHaveBeenCalled();
   });
 
-  it('should call onOpenChange when close button is clicked', () => {
+  it('should call onClose when close button is clicked', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={mockModel}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
 
@@ -107,8 +120,7 @@ describe('DeleteModelModal', () => {
     fireEvent.click(closeButton);
 
     expect(onConfirmActionMock).not.toHaveBeenCalled();
-    expect(onOpenChangeMock).toHaveBeenCalledTimes(1);
-    expect(onOpenChangeMock).toHaveBeenCalledWith(false);
+    expect(onCloseMock).toHaveBeenCalledTimes(1);
   });
 
   it('should handle model with different types correctly', () => {
@@ -120,9 +132,11 @@ describe('DeleteModelModal', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={baseModel}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
 
@@ -133,7 +147,9 @@ describe('DeleteModelModal', () => {
     const confirmButton = screen.getByText('actions.confirm.title');
     fireEvent.click(confirmButton);
 
-    expect(onConfirmActionMock).toHaveBeenCalledWith({ id: baseModel.id });
+    expect(onConfirmActionMock).toHaveBeenCalledWith({
+      name: mockModel.resourceName,
+    });
   });
 
   it('should handle model with empty name gracefully', () => {
@@ -145,9 +161,11 @@ describe('DeleteModelModal', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={modelWithEmptyName}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
 
@@ -165,26 +183,31 @@ describe('DeleteModelModal', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={adapterModel}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
 
     const confirmButton = screen.getByText('actions.confirm.title');
     fireEvent.click(confirmButton);
 
-    expect(onConfirmActionMock).toHaveBeenCalledWith({ id: adapterModel.id });
-    expect(onOpenChangeMock).toHaveBeenCalledWith(false);
+    expect(onConfirmActionMock).toHaveBeenCalledWith({
+      name: mockModel.resourceName,
+    });
   });
 
   it('should pass correct danger color to confirmation modal', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={mockModel}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
 
@@ -198,14 +221,16 @@ describe('DeleteModelModal', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={mockModel}
+        hasActiveDeployments={false}
+        loading={false}
       />,
     );
 
     // Close the modal without confirming
-    onOpenChangeMock.mockClear();
+    onCloseMock.mockClear();
     onConfirmActionMock.mockClear();
 
     const closeButton = screen.getByText('actions.close.title');
@@ -214,25 +239,21 @@ describe('DeleteModelModal', () => {
     expect(onConfirmActionMock).not.toHaveBeenCalled();
   });
 
-  it('should handle rapid successive confirm clicks correctly', () => {
+  it('should not call onConfirmAction when loading is true', () => {
     render(
       <DeleteModelModal
         isOpen={true}
-        onOpenChange={onOpenChangeMock}
+        onClose={onCloseMock}
         onConfirmAction={onConfirmActionMock}
         model={mockModel}
+        hasActiveDeployments={false}
+        loading={true}
       />,
     );
 
     const confirmButton = screen.getByText('actions.confirm.title');
-
-    // Click multiple times rapidly
-    fireEvent.click(confirmButton);
-    fireEvent.click(confirmButton);
     fireEvent.click(confirmButton);
 
-    // Should only be called once for the first click
-    expect(onConfirmActionMock).toHaveBeenCalledTimes(1);
-    expect(onConfirmActionMock).toHaveBeenCalledWith({ id: mockModel.id });
+    expect(onConfirmActionMock).not.toHaveBeenCalled();
   });
 });

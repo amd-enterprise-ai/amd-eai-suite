@@ -4,18 +4,26 @@
 
 """Cluster-auth client for API key management."""
 
+from fastapi import Request
+from loguru import logger
+
 from .client import ClusterAuthClient
-from .config import CLUSTER_AUTH_ADMIN_TOKEN, CLUSTER_AUTH_URL
+from .config import CLUSTER_AUTH_ENABLED
 
 
-def get_cluster_auth_client() -> ClusterAuthClient:
+def get_cluster_auth_client(request: Request) -> ClusterAuthClient | None:
     """
-    Dependency injection for cluster-auth client.
+    FastAPI dependency that returns the cluster-auth client from app state.
 
-    Returns:
-        ClusterAuthClient instance configured with environment variables
+    Returns None when cluster-auth is disabled (CLUSTER_AUTH_ENABLED=false)
+    or when the client failed to initialize at startup.
     """
-    return ClusterAuthClient(CLUSTER_AUTH_URL, CLUSTER_AUTH_ADMIN_TOKEN)
+    if not CLUSTER_AUTH_ENABLED:
+        return None
+    client = getattr(request.app.state, "cluster_auth_client", None)
+    if client is None:
+        logger.warning("cluster-auth client not available in app.state")
+    return client
 
 
 __all__ = ["ClusterAuthClient", "get_cluster_auth_client"]

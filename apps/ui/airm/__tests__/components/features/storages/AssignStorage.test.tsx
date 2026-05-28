@@ -8,8 +8,8 @@ import React, { act } from 'react';
 import { generateMockProjects } from '@/__mocks__/utils/project-mock';
 import { generateMockStorages } from '@/__mocks__/utils/storages-mock';
 
-import { Project } from '@amdenterpriseai/types';
-import { Storage } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import { Storage } from '@/types/storages';
 
 import { AssignStorage } from '@/components/features/storages';
 
@@ -90,7 +90,7 @@ describe('AssignStorage', () => {
     fireEvent.click(screen.getByText('form.assign.action.save'));
     await waitFor(() => {
       expect(mockUpdateStorageAssignment).toHaveBeenCalledWith(storage.id, {
-        project_ids: [],
+        projectIds: [],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -126,7 +126,7 @@ describe('AssignStorage', () => {
 
     await waitFor(() => {
       expect(mockUpdateStorageAssignment).toHaveBeenCalledWith(storage.id, {
-        project_ids: [],
+        projectIds: [],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -162,7 +162,7 @@ describe('AssignStorage', () => {
 
     await waitFor(() => {
       expect(mockUpdateStorageAssignment).toHaveBeenCalledWith(storage.id, {
-        project_ids: [mockProjects[0].id, mockProjects[2].id],
+        projectIds: [mockProjects[0].id, mockProjects[2].id],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -196,7 +196,7 @@ describe('AssignStorage', () => {
 
     await waitFor(() => {
       expect(mockUpdateStorageAssignment).toHaveBeenCalledWith(storage.id, {
-        project_ids: [mockProjects[1].id],
+        projectIds: [mockProjects[1].id],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
@@ -232,7 +232,7 @@ describe('AssignStorage', () => {
 
     await waitFor(() => {
       expect(mockUpdateStorageAssignment).toHaveBeenCalledWith(storage.id, {
-        project_ids: [mockProjects[0].id],
+        projectIds: [mockProjects[0].id],
       });
       expect(toastSuccessMock).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();

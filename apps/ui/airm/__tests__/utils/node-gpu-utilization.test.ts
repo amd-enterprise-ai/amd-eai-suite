@@ -16,7 +16,7 @@ describe('mergeGpuDeviceTimeseriesToChartData', () => {
   it('merges single device timeseries into chart points', () => {
     const devices = [
       {
-        gpu_id: '0',
+        gpuId: '0',
         metric: {
           values: [
             { timestamp: '2024-01-01T00:00:00Z', value: 50 },
@@ -36,13 +36,13 @@ describe('mergeGpuDeviceTimeseriesToChartData', () => {
   it('merges multiple devices and fills null for missing timestamps', () => {
     const devices = [
       {
-        gpu_id: '1',
+        gpuId: '1',
         metric: {
           values: [{ timestamp: '2024-01-01T00:00:00Z', value: 30 }],
         },
       },
       {
-        gpu_id: '0',
+        gpuId: '0',
         metric: {
           values: [
             { timestamp: '2024-01-01T00:00:00Z', value: 50 },
@@ -67,16 +67,16 @@ describe('mergeGpuDeviceTimeseriesToChartData', () => {
     });
   });
 
-  it('sorts devices by gpu_id and timestamps chronologically', () => {
+  it('sorts devices by gpuId and timestamps chronologically', () => {
     const devices = [
       {
-        gpu_id: '2',
+        gpuId: '2',
         metric: {
           values: [{ timestamp: '2024-01-01T00:10:00Z', value: 100 }],
         },
       },
       {
-        gpu_id: '0',
+        gpuId: '0',
         metric: {
           values: [{ timestamp: '2024-01-01T00:05:00Z', value: 200 }],
         },
@@ -95,7 +95,7 @@ describe('mergeGpuDeviceTimeseriesToChartData', () => {
   });
 
   it('handles device with no metric', () => {
-    const devices = [{ gpu_id: '0' }];
+    const devices = [{ gpuId: '0' }];
 
     const result = mergeGpuDeviceTimeseriesToChartData(devices);
 
@@ -104,15 +104,15 @@ describe('mergeGpuDeviceTimeseriesToChartData', () => {
 });
 
 describe('normalizeNodeGpuUtilizationResponse', () => {
-  it('passes through snake_case gpu_devices directly', () => {
+  it('normalizes gpuDevices and preserves all fields', () => {
     const raw: NodeGpuUtilizationRawResponse = {
-      gpu_devices: [
+      gpuDevices: [
         {
-          gpu_uuid: 'uuid-1',
-          gpu_id: '0',
+          gpuUuid: 'uuid-1',
+          gpuId: '0',
           hostname: 'node-1',
           metric: {
-            series_label: 'gpu_activity_pct',
+            seriesLabel: 'gpuActivityPct',
             values: [{ timestamp: '2024-01-01T00:00:00Z', value: 50 }],
           },
         },
@@ -122,22 +122,32 @@ describe('normalizeNodeGpuUtilizationResponse', () => {
 
     const result = normalizeNodeGpuUtilizationResponse(raw);
 
-    expect(result.gpu_devices).toBe(raw.gpu_devices);
+    expect(result.gpuDevices).toEqual([
+      {
+        gpuUuid: 'uuid-1',
+        gpuId: '0',
+        hostname: 'node-1',
+        metric: {
+          seriesLabel: 'gpuActivityPct',
+          values: [{ timestamp: '2024-01-01T00:00:00Z', value: 50 }],
+        },
+      },
+    ]);
     expect(result.range).toEqual({
       start: '2024-01-01T00:00:00Z',
       end: '2024-01-01T01:00:00Z',
     });
   });
 
-  it('defaults range to empty strings when gpu_devices present but range missing', () => {
+  it('defaults range to empty strings when gpuDevices present but range missing', () => {
     const raw: NodeGpuUtilizationRawResponse = {
-      gpu_devices: [
+      gpuDevices: [
         {
-          gpu_uuid: 'uuid-1',
-          gpu_id: '0',
+          gpuUuid: 'uuid-1',
+          gpuId: '0',
           hostname: 'node-1',
           metric: {
-            series_label: 'gpu_activity_pct',
+            seriesLabel: 'gpuActivityPct',
             values: [],
           },
         },
@@ -146,10 +156,11 @@ describe('normalizeNodeGpuUtilizationResponse', () => {
 
     const result = normalizeNodeGpuUtilizationResponse(raw);
 
+    expect(result.gpuDevices).toHaveLength(1);
     expect(result.range).toEqual({ start: '', end: '' });
   });
 
-  it('normalizes camelCase gpuDevices to snake_case', () => {
+  it('normalizes camelCase gpuDevices with custom metric label', () => {
     const raw: NodeGpuUtilizationRawResponse = {
       gpuDevices: [
         {
@@ -167,20 +178,20 @@ describe('normalizeNodeGpuUtilizationResponse', () => {
 
     const result = normalizeNodeGpuUtilizationResponse(raw);
 
-    expect(result.gpu_devices).toEqual([
+    expect(result.gpuDevices).toEqual([
       {
-        gpu_uuid: 'uuid-2',
-        gpu_id: '1',
+        gpuUuid: 'uuid-2',
+        gpuId: '1',
         hostname: 'node-2',
         metric: {
-          series_label: 'custom_metric',
+          seriesLabel: 'custom_metric',
           values: [{ timestamp: '2024-01-01T00:00:00Z', value: 75 }],
         },
       },
     ]);
   });
 
-  it('defaults seriesLabel to gpu_activity_pct when metric exists without seriesLabel', () => {
+  it('defaults seriesLabel to gpuActivityPct when metric exists without seriesLabel', () => {
     const raw: NodeGpuUtilizationRawResponse = {
       gpuDevices: [
         {
@@ -196,8 +207,8 @@ describe('normalizeNodeGpuUtilizationResponse', () => {
 
     const result = normalizeNodeGpuUtilizationResponse(raw);
 
-    expect(result.gpu_devices[0].metric.series_label).toBe('gpu_activity_pct');
-    expect(result.gpu_devices[0].metric.values).toHaveLength(1);
+    expect(result.gpuDevices[0].metric.seriesLabel).toBe('gpuActivityPct');
+    expect(result.gpuDevices[0].metric.values).toHaveLength(1);
   });
 
   it('provides empty metric when device has no metric field', () => {
@@ -213,8 +224,8 @@ describe('normalizeNodeGpuUtilizationResponse', () => {
 
     const result = normalizeNodeGpuUtilizationResponse(raw);
 
-    expect(result.gpu_devices[0].metric).toEqual({
-      series_label: 'gpu_activity_pct',
+    expect(result.gpuDevices[0].metric).toEqual({
+      seriesLabel: 'gpuActivityPct',
       values: [],
     });
   });
@@ -227,7 +238,7 @@ describe('normalizeNodeGpuUtilizationResponse', () => {
 
     const result = normalizeNodeGpuUtilizationResponse(raw);
 
-    expect(result.gpu_devices).toEqual([]);
+    expect(result.gpuDevices).toEqual([]);
   });
 
   it('handles missing gpuDevices by defaulting to empty array', () => {
@@ -235,7 +246,7 @@ describe('normalizeNodeGpuUtilizationResponse', () => {
 
     const result = normalizeNodeGpuUtilizationResponse(raw);
 
-    expect(result.gpu_devices).toEqual([]);
+    expect(result.gpuDevices).toEqual([]);
     expect(result.range).toEqual({ start: '', end: '' });
   });
 });

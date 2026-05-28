@@ -14,14 +14,16 @@ import { useRouter } from 'next/router';
 import { useProject } from '@/contexts/ProjectContext';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import { deleteWorkload, getWorkload } from '@/lib/app/workloads';
-import { getModel } from '@/lib/app/models';
+import { deleteModel } from '@/lib/app/models';
+import { getAimNamespaceModel } from '@/lib/app/aims';
 import { getDataset } from '@/lib/app/datasets';
 import { getChart } from '@/lib/app/charts';
 
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
-import { Workload } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { Workload } from '@/types/workloads';
 
-import WorkloadDetailsPage from '@/pages/workloads/[id]/index';
+import WorkloadDetailsPage from '@/pages/[project]/workloads/[id]/index';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';
@@ -46,6 +48,27 @@ vi.mock('@/lib/app/workloads', async (importOriginal) => ({
   getWorkloadMetrics: vi.fn(),
 }));
 
+vi.mock('@/components/features/workloads/DeleteWorkloadModal', () => ({
+  default: ({
+    isOpen,
+    workload,
+    onConfirmAction,
+  }: {
+    isOpen: boolean;
+    workload: any;
+    onConfirmAction: (id: string) => void;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    isOpen && workload ? (
+      <button
+        data-testid="confirm-delete"
+        onClick={() => onConfirmAction(workload.id)}
+      >
+        Confirm Delete
+      </button>
+    ) : null,
+}));
+
 vi.mock('@/lib/app/charts', async (importOriginal) => ({
   ...(await importOriginal()),
   getChart: vi.fn(),
@@ -59,7 +82,12 @@ vi.mock('@/lib/app/datasets', async (importOriginal) => ({
 // Mock the workload services
 vi.mock('@/lib/app/models', async (importOriginal) => ({
   ...(await importOriginal()),
-  getModel: vi.fn(),
+  deleteModel: vi.fn(),
+}));
+
+vi.mock('@/lib/app/aims', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getAimNamespaceModel: vi.fn(),
 }));
 
 // Mock useSystemToast
@@ -139,19 +167,35 @@ describe('WorkloadDetailsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (useRouter as Mock).mockReturnValue({
-      query: { id: 'workload-1' },
+      query: { id: 'workload-1', project: 'test-project' },
       push: mockPush,
       back: mockBack,
     });
     (useProject as Mock).mockReturnValue({
-      activeProject: 'project-1',
+      activeProject: 'test-project',
+      projectPath: (path: string) =>
+        `/test-project${path.startsWith('/') ? path : `/${path}`}`,
+      projectUrl: (path: string) =>
+        `/test-project${path.startsWith('/') ? path : `/${path}`}`,
     });
     (getWorkload as Mock).mockResolvedValue(mockWorkload);
     (deleteWorkload as Mock).mockResolvedValue({});
-    (getModel as Mock).mockResolvedValue({
+    (deleteModel as Mock).mockResolvedValue({});
+    (getAimNamespaceModel as Mock).mockResolvedValue({
       id: 'model-1',
-      name: 'Test Model',
-      canonicalName: 'org/test-model',
+      displayName: null,
+      workloadId: null,
+      metadata: {
+        name: 'Test Model',
+        creationTimestamp: '2026-01-01T00:00:00Z',
+      },
+      spec: {
+        image: 'amdenterpriseai/aim-base:0.10',
+        modelSources: [
+          { modelId: 'org/test-model', sourceUri: 's3://bucket/model' },
+        ],
+      },
+      status: { status: 'Ready' },
     });
     (getDataset as Mock).mockResolvedValue({
       id: 'dataset-1',
@@ -213,11 +257,6 @@ describe('WorkloadDetailsPage', () => {
       expect(screen.getByText('details.sections.timeline')).toBeInTheDocument();
       expect(screen.getByText('test-user')).toBeInTheDocument();
 
-      // Model section should display model info
-      await waitFor(() => {
-        expect(screen.getByText('Test Model')).toBeInTheDocument();
-      });
-
       // Chart section should display chart info
       await waitFor(() => {
         expect(screen.getByText('Test Chart')).toBeInTheDocument();
@@ -231,7 +270,6 @@ describe('WorkloadDetailsPage', () => {
       const workloadWithoutModel = {
         ...mockWorkload,
         model: undefined,
-        modelId: undefined,
         dataset: undefined,
         datasetId: undefined,
       };
@@ -423,7 +461,9 @@ describe('WorkloadDetailsPage', () => {
         fireEvent.click(chatButton);
       });
 
-      expect(mockPush).toHaveBeenCalledWith('/chat?workload=workload-1');
+      expect(mockPush).toHaveBeenCalledWith(
+        '/test-project/chat?workload=workload-1',
+      );
     });
 
     it('opens workspace in new window when workspace button is clicked', async () => {
@@ -478,6 +518,126 @@ describe('WorkloadDetailsPage', () => {
 
       await act(async () => {
         fireEvent.click(deleteButton);
+      });
+    });
+
+    it('fetches model using workload.id for fine-tuning workloads when complete', async () => {
+      // For FINE_TUNING, the workload itself IS the model — use workload.id directly
+      // to look up the AIMModel via WORKLOAD_ID_LABEL. model_id is not used.
+      const mockFTWorkload: Workload = {
+        ...mockWorkload,
+        id: 'ft-workload-id',
+        name: 'wb-llm-finetune-abc123-job',
+        type: WorkloadType.FINE_TUNING,
+        status: WorkloadStatus.COMPLETE,
+      };
+
+      (getWorkload as Mock).mockResolvedValue(mockFTWorkload);
+      (useRouter as Mock).mockReturnValue({
+        query: { id: 'ft-workload-id', project: 'test-project' },
+        push: mockPush,
+        back: mockBack,
+      });
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(getAimNamespaceModel).toHaveBeenCalledWith(
+          'ft-workload-id',
+          'test-project',
+        );
+      });
+    });
+
+    it('does not fetch model for in-progress fine-tuning workloads', async () => {
+      // AIMModel CR doesn't exist until training completes — skip model fetch.
+      const mockFTWorkload: Workload = {
+        ...mockWorkload,
+        id: 'ft-workload-id',
+        name: 'wb-llm-finetune-abc123-job',
+        type: WorkloadType.FINE_TUNING,
+        status: WorkloadStatus.RUNNING,
+      };
+
+      (getWorkload as Mock).mockResolvedValue(mockFTWorkload);
+      (useRouter as Mock).mockReturnValue({
+        query: { id: 'ft-workload-id', project: 'test-project' },
+        push: mockPush,
+        back: mockBack,
+      });
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(getAimNamespaceModel).not.toHaveBeenCalled();
+      });
+    });
+
+    it('fetches model for fine-tuning workloads using workload id', async () => {
+      const mockFTWorkload: Workload = {
+        ...mockWorkload,
+        id: 'ft-workload-id',
+        type: WorkloadType.FINE_TUNING,
+        status: WorkloadStatus.COMPLETE,
+      };
+
+      (getWorkload as Mock).mockResolvedValue(mockFTWorkload);
+      (useRouter as Mock).mockReturnValue({
+        query: { id: 'ft-workload-id', project: 'test-project' },
+        push: mockPush,
+        back: mockBack,
+      });
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(getAimNamespaceModel).toHaveBeenCalledWith(
+          'ft-workload-id',
+          'test-project',
+        );
+      });
+    });
+
+    it('calls deleteModel for fine-tuning workloads instead of deleteWorkload', async () => {
+      const mockFTWorkload: Workload = {
+        ...mockWorkload,
+        id: 'workload-4',
+        name: 'Model fine-tuning',
+        type: WorkloadType.FINE_TUNING,
+        status: WorkloadStatus.RUNNING,
+      };
+
+      (getWorkload as Mock).mockResolvedValue(mockFTWorkload);
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      const deleteButton = await waitFor(() =>
+        screen.getByText('list.actions.delete.label'),
+      );
+
+      await act(async () => {
+        fireEvent.click(deleteButton);
+      });
+
+      const confirmButton = await waitFor(() =>
+        screen.getByTestId('confirm-delete'),
+      );
+
+      await act(async () => {
+        fireEvent.click(confirmButton);
+      });
+
+      await waitFor(() => {
+        expect(deleteModel).toHaveBeenCalledWith('workload-4', 'test-project');
+        expect(deleteWorkload).not.toHaveBeenCalled();
       });
     });
   });

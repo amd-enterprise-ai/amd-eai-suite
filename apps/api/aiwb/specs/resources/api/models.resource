@@ -31,7 +31,7 @@ Create model
     ...    model_data (dict): Model creation parameters including:
     ...    - name: Model name
     ...    - type: Model type (BaseModel or MergedModel)
-    ...    - model_weights_path: Optional path to weights
+    ...    - modelWeightsPath: Optional path to weights
     ...    - base_model_id: Required for MergedModel type
     ...
     ...    Return:
@@ -83,7 +83,7 @@ Get model
         FAIL                    namespace cannot be None when calling Get model
     END
 
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/models/${model_id}
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/aims/models/${model_id}
 
     Log                     GET ${endpoint}         DEBUG
     ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
@@ -91,26 +91,27 @@ Get model
     RETURN                  ${response}
 
 Get models
-    [Documentation]    List models with optional filtering using namespace-based routing.
-    ...                Pattern: /namespaces/{namespace}/models
+    [Documentation]    List fine-tuned models using namespace-based routing (K8s-based).
+    ...                Pattern: /namespaces/{namespace}/aims/models
+    ...
+    ...                Returns AIMModel CRs in the namespace.
+    ...
+    ...                Response shape per model follows the AIMModel CRD: metadata (name,
+    ...                labels, annotations, creationTimestamp), spec (aimId, image,
+    ...                modelSources, custom, env), and status (status, conditions,
+    ...                imageMetadata, sourceType).
     ...
     ...                Args:
-    ...                onboarding_status (str, optional): Filter by onboarding status
-    ...                name (str, optional): Filter by model name (exact match)
     ...                namespace (str): Namespace for the request (required)
     ...                expected_status (str): Expected HTTP status code (default: any)
-    ...                project_id: DEPRECATED - kept for backward compatibility but ignored
-    ...
-    ...                Note: page, page_size, sort_order, sort_by, model_type are no longer supported by the backend.
-    ...                The backend only supports onboarding_status and name filters.
+    ...                project_id: DEPRECATED - ignored
     ...
     ...                Returns:
-    ...                response: API response containing list of models (in 'data' array)
+    ...                response: API response containing list of AIMModelResource objects (in 'data' array)
     ...
     ...                Raises:
     ...                HTTPError: If the API request fails
-    [Arguments]             ${namespace}            ${onboarding_status}=${None}    ${name}=${None}
-    ...                     ${expected_status}=any                          ${project_id}=${None}
+    [Arguments]             ${namespace}            ${expected_status}=any    ${project_id}=${None}
     Create api session    aiwb
 
     # Verify that namespace is not None
@@ -118,15 +119,10 @@ Get models
         FAIL                    namespace cannot be None when calling Get models
     END
 
-    ${params}=              Create dictionary
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/aims/models
 
-    IF    "${name}" != "${None}"    Set to dictionary    ${params}    name=${name}
-    IF    "${onboarding_status}" != "${None}"    Set to dictionary    ${params}    onboarding_status=${onboarding_status}
-
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/models
-
-    Log                     GET ${endpoint} with params: ${params}          DEBUG
-    ${response}=            Safe Get Request        ${endpoint}             params=${params}        expected_status=${expected_status}
+    Log                     GET ${endpoint}         DEBUG
+    ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
     Log                     List models response: status=${response.status_code}                    DEBUG
     RETURN                  ${response}
 
@@ -149,7 +145,7 @@ Modify model
         FAIL                    namespace cannot be None when calling Modify model
     END
 
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/models/${model_id}
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/aims/models/${model_id}
     TRY
         Log                     PUT ${endpoint} with data: ${model_data}                               DEBUG
         ${response}=            Safe Put Request        ${endpoint}             json=${model_data}      expected_status=${expected_status}
@@ -187,7 +183,7 @@ Delete model
         FAIL                    namespace cannot be None when calling Delete model
     END
 
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/models/${model_id}
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/aims/models/${model_id}
 
     Log                     DELETE ${endpoint}      DEBUG
     ${response}=            Safe Delete Request     ${endpoint}             expected_status=${expected_status}
@@ -204,7 +200,7 @@ Send chat completion request to external endpoint
 
     ${clean_host}=    Evaluate    $external_host.rstrip('/')
     ${session_name}=    Set variable    aim_external_chat_${model_id}
-    Create Session    ${session_name}    ${clean_host}    verify=False
+    Create Session    ${session_name}    ${clean_host}    verify=${VERIFY_SSL}
 
     ${headers}=    Create dictionary    Content-Type=application/json
     IF    "${api_key}" != "${None}"
@@ -234,7 +230,7 @@ List models from external endpoint
     ${clean_host}=          Evaluate                $external_host.rstrip('/')
     ${models_url}=          Set Variable            ${clean_host}/v1/models
 
-    Create Session          ${session_name}         ${clean_host}           verify=False
+    Create Session          ${session_name}         ${clean_host}           verify=${VERIFY_SSL}
 
     # Add Authorization header if API key provided
     ${headers}=             Create Dictionary
@@ -284,7 +280,7 @@ Run Chat Inference
     # Create session for external endpoint
     ${session_name}=    Set Variable If    $workload_id is not None    aim_external_${workload_id}    aim_external_temp
     ${clean_host}=    Evaluate    $external_host.rstrip('/')
-    Create Session    ${session_name}    ${clean_host}    verify=False
+    Create Session    ${session_name}    ${clean_host}    verify=${VERIFY_SSL}
 
     ${headers}=    Create Dictionary    Content-Type=application/json
 
@@ -339,7 +335,7 @@ Run Completion Inference
     # Create session for external endpoint
     ${session_name}=    Set Variable If    $workload_id is not None    aim_external_${workload_id}    aim_external_temp
     ${clean_host}=    Evaluate    $external_host.rstrip('/')
-    Create Session    ${session_name}    ${clean_host}    verify=False
+    Create Session    ${session_name}    ${clean_host}    verify=${VERIFY_SSL}
 
     ${headers}=    Create Dictionary    Content-Type=application/json
 
@@ -382,3 +378,11 @@ Run Completion Inference
     Should Be True    ${has_html_tag}    msg=Completion model should continue HTML structure with tags like </li> or </ul>
 
     RETURN    ${text}
+
+Get finetunable models
+    [Documentation]    GET /v1/finetunable — returns GPU-compatible finetunable model objects.
+    [Arguments]    ${expected_status}=any
+    Create api session    aiwb
+    ${endpoint}=    Service API Endpoint    aiwb    endpoint=finetunable
+    ${response}=    Safe Get Request    ${endpoint}    expected_status=${expected_status}
+    RETURN    ${response}

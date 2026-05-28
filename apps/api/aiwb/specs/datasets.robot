@@ -11,7 +11,6 @@ Resource    resources/aiwb_datasets.resource
 Resource    resources/api/common.resource
 Resource    resources/airm_projects.resource
 Library             Collections
-Test Setup          Initialize Dataset Tracking
 Test Teardown       Clean Up Dataset Test Resources
 
 
@@ -127,3 +126,50 @@ Batch delete datasets
     When batch delete datasets request is sent
     Then response status should be 200
     # Note: API returns 200 with list of deleted IDs, not 204
+
+Full dataset lifecycle
+    [Documentation]    Verify the complete dataset lifecycle: upload, get, list, download, delete, and confirm deletion.
+    [Tags]                  datasets                lifecycle               smoke
+    Given a ready project with user access exists
+    And valid dataset upload data is prepared
+    When upload dataset request is sent
+    Then response status should be 200
+    When get dataset request is sent
+    Then response status should be 200
+    When list datasets request is sent
+    Then response should contain the uploaded dataset
+    When download dataset request is sent
+    Then downloaded content should match uploaded file
+    When delete dataset request is sent
+    Then response status should be 204
+    When get dataset request is sent
+    Then response status should be 404
+
+Upload dataset exceeding size limit
+    [Documentation]    Verify that uploading a dataset larger than the configured size limit is rejected.
+    [Tags]                  datasets                negative                large-file
+    Given a ready project with user access exists
+    When oversized dataset upload request is sent
+    Then response status should be 400
+
+Download non-existent dataset is rejected
+    [Documentation]    Verify that downloading a dataset that does not exist is rejected.
+    [Tags]                  datasets                negative
+    Given a ready project with user access exists
+    When download request is sent for non-existent dataset
+    Then response status should be 404
+
+Get non-existent dataset is rejected
+    [Documentation]    Verify that getting a dataset that does not exist is rejected.
+    [Tags]                  datasets                negative
+    Given a ready project with user access exists
+    When get request is sent for non-existent dataset
+    Then response status should be 404
+
+Upload dataset with duplicate name is rejected
+    [Documentation]    Verify that uploading a dataset with a name that already exists is rejected.
+    [Tags]                  datasets                negative
+    Given a ready project with user access exists
+    And a dataset exists
+    When upload dataset with same name is attempted
+    Then response status should be 409

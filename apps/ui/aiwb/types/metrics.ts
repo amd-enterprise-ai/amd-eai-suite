@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { WorkloadStatus } from './enums/workloads';
+
 export type TimeSeriesDataPoint = {
   timestamp: string;
   value: number | null;
@@ -58,6 +60,7 @@ export type ProjectUtilizationMetric = {
 };
 
 export type ProjectStatusCount = {
+  status: WorkloadStatus;
   count: number;
 };
 

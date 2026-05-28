@@ -4,9 +4,17 @@
 
 """Cluster resources service for AIWB API."""
 
+from kubernetes_asyncio.client import V1Node
 from loguru import logger
 
 from ..dispatch.kube_client import KubernetesClient
+from .constants import (
+    AMD_GPU_DEVICE_ID_LABEL,
+    AMD_GPU_DEVICE_ID_LABEL_BETA,
+    AMD_GPU_PRODUCT_NAME_LABEL,
+    AMD_GPU_PRODUCT_NAME_LABEL_BETA,
+    AMD_GPU_RESOURCE,
+)
 from .schemas import AvailableResources, ClusterResourcesData, ClusterResourcesResponse
 
 
@@ -78,11 +86,21 @@ def get_gpu_count_from_node(node: dict) -> int:
         return int(nvidia_gpus)
 
     # Check for AMD GPUs
-    amd_gpus = allocatable.get("amd.com/gpu", "0")
+    amd_gpus = allocatable.get(AMD_GPU_RESOURCE, "0")
     if amd_gpus and amd_gpus != "0":
         return int(amd_gpus)
 
     return 0
+
+
+def _is_node_ready(node: V1Node) -> bool:
+    """Return True if the node has a Ready=True condition."""
+    if not (hasattr(node, "status") and node.status and hasattr(node.status, "conditions")):
+        return False
+    for condition in node.status.conditions or []:
+        if condition.type == "Ready" and condition.status == "True":
+            return True
+    return False
 
 
 async def get_cluster_resources(kube_client: KubernetesClient) -> ClusterResourcesResponse:
@@ -109,15 +127,7 @@ async def get_cluster_resources(kube_client: KubernetesClient) -> ClusterResourc
         ready_node_count = 0
 
         for node in nodes:
-            # Check if node is ready
-            is_ready = False
-            if hasattr(node, "status") and node.status and hasattr(node.status, "conditions"):
-                for condition in node.status.conditions or []:
-                    if condition.type == "Ready" and condition.status == "True":
-                        is_ready = True
-                        break
-
-            if not is_ready:
+            if not _is_node_ready(node):
                 continue
 
             ready_node_count += 1
@@ -167,4 +177,60 @@ async def get_cluster_resources(kube_client: KubernetesClient) -> ClusterResourc
 
     except Exception as e:
         logger.error(f"Failed to get cluster resources: {e}")
+        raise
+
+
+async def get_cluster_gpu_device_info(kube_client: KubernetesClient) -> dict[str, str]:
+    """Get AMD GPU device IDs and display names from ready cluster nodes.
+
+    Returns a dict mapping device_id → display_name. Display name is read from
+    the amd.com/gpu.product-name node label (underscores replaced with spaces).
+    Falls back to the raw device ID when the label is absent.
+    """
+    try:
+        nodes_response = await kube_client.core_v1.list_node()
+        nodes = nodes_response.items if hasattr(nodes_response, "items") else []
+
+        device_info: dict[str, str] = {}
+        for node in nodes:
+            if not _is_node_ready(node):
+                continue
+
+            if hasattr(node, "metadata") and node.metadata:
+                labels = node.metadata.labels or {}
+                device_id = labels.get(AMD_GPU_DEVICE_ID_LABEL) or labels.get(AMD_GPU_DEVICE_ID_LABEL_BETA)
+                if device_id:
+                    product_name = labels.get(AMD_GPU_PRODUCT_NAME_LABEL) or labels.get(AMD_GPU_PRODUCT_NAME_LABEL_BETA)
+                    device_info[device_id] = product_name.replace("_", " ") if product_name else device_id
+
+        return device_info
+
+    except Exception as e:
+        logger.error(f"Failed to get cluster GPU device info: {e}")
+        raise
+
+
+async def get_cluster_gpu_device_ids(kube_client: KubernetesClient) -> set[str]:
+    """Get AMD GPU device type IDs present in the cluster.
+    Returns a set of hex device type IDs (e.g. {"74a1", "74a9"}).
+    """
+    try:
+        nodes_response = await kube_client.core_v1.list_node()
+        nodes = nodes_response.items if hasattr(nodes_response, "items") else []
+
+        device_ids: set[str] = set()
+        for node in nodes:
+            if not _is_node_ready(node):
+                continue
+
+            if hasattr(node, "metadata") and node.metadata:
+                labels = node.metadata.labels or {}
+                device_id = labels.get(AMD_GPU_DEVICE_ID_LABEL) or labels.get(AMD_GPU_DEVICE_ID_LABEL_BETA)
+                if device_id:
+                    device_ids.add(device_id)
+
+        return device_ids
+
+    except Exception as e:
+        logger.error(f"Failed to get cluster GPU device IDs: {e}")
         raise

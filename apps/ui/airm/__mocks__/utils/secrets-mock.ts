@@ -6,14 +6,15 @@ import {
   SecretScope,
   SecretStatus,
   SecretType,
-  SecretUseCase,
-} from '@amdenterpriseai/types';
+} from '@/types/enums/secrets';
 import {
   ProjectSecret,
   ProjectSecretWithParentSecret,
   Secret,
-} from '@amdenterpriseai/types';
-import { ProjectStatus } from '@amdenterpriseai/types';
+} from '@/types/secrets';
+import { ProjectStatus } from '@/types/enums/projects';
+import { GPU_PREEMPTION_DISABLED } from '@/types/projects';
+import { SecretUseCase } from '@amdenterpriseai/types';
 
 export const generateMockSecrets = (n: number): Secret[] => {
   return Array.from({ length: n }, (_, i) => ({
@@ -46,6 +47,7 @@ export const generateMockProjectSecrets = (
       status: ProjectStatus.READY,
       statusReason: null,
       clusterId: `cluster-${i + 1}`,
+      gpuPreemption: GPU_PREEMPTION_DISABLED,
     },
     scope: SecretScope.PROJECT,
     status: ProjectSecretStatus.PENDING,
@@ -70,6 +72,7 @@ export const generateMockProjectSecretsWithParentSecret = (
       status: ProjectStatus.READY,
       statusReason: null,
       clusterId: `cluster-${i + 1}`,
+      gpuPreemption: GPU_PREEMPTION_DISABLED,
     },
     scope: SecretScope.PROJECT,
     status: ProjectSecretStatus.PENDING,

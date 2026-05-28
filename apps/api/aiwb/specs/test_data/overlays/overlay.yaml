@@ -1,0 +1,16 @@
+# Copyright (c) Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Simple overlay for E2E testing of overlay CRUD operations
+replicaCount: 1
+resources:
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+  requests:
+    cpu: "1"
+    memory: "2Gi"
+env:
+  - name: TEST_VAR
+    value: "original"

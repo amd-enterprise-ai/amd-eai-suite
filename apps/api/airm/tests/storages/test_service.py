@@ -12,16 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.messaging.schemas import (
-    ConfigMapStatus,
-    ProjectSecretStatus,
-    ProjectStorageStatus,
-    ProjectStorageUpdateMessage,
-    SecretScope,
-)
+from api_common.exceptions import ConflictException, NotFoundException, ValidationException
+from api_common.secrets import SecretUseCase
 from app.projects.enums import ProjectStatus
-from app.secrets.enums import SecretUseCase
-from app.storages.enums import StorageScope, StorageStatus, StorageType
+from app.secrets.enums import ProjectSecretStatus, SecretScope
+from app.storages.enums import ProjectStorageStatus, StorageScope, StorageStatus, StorageType
+from app.storages.messaging import ProjectStorageUpdateMessage
 from app.storages.models import ProjectStorage as ProjectStorageModel
 from app.storages.models import Storage as StorageModel
 from app.storages.repository import create_project_storage_configmap, get_project_storage, get_storage_by_id
@@ -38,7 +34,7 @@ from app.storages.service import (
     update_project_storage_secret_status,
     update_storage_overall_status,
 )
-from app.utilities.exceptions import ConflictException, NotFoundException, ValidationException
+from app.workloads.enums import ConfigMapStatus
 from tests import factory  # type: ignore[attr-defined]
 
 

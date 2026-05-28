@@ -9,10 +9,11 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..messaging.schemas import ProjectSecretStatus, SecretKind, SecretScope
-from ..utilities.exceptions import ConflictException
-from ..utilities.models import set_updated_fields
-from .enums import SecretStatus, SecretUseCase
+from api_common.exceptions import ConflictException
+from api_common.models import set_updated_fields
+from api_common.secrets import SecretUseCase
+
+from .enums import ProjectSecretStatus, SecretKind, SecretScope, SecretStatus
 from .models import OrganizationScopedSecret, OrganizationSecretAssignment, ProjectScopedSecret, Secret
 from .schemas import OrganizationSecretIn
 

@@ -10,7 +10,7 @@ from loguru import logger
 from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api_common.collections import SortDirection, paginate_list, sort_list
+from api_common.collections import SortCondition, SortDirection, paginate_list, sort_list
 
 from ..aims.repository import get_aim_service_by_id
 from ..aims.service import list_aim_services, list_chattable_aim_services
@@ -192,8 +192,7 @@ async def get_namespace_workload_metrics_paginated(
     page_size: int = 20,
     workload_types: list[WorkloadType] | None = None,
     status_filter: list[WorkloadStatus] | None = None,
-    sort_by: str | None = None,
-    sort_order: SortDirection = SortDirection.desc,
+    sort: list[SortCondition] | None = None,
 ) -> NamespaceWorkloadMetricsListPaginated:
     """Get paginated metrics for all resources in a namespace.
 
@@ -208,8 +207,7 @@ async def get_namespace_workload_metrics_paginated(
         page_size: Number of items per page
         workload_types: Optional filter by workload type(s)
         status_filter: Optional filter by workload status(es)
-        sort_by: Optional field to sort by
-        sort_order: Sort direction (asc or desc)
+        sort: Optional list of sort conditions (field + direction)
     """
     # Convert user's WorkloadStatus filter to corresponding AIMServiceStatus values
     aim_status_filter = [
@@ -234,7 +232,10 @@ async def get_namespace_workload_metrics_paginated(
 
     metrics = aim_metrics + workload_metrics
 
-    # Sort the full filtered data list before pagination
+    if sort and len(sort) > 1:
+        logger.warning("Multiple sort conditions provided, only the first will be applied")
+    sort_by = sort[0].field if sort else None
+    sort_order = sort[0].direction if sort else SortDirection.desc
     metrics = sort_list(metrics, sort_by=sort_by, sort_order=sort_order)
 
     paginated = paginate_list(metrics, page=page, page_size=page_size)

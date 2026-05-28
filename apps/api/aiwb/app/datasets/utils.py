@@ -5,6 +5,7 @@
 import asyncio
 import os
 import re
+from collections.abc import Generator
 
 from fastapi import UploadFile
 from loguru import logger
@@ -141,22 +142,24 @@ async def sync_dataset_to_s3(dataset: Dataset, file: UploadFile, client: MinioCl
     return dataset_path
 
 
-@retry(
-    wait=wait_exponential(multiplier=1, min=MINIO_MIN_WAIT, max=MINIO_MAX_WAIT),
-    stop=stop_after_attempt(MINIO_MAX_ATTEMPTS),
-    reraise=True,
-)
-async def download_from_s3(dataset: Dataset, client: MinioClient) -> tuple[str, bytes]:
+def download_from_s3_stream(dataset: Dataset, client: MinioClient) -> Generator[bytes]:
     """
-    Downloads file with Minio
-    """
-    # dataset.path now only contains the key portion, bucket is known
-    object_key = dataset.path
+    Stream dataset from S3 in chunks without loading into memory.
 
-    with handle_s3_operation("downloading dataset", f"s3://{MINIO_BUCKET}/{object_key}", dataset.id):
-        content = await asyncio.to_thread(client.download_object, bucket_name=MINIO_BUCKET, object_name=object_key)
-        file_name = object_key.split("/")[-1]
-        return file_name, content
+    Args:
+        dataset: Dataset model with path information
+        client: MinioClient instance
+
+    Yields:
+        bytes: Chunks of the dataset file (8KB each)
+    """
+    object_key = dataset.path
+    logger.info(f"Streaming dataset {dataset.id} from S3: {object_key}")
+
+    with handle_s3_operation("streaming dataset", f"s3://{MINIO_BUCKET}/{object_key}", dataset.id):
+        yield from client.stream_object(MINIO_BUCKET, object_key)
+
+    logger.info(f"Successfully streamed dataset {dataset.id} from S3")
 
 
 @retry(

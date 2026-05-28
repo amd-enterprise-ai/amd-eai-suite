@@ -8,30 +8,35 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
 from fastapi.responses import StreamingResponse
 from prometheus_api_client import PrometheusConnect
+from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.auth.security import get_user_email
 from api_common.database import get_session
-from api_common.schemas import ListResponse
+from api_common.schemas import ListResponse, QueryParam
 
-from ..cluster_auth.client import ClusterAuthClient, get_cluster_auth_client
+from ..cluster_auth import get_cluster_auth_client
+from ..cluster_auth.client import ClusterAuthClient
 from ..dispatch.kube_client import KubernetesClient, get_kube_client
 from ..logs.client import get_loki_client
-from ..logs.schemas import LogsQueryRequest, WorkloadLogsResponse
+from ..logs.schemas import LogsQuery, WorkloadLogsResponse
 from ..logs.service import get_logs_by_workload_id
 from ..metrics.client import get_prometheus_client
 from ..metrics.enums import MetricName
 from ..metrics.schemas import MetricsScalar, MetricsScalarWithRange, MetricsTimeRange, MetricsTimeseries
 from ..metrics.service import get_metric_by_workload_id
 from ..namespaces.security import ensure_access_to_workbench_namespace
-from .crds import AIMClusterServiceTemplateResource
-from .enums import AIMServiceStatus
+from .crds import AIMClusterServiceTemplateResource, AIMServiceTemplateResource
+from .gateway import list_aim_service_replicas
 from .schemas import (
     AIMDeployRequest,
     AIMResponse,
     AIMServiceHistoryResponse,
+    AIMServiceListQuery,
     AIMServicePatchRequest,
+    AIMServiceReplicaResponse,
     AIMServiceResponse,
+    AIMServiceTemplateQuery,
 )
 from .service import (
     chat_with_aim_service,
@@ -43,6 +48,7 @@ from .service import (
     list_aim_services_history,
     list_aims,
     list_chattable_aim_services,
+    list_fine_tuned_aim_service_templates,
     undeploy_aim,
     update_aim_scaling_policy,
 )
@@ -92,10 +98,10 @@ async def get_aim_endpoint(
     """),
 )
 async def list_aim_service_templates_endpoint(
-    aim_resource_name: str = Query(..., description="AIMClusterModel resource name"),
+    query: QueryParam[AIMServiceTemplateQuery],
     kube_client: KubernetesClient = Depends(get_kube_client),
 ) -> ListResponse[AIMClusterServiceTemplateResource]:
-    templates = await list_aim_cluster_service_templates(kube_client, aim_resource_name)
+    templates = await list_aim_cluster_service_templates(kube_client, query.aim_resource_name)
     return ListResponse(data=templates)
 
 
@@ -106,6 +112,9 @@ async def list_aim_service_templates_endpoint(
     summary="Deploy an AIM",
     description=dedent("""
         Deploy an AIM by creating an AIMService in Kubernetes.
+
+        The `model` field accepts either an AIMClusterModel name (cluster-scoped)
+        or an AIMModel name (namespace-scoped fine-tuned model). The API auto-detects which type it is.
     """),
 )
 async def deploy_aim_endpoint(
@@ -113,7 +122,7 @@ async def deploy_aim_endpoint(
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     submitter: str = Depends(get_user_email),
     kube_client: KubernetesClient = Depends(get_kube_client),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient | None = Depends(get_cluster_auth_client),
 ) -> AIMServiceResponse:
     return await deploy_aim(
         kube_client=kube_client,
@@ -136,7 +145,7 @@ async def undeploy_aim_endpoint(
     id: UUID = Path(..., description="Service ID (UUID) of the AIM service to undeploy"),
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     kube_client: KubernetesClient = Depends(get_kube_client),
-    cluster_auth_client: ClusterAuthClient = Depends(get_cluster_auth_client),
+    cluster_auth_client: ClusterAuthClient | None = Depends(get_cluster_auth_client),
 ) -> None:
     await undeploy_aim(
         kube_client=kube_client,
@@ -157,11 +166,11 @@ async def undeploy_aim_endpoint(
     """),
 )
 async def list_aim_services_endpoint(
+    query: QueryParam[AIMServiceListQuery],
     namespace: str = Depends(ensure_access_to_workbench_namespace),
     kube_client: KubernetesClient = Depends(get_kube_client),
-    status_filter: list[AIMServiceStatus] | None = Query(None, description="Filter by status(es)"),
 ) -> ListResponse[AIMServiceResponse]:
-    services = await list_aim_services(kube_client, namespace, status_filter=status_filter)
+    services = await list_aim_services(kube_client, namespace, status_filter=query.status_filter)
     return ListResponse(data=services)
 
 
@@ -170,7 +179,7 @@ async def list_aim_services_endpoint(
     response_model=ListResponse[AIMServiceResponse],
     status_code=status.HTTP_200_OK,
     summary="List chattable AIM services",
-    description="List RUNNING AIM services that support chat functionality.",
+    description="List AIM services with ready conditions that support chat functionality.",
 )
 async def get_chattable_aim_services(
     namespace: str = Depends(ensure_access_to_workbench_namespace),
@@ -247,6 +256,25 @@ async def chat_with_aim_service_endpoint(
 
 
 @router.get(
+    "/namespaces/{namespace}/aims/services/{id}/replicas",
+    response_model=ListResponse[AIMServiceReplicaResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List AIM service replicas",
+    description=dedent("""
+        Return Kubernetes pod data for each replica of an AIM service.
+        The response is a fixed schema containing commonly needed pod fields.
+    """),
+)
+async def get_aim_service_replicas_endpoint(
+    id: UUID = Path(description="The UUID of the AIM service"),
+    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    kube_client: KubernetesClient = Depends(get_kube_client),
+) -> ListResponse[AIMServiceReplicaResponse]:
+    replicas = await list_aim_service_replicas(kube_client, namespace, id)
+    return ListResponse(data=[AIMServiceReplicaResponse.model_validate(r) for r in replicas])
+
+
+@router.get(
     "/namespaces/{namespace}/aims/services/{id}/metrics/{metric}",
     response_model=MetricsTimeseries | MetricsScalar | MetricsScalarWithRange,
     status_code=status.HTTP_200_OK,
@@ -257,6 +285,12 @@ async def get_aim_metric_endpoint(
     id: UUID = Path(description="The UUID of the AIM service"),
     metric: MetricName = Path(description="Metric name to retrieve"),
     time_range: MetricsTimeRange = Depends(),
+    pod_name: str | None = Query(
+        None,
+        alias=to_camel("pod_name"),
+        pattern=r"^[a-z0-9][a-z0-9\-\.]{0,252}$",
+        description="Optional pod name to scope metrics to a single replica. Omit to aggregate across all replicas.",
+    ),
     prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
     _: str = Depends(ensure_access_to_workbench_namespace),
 ) -> MetricsTimeseries | MetricsScalar | MetricsScalarWithRange:
@@ -266,6 +300,7 @@ async def get_aim_metric_endpoint(
         start=time_range.start,
         end=time_range.end,
         prometheus_client=prometheus_client,
+        pod_name=pod_name,
     )
 
 
@@ -277,8 +312,8 @@ async def get_aim_metric_endpoint(
     description="Retrieve logs for a specific AIM service from Loki, with pagination and filtering support.",
 )
 async def get_aim_logs_endpoint(
+    params: QueryParam[LogsQuery],
     id: UUID = Path(description="The UUID of the AIM service"),
-    params: LogsQueryRequest = Depends(),
     loki_client: object = Depends(get_loki_client),
     _: str = Depends(ensure_access_to_workbench_namespace),
 ) -> WorkloadLogsResponse:
@@ -332,3 +367,25 @@ async def update_aim_service_endpoint(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="All scaling fields must be provided: minReplicas, maxReplicas, autoScaling.",
     )
+
+
+@router.get(
+    "/namespaces/{namespace}/models/{model_name}/templates",
+    response_model=ListResponse[AIMServiceTemplateResource],
+    summary="List AIMServiceTemplates for a fine-tuned model",
+    description=dedent("""
+        List namespace-scoped AIMServiceTemplates for a fine-tuned model.
+        The model_name is the AIMModel CR name in the namespace (equal to the model UUID).
+    """),
+)
+async def get_fine_tuned_aim_service_templates(
+    model_name: str = Path(..., description="Fine-tuned model resource name (AIMModel CR name)"),
+    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    kube_client: KubernetesClient = Depends(get_kube_client),
+) -> ListResponse[AIMServiceTemplateResource]:
+    templates = await list_fine_tuned_aim_service_templates(
+        kube_client=kube_client,
+        namespace=namespace,
+        model_name=model_name,
+    )
+    return ListResponse(data=templates)

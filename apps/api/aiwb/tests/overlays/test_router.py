@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from api_common.exceptions import NotFoundException
 from app import app  # type: ignore[attr-defined]
 from app.overlays.schemas import OverlayResponse
-from tests.dependency_overrides import BASE_OVERRIDES, override_dependencies
+from tests.dependency_overrides import SESSION_OVERRIDES, override_dependencies
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def overlay_response(chart_id: UUID) -> OverlayResponse:
     )
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.parse_overlay_file", autospec=True)
 @patch("app.overlays.router.create_overlay", autospec=True)
 def test_create_overlay(
@@ -63,25 +63,25 @@ def test_create_overlay(
         response = client.post(
             "/v1/overlays",
             data={
-                "chart_id": str(chart_id),
-                "canonical_name": canonical_name,
+                "chartId": str(chart_id),
+                "canonicalName": canonical_name,
             },
             files={
-                "overlay_file": ("test.yaml", BytesIO(b"key: value"), "application/x-yaml"),
+                "overlayFile": ("test.yaml", BytesIO(b"key: value"), "application/x-yaml"),
             },
         )
 
-    assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_201_CREATED
     response_data = response.json()
-    assert response_data["canonical_name"] == overlay_response.canonical_name
-    assert response_data["chart_id"] == str(overlay_response.chart_id)
+    assert response_data["canonicalName"] == overlay_response.canonical_name
+    assert response_data["chartId"] == str(overlay_response.chart_id)
     assert response_data["overlay"] == overlay_response.overlay
 
     mock_helper_parse_overlay.assert_awaited_once()
     mock_service_create_overlay.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.parse_overlay_file", autospec=True)
 @patch("app.overlays.router.create_overlay", side_effect=ValueError("Chart not found"), autospec=True)
 def test_create_overlay_non_existent_chart(
@@ -97,11 +97,11 @@ def test_create_overlay_non_existent_chart(
         response = client.post(
             "/v1/overlays",
             data={
-                "chart_id": str(chart_id),
-                "canonical_name": canonical_name,
+                "chartId": str(chart_id),
+                "canonicalName": canonical_name,
             },
             files={
-                "overlay_file": ("test.yaml", BytesIO(b"key: value"), "application/x-yaml"),
+                "overlayFile": ("test.yaml", BytesIO(b"key: value"), "application/x-yaml"),
             },
         )
 
@@ -112,7 +112,7 @@ def test_create_overlay_non_existent_chart(
     mock_service_create_overlay.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.parse_overlay_file", autospec=True)
 @patch("app.overlays.router.create_overlay", side_effect=ValueError("Duplicate canonical name"), autospec=True)
 def test_create_overlay_duplicate(
@@ -128,11 +128,11 @@ def test_create_overlay_duplicate(
         response = client.post(
             "/v1/overlays",
             data={
-                "chart_id": str(chart_id),
-                "canonical_name": canonical_name,
+                "chartId": str(chart_id),
+                "canonicalName": canonical_name,
             },
             files={
-                "overlay_file": ("test.yaml", BytesIO(b"key: value"), "application/x-yaml"),
+                "overlayFile": ("test.yaml", BytesIO(b"key: value"), "application/x-yaml"),
             },
         )
 
@@ -143,7 +143,7 @@ def test_create_overlay_duplicate(
     mock_service_create_overlay.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.parse_overlay_file", side_effect=ValueError("Invalid YAML"), autospec=True)
 def test_create_overlay_invalid_yaml(mock_helper_parse_overlay: MagicMock, chart_id: UUID) -> None:
     """Test creating overlay with invalid YAML."""
@@ -153,11 +153,11 @@ def test_create_overlay_invalid_yaml(mock_helper_parse_overlay: MagicMock, chart
         response = client.post(
             "/v1/overlays",
             data={
-                "chart_id": str(chart_id),
-                "canonical_name": canonical_name,
+                "chartId": str(chart_id),
+                "canonicalName": canonical_name,
             },
             files={
-                "overlay_file": ("test.yaml", BytesIO(b"invalid: yaml: content"), "application/x-yaml"),
+                "overlayFile": ("test.yaml", BytesIO(b"invalid: yaml: content"), "application/x-yaml"),
             },
         )
 
@@ -167,7 +167,7 @@ def test_create_overlay_invalid_yaml(mock_helper_parse_overlay: MagicMock, chart
     mock_helper_parse_overlay.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.parse_overlay_file", autospec=True)
 @patch("app.overlays.router.update_overlay", autospec=True)
 def test_update_overlay_with_file(
@@ -187,25 +187,25 @@ def test_update_overlay_with_file(
         response = client.put(
             f"/v1/overlays/{overlay_response.id}",
             data={
-                "chart_id": str(chart_id),
-                "canonical_name": canonical_name,
+                "chartId": str(chart_id),
+                "canonicalName": canonical_name,
             },
             files={
-                "overlay_file": ("test.yaml", BytesIO(b"key: value"), "application/x-yaml"),
+                "overlayFile": ("test.yaml", BytesIO(b"key: value"), "application/x-yaml"),
             },
         )
 
     assert response.status_code == status.HTTP_200_OK
     response_data = response.json()
-    assert response_data["canonical_name"] == overlay_response.canonical_name
-    assert response_data["chart_id"] == str(overlay_response.chart_id)
+    assert response_data["canonicalName"] == overlay_response.canonical_name
+    assert response_data["chartId"] == str(overlay_response.chart_id)
     assert response_data["overlay"] == overlay_response.overlay
 
     mock_helper_parse_overlay.assert_awaited_once()
     mock_service_update_overlay.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.update_overlay", autospec=True)
 def test_update_overlay_without_file(
     mock_update_overlay: MagicMock, overlay_response: OverlayResponse, chart_id: UUID
@@ -218,20 +218,47 @@ def test_update_overlay_without_file(
         response = client.put(
             f"/v1/overlays/{overlay_response.id}",
             data={
-                "chart_id": str(chart_id),
-                "canonical_name": canonical_name,
+                "chartId": str(chart_id),
+                "canonicalName": canonical_name,
             },
         )
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["canonical_name"] == overlay_response.canonical_name
-    assert data["chart_id"] == str(overlay_response.chart_id)
+    assert data["canonicalName"] == overlay_response.canonical_name
+    assert data["chartId"] == str(overlay_response.chart_id)
 
     mock_update_overlay.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
+@patch("app.overlays.router.update_overlay", autospec=True)
+def test_update_overlay_without_chart_id_does_not_null_it(
+    mock_update_overlay: MagicMock, overlay_response: OverlayResponse
+) -> None:
+    """Test that updating overlay without chart_id does not set chart_id to None."""
+    canonical_name = "updated-canonical-name"
+    mock_update_overlay.return_value = overlay_response
+
+    with TestClient(app) as client:
+        response = client.put(
+            f"/v1/overlays/{overlay_response.id}",
+            data={
+                "canonicalName": canonical_name,
+            },
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    call_kwargs = mock_update_overlay.call_args
+    overlay_update = call_kwargs.kwargs["overlay_update"]
+    unset_fields = overlay_update.model_dump(exclude_unset=True)
+    assert "chart_id" not in unset_fields, "chart_id should not be set when not provided in the request"
+    assert "canonical_name" in unset_fields
+    assert unset_fields["canonical_name"] == canonical_name
+
+
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.update_overlay", autospec=True)
 def test_update_overlay_empty_request(mock_update_overlay: MagicMock, overlay_response: OverlayResponse) -> None:
     """Test updating overlay with no data returns validation error."""
@@ -241,10 +268,10 @@ def test_update_overlay_empty_request(mock_update_overlay: MagicMock, overlay_re
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     response_data = resp.json()
     assert "detail" in response_data
-    assert "Either 'overlay_file' or 'chart_id' or 'canonical_name' must be provided" in response_data["detail"]
+    assert "Either 'overlayFile' or 'chartId' or 'canonicalName' must be provided" in response_data["detail"]
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.get_overlay_by_id", autospec=True)
 def test_get_overlay(mock_service_get_overlay_by_id: MagicMock, overlay_response: OverlayResponse) -> None:
     """Test getting an overlay by ID."""
@@ -256,15 +283,15 @@ def test_get_overlay(mock_service_get_overlay_by_id: MagicMock, overlay_response
     assert response.status_code == status.HTTP_200_OK
     response_data = response.json()
     assert response_data["id"] == str(overlay_response.id)
-    assert response_data["canonical_name"] == overlay_response.canonical_name
-    assert response_data["chart_id"] == str(overlay_response.chart_id)
+    assert response_data["canonicalName"] == overlay_response.canonical_name
+    assert response_data["chartId"] == str(overlay_response.chart_id)
     assert response_data["overlay"] == overlay_response.overlay
-    assert response_data["created_by"] == overlay_response.created_by
+    assert response_data["createdBy"] == overlay_response.created_by
 
     mock_service_get_overlay_by_id.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.get_overlay_by_id", autospec=True)
 def test_get_overlay_not_found(mock_service_get_overlay_by_id: MagicMock, overlay_id: UUID) -> None:
     """Test getting a non-existent overlay returns 404."""
@@ -279,7 +306,7 @@ def test_get_overlay_not_found(mock_service_get_overlay_by_id: MagicMock, overla
     mock_service_get_overlay_by_id.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.delete_overlay_by_id_service", autospec=True)
 def test_delete_overlay(mock_service_delete_overlay: MagicMock, overlay_id: UUID) -> None:
     """Test deleting an overlay."""
@@ -292,7 +319,7 @@ def test_delete_overlay(mock_service_delete_overlay: MagicMock, overlay_id: UUID
     mock_service_delete_overlay.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.delete_overlay_by_id_service", autospec=True)
 def test_delete_overlay_not_found(mock_service_delete_overlay: MagicMock, overlay_id: UUID) -> None:
     """Test deleting a non-existent overlay returns 404."""
@@ -307,7 +334,7 @@ def test_delete_overlay_not_found(mock_service_delete_overlay: MagicMock, overla
     mock_service_delete_overlay.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.list_overlays", autospec=True)
 def test_list_overlays(mock_list_overlays: MagicMock, overlay_response: OverlayResponse) -> None:
     """Test listing overlays."""
@@ -325,14 +352,14 @@ def test_list_overlays(mock_list_overlays: MagicMock, overlay_response: OverlayR
     mock_list_overlays.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.list_overlays", autospec=True)
 def test_list_overlays_with_chart_filter(mock_list_overlays: MagicMock, chart_id: UUID) -> None:
     """Test listing overlays with chart_id filter."""
     mock_list_overlays.return_value = []
 
     with TestClient(app) as client:
-        response = client.get(f"/v1/overlays?chart_id={chart_id}")
+        response = client.get(f"/v1/overlays?chartId={chart_id}")
 
     assert response.status_code == status.HTTP_200_OK
     response_data = response.json()
@@ -342,7 +369,7 @@ def test_list_overlays_with_chart_filter(mock_list_overlays: MagicMock, chart_id
     mock_list_overlays.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.delete_overlays", autospec=True)
 def test_batch_delete_overlays(mock_delete_overlays: MagicMock) -> None:
     """Test batch deleting overlays."""
@@ -359,7 +386,7 @@ def test_batch_delete_overlays(mock_delete_overlays: MagicMock) -> None:
     mock_delete_overlays.assert_awaited_once()
 
 
-@override_dependencies(BASE_OVERRIDES)
+@override_dependencies(SESSION_OVERRIDES)
 @patch("app.overlays.router.delete_overlays", autospec=True)
 def test_batch_delete_overlays_partial_not_found(mock_delete_overlays: MagicMock) -> None:
     """Test batch delete when some overlays are not found."""

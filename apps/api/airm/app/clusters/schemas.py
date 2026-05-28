@@ -6,11 +6,13 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, computed_field
+from pydantic import AwareDatetime, ConfigDict, Field, computed_field
 
-from ..messaging.schemas import GPUVendor, PriorityClass
-from ..utilities.schema import BaseEntityPublic
+from api_common.schemas import BaseEntityPublic, BaseModel
+
+from ..utilities.enums import GPUVendor
 from .constants import DEFAULT_PRIORITY_CLASSES
+from .messaging import PriorityClass
 
 
 class ClusterStatus(StrEnum):
@@ -20,8 +22,8 @@ class ClusterStatus(StrEnum):
 
 
 class ClusterIn(BaseModel):
-    workloads_base_url: str | None = Field(
-        min_length=1, max_length=1024, description="The base URL of the cluster.", default=None
+    workbench_base_url: str | None = Field(
+        min_length=1, max_length=1024, description="The Workbench base URL of the cluster.", default=None
     )
     kube_api_url: str | None = Field(
         min_length=1, max_length=1024, description="The kube-api URL of the cluster", default=None
@@ -49,8 +51,6 @@ class ClusterResponse(ClusterIn, BaseEntityPublic):
         if datetime.now(tz=UTC) - self.last_heartbeat_at > timedelta(minutes=5):
             return ClusterStatus.UNHEALTHY
         return ClusterStatus.HEALTHY
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class ClustersStats(BaseModel):
@@ -84,8 +84,6 @@ class ClusterNodeResponse(BaseModel):
     gpu_info: GPUInfo | None = Field(None, description="The GPU information available in the node.")
     updated_at: AwareDatetime = Field(description="The timestamp the node was last updated.")
     status: str = Field(description="The status of the node.")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class ClusterNodes(BaseModel):
@@ -136,8 +134,6 @@ class ClusterWithResources(ClusterResponse):
         allocated = self.allocated_resources.memory_bytes
         available = self.available_resources.memory_bytes
         return (allocated / available * 100) if available > 0 else 0
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class Clusters(BaseModel):

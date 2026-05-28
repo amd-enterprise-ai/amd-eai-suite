@@ -9,8 +9,8 @@ description: AIWB (AI Workbench) - API and UI services for AI workload managemen
 
 type: application
 
-# Chart version
-version: 1.0.3
+# Chart version (placeholder; release workflow overwrites before OCI publish)
+version: 0.0.0
 
-# Workbench version
-appVersion: "1.0.3"
+# Application version tag default (overridden when packaging for OCI / releases)
+appVersion: "0.0.0"

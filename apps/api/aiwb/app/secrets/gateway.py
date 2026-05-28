@@ -7,11 +7,12 @@
 from kubernetes_asyncio.client import ApiException, V1ObjectMeta, V1Secret
 from loguru import logger
 
+from api_common.secrets import SecretUseCase
+
 from ..config import SUBMITTER_ANNOTATION
 from ..dispatch.kube_client import KubernetesClient
 from .constants import USE_CASE_LABEL
 from .crds import KubernetesSecretResource
-from .enums import SecretUseCase
 
 
 def _convert_v1secret_to_crd(v1_secret: V1Secret) -> KubernetesSecretResource:

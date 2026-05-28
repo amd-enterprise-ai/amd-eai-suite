@@ -43,12 +43,12 @@
     "edit": {
       "title": "Edit Cluster",
       "field": {
-        "workloadsBaseUrl": {
-          "label": "Base URL for workloads submitted to the cluster.",
-          "placeholder": "Provide base URL for the workloads",
-          "emptyError": "Workloads base URL must not be empty",
+        "workbenchBaseUrl": {
+          "label": "Workbench URL for the cluster.",
+          "placeholder": "Provide Workbench base URL",
+          "emptyError": "Workbench base URL must not be empty",
           "error": {
-            "invalid": "Workloads base URL must be a valid URL (must start with http:// or https://)"
+            "invalid": "Workbench base URL must be a valid URL (must start with http:// or https://)"
           }
         },
         "kubeApiUrl": {

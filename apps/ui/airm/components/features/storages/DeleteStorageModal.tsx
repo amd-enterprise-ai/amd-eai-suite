@@ -11,7 +11,8 @@ import { deleteProjectStorage, deleteStorage } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { BaseStorage, Storage } from '@amdenterpriseai/types';
+import { BaseStorage } from '@/types/storages';
+import { Storage } from '@/types/storages';
 
 import { ConfirmationModal } from '@amdenterpriseai/components';
 

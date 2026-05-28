@@ -2,14 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 
-import { Workload } from '@amdenterpriseai/types';
-import { WorkloadsStats } from '@amdenterpriseai/types';
-import { WorkloadStatusStatsResponse } from '@amdenterpriseai/types';
+import { Workload } from '@/types/workloads';
+import { WorkloadsStats } from '@/types/workloads';
+import { WorkloadStatusStatsResponse } from '@/types/metrics';
 
 export const getWorkload = async (params: {
   accessToken: string;
@@ -25,8 +22,7 @@ export const getWorkload = async (params: {
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(`Failed to get workload`);
   }
@@ -45,8 +41,7 @@ export const getClusterWorkloadsStats = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get cluster workload stats: ${await getErrorMessage(response)}`,
@@ -66,8 +61,7 @@ export const getWorkloadsStats = async (
   });
 
   if (response.ok) {
-    const json = await response.json();
-    return convertSnakeToCamel(json);
+    return await response.json();
   } else {
     throw new Error(
       `Failed to get workloads stats: ${await getErrorMessage(response)}`,

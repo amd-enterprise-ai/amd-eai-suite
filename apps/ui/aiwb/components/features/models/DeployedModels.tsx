@@ -19,20 +19,28 @@ import { useTranslation } from 'next-i18next';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 
 import { getModels } from '@/lib/app/models';
+import {
+  AIM_CANONICAL_NAME_ANNOTATION,
+  AIM_MODEL_NAME_LABEL,
+  AIM_MODEL_WORKLOAD_ID_LABEL,
+  FINE_TUNED_LABEL,
+} from '@/types/aims';
+import { AIMModelResponse } from '@/types/models';
 import { deleteWorkload, listWorkloads } from '@/lib/app/workloads';
 
 import { getFilteredData } from '@amdenterpriseai/utils/app';
-import { getWorkloadStatusVariants } from '@amdenterpriseai/utils/app';
+import { getWorkloadStatusVariants } from '@/utils/workloads';
 import { getWorkloadTypeVariants } from '@amdenterpriseai/utils/app';
 
 import { TableColumns } from '@amdenterpriseai/types';
 import { FilterComponentType } from '@amdenterpriseai/types';
 import { SortDirection } from '@amdenterpriseai/types';
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
-import { WorkloadsTableFields } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
+import { WorkloadsTableFields } from '@/types/enums/workloads-table-fields';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import { Model } from '@amdenterpriseai/types';
-import { Workload } from '@amdenterpriseai/types';
+import { Model } from '@/types/models';
+import { Workload } from '@/types/workloads';
 
 import { ConfirmationModal } from '@amdenterpriseai/components';
 import { ClientSideDataTable } from '@amdenterpriseai/components';
@@ -46,17 +54,22 @@ import { ActionsToolbar } from '@amdenterpriseai/components';
 
 import { useProject } from '@/contexts/ProjectContext';
 import {
+  fetchProfilesForServices,
   getAimClusterModels,
   getAimServices,
   mapAIMServiceStatusToWorkloadStatus,
   resolveAIMServiceDisplay,
   undeployAim,
 } from '@/lib/app/aims';
-import { ParsedAIM } from '@/types/aims';
+import type { AIMServiceProfile } from '@/lib/app/aims';
+import { ModelProfileSummary } from '@/components/shared/ModelProfileSummary';
+import { AIMService, ParsedAIM } from '@/types/aims';
+import { SUBMITTER_ANNOTATION_KEY } from '@/components/features/secrets/constants';
 import AIMConnectModal from './AIMConnectModal';
 
 const defaultStatusSet = [
   WorkloadStatus.PENDING,
+  WorkloadStatus.STARTING,
   WorkloadStatus.RUNNING,
   WorkloadStatus.FAILED,
 ];
@@ -90,7 +103,7 @@ const DeployedModels: React.FC = ({}) => {
   const { t } = useTranslation(['workloads', 'models', 'common']);
   const { toast } = useSystemToast();
   const router = useRouter();
-  const { activeProject } = useProject();
+  const { activeProject, projectPath, projectUrl } = useProject();
 
   const [filters, setFilters] = useState<ClientSideDataFilter<Workload>[]>(
     convertFilterValueMap({
@@ -129,20 +142,28 @@ const DeployedModels: React.FC = ({}) => {
   });
 
   const {
-    data: allAimServices,
+    data: allAimServices = [],
     isLoading: isAimServicesLoading,
     isRefetching: isAimServicesRefetching,
     refetch: refetchAimServices,
-  } = useQuery({
+  } = useQuery<AIMService[]>({
     queryKey: ['project', activeProject, 'aim-services'],
-    queryFn: async () => {
-      if (!activeProject) return [];
-      const response = await getAimServices(activeProject);
-      return response;
-    },
+    queryFn: () => getAimServices(activeProject!),
     refetchInterval: 30000,
     enabled: !!activeProject,
   });
+
+  const { data: aimServiceProfiles = new Map<string, AIMServiceProfile>() } =
+    useQuery({
+      queryKey: [
+        'project',
+        activeProject,
+        'aim-service-profiles',
+        allAimServices.map((s) => s.id),
+      ],
+      queryFn: () => fetchProfilesForServices(allAimServices),
+      enabled: allAimServices.length > 0,
+    });
 
   // Merge AIM Services with Workloads to create an aggregated list for the table
   const allDeployments = useMemo(() => {
@@ -150,11 +171,11 @@ const DeployedModels: React.FC = ({}) => {
     const aimWorkloads: Workload[] = allAimServices.map((aim) => ({
       id: aim.id,
       displayName: aim.metadata.name,
-      name: aim.resourceName,
+      name: aim.metadata.name,
       type: WorkloadType.INFERENCE,
       status: mapAIMServiceStatusToWorkloadStatus(aim.status.status),
       createdAt: aim.metadata.creationTimestamp,
-      createdBy: aim.metadata.annotations.airmSilogenAiSubmitter,
+      createdBy: aim.metadata.annotations[SUBMITTER_ANNOTATION_KEY],
       updatedAt: aim.metadata.creationTimestamp,
       aimId: aim.status.resolvedModel?.name,
     })) as Workload[];
@@ -172,8 +193,8 @@ const DeployedModels: React.FC = ({}) => {
     [workloads],
   );
 
-  const hasModelWorkloads = useMemo(
-    () => workloads.some((w) => w.modelId),
+  const hasFinetuningWorkloads = useMemo(
+    () => workloads.some((w) => w.type === WorkloadType.FINE_TUNING),
     [workloads],
   );
 
@@ -195,8 +216,16 @@ const DeployedModels: React.FC = ({}) => {
     refetch: refetchModels,
   } = useQuery<Model[]>({
     queryKey: ['project', activeProject, 'custom-models'],
-    queryFn: () => getModels(activeProject!),
-    enabled: !!activeProject && hasModelWorkloads,
+    queryFn: async () => {
+      const data = await getModels(activeProject!);
+      return data.map((item: AIMModelResponse) => ({
+        id: item.metadata.labels?.[AIM_MODEL_WORKLOAD_ID_LABEL],
+        name: item.metadata.name,
+        canonicalName: item.spec?.modelSources?.[0]?.modelId || '',
+        resourceName: item.metadata.name,
+      }));
+    },
+    enabled: !!activeProject && hasFinetuningWorkloads,
   });
 
   useEffect(() => {
@@ -253,17 +282,50 @@ const DeployedModels: React.FC = ({}) => {
     onClose: onConnectModalClose,
   } = useDisclosure();
 
+  // TODO(EAI-6064): The fine-tuned branch below fakes a ParsedAIM because
+  // AIMConnectModal asks for one but only uses two fields off it
+  // (deployedService + canonicalName). When that ticket lands and the modal
+  // takes (service, canonicalName) directly, delete the fake-ParsedAIM
+  // construction and pass `matchingService` + canonical-name annotation
+  // (`AIM_CANONICAL_NAME_ANNOTATION`) straight through.
   const aimForConnectModal = useMemo((): ParsedAIM | undefined => {
-    if (!workloadForConnect?.aimId || !aims || !allAimServices)
-      return undefined;
-    const baseAim = aims.find((a) => a.model === workloadForConnect.aimId);
+    if (!workloadForConnect?.aimId || !allAimServices) return undefined;
     const matchingService = allAimServices.find(
       (s) => s.id === workloadForConnect.id,
     );
-    if (!baseAim) return undefined;
+
+    // Cluster-scoped deployment: catalog has the parsed AIM
+    const baseAim = aims?.find((a) => a.model === workloadForConnect.aimId);
+    if (baseAim) {
+      return {
+        ...baseAim,
+        deployedService: matchingService ?? baseAim.deployedService,
+      };
+    }
+
+    // Fine-tuned (namespace-scoped) deployment: not in cluster catalog.
+    // Read the canonical name from the AIMService annotation.
+    if (!matchingService) return undefined;
+    const canonicalName =
+      matchingService.metadata.annotations?.[AIM_CANONICAL_NAME_ANNOTATION] ??
+      '';
     return {
-      ...baseAim,
-      deployedService: matchingService ?? baseAim.deployedService,
+      model: workloadForConnect.aimId,
+      imageReference: '',
+      annotations: {},
+      description: { short: '', full: '' },
+      title:
+        matchingService.metadata.annotations?.[AIM_MODEL_NAME_LABEL] ??
+        matchingService.metadata.name,
+      imageVersion: '',
+      canonicalName,
+      tags: [],
+      status: matchingService.status.status,
+      workloadStatuses: [],
+      isPreview: false,
+      isHfTokenRequired: false,
+      deployedService: matchingService,
+      deployedServices: [matchingService],
     };
   }, [workloadForConnect, aims, allAimServices]);
 
@@ -308,28 +370,61 @@ const DeployedModels: React.FC = ({}) => {
     Record<WorkloadsTableFields, (item: Workload) => React.ReactNode | string>
   > = {
     [WorkloadsTableFields.DISPLAY_NAME]: (item) => {
+      const aimService =
+        item.aimId && allAimServices
+          ? allAimServices.find((service) => service.id === item.id)
+          : undefined;
+      const profile = aimService
+        ? aimServiceProfiles.get(String(aimService.id))
+        : undefined;
+      const profileSummary = (
+        <ModelProfileSummary profile={profile ?? null} t={t} />
+      );
+
       if (item.aimId && allAimServices && aims) {
-        const aimService = allAimServices.find(
-          (service) => service.id === item.id,
-        );
         if (aimService) {
           const displayInfo = resolveAIMServiceDisplay(aimService, aims);
-          const metricLabel = t(
-            `models:performanceMetrics.values.${displayInfo.metric}`,
+          // Fine-tuned: show the user-given name (title); cluster catalog: show canonical + version.
+          const isFineTuned =
+            aimService.metadata.labels?.[FINE_TUNED_LABEL] === 'true';
+          const displayName = isFineTuned
+            ? displayInfo.title
+            : `${displayInfo.canonicalName} ${displayInfo.imageVersion ? `(${displayInfo.imageVersion})` : ''}`.trim();
+          return (
+            <div className="flex flex-col gap-1">
+              <span>{displayName}</span>
+              {profileSummary}
+            </div>
           );
-          return `${displayInfo.canonicalName} ${displayInfo.imageVersion ? `(${displayInfo.imageVersion})` : ''} (${metricLabel})`;
         }
       }
-      return item.displayName ?? item.name ?? '-';
+      const displayName = item.displayName ?? item.name;
+      if (!displayName) {
+        return <NoDataDisplay />;
+      }
+      return (
+        <div className="flex flex-col gap-1">
+          <span>{displayName}</span>
+          {profileSummary}
+        </div>
+      );
     },
     [WorkloadsTableFields.CANONICAL_NAME]: (item) => {
-      const model = item.modelId ? modelsMap.get(item.modelId) : undefined;
+      const model = modelsMap.get(item.id);
       if (model?.canonicalName) {
         return model.canonicalName;
       }
       const aim = aims.find((a) => a.model === item.aimId);
+      if (aim?.canonicalName) {
+        return aim.canonicalName;
+      }
+      // Fine-tuned deployments aren't in the cluster catalog; the canonical
+      // lives on the AIMService annotation.
+      const aimService = allAimServices?.find((s) => s.id === item.id);
+      const annotationCanonical =
+        aimService?.metadata.annotations?.[AIM_CANONICAL_NAME_ANNOTATION];
       return (
-        aim?.canonicalName ||
+        annotationCanonical ||
         item.userInputs?.canonicalName || <NoDataDisplay />
       );
     },
@@ -360,13 +455,13 @@ const DeployedModels: React.FC = ({}) => {
       onPress: (w: Workload) => {
         if (w.aimId) {
           router.push({
-            pathname: `/aims/${w.id}`,
-            search: `ref=${router.asPath}`,
+            pathname: projectPath(`/aims/${w.id}`),
+            query: { ref: router.asPath },
           });
         } else {
           router.push({
-            pathname: `/workloads/${w.id}`,
-            search: `ref=${router.asPath}`,
+            pathname: projectPath(`/workloads/${w.id}`),
+            query: { ref: router.asPath },
           });
         }
       },
@@ -396,7 +491,7 @@ const DeployedModels: React.FC = ({}) => {
         label: t('list.actions.chat.label'),
         startContent: <IconMessage />,
         onPress: () => {
-          window.open(`/chat?workload=${item.id}`, '_blank');
+          window.open(projectUrl(`/chat?workload=${item.id}`), '_blank');
         },
       });
       if (item.aimId) {
@@ -443,6 +538,7 @@ const DeployedModels: React.FC = ({}) => {
         defaultSelectedValues: defaultStatusSet.map(String),
         fields: [
           WorkloadStatus.PENDING,
+          WorkloadStatus.STARTING,
           WorkloadStatus.RUNNING,
           WorkloadStatus.COMPLETE,
           WorkloadStatus.FAILED,
@@ -451,11 +547,11 @@ const DeployedModels: React.FC = ({}) => {
           WorkloadStatus.DELETED,
         ].map((status) => ({
           props: {
-            description: t(`status.${status}`),
+            description: t(`workloads:status.${status}`),
             showDivider: status === WorkloadStatus.DELETING,
           },
           key: String(status),
-          label: t(`status.${status}`),
+          label: t(`workloads:status.${status}`),
         })),
       },
     }),
@@ -541,7 +637,8 @@ const DeployedModels: React.FC = ({}) => {
         aim={aimForConnectModal}
         onConfirmAction={(aim) => {
           const serviceId = aim.deployedService?.id;
-          if (serviceId) window.open(`/chat?workload=${serviceId}`, '_blank');
+          if (serviceId)
+            window.open(projectUrl(`/chat?workload=${serviceId}`), '_blank');
           onConnectModalClose();
           setWorkloadForConnect(undefined);
         }}

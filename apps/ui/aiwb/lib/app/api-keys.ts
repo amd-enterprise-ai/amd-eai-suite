@@ -2,12 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  convertCamelToSnake,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
-import { ApiKeyDetails, ApiKeysResponse } from '@amdenterpriseai/types';
+import { ApiKeyDetails } from '@/types/api-keys';
+import { ApiKeysResponse } from '@/types/api-keys';
 
 export const fetchProjectApiKeys = async (
   projectId: string,
@@ -53,7 +51,7 @@ export const createApiKey = async (
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(convertCamelToSnake(data)),
+    body: JSON.stringify(data),
   });
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
@@ -96,7 +94,7 @@ export const updateApiKeyBindings = async (
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(convertCamelToSnake({ aimIds })),
+      body: JSON.stringify({ aimIds }),
     },
   );
 

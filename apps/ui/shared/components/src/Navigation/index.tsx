@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 export { CollapsibleItem } from './CollapsibleItem';
-export { CollapsibleSection } from './CollapsibleSection';
+export { Section } from './Section';
 export { MobileMenu } from './MobileMenu';
 export { Sidebar } from './Sidebar';
 export { SidebarButton } from './SidebarButton';

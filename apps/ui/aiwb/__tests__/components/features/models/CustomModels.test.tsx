@@ -12,9 +12,12 @@ import {
 
 import { mockModels } from '@/__mocks__/services/app/models.data';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
-import { deleteModel, deployModel, getModels } from '@/lib/app/models';
+import { getFinetunableModels, getModels } from '@/lib/app/models';
 import { listWorkloads } from '@/lib/app/workloads';
+import { getAimServices } from '@/lib/app/aims';
 
+import { FinetunableModel } from '@/types/models';
+import { WorkloadStatus } from '@/types/enums/workloads';
 import CustomModels from '@/components/features/models/CustomModels';
 
 import wrapper from '@/__tests__/ProviderWrapper';
@@ -25,16 +28,20 @@ import { Mock, vi } from 'vitest';
 // Mock the API services
 vi.mock('@/lib/app/models', async (importOriginal) => ({
   ...(await importOriginal()),
-  deployModel: vi.fn(),
   finetuneModel: vi.fn(),
-  getModel: vi.fn(),
   deleteModel: vi.fn(),
   getModels: vi.fn(),
+  getFinetunableModels: vi.fn(),
 }));
 
 vi.mock('@/lib/app/workloads', async (importOriginal) => ({
   ...(await importOriginal()),
   listWorkloads: vi.fn(),
+}));
+
+vi.mock('@/lib/app/aims', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getAimServices: vi.fn().mockResolvedValue([]),
 }));
 
 // Mock useSystemToast for testing
@@ -64,11 +71,25 @@ vi.mock('@tabler/icons-react', async (importOriginal) => {
 });
 
 describe('Custom Models', () => {
-  const mockFinetunableModels = ['org/model-1', 'org/model-6']; // These models can be fine-tuned
+  const mockFinetunableModels: FinetunableModel[] = [
+    {
+      canonicalName: 'org/model-1',
+      gpuCount: 0,
+      compatibleAccelerators: [],
+      compatibleAcceleratorNames: [],
+    },
+    {
+      canonicalName: 'org/model-6',
+      gpuCount: 0,
+      compatibleAccelerators: [],
+      compatibleAcceleratorNames: [],
+    },
+  ];
 
   beforeEach(() => {
     vi.clearAllMocks();
     (getModels as Mock).mockResolvedValue(mockModels);
+    (getFinetunableModels as Mock).mockResolvedValue(mockFinetunableModels);
     (listWorkloads as Mock).mockResolvedValue({
       data: mockWorkloads,
       total: mockWorkloads.length,
@@ -79,21 +100,24 @@ describe('Custom Models', () => {
 
   it('renders custom models component', async () => {
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
+      render(<CustomModels />, { wrapper });
     });
 
     // Wait for the models to load
     await waitFor(() => {
       expect(getModels).toHaveBeenCalled();
     });
+
+    // Deleted and Unknown workloads should be excluded from the query
+    expect(listWorkloads).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        status: expect.not.arrayContaining([
+          WorkloadStatus.DELETED,
+          WorkloadStatus.UNKNOWN,
+        ]),
+      }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText('model-1')).toBeInTheDocument();
@@ -104,15 +128,7 @@ describe('Custom Models', () => {
 
   it('filters models by search query', async () => {
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
+      render(<CustomModels />, { wrapper });
     });
 
     // Wait for the models to load
@@ -135,15 +151,7 @@ describe('Custom Models', () => {
 
   it('clears filters', async () => {
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
+      render(<CustomModels />, { wrapper });
     });
 
     // Wait for the models to load
@@ -171,75 +179,37 @@ describe('Custom Models', () => {
   });
 
   it('opens finetune model modal', async () => {
-    const mockOnOpenFinetuneModal = vi.fn();
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={mockOnOpenFinetuneModal}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        {
-          wrapper,
-        },
-      );
+      render(<CustomModels />, { wrapper });
     });
 
-    // Wait for the models to load
     await waitFor(() => {
       expect(getModels).toHaveBeenCalled();
     });
 
-    // Click the "Create New" button to open the finetune modal
     const createNewButton = screen.getByText(
       'customModels.list.actions.finetune.title',
     );
     fireEvent.click(createNewButton);
 
-    // Check if the finetune modal is open by looking for the form element
     await waitFor(() => {
-      expect(mockOnOpenFinetuneModal).toHaveBeenCalled();
+      expect(getFinetunableModels).toHaveBeenCalled();
     });
   });
 
   it('opens deploy model modal from row action', async () => {
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
+      render(<CustomModels />, { wrapper });
     });
 
-    // Wait for the models to load
     await waitFor(() => {
       expect(getModels).toHaveBeenCalled();
     });
-
-    // The test needs to find action buttons but actual rows might not render
-    // so we'll test the functionality through the deployModel method directly
-    expect(deployModel).not.toHaveBeenCalled();
-
-    // Verify that the function exists and is callable
-    expect(typeof deployModel).toBe('function');
   });
 
   it('opens model details modal from row action', async () => {
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
+      render(<CustomModels />, { wrapper });
     });
 
     // Wait for the models to load
@@ -250,105 +220,9 @@ describe('Custom Models', () => {
     expect(getModels).toHaveBeenCalled();
   });
 
-  it('allows finetuning for ready base models with fine-tune capability', async () => {
-    await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
-    });
-
-    // Wait for initial models load
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalledTimes(1);
-    });
-
-    // Find the row for model-6 which has READY status and fine-tune capability
-    const model6Row = await screen.findByText('model-6');
-    expect(model6Row).toBeInTheDocument();
-
-    // Find the table row containing model-6
-    const tableRow = model6Row.closest('tr');
-    expect(tableRow).not.toBeNull();
-
-    // Find the context menu button within that specific row
-    const actionButton = tableRow
-      ? await within(tableRow).findByText('action-dot-icon')
-      : null;
-    expect(actionButton).not.toBeNull();
-
-    // Click the action button for model-6
-    await act(async () => {
-      if (actionButton) fireEvent.click(actionButton);
-    });
-
-    // Check that the Fine-tune option is present in the dropdown since model-6 has READY status and fine-tune capability
-    const finetuneOption = await screen.findByTestId('finetune');
-    expect(finetuneOption).toBeInTheDocument();
-
-    // The finetune option should be enabled (not disabled) for model-6
-    expect(finetuneOption).not.toHaveAttribute('data-disabled', 'true');
-  });
-
-  it('does not show fine-tune action when model is not in ready status', async () => {
-    const finetunableModelsWithPending = [
-      'org/model-1',
-      'org/model-2',
-      'org/model-6',
-    ];
-    await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={finetunableModelsWithPending}
-        />,
-        { wrapper },
-      );
-    });
-
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalledTimes(1);
-    });
-
-    // model-2 has PENDING onboarding status (simulating active fine-tuning)
-    const model2Row = await screen.findByText('model-2');
-    const tableRow = model2Row.closest('tr');
-    expect(tableRow).not.toBeNull();
-
-    const actionButton = tableRow
-      ? await within(tableRow).findByText('action-dot-icon')
-      : null;
-    expect(actionButton).not.toBeNull();
-
-    await act(async () => {
-      if (actionButton) fireEvent.click(actionButton);
-    });
-
-    // Wait for the dropdown to render by asserting a menu item that's always present
-    await screen.findByTestId('delete');
-
-    const finetuneOption = screen.queryByTestId('finetune');
-    expect(finetuneOption).not.toBeInTheDocument();
-  });
-
   it('refreshes the models list', async () => {
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
+      render(<CustomModels />, { wrapper });
     });
 
     // Wait for initial models load
@@ -367,53 +241,69 @@ describe('Custom Models', () => {
   });
 
   it('allows deleting a model', async () => {
-    const onOpenDeleteModalMock = vi.fn();
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={onOpenDeleteModalMock}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
+      render(<CustomModels />, { wrapper });
     });
 
-    // Wait for the models to load
     await waitFor(() => {
       expect(getModels).toHaveBeenCalled();
       expect(screen.getByText('model-1')).toBeInTheDocument();
     });
 
-    // Verify the deleteModel function is available
-    expect(typeof deleteModel).toBe('function');
-    expect(deleteModel).not.toHaveBeenCalled();
-
     const actionButtons = await screen.findAllByText('action-dot-icon');
     await act(async () => {
-      fireEvent.click(actionButtons[1]);
+      fireEvent.click(actionButtons[0]);
     });
 
     const deleteOption = await screen.findByTestId('delete');
-    await act(async () => {
-      fireEvent.click(deleteOption);
-    });
-
-    expect(onOpenDeleteModalMock).toHaveBeenCalled();
+    expect(deleteOption).toBeInTheDocument();
   });
 
-  it('does not show deploy action when model onboarding status is not ready', async () => {
+  it('shows AIM deployment count in workloads column', async () => {
+    (getAimServices as Mock).mockResolvedValue([
+      {
+        id: 'aim-svc-1',
+        metadata: {
+          name: 'svc-1',
+          creationTimestamp: '2026-01-01T00:00:00Z',
+          annotations: {},
+        },
+        status: {
+          status: 'Running',
+          resolvedModel: { name: 'wb-finetune-cr-1' },
+        },
+      },
+      {
+        id: 'aim-svc-2',
+        metadata: {
+          name: 'svc-2',
+          creationTimestamp: '2026-01-01T00:00:00Z',
+          annotations: {},
+        },
+        status: {
+          status: 'Running',
+          resolvedModel: { name: 'wb-finetune-cr-1' },
+        },
+      },
+    ]);
+
     await act(async () => {
-      render(
-        <CustomModels
-          onOpenDeployModal={vi.fn()}
-          onOpenFinetuneModal={vi.fn()}
-          onOpenDeleteModal={vi.fn()}
-          finetunableModels={mockFinetunableModels}
-        />,
-        { wrapper },
-      );
+      render(<CustomModels />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(getAimServices).toHaveBeenCalled();
+    });
+
+    // model-1's resourceName is 'wb-finetune-cr-1', matching both AIM services
+    const model1Row = (await screen.findByText('model-1')).closest('tr');
+    expect(model1Row).not.toBeNull();
+    expect(within(model1Row!).getByText('2')).toBeInTheDocument();
+  });
+
+  it('does not show deploy action when model status is not complete', async () => {
+    await act(async () => {
+      render(<CustomModels />, { wrapper });
     });
 
     // Wait for initial models load
@@ -421,7 +311,7 @@ describe('Custom Models', () => {
       expect(getModels).toHaveBeenCalledTimes(1);
     });
 
-    // Find the row for model-2 which has PENDING onboarding status
+    // Find the row for model-2 which has Pending status
     const model2Row = await screen.findByText('model-2');
     expect(model2Row).toBeInTheDocument();
 
@@ -440,11 +330,11 @@ describe('Custom Models', () => {
       if (actionButton) fireEvent.click(actionButton);
     });
 
-    // Check that the Deploy option is not present in the dropdown since model-2 has PENDING status
+    // Check that the Deploy option is not present since model-2 has Pending status
     const deployOption = screen.queryByTestId('deploy');
     expect(deployOption).not.toBeInTheDocument();
 
-    // Also test with model-4 which has FAILED status
+    // Also test with model-4 which has Failed status
     const model4Row = await screen.findByText('model-4');
     expect(model4Row).toBeInTheDocument();
 
@@ -461,7 +351,7 @@ describe('Custom Models', () => {
       if (actionButton4) fireEvent.click(actionButton4);
     });
 
-    // Check that the Deploy option is not present for model-4 with FAILED status
+    // Check that the Deploy option is not present for model-4 with Failed status
     const deployOption4 = screen.queryByTestId('deploy');
     expect(deployOption4).not.toBeInTheDocument();
   });

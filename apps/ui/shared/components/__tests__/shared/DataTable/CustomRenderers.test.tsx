@@ -15,13 +15,13 @@ import {
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/DateSince', () => ({
+vi.mock('@/src/DateSince', () => ({
   DateSince: ({ date }: { date: string }) => (
     <span data-testid="mock-datesince" data-date={date} />
   ),
 }));
 
-vi.mock('../../../src/InlineBadge', () => ({
+vi.mock('@/src/InlineBadge', () => ({
   InlineBadge: ({
     children,
     color = 'default',
@@ -43,7 +43,7 @@ vi.mock('../../../src/InlineBadge', () => ({
   ),
 }));
 
-vi.mock('../../../src/Status/Status', () => ({
+vi.mock('@/src/Status/Status', () => ({
   default: ({ label, color, icon: IconComponent, isPending }: any) => (
     <div
       data-testid="mock-status-display"

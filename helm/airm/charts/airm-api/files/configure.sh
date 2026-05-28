@@ -12,7 +12,7 @@ echo ""
 # --- Configuration Variables ---
 # Get values from bloom configmap mounted as env
 
-CLUSTER_WORKLOADS_BASE_URL="https://workspaces.${NEW_DOMAIN_NAME}/"
+CLUSTER_WORKBENCH_BASE_URL="https://aiwbui.${NEW_DOMAIN_NAME}/"
 CLUSTER_KUBE_API_URL="https://k8s.${NEW_DOMAIN_NAME}"
 USER_EMAIL="devuser@${NEW_DOMAIN_NAME}"
 PROJECT_NAME="demo"
@@ -89,12 +89,12 @@ function create_project() {
         -d '{
             "name": "'"$PROJECT_NAME"'",
             "description": "'"$PROJECT_DESCRIPTION"'",
-            "cluster_id": "'"$CLUSTER_ID"'",
+            "clusterId": "'"$CLUSTER_ID"'",
             "quota": {
-            "cpu_milli_cores": 0,
-            "memory_bytes": 0,
-            "ephemeral_storage_bytes": 0,
-            "gpu_count": 0
+            "cpuMilliCores": 0,
+            "memoryBytes": 0,
+            "ephemeralStorageBytes": 0,
+            "gpuCount": 0
             }
         }' | jq -r '.id')
         echo "$PROJECT_ID"
@@ -164,9 +164,9 @@ EOF
         -H 'Content-Type: application/json' \
         -d '{
             "name": "'"$SECRET_NAME"'",
-            "project_ids": ["'"$PROJECT_ID"'"],
+            "projectIds": ["'"$PROJECT_ID"'"],
             "type": "ExternalSecret",
-            "use_case": "S3",
+            "useCase": "S3",
             "scope": "Organization",
             "manifest": '"$(echo "$EXTERNAL_SECRET_MANIFEST" | jq -Rs .)"'
         }')
@@ -206,14 +206,14 @@ EOF
         -H 'Content-Type: application/json' \
         -d '{
             "name": "'"$STORAGE_NAME"'",
-            "project_ids": ["'"$PROJECT_ID"'"],
-            "secret_id": "'"$SECRET_ID"'",
+            "projectIds": ["'"$PROJECT_ID"'"],
+            "secretId": "'"$SECRET_ID"'",
             "type": "S3",
             "scope": "Organization",
             "spec": {
-                "bucket_url": "http://minio.minio-tenant-default.svc.cluster.local:80",
-                "access_key_name": "minio-access-key",
-                "secret_key_name": "minio-secret-key"
+                "bucketUrl": "http://minio.minio-tenant-default.svc.cluster.local:80",
+                "accessKeyName": "minio-access-key",
+                "secretKeyName": "minio-secret-key"
             }
         }')
         echo "$ADD_STORAGE_RESP"
@@ -242,7 +242,7 @@ function add_user_to_project() {
         "${AIRM_API_URL}/v1/projects/${PROJECT_ID}/users" \
         -H "Authorization: Bearer ${TOKEN}" \
         -H 'Content-Type: application/json' \
-        -d '{"user_ids": ["'"${USER_ID}"'"]}')
+        -d '{"userIds": ["'"${USER_ID}"'"]}')
         echo "$ADD_PROJECT_RESP"
         check_success "$([[ "$ADD_PROJECT_RESP" == "200" || "$ADD_PROJECT_RESP" == "201" || "$ADD_PROJECT_RESP" == "204" ]] && echo 0 || echo 1)" "Failed to add user to project"
     else
@@ -264,12 +264,12 @@ function create_cluster() {
         -H 'accept: application/json' -H "Authorization: Bearer ${TOKEN}" \
         -H 'Content-Type: application/json' \
         -d '{
-          "workloads_base_url": "'"$CLUSTER_WORKLOADS_BASE_URL"'",
-          "kube_api_url": "'"$CLUSTER_KUBE_API_URL"'"
+          "workbenchBaseUrl": "'"$CLUSTER_WORKBENCH_BASE_URL"'",
+          "kubeApiUrl": "'"$CLUSTER_KUBE_API_URL"'"
         }')
         CLUSTER_ID=$(echo "$CLUSTER" | jq -r '.id')
         check_success "$([[ "$CLUSTER_ID" != "null" ]] && echo 0 || echo 1)" "Failed to create cluster"
-        CLUSTER_SECRET=$(echo "$CLUSTER" | jq -r '.user_secret')
+        CLUSTER_SECRET=$(echo "$CLUSTER" | jq -r '.userSecret')
     else
         echo "Cluster already exists with ID: $CLUSTER_EXISTS"
         CLUSTER_ID=$CLUSTER_EXISTS

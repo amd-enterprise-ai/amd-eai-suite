@@ -6,11 +6,8 @@ import { NextRequest } from 'next/server';
 
 import { authenticateRoute, handleError } from '@amdenterpriseai/utils/server';
 
-import {
-  INFERENCE_CHUNK_DELIMITER,
-  InferenceChunk,
-  StreamingChatResponse,
-} from '@amdenterpriseai/types';
+import { INFERENCE_CHUNK_DELIMITER } from '@/types/chat';
+import { InferenceChunk, StreamingChatResponse } from '@/types/chat';
 
 import { extractApiPath } from './route-utils';
 

@@ -54,7 +54,7 @@ Deploy AIM
     ...
     ...    Args:
     ...    model (str): AIMClusterModel resource name (e.g., 'meta-llama-3-8b')
-    ...    deploy_data (dict): Deployment configuration (replicas, hf_token, etc.)
+    ...    deploy_data (dict): Deployment configuration (replicas, hfToken, etc.)
     ...    namespace (str): Kubernetes namespace to deploy into
     ...
     ...    Return:
@@ -123,6 +123,51 @@ List AIM Templates
     [Arguments]             ${aim_resource_name}    ${expected_status}=any
     Create api session    aiwb
     ${endpoint}=            Service API Endpoint    aiwb    endpoint=cluster/aims/templates
-    ${params}=              Create Dictionary       aim_resource_name=${aim_resource_name}
+    ${params}=              Create Dictionary       aimResourceName=${aim_resource_name}
     ${response}=            Safe Get Request        ${endpoint}             params=${params}        expected_status=${expected_status}
+    RETURN                  ${response}
+
+Update AIM Service Scaling Policy
+    [Documentation]    Update the scaling policy of an AIMService
+    ...
+    ...    Args:
+    ...    service_id (str): UUID of the AIMService
+    ...    scaling_data (dict): Scaling configuration (minReplicas, maxReplicas, autoScaling)
+    ...    namespace (str): Kubernetes namespace
+    ...
+    ...    Return:
+    ...    response: API response containing the updated AIMService details
+    [Arguments]             ${service_id}           ${scaling_data}         ${namespace}            ${expected_status}=any
+    Create api session    aiwb
+    ${endpoint}=            AIM Services endpoint   ${namespace}
+    ${response}=            Safe Patch Request      ${endpoint}/${service_id}                       json=${scaling_data}                            expected_status=${expected_status}
+    RETURN                  ${response}
+
+List Fine-Tuned AIM Service Templates
+    [Documentation]    List AIMServiceTemplates for a namespace-scoped fine-tuned model.
+    ...
+    ...    Args:
+    ...    model_name (str): AIMModel CR name in the namespace
+    ...    namespace (str): Kubernetes namespace
+    ...
+    ...    Return:
+    ...    response: API response containing list of AIMServiceTemplates
+    [Arguments]             ${model_name}           ${namespace}            ${expected_status}=any
+    Create api session    aiwb
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/models/${model_name}/templates
+    ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
+    RETURN                  ${response}
+
+List Chattable AIM Services
+    [Documentation]    List AIM services with ready conditions that support chat in a namespace.
+    ...
+    ...    Args:
+    ...    namespace (str): Kubernetes namespace
+    ...
+    ...    Return:
+    ...    response: API response containing list of chattable AIMServices
+    [Arguments]             ${namespace}            ${expected_status}=any
+    Create api session    aiwb
+    ${endpoint}=            AIM Services endpoint   ${namespace}
+    ${response}=            Safe Get Request        ${endpoint}/chattable   expected_status=${expected_status}
     RETURN                  ${response}

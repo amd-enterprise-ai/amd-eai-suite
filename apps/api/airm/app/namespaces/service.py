@@ -8,19 +8,23 @@ from keycloak import KeycloakAdmin
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.exceptions import NotFoundException
+
 from ..clusters.models import Cluster
-from ..messaging.schemas import (
+from ..messaging.sender import MessageSender
+from ..projects.models import Project
+from ..projects.repository import get_project_by_id
+from ..projects.schemas import GpuPreemptionConfig
+from ..projects.utils import extract_gpu_preemption_config, has_gpu_preemption_changed
+from .messaging import (
     NamespaceDeletedMessage,
     NamespaceStatus,
     ProjectNamespaceCreateMessage,
     ProjectNamespaceDeleteMessage,
     ProjectNamespaceStatusMessage,
+    ProjectNamespaceUpdateMessage,
     UnmanagedNamespaceMessage,
 )
-from ..messaging.sender import MessageSender
-from ..projects.models import Project
-from ..projects.repository import get_project_by_id
-from ..utilities.exceptions import NotFoundException
 from .models import Namespace
 from .repository import (
     create_namespace,
@@ -29,7 +33,7 @@ from .repository import (
     get_namespace_by_project_and_cluster,
     update_namespace_status,
 )
-from .utils import _build_namespace_manifest
+from .utils import _build_namespace_manifest, namespace_failure_message_preemption_mismatch
 
 
 async def create_namespace_for_project(
@@ -46,41 +50,65 @@ async def create_namespace_for_project(
     )
     await create_namespace(session, namespace)
 
-    manifest = _build_namespace_manifest(namespace.name, namespace.project_id)
+    gpu_preemption = extract_gpu_preemption_config(project)
+    manifest = _build_namespace_manifest(namespace.name, namespace.project_id, gpu_preemption)
     message = ProjectNamespaceCreateMessage(message_type="project_namespace_create", namespace_manifest=manifest)
     await message_sender.enqueue(project.cluster_id, message)
 
     return namespace
 
 
+async def send_project_namespace_manifest_update(
+    project: Project, gpu_preemption: GpuPreemptionConfig, message_sender: MessageSender
+) -> None:
+    manifest = _build_namespace_manifest(project.name, project.id, gpu_preemption)
+    message = ProjectNamespaceUpdateMessage(message_type="project_namespace_update", namespace_manifest=manifest)
+    await message_sender.enqueue(project.cluster_id, message)
+
+
 async def update_project_namespace_status(
-    kc_admin: KeycloakAdmin, session: AsyncSession, cluster: Cluster, message: ProjectNamespaceStatusMessage
+    kc_admin: KeycloakAdmin,
+    session: AsyncSession,
+    cluster: Cluster,
+    message: ProjectNamespaceStatusMessage,
 ) -> None:
     namespace = await get_namespace_by_project_and_cluster(session, message.project_id, cluster.id)
-
     if not namespace:
         raise NotFoundException(f"Namespace for project {message.project_id} not found in cluster {cluster.id}.")
 
-    await __update_project_namespace_status(kc_admin, session, namespace, message.status, message.status_reason)
+    project = await get_project_by_id(session, namespace.project_id)
+    if not project:
+        raise NotFoundException(f"Project {namespace.project_id} not found.")
+
+    db_config = extract_gpu_preemption_config(project)
+    if message.gpu_preemption is not None and has_gpu_preemption_changed(db_config, message.gpu_preemption):
+        await __update_project_namespace_status(
+            kc_admin,
+            session,
+            namespace,
+            project,
+            NamespaceStatus.FAILED,
+            namespace_failure_message_preemption_mismatch(message.gpu_preemption),
+        )
+        logger.warning(f"Namespace {project.name} preemption config diverged from DB; marked as failed.")
+    else:
+        await __update_project_namespace_status(
+            kc_admin, session, namespace, project, message.status, message.status_reason
+        )
 
 
 async def __update_project_namespace_status(
     kc_admin: KeycloakAdmin,
     session: AsyncSession,
     namespace: Namespace,
+    project: Project,
     status: NamespaceStatus,
     status_reason: str | None,
 ) -> None:
     from ..projects.service import update_project_status_from_components  # noqa: PLC0415
 
     await update_namespace_status(session, namespace, status, status_reason, "system")
-
-    project = await get_project_by_id(session, namespace.project_id)
-    if not project:
-        raise NotFoundException(f"Project {namespace.project_id} not found.")
-
     await update_project_status_from_components(kc_admin, session, project)
-
     logger.info(f"Updated namespace {project.name} status to {status}.")
 
 
@@ -138,8 +166,11 @@ async def handle_namespace_deleted(
         raise NotFoundException(f"Namespace {message.namespace_name} not found in cluster {cluster.id}.")
 
     if namespace.project_id is not None:
+        project = await get_project_by_id(session, namespace.project_id)
+        if not project:
+            raise NotFoundException(f"Project {namespace.project_id} not found.")
         await __update_project_namespace_status(
-            kc_admin, session, namespace, NamespaceStatus.DELETED, "Namespace deleted"
+            kc_admin, session, namespace, project, NamespaceStatus.DELETED, "Namespace deleted"
         )
     else:
         await delete_namespace(session, namespace)

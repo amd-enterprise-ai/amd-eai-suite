@@ -25,7 +25,7 @@ The following external components must be available in the Kubernetes cluster be
 ```
 cd helm/airm/charts
 
-# 1. Create output template just to validate
+# 1. Create output template just to validate (replace <PUBLIC-DOMAIN-HERE> with your domain)
 helm template airm-api ./airm-api -n airm --create-namespace --set airm.appDomain=<PUBLIC-DOMAIN-HERE> > airm-api-helm-generated.yaml
 
 # 2. Run chart install
@@ -59,7 +59,7 @@ helm upgrade -n airm --set airm.appDomain=<PUBLIC-DOMAIN-HERE> airm-api ./airm-a
 | airm.keycloak.adminClientSecretName                   | Secret containing the Keycloak admin client secret              | string | `airm-keycloak-admin-client`                               |
 | airm.keycloak.uiClientSecretName                      | Secret containing the Keycloak UI client secret                 | string | `airm-keycloak-ui-creds`                                   |
 | airm.keycloak.userCredentialsSecretName               | Secret containing the Keycloak user credentials                 | string | `airm-user-credentials`                                    |
-| airm.postgresql.host                                  | PostgreSQL host address                                         | string | `airm-cnpg-rw.airm.svc.cluster.local`                      |
+| airm.postgresql.host                                  | PostgreSQL host address                                         | string | `airm-infra-cnpg-cnpg-rw.airm.svc.cluster.local`           |
 | airm.postgresql.port                                  | PostgreSQL port number                                          | int    | `5432`                                                     |
 | airm.postgresql.userSecretName                        | Secret containing the PostgreSQL credentials                    | string | `airm-cnpg-user`                                           |
 | airm.rabbitmq.host                                    | RabbitMQ host address                                           | string | `airm-infra-rabbitmq-rabbitmq.airm.svc.cluster.local`      |

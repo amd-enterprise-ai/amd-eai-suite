@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import { TimeRangePeriod } from '@amdenterpriseai/types';
+import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import InferenceRequestsCard from '@/components/features/workloads/InferenceRequestsCard';
 
@@ -55,6 +56,7 @@ describe('InferenceRequestsCard', () => {
   const defaultProps = {
     namespace: 'test-project-id',
     workloadId: mockWorkloads[0].id,
+    timeRange: getCurrentTimeRange(TimeRangePeriod['1H']),
     timePeriod: TimeRangePeriod['1H'],
   };
 

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from ..messaging.schemas import PriorityClass
+from .messaging import PriorityClass
 
 DEFAULT_PRIORITY_CLASSES = [
     PriorityClass(name="low", priority=-100),

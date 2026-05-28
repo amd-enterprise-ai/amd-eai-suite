@@ -3,7 +3,8 @@ module github.com/silogen/agent
 go 1.25.4
 
 require (
-	github.com/amd-enterprise-ai/aim-engine v0.0.1-rc1
+	dario.cat/mergo v1.0.2
+	github.com/amd-enterprise-ai/aim-engine v0.2.1
 	github.com/go-logr/logr v1.4.3
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
@@ -18,7 +19,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/gateway-api v1.3.0
 	sigs.k8s.io/kueue v0.12.3
-	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
@@ -26,7 +26,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
-	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
+	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
@@ -72,4 +72,5 @@ require (
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
+	sigs.k8s.io/yaml v1.6.0
 )

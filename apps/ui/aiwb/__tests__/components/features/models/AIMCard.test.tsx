@@ -9,6 +9,7 @@ import {
   mockAggregatedAims,
   mockAggregatedAimWithMultipleDeployments,
   mockUnsupportedAggregatedAim,
+  mockAggregatedAimWithStarting,
 } from '@/__mocks__/services/app/aims.data';
 
 vi.mock('next-i18next', () => ({
@@ -42,6 +43,8 @@ vi.mock('next-i18next', () => ({
         'aimCatalog.card.gated': 'Gated',
         'aimCatalog.card.actionsMenu': 'Actions menu',
         'aimCatalog.status.deploying': 'Deploying',
+        'models:status.pending': 'Pending',
+        'models:status.starting': 'Starting',
         'aimCatalog.actions.deploy.label': 'Deploy',
         'aimCatalog.actions.undeploy.label': 'Undeploy',
         'aimCatalog.actions.workloadDetails.label': 'Workload details',
@@ -287,7 +290,7 @@ describe('AIMCard', () => {
   });
 
   describe('Deployment status badges', () => {
-    it('shows deploying status badge when models are pending', () => {
+    it('shows pending status badge when models are pending', () => {
       const aggregatedAim = mockAggregatedAims[2];
       render(
         <AIMCard
@@ -300,10 +303,10 @@ describe('AIMCard', () => {
         />,
       );
 
-      expect(screen.getByText('Deploying')).toBeInTheDocument();
+      expect(screen.getByText('Pending')).toBeInTheDocument();
     });
 
-    it('does not show deploying badge when no pending deployments', () => {
+    it('does not show pending badge when no pending deployments', () => {
       const aggregatedAim = mockAggregatedAims[0];
       render(
         <AIMCard
@@ -316,7 +319,38 @@ describe('AIMCard', () => {
         />,
       );
 
-      expect(screen.queryByText('Deploying')).not.toBeInTheDocument();
+      expect(screen.queryByText('Pending')).not.toBeInTheDocument();
+    });
+
+    it('shows starting status badge when models are starting', () => {
+      render(
+        <AIMCard
+          aggregatedAim={mockAggregatedAimWithStarting}
+          onDeploy={onDeploy}
+          onOpenDetails={onOpenDetails}
+          onChatWithModel={onChatWithModel}
+          onConnectToModel={onConnectToModel}
+          onUndeploy={onUndeploy}
+        />,
+      );
+
+      expect(screen.getByText('Starting')).toBeInTheDocument();
+    });
+
+    it('does not show starting badge when no starting deployments', () => {
+      const aggregatedAim = mockAggregatedAims[0];
+      render(
+        <AIMCard
+          aggregatedAim={aggregatedAim}
+          onDeploy={onDeploy}
+          onOpenDetails={onOpenDetails}
+          onChatWithModel={onChatWithModel}
+          onConnectToModel={onConnectToModel}
+          onUndeploy={onUndeploy}
+        />,
+      );
+
+      expect(screen.queryByText('Starting')).not.toBeInTheDocument();
     });
   });
 
@@ -662,7 +696,7 @@ describe('AIMCard', () => {
   });
 
   describe('Status indicators', () => {
-    it('does not show deploying badge for deployed models', () => {
+    it('does not show pending badge for deployed models', () => {
       const aggregatedAim = mockAggregatedAims[0];
 
       render(
@@ -676,11 +710,11 @@ describe('AIMCard', () => {
         />,
       );
 
-      // No deploying badge should be shown for fully deployed models
-      expect(screen.queryByText('Deploying')).not.toBeInTheDocument();
+      // No pending badge should be shown for fully deployed models
+      expect(screen.queryByText('Pending')).not.toBeInTheDocument();
     });
 
-    it('shows deploying status badge for pending deployments', () => {
+    it('shows pending status badge for pending deployments', () => {
       const aggregatedAim = mockAggregatedAims[2];
 
       render(
@@ -694,7 +728,7 @@ describe('AIMCard', () => {
         />,
       );
 
-      expect(screen.getByText('Deploying')).toBeInTheDocument();
+      expect(screen.getByText('Pending')).toBeInTheDocument();
     });
   });
 

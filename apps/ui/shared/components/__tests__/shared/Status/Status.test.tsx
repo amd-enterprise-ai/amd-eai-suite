@@ -5,7 +5,9 @@
 import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
-import Status, { Intent } from '@amdenterpriseai/components';
+import { Intent } from '@amdenterpriseai/types';
+
+import { Status } from '@amdenterpriseai/components';
 
 // Mock HeroUI components
 vi.mock('@heroui/react', () => ({
@@ -67,49 +69,52 @@ vi.mock('@heroui/react', () => ({
   },
 }));
 
-// Mock icons
-vi.mock('@tabler/icons-react', () => ({
-  IconCircleCheck: ({ size, role, className }: any) => (
-    <svg
-      data-testid="icon-success"
-      data-size={size}
-      role={role}
-      className={className}
-    >
-      Success Icon
-    </svg>
-  ),
-  IconAlertTriangle: ({ size, role, className }: any) => (
-    <svg
-      data-testid="icon-warning-danger"
-      data-size={size}
-      role={role}
-      className={className}
-    >
-      Warning Icon
-    </svg>
-  ),
-  IconLoaderQuarter: ({ size, role, className }: any) => (
-    <svg
-      data-testid="icon-pending"
-      data-size={size}
-      role={role}
-      className={className}
-    >
-      Pending Icon
-    </svg>
-  ),
-  IconInfoCircle: ({ size, role, className }: any) => (
-    <svg
-      data-testid="icon-info"
-      data-size={size}
-      role={role}
-      className={className}
-    >
-      Info Icon
-    </svg>
-  ),
-}));
+vi.mock('@tabler/icons-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tabler/icons-react')>();
+  return {
+    ...actual,
+    IconCircleCheck: ({ size, role, className }: any) => (
+      <svg
+        data-testid="icon-success"
+        data-size={size}
+        role={role}
+        className={className}
+      >
+        Success Icon
+      </svg>
+    ),
+    IconAlertTriangle: ({ size, role, className }: any) => (
+      <svg
+        data-testid="icon-warning-danger"
+        data-size={size}
+        role={role}
+        className={className}
+      >
+        Warning Icon
+      </svg>
+    ),
+    IconLoaderQuarter: ({ size, role, className }: any) => (
+      <svg
+        data-testid="icon-pending"
+        data-size={size}
+        role={role}
+        className={className}
+      >
+        Pending Icon
+      </svg>
+    ),
+    IconInfoCircle: ({ size, role, className }: any) => (
+      <svg
+        data-testid="icon-info"
+        data-size={size}
+        role={role}
+        className={className}
+      >
+        Info Icon
+      </svg>
+    ),
+  };
+});
 
 // Custom icon for testing overrides
 const MockCustomIcon = ({ size, role, className }: any) => (

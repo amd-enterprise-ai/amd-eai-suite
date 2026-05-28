@@ -21,7 +21,6 @@ Resource            resources/workloads.resource
 Resource            resources/aiwb_aims.resource
 Resource            resources/airm_projects.resource
 
-Suite Setup         Initialize Project Tracking
 Suite Teardown      Clean Up All Created Projects
 Test Setup          Open test browser
 Test Teardown       Close test browser

@@ -2,18 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tooltip } from '@heroui/react';
 import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { dateComparator, getFilteredData } from '@amdenterpriseai/utils/app';
+import { getFilteredData } from '@amdenterpriseai/utils/app';
 
-import {
-  ActionItem,
-  CustomComparatorConfig,
-  TableColumns,
-} from '@amdenterpriseai/types';
+import { ActionItem, TableColumns } from '@amdenterpriseai/types';
 import { SecretsTableField } from '@amdenterpriseai/types';
 import { ClientSideDataFilter } from '@amdenterpriseai/types';
 import { SecretResponseData } from '@/types/secrets';
@@ -22,7 +17,6 @@ import { ClientSideDataTable } from '@amdenterpriseai/components';
 import { DateDisplay, NoDataDisplay } from '@amdenterpriseai/components';
 
 import { SUBMITTER_ANNOTATION_KEY } from './constants';
-import SecretProjectAssignedTo from './SecretProjectAssignedTo';
 
 interface Props {
   filters?: ClientSideDataFilter<SecretResponseData>[];

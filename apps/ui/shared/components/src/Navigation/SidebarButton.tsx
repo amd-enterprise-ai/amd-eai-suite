@@ -2,13 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import React, { FC } from 'react';
+import React, { FC, useMemo } from 'react';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 
 import { isMenuItemActive } from '@amdenterpriseai/utils/app';
+
+import { buildProjectHref, stripProjectPrefix } from './project-utils';
 
 interface Props {
   text: string;
@@ -17,6 +20,7 @@ interface Props {
   isSidebarMini: boolean;
   icon?: React.ReactNode;
   nested?: boolean;
+  projectPrefix?: string;
 }
 
 export const SidebarButton: FC<Props> = ({
@@ -25,8 +29,27 @@ export const SidebarButton: FC<Props> = ({
   icon,
   isSidebarMini,
   nested,
+  projectPrefix,
 }) => {
   const { t } = useTranslation('common');
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const fullHref = useMemo(
+    () => buildProjectHref(href, projectPrefix),
+    [projectPrefix, href],
+  );
+
+  const pathWithoutProject = useMemo(
+    () =>
+      stripProjectPrefix(
+        pathname,
+        projectPrefix,
+        router.locale,
+        router.defaultLocale,
+      ),
+    [projectPrefix, pathname, router.locale, router.defaultLocale],
+  );
 
   const content = (
     <div
@@ -46,16 +69,15 @@ export const SidebarButton: FC<Props> = ({
       </span>
     </div>
   );
-  const pathname = usePathname();
 
-  const isActive = isMenuItemActive(href, pathname);
+  const isActive = isMenuItemActive(href, pathWithoutProject);
   let classNames =
     'bg-transparent dark:hover:bg-default-100 hover:bg-default-200';
   if (isActive && nested) {
     classNames += ' font-extrabold';
   } else if (isActive) {
     classNames =
-      'bg-primary-200/75 hover:bg-primary-300/50 text-primary dark:bg-primary-900/25 dark:hover:bg-primary-800/25 dark:text-primary-400';
+      'bg-primary/15 hover:bg-primary/25 text-primary dark:text-primary-500';
   }
 
   return (
@@ -64,7 +86,11 @@ export const SidebarButton: FC<Props> = ({
         ${classNames}
       `}
     >
-      <Link className="w-full h-full py-3 text-nowrap" href={href} role="link">
+      <Link
+        className="w-full h-full py-3 text-nowrap outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md"
+        href={fullHref}
+        role="link"
+      >
         {content}
       </Link>
     </div>

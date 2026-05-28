@@ -5,7 +5,7 @@
 import { getErrorMessage } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { Organization } from '@amdenterpriseai/types';
+import { Organization } from '@/types/organization';
 
 export async function fetchOrganization(): Promise<Organization> {
   const response = await fetch('/api/organization');

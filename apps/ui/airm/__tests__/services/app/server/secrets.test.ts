@@ -4,17 +4,13 @@
 
 import { getProjectSecrets, getSecrets } from '@/services/server';
 
-import {
-  convertSnakeToCamel,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { getErrorMessage } from '@amdenterpriseai/utils/app';
 
 vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@amdenterpriseai/utils/app')>();
   return {
     ...actual,
-    convertSnakeToCamel: vi.fn((data) => ({ ...data, camelCased: true })),
     getErrorMessage: vi.fn(async (response) => 'error message'),
   };
 });
@@ -33,8 +29,8 @@ describe('secrets service', () => {
   });
 
   describe('getSecrets', () => {
-    it('should fetch secrets and convert response', async () => {
-      const mockJson = { secret_key: 'value' };
+    it('should fetch secrets and return response', async () => {
+      const mockJson = { secretKey: 'value' };
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue(mockJson),
@@ -50,8 +46,7 @@ describe('secrets service', () => {
           }),
         }),
       );
-      expect(convertSnakeToCamel).toHaveBeenCalledWith(mockJson);
-      expect(result).toEqual({ ...mockJson, camelCased: true });
+      expect(result).toEqual(mockJson);
     });
 
     it('should throw error if response not ok', async () => {
@@ -67,8 +62,8 @@ describe('secrets service', () => {
   });
 
   describe('getProjectSecrets', () => {
-    it('should fetch project secrets and convert response', async () => {
-      const mockJson = { project_secret: 'value' };
+    it('should fetch project secrets and return response', async () => {
+      const mockJson = { projectSecret: 'value' };
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue(mockJson),
@@ -84,8 +79,7 @@ describe('secrets service', () => {
           }),
         }),
       );
-      expect(convertSnakeToCamel).toHaveBeenCalledWith(mockJson);
-      expect(result).toEqual({ ...mockJson, camelCased: true });
+      expect(result).toEqual(mockJson);
     });
 
     it('should throw error if response not ok', async () => {

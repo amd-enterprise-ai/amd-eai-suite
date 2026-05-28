@@ -4,7 +4,9 @@
 
 from datetime import UTC, datetime, timedelta
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import AwareDatetime, Field, model_validator
+
+from api_common.schemas import BaseModel
 
 from .constants import MAX_DAYS_FOR_METRICS
 

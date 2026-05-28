@@ -16,7 +16,8 @@ import { addCluster } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import { CreateClusterResponse } from '@amdenterpriseai/types';
+import { CLUSTER_ONBOARDING_DOC_URL } from '@/constants/clusters/connectCluster';
+import { CreateClusterResponse } from '@/types/clusters';
 import { StepModalHandle } from '@amdenterpriseai/types';
 
 import { StepModal } from '@amdenterpriseai/components';
@@ -91,8 +92,20 @@ const ConnectClusterModal: React.FC<Props> = ({ onOpenChange, isOpen }) => {
           content: (
             <Alert
               color="warning"
-              className="bg-primary/10!"
-              description={t('connectCluster.start.content.description')}
+              description={
+                <span>
+                  {t('connectCluster.start.content.description')}{' '}
+                  <a
+                    href={CLUSTER_ONBOARDING_DOC_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-primary"
+                  >
+                    {t('connectCluster.start.content.docLinkText')}
+                  </a>{' '}
+                  {t('connectCluster.start.content.descriptionEnd')}
+                </span>
+              }
             />
           ),
           customActions: (

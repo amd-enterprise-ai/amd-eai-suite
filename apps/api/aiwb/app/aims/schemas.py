@@ -3,17 +3,19 @@
 # SPDX-License-Identifier: MIT
 
 
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import Field, computed_field, model_validator
 
-from api_common.schemas import BaseEntityPublic
+from api_common.schemas import BaseEntityPublic, BaseModel
 
-from .constants import CLUSTER_AUTH_GROUP_ANNOTATION
+from .constants import (
+    AIM_CHATTABLE_CONDITIONS,
+    CLUSTER_AUTH_GROUP_ANNOTATION,
+)
 from .crds import AIMClusterModelResource, AIMServiceResource, HTTPRouteResource
-from .enums import AIMServiceStatus as AIMServiceStatusEnum
-from .enums import OptimizationMetric
-from .utils import extract_endpoints
+from .enums import AIMServiceStatus, OptimizationMetric
+from .utils import extract_endpoints, is_condition_true
 
 
 class ScalingPolicyMixin(BaseModel):
@@ -26,32 +28,23 @@ class ScalingPolicyMixin(BaseModel):
     should only be used with a valid autoScaling configuration containing KEDA metrics.
     """
 
-    min_replicas: Annotated[
-        int | None,
-        Field(
-            ge=1,
-            alias="minReplicas",
-            description="Minimum number of replicas for autoscaling. Requires autoScaling config.",
+    min_replicas: int | None = Field(
+        None,
+        ge=1,
+        description="Minimum number of replicas for autoscaling. Requires autoScaling config.",
+    )
+    max_replicas: int | None = Field(
+        None,
+        ge=1,
+        description="Maximum number of replicas for autoscaling. Requires autoScaling config.",
+    )
+    auto_scaling: dict[str, Any] | None = Field(
+        None,
+        description=(
+            "KEDA autoscaling configuration with custom metrics. Required when using minReplicas/maxReplicas. "
+            "Example: {'metrics': [{'type': 'PodMetric', 'podmetric': {'metric': {...}, 'target': {...}}}]}"
         ),
-    ] = None
-    max_replicas: Annotated[
-        int | None,
-        Field(
-            ge=1,
-            alias="maxReplicas",
-            description="Maximum number of replicas for autoscaling. Requires autoScaling config.",
-        ),
-    ] = None
-    auto_scaling: Annotated[
-        dict[str, Any] | None,
-        Field(
-            alias="autoScaling",
-            description=(
-                "KEDA autoscaling configuration with custom metrics. Required when using minReplicas/maxReplicas. "
-                "Example: {'metrics': [{'type': 'PodMetric', 'podmetric': {'metric': {...}, 'target': {...}}}]}"
-            ),
-        ),
-    ] = None
+    )
 
     @model_validator(mode="after")
     def validate_scaling_policy(self) -> "ScalingPolicyMixin":
@@ -79,6 +72,14 @@ class ScalingPolicyMixin(BaseModel):
         return self
 
 
+class AIMServiceTemplateQuery(BaseModel):
+    aim_resource_name: str = Field(..., description="AIMClusterModel resource name")
+
+
+class AIMServiceListQuery(BaseModel):
+    status_filter: list[AIMServiceStatus] | None = Field(default=None, description="Filter by status(es)")
+
+
 class AIMResponse(AIMClusterModelResource):
     """AIMResponse API response schema."""
 
@@ -86,11 +87,19 @@ class AIMResponse(AIMClusterModelResource):
 
 
 class AIMDeployRequest(ScalingPolicyMixin):
-    """Schema for deploying an AIM with optional scaling policy configuration."""
+    """Schema for deploying an AIM with optional scaling policy configuration.
+
+    The `model` field can reference either a cluster-scoped AIMClusterModel or a
+    namespace-scoped AIMModel (fine-tuned). The API auto-detects which type it is.
+    """
 
     model: str = Field(
         ...,
-        description="AIMClusterModel resource name (e.g., 'meta-llama-3-8b'). Must reference an existing model in the cluster.",
+        description=(
+            "Model resource name. Either an AIMClusterModel name (e.g., 'meta-llama-3-8b') "
+            "or a namespace-scoped AIMModel name (fine-tuned model UUID). "
+            "The API auto-detects which type it is."
+        ),
     )
     replicas: int = Field(
         1,
@@ -98,25 +107,37 @@ class AIMDeployRequest(ScalingPolicyMixin):
     )
     image_pull_secrets: list[str] | None = Field(
         None,
-        description="Names of the secrets for pulling AIM container images.",
-        alias="imagePullSecrets",
+        description="Names of the secrets for pulling AIM container images. Only applies to cluster-scoped AIMClusterModel deployments.",
     )
     hf_token: str | None = Field(
         None,
-        description="Hugging Face token for accessing private models (if required).",
-        alias="hfToken",
+        description="Hugging Face token for accessing private models (if required). Only applies to cluster-scoped AIMClusterModel deployments.",
     )
     metric: OptimizationMetric | None = Field(
         None,
-        description="Performance optimization metric (latency or throughput). If not specified, default optimization will be used.",
+        description="Performance optimization metric (latency or throughput). Only applies to cluster-scoped AIMClusterModel deployments.",
     )
     allow_unoptimized: bool = Field(
         False,
         description="Allow unoptimized deployment configurations if available in the cluster.",
-        alias="allowUnoptimized",
     )
-
-    model_config = ConfigDict(populate_by_name=True)
+    precision: str | None = Field(
+        None,
+        description="Runtime precision (e.g. fp8, fp16). Passed to AIMServiceOverrides.precision. Only applies to cluster-scoped AIMClusterModel deployments.",
+    )
+    gpu_model: str | None = Field(
+        None,
+        description="GPU model (e.g. MI300X). Passed to AIMServiceOverrides.hardware. Only applies to cluster-scoped AIMClusterModel deployments.",
+    )
+    gpu_count: int | None = Field(
+        None,
+        ge=1,
+        description="Number of GPUs per replica. Passed to AIMServiceOverrides.hardware. Only applies to cluster-scoped AIMClusterModel deployments.",
+    )
+    template_name: str | None = Field(
+        None,
+        description="Explicit AIMServiceTemplate name (profile). When set, spec.template.name is used.",
+    )
 
 
 class AIMServicePatchRequest(ScalingPolicyMixin):
@@ -125,8 +146,6 @@ class AIMServicePatchRequest(ScalingPolicyMixin):
     All fields are optional. Include only the fields you want to update.
     For scaling policy, all three fields (minReplicas, maxReplicas, autoScaling) must be provided together.
     """
-
-    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIMServiceResponse(AIMServiceResource):
@@ -145,7 +164,10 @@ class AIMServiceResponse(AIMServiceResource):
 
     @computed_field
     def endpoints(self) -> dict[str, str]:
-        if self.status.status != AIMServiceStatusEnum.RUNNING:
+        # Endpoints require both routing and inference service to be ready.
+        # We check both conditions because endpoints represent inference service URLs
+        # and should only be shown when the full stack is functional.
+        if not all(is_condition_true(self.status.conditions, c) for c in AIM_CHATTABLE_CONDITIONS):
             return {}
         return extract_endpoints(self, httproute=self.httproute, inference_service_name=self.inference_service_name)
 
@@ -165,4 +187,59 @@ class AIMServiceHistoryResponse(BaseEntityPublic):
     status: str = Field(..., description="Status")
     metric: OptimizationMetric | None = Field(None, description="Performance optimization metric")
 
-    model_config = ConfigDict(from_attributes=True)
+
+# ---------------------------------------------------------------------------
+# Replica response schema
+# ---------------------------------------------------------------------------
+# These models mirror the subset of Kubernetes pod fields that are useful for
+# displaying replica status. Field names follow camelCase via alias_generator,
+# with one explicit override: podIP (Kubernetes uses uppercase "IP", not "Ip").
+# ---------------------------------------------------------------------------
+
+
+class ReplicaContainerStatus(BaseModel):
+    ready: bool | None = None
+    restart_count: int | None = None
+    state: dict[str, Any] | None = None
+
+
+class ReplicaCondition(BaseModel):
+    type: str | None = None
+    status: str | None = None
+    reason: str | None = None
+    message: str | None = None
+
+
+class ReplicaStatus(BaseModel):
+    phase: str | None = None
+    # sanitize_for_serialization produces "podIP" (K8s JSON format); the serialization alias
+    # uses "podIp" (standard camelCase) so the API response is consistent with other fields.
+    pod_ip: str | None = Field(None, alias="podIP", serialization_alias="podIp")
+    container_statuses: list[ReplicaContainerStatus] | None = None
+    conditions: list[ReplicaCondition] | None = None
+
+
+class ReplicaResources(BaseModel):
+    limits: dict[str, str] | None = None
+
+
+class ReplicaContainer(BaseModel):
+    resources: ReplicaResources | None = None
+
+
+class ReplicaSpec(BaseModel):
+    node_name: str | None = None
+    containers: list[ReplicaContainer] | None = None
+
+
+class ReplicaMetadata(BaseModel):
+    name: str
+    creation_timestamp: str | None = None
+
+
+class AIMServiceReplicaResponse(BaseModel):
+    """Kubernetes pod data for a single AIM service replica."""
+
+    metadata: ReplicaMetadata
+    status: ReplicaStatus | None = None
+    spec: ReplicaSpec | None = None

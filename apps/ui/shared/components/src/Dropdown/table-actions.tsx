@@ -4,7 +4,7 @@
 
 import { ActionItem, TableColumn } from '@amdenterpriseai/types';
 
-import { ThreeDotActionsDropdown } from '@amdenterpriseai/components';
+import { ThreeDotActionsDropdown } from './ThreeDotActionsDropdown';
 
 export const ACTIONS_COLUMN_KEY = 'actions';
 

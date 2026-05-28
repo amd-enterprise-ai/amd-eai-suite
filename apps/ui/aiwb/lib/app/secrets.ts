@@ -13,9 +13,7 @@ export const fetchProjectSecrets = async (
     throw new APIRequestError('Namespace is required', 400);
   }
 
-  const params = useCase
-    ? `?${new URLSearchParams({ use_case: useCase })}`
-    : '';
+  const params = useCase ? `?${new URLSearchParams({ useCase })}` : '';
   const response = await fetch(`/api/namespaces/${namespace}/secrets${params}`);
 
   if (!response.ok) {

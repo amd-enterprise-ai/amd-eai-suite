@@ -45,10 +45,9 @@ async def test_create_workload_success(db_session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_create_workload_with_all_fields(db_session: AsyncSession) -> None:
-    """Test creating a workload with all optional fields including model and dataset."""
+    """Test creating a workload with all optional fields."""
     chart = await factory.create_chart(db_session, name="inference-chart")
     dataset = await factory.create_dataset(db_session, name="test-dataset")
-    model = await factory.create_inference_model(db_session, name="test-model")
 
     workload = await create_workload(
         db_session,
@@ -58,11 +57,9 @@ async def test_create_workload_with_all_fields(db_session: AsyncSession) -> None
         namespace="test-namespace",
         submitter="test@example.com",
         status=WorkloadStatus.RUNNING,
-        model_id=model.id,
         dataset_id=dataset.id,
     )
 
-    assert workload.model_id == model.id
     assert workload.dataset_id == dataset.id
     assert workload.type == WorkloadType.INFERENCE
     assert workload.status == WorkloadStatus.RUNNING

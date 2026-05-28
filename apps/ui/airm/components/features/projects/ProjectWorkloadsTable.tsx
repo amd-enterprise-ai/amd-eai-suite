@@ -26,9 +26,9 @@ import {
 } from '@amdenterpriseai/utils/app';
 import {
   getWorkloadStatusFilterItems,
+  getWorkloadStatusVariants,
   getWorkloadTypeFilterItems,
-} from '@amdenterpriseai/utils/app';
-import { getWorkloadStatusVariants } from '@amdenterpriseai/utils/app';
+} from '@/utils/workloads';
 import { getWorkloadTypeVariants } from '@amdenterpriseai/utils/app';
 
 import {
@@ -38,22 +38,22 @@ import {
 } from '@amdenterpriseai/types';
 import { TableColumns } from '@amdenterpriseai/types';
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { ProjectWorkloadsTableField } from '@amdenterpriseai/types';
+import { ProjectWorkloadsTableField } from '@/types/enums/project-workloads-table-field';
 import { FilterOperator } from '@amdenterpriseai/types';
 import { SortDirection } from '@amdenterpriseai/types';
-import { WorkloadStatus, WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadType } from '@amdenterpriseai/types';
+import { WorkloadStatus } from '@/types/enums/workloads';
 import { FilterValueMap } from '@amdenterpriseai/types';
-import {
-  WorkloadWithMetrics,
-  WorkloadWithMetricsServer,
-  ProjectWorkloadsMetricsResponse,
-} from '@/types/workloads';
 
 import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
 import { ChipDisplay, StatusDisplay } from '@amdenterpriseai/components';
 import { ServerSideDataTable } from '@amdenterpriseai/components';
 import { ActionsToolbar } from '@amdenterpriseai/components';
 import { ActionItem } from '@amdenterpriseai/types';
+import {
+  WorkloadWithMetrics,
+  ProjectWorkloadsMetricsResponse,
+} from '@/types/workloads';
 
 interface Props {
   projectId: string;
@@ -85,7 +85,7 @@ const defaultStatusSet = Object.values(WorkloadStatus).filter(
   (status) => status !== WorkloadStatus.DELETED,
 );
 
-const defaultFilterValues: FilterParams<WorkloadWithMetricsServer>[] = [
+const defaultFilterValues: FilterParams<WorkloadWithMetrics>[] = [
   {
     fields: ['type'],
     operator: FilterOperator.EQ,
@@ -130,18 +130,17 @@ const defaultRowActions = (
 };
 
 const WORKLOADS_METRICS_QUERY_KEY = 'project';
-const API_REQUEST_DEFAULTS: CollectionRequestParams<WorkloadWithMetricsServer> =
-  {
-    page: 1,
-    pageSize: 10,
-    sort: [
-      {
-        field: 'created_at' as keyof WorkloadWithMetricsServer,
-        direction: SortDirection.DESC,
-      },
-    ],
-    filter: defaultFilterValues,
-  };
+const API_REQUEST_DEFAULTS: CollectionRequestParams<WorkloadWithMetrics> = {
+  page: 1,
+  pageSize: 10,
+  sort: [
+    {
+      field: 'createdAt' as keyof WorkloadWithMetrics,
+      direction: SortDirection.DESC,
+    },
+  ],
+  filter: defaultFilterValues,
+};
 
 export const ProjectWorkloadsTable: React.FC<Props> = ({
   projectId,
@@ -157,9 +156,7 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({
   >();
 
   const [filters, setFilters] =
-    useState<Array<FilterParams<WorkloadWithMetricsServer>>>(
-      defaultFilterValues,
-    );
+    useState<Array<FilterParams<WorkloadWithMetrics>>>(defaultFilterValues);
 
   const {
     isOpen: isDeleteWorkloadModalOpen,
@@ -185,7 +182,7 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({
   });
 
   const [workloadsTableParams, setWorkloadsTableParams] =
-    useState<CollectionRequestParams<WorkloadWithMetricsServer>>(
+    useState<CollectionRequestParams<WorkloadWithMetrics>>(
       API_REQUEST_DEFAULTS,
     );
 
@@ -207,7 +204,7 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({
   });
 
   const handleWorkloadsTableParamsChange = useDebouncedCallback(
-    (params: CollectionRequestParams<WorkloadWithMetricsServer>) => {
+    (params: CollectionRequestParams<WorkloadWithMetrics>) => {
       setWorkloadsTableParams(params);
     },
     100,
@@ -246,15 +243,15 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({
   };
 
   const sortFieldMapper: CustomSortFieldMapperConfig<
-    WorkloadWithMetricsServer,
+    WorkloadWithMetrics,
     ProjectWorkloadsTableField
   > = {
-    [ProjectWorkloadsTableField.CREATED_AT]: { fields: ['created_at'] },
-    [ProjectWorkloadsTableField.NAME]: { fields: ['display_name'] },
+    [ProjectWorkloadsTableField.CREATED_AT]: { fields: ['createdAt'] },
+    [ProjectWorkloadsTableField.NAME]: { fields: ['displayName'] },
     [ProjectWorkloadsTableField.RUN_TIME]: {
-      fields: ['run_time'],
+      fields: ['runTime'],
     },
-    [ProjectWorkloadsTableField.CREATED_BY]: { fields: ['created_by'] },
+    [ProjectWorkloadsTableField.CREATED_BY]: { fields: ['createdBy'] },
     [ProjectWorkloadsTableField.TYPE]: { fields: ['type'] },
     [ProjectWorkloadsTableField.STATUS]: { fields: ['status'] },
   };
@@ -304,9 +301,9 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({
   };
 
   const serverSideFilterMapping: Partial<
-    Record<string, (keyof WorkloadWithMetricsServer)[]>
+    Record<string, (keyof WorkloadWithMetrics)[]>
   > = {
-    search: ['display_name'],
+    search: ['displayName'],
     type: ['type'],
     status: ['status'],
   };
@@ -320,7 +317,7 @@ export const ProjectWorkloadsTable: React.FC<Props> = ({
         isRefreshing={isProjectWorkloadsMetricsLoading}
         onFilterChange={(filters) => {
           const serverSideFilters =
-            convertToServerSideFilterParams<WorkloadWithMetricsServer>(
+            convertToServerSideFilterParams<WorkloadWithMetrics>(
               filters as FilterValueMap,
               operatorMapping,
               serverSideFilterMapping,

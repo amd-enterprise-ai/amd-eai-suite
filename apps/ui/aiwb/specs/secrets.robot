@@ -21,7 +21,6 @@ Resource            resources/airm_projects.resource
 
 Library             TestPrefix
 
-Suite Setup         Initialize Project Tracking
 Suite Teardown      Clean Up All Created Projects
 Test Setup          Open test browser
 Test Teardown       Close test browser

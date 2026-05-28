@@ -60,6 +60,7 @@ async def test_rabbitmq_connection_invalid_host():
                 "name or service not known",
                 "temporary failure in name resolution",
                 "no address associated with hostname",
+                "getaddrinfo failed",
             ]
         )
         assert connection is None
@@ -83,7 +84,16 @@ async def test_rabbitmq_connection_invalid_port(rabbitmq_service):
                 host=docker_ip, port=9999, vhost="vh_airm_common", username="guest", password="guest"
             )
         error_msg = str(exc_info.value).lower()
-        assert any(x in error_msg for x in ["connect call failed", "connection refused", "errno"])
+        assert any(
+            x in error_msg
+            for x in [
+                "connect call failed",
+                "connection refused",
+                "errno",
+                "remote computer refused the network connection",
+                "getaddrinfo failed",
+            ]
+        )
         assert connection is None
         assert channel is None
     finally:

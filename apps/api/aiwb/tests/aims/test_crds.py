@@ -41,12 +41,14 @@ def test_aim_image_metadata() -> None:
     """Test AIMImageMetadata."""
     m = AIMImageMetadata.model_validate(
         {
-            "model": {"canonicalName": "test"},
-            "originalLabels": {"key": "value"},
+            "model": {"canonicalName": "test", "descriptionFull": "A full description"},
+            "oci": {"description": "Short desc", "version": "1.0"},
         }
     )
     assert m.model.canonical_name == "test"
-    assert m.original_labels == {"key": "value"}
+    assert m.model.description_full == "A full description"
+    assert m.oci.description == "Short desc"
+    assert m.oci.version == "1.0"
 
 
 def test_aim_cluster_model_status_defaults() -> None:
@@ -62,10 +64,6 @@ def test_aim_cluster_model_resource_with_factory() -> None:
     assert aim.metadata.name == "my-model"
     assert aim.spec.image == "docker.io/test:v1"
     assert aim.status.status == AIMClusterModelStatus.READY
-    # Computed fields
-    assert aim.resource_name == "my-model"
-    assert aim.image_reference == "docker.io/test:v1"
-    assert aim.status_value == "Ready"
 
 
 def test_aim_cluster_model_resource_minimal() -> None:
@@ -92,12 +90,10 @@ def test_aim_service_spec_with_scaling() -> None:
             "minReplicas": 2,
             "maxReplicas": 10,
             "autoScaling": {"metrics": []},
-            "cacheModel": True,
         }
     )
     assert s.min_replicas == 2
     assert s.max_replicas == 10
-    assert s.cache_model is True
 
 
 def test_aim_service_status_fields() -> None:
@@ -129,7 +125,6 @@ def test_aim_service_resource_with_factory() -> None:
     assert svc.spec.replicas == 2
     assert svc.status.status == AIMServiceStatus.RUNNING
     assert svc.id is not None  # Computed from label
-    assert svc.resource_name == svc.metadata.name
 
 
 def test_aim_service_resource_with_scaling() -> None:

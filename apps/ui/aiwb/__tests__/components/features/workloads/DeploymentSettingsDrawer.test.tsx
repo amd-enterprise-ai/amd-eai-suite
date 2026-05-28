@@ -328,7 +328,7 @@ describe('WorkloadSettingsDrawer', () => {
       });
     });
 
-    it('calls onSuccess after successful submission', async () => {
+    it('calls onSuccess with all form values after successful submission', async () => {
       render(
         <DeploymentSettingsDrawer
           isOpen={true}
@@ -344,7 +344,7 @@ describe('WorkloadSettingsDrawer', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockOnSuccess).toHaveBeenCalled();
+        expect(mockOnSuccess).toHaveBeenCalledWith(DEFAULT_AUTOSCALING);
       });
     });
 

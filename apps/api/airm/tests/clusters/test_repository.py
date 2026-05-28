@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clusters.messaging import ClusterNode, GPUInformation
 from app.clusters.repository import (
     create_cluster,
     create_cluster_nodes,
@@ -24,7 +25,7 @@ from app.clusters.repository import (
     update_last_heartbeat,
 )
 from app.clusters.schemas import ClusterIn, ClusterNameEdit
-from app.messaging.schemas import ClusterNode, GPUInformation, GPUVendor
+from app.utilities.enums import GPUVendor
 from tests import factory  # type: ignore[attr-defined]
 
 
@@ -36,13 +37,13 @@ async def test_create_cluster(db_session: AsyncSession) -> None:
     cluster = await create_cluster(
         db_session,
         env.creator,
-        ClusterIn(workloads_base_url="https://example.com", kube_api_url="https://k8s.example.com:6443"),
+        ClusterIn(workbench_base_url="https://example.com", kube_api_url="https://k8s.example.com:6443"),
     )
 
     assert cluster.created_by == env.creator
     assert cluster.name is None  # Repository function doesn't set name
     assert cluster.updated_by == env.creator
-    assert cluster.workloads_base_url == "https://example.com"
+    assert cluster.workbench_base_url == "https://example.com"
     assert cluster.kube_api_url == "https://k8s.example.com:6443"
 
 
@@ -54,12 +55,12 @@ async def test_create_cluster_duplicate_name_raises_error(db_session: AsyncSessi
     cluster_name = "Duplicate Cluster"
 
     await factory.create_cluster(
-        db_session, name=cluster_name, creator=env.creator, workloads_base_url="https://example.com"
+        db_session, name=cluster_name, creator=env.creator, workbench_base_url="https://example.com"
     )
 
     with pytest.raises(IntegrityError):
         await factory.create_cluster(
-            db_session, name=cluster_name, creator=env.creator, workloads_base_url="https://example.com"
+            db_session, name=cluster_name, creator=env.creator, workbench_base_url="https://example.com"
         )
 
 
@@ -282,11 +283,11 @@ async def test_get_cluster_by_invalid_id_raises_exception(db_session: AsyncSessi
     [
         (
             ClusterIn(
-                workloads_base_url="https://updated.example.com", kube_api_url="https://k8s.updated.example.com:6443"
+                workbench_base_url="https://updated.example.com", kube_api_url="https://k8s.updated.example.com:6443"
             ),
             {
                 "name": "original-name",
-                "workloads_base_url": "https://updated.example.com",
+                "workbench_base_url": "https://updated.example.com",
                 "kube_api_url": "https://k8s.updated.example.com:6443",
             },
         ),
@@ -294,7 +295,7 @@ async def test_get_cluster_by_invalid_id_raises_exception(db_session: AsyncSessi
             ClusterNameEdit(name="updated-name"),
             {
                 "name": "updated-name",
-                "workloads_base_url": "https://example.com",
+                "workbench_base_url": "https://example.com",
                 "kube_api_url": "https://k8s.example.com:6443",
             },
         ),
@@ -305,13 +306,13 @@ async def test_update_cluster(
 ) -> None:
     """Test updating cluster attributes with parametrize."""
     env = await factory.create_basic_test_environment(db_session)
-    cluster = await factory.create_cluster(db_session, name="original-name", workloads_base_url="https://example.com")
+    cluster = await factory.create_cluster(db_session, name="original-name", workbench_base_url="https://example.com")
     updated_by = "updater@example.com"
 
     updated_cluster = await update_cluster(db_session, cluster, edit_obj, updated_by)
 
     assert updated_cluster.name == expected["name"]
-    assert updated_cluster.workloads_base_url == expected["workloads_base_url"]
+    assert updated_cluster.workbench_base_url == expected["workbench_base_url"]
     assert updated_cluster.kube_api_url == expected["kube_api_url"]
     assert updated_cluster.updated_by == updated_by
 

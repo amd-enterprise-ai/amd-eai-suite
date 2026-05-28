@@ -9,8 +9,8 @@ from loguru import logger
 
 from ..messaging.connector import get_connection_to_cluster_vhost
 from ..messaging.publisher import publish_message_to_queue
-from ..messaging.schemas import Message
 from .config import RABBITMQ_ADMIN_PASSWORD, RABBITMQ_ADMIN_USER, RABBITMQ_HOST, RABBITMQ_PORT
+from .schemas import Message
 
 
 class MessageSender:

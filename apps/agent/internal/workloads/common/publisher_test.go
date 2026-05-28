@@ -78,7 +78,7 @@ func TestCreateComponentStatusMessage(t *testing.T) {
 			assert.NotNil(t, msg)
 			assert.Equal(t, messaging.MessageTypeWorkloadComponentStatusUpdate, msg.MessageType)
 			assert.Equal(t, tt.componentData.Name, msg.Name)
-			assert.Equal(t, messaging.WorkloadComponentKind(tt.expectedStatusKind), msg.Kind)
+			assert.Equal(t, WorkloadComponentKind(tt.expectedStatusKind), msg.Kind)
 			assert.Equal(t, tt.componentData.APIVersion, msg.APIVersion)
 			assert.Equal(t, tt.componentData.WorkloadID.String(), msg.WorkloadID)
 			assert.Equal(t, tt.componentData.ComponentID.String(), msg.ID)
@@ -187,7 +187,7 @@ func TestCreateAutoDiscoveredMessage(t *testing.T) {
 			assert.Equal(t, tt.componentData.WorkloadID.String(), msg.WorkloadID)
 			assert.Equal(t, tt.componentData.ComponentID.String(), msg.ComponentID)
 			assert.Equal(t, tt.componentData.Name, msg.Name)
-			assert.Equal(t, messaging.WorkloadComponentKind(tt.expectedKind), msg.Kind)
+			assert.Equal(t, WorkloadComponentKind(tt.expectedKind), msg.Kind)
 			assert.Equal(t, tt.componentData.APIVersion, msg.APIVersion)
 			assert.False(t, msg.UpdatedAt.IsZero())
 
@@ -216,17 +216,17 @@ func TestPublishWorkloadStatus(t *testing.T) {
 		context.Background(),
 		pub,
 		"11111111-1111-1111-1111-111111111111",
-		messaging.WorkloadStatusDeleted,
+		WorkloadStatusDeleted,
 		reason,
 	)
 	require.NoError(t, err)
 
 	require.Len(t, pub.Published, 1)
-	msg, ok := pub.Published[0].(*messaging.WorkloadStatusMessage)
+	msg, ok := pub.Published[0].(*WorkloadStatusMessage)
 	require.True(t, ok, "expected WorkloadStatusMessage, got %T", pub.Published[0])
 
 	assert.Equal(t, messaging.MessageTypeWorkloadStatusUpdate, msg.MessageType)
-	assert.Equal(t, messaging.WorkloadStatusDeleted, msg.Status)
+	assert.Equal(t, WorkloadStatusDeleted, msg.Status)
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", msg.WorkloadID)
 	require.NotNil(t, msg.StatusReason)
 	assert.Equal(t, reason, *msg.StatusReason)
@@ -253,12 +253,12 @@ func TestPublishDeletionMessage_FromPublisherHelpers(t *testing.T) {
 
 	require.Len(t, pub.Published, 1)
 	// Note: PublishDeletionMessage publishes a non-pointer value.
-	msg, ok := pub.Published[0].(messaging.WorkloadComponentStatusMessage)
+	msg, ok := pub.Published[0].(WorkloadComponentStatusMessage)
 	require.True(t, ok, "expected WorkloadComponentStatusMessage value, got %T", pub.Published[0])
 
 	assert.Equal(t, messaging.MessageTypeWorkloadComponentStatusUpdate, msg.MessageType)
 	assert.Equal(t, data.Name, msg.Name)
-	assert.Equal(t, messaging.WorkloadComponentKind(data.Kind), msg.Kind)
+	assert.Equal(t, WorkloadComponentKind(data.Kind), msg.Kind)
 	assert.Equal(t, data.APIVersion, msg.APIVersion)
 	assert.Equal(t, data.WorkloadID.String(), msg.WorkloadID)
 	assert.Equal(t, data.ComponentID.String(), msg.ID)

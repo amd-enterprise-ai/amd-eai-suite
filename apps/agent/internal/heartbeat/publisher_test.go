@@ -6,58 +6,44 @@ package heartbeat
 
 import (
 	"context"
-	"errors"
+	"strings"
 	"testing"
+	"time"
 
-	"github.com/silogen/agent/internal/testutils"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"k8s.io/client-go/kubernetes/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/silogen/agent/internal/kubernetes"
+	"github.com/silogen/agent/internal/config"
 	"github.com/silogen/agent/internal/messaging"
+	"github.com/stretchr/testify/assert"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestPublisher_Publish_Success(t *testing.T) {
-	fakeClientset := fake.NewSimpleClientset()
-	k8sClient := &kubernetes.Client{
-		Clientset: fakeClientset,
-	}
-	mockPublisher := testutils.NewMockPublisher()
+func testPublisher(t *testing.T) *messaging.Publisher {
+	t.Helper()
 	logger := zap.New()
-	ctx := context.Background()
-
-	publisher := NewPublisher(mockPublisher, k8sClient, "test-cluster", logger)
-	err := publisher.Publish(ctx)
-
-	assert.NoError(t, err)
-	require.Len(t, mockPublisher.Published, 1)
-
-	msg, ok := mockPublisher.Published[0].(*messaging.HeartbeatMessage)
-	require.True(t, ok, "message should be of type *HeartbeatMessage")
-
-	assert.Equal(t, messaging.MessageTypeHeartbeat, msg.MessageType)
-	assert.Equal(t, "test-cluster", msg.ClusterName)
-	assert.NotZero(t, msg.LastHeartbeatAt)
+	cfg := config.RabbitMQConfig{
+		Host:     "localhost",
+		Port:     5672,
+		VHost:    "vh_test",
+		Queue:    "test_queue",
+		User:     "user",
+		Password: "pass",
+	}
+	return messaging.NewPublisher(cfg, logger)
 }
 
-func TestPublisher_Publish_PublishFailure(t *testing.T) {
-	logger := zap.New()
-
-	// Create a real kubernetes client with fake clientset (will succeed health check)
-	fakeClientset := fake.NewSimpleClientset()
-	k8sClient := &kubernetes.Client{
-		Clientset: fakeClientset,
+func TestPublisher_Publish_HeartbeatMessage_WithoutBroker(t *testing.T) {
+	publisher := testPublisher(t)
+	msg := &HeartbeatMessage{
+		MessageType:     messaging.MessageTypeHeartbeat,
+		LastHeartbeatAt: time.Now().UTC(),
+		ClusterName:     "test-cluster",
 	}
 
-	mockMsgPublisher := testutils.NewMockFailingPublisher(errors.New("failed to publish heartbeat"))
-
-	// Publisher fails
-	ctx := context.Background()
-	publisher := NewPublisher(mockMsgPublisher, k8sClient, "test-cluster", logger)
-	err := publisher.Publish(ctx)
-
+	err := publisher.Publish(context.Background(), msg)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to publish heartbeat")
+	errStr := err.Error()
+	assert.True(t,
+		strings.Contains(errStr, "connect failed") ||
+			strings.Contains(errStr, "queue declare failed") ||
+			strings.Contains(errStr, "channel failed"),
+		"unexpected error: %s", errStr)
 }

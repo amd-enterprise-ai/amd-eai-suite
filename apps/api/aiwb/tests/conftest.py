@@ -18,11 +18,12 @@ import pytest_asyncio
 from fastapi import Request
 from filelock import FileLock
 from prometheus_api_client import PrometheusConnect
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from tenacity import retry, stop_after_attempt, wait_exponential
 from testcontainers.postgres import PostgresContainer
 
-from api_common.database import create_engine
+import api_common.database as db_module
 from api_common.models import BaseEntity
 from app.minio import MinioClient
 
@@ -112,13 +113,14 @@ async def _connect_to_postgres(host: str, port: int) -> asyncpg.Connection:
 
 
 @retry(wait=wait_exponential(multiplier=0.5, min=0.5, max=2.5), stop=stop_after_attempt(5), reraise=True)
-async def _create_engine_with_schema(database_url: str) -> tuple:
-    """Create database engine and schema with retry logic."""
-    engine, session_local = create_engine(database_url)
-    # Create schema
-    async with engine.begin() as conn:
-        await conn.run_sync(BaseEntity.metadata.create_all)
-    return engine, session_local
+async def _create_schema(database_url: str) -> None:
+    """Create database schema with retry logic. Called once per worker."""
+    engine = create_async_engine(database_url, echo=False, poolclass=NullPool)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(BaseEntity.metadata.create_all)
+    finally:
+        await engine.dispose()
 
 
 def _coordinate_container_across_workers(
@@ -210,6 +212,9 @@ def database_url(postgres_container: dict[str, Any], worker_id: str) -> Generato
 
     url = f"postgresql+asyncpg://{TEST_DB_USER}:{TEST_DB_PASSWORD}@{host}:{port}/{db_name}"
 
+    # Create schema once per worker, not per test
+    asyncio.run(_create_schema(url))
+
     yield url
 
     # Cleanup database
@@ -258,15 +263,19 @@ async def engine_and_session_maker(database_url: str) -> AsyncGenerator[tuple[An
     """
     Create database engine and session maker for tests.
 
-    Note: This is function-scoped rather than session-scoped due to pytest-asyncio
-    limitations with async session fixtures. While this recreates the engine per test,
-    it ensures proper event loop integration and avoids "Task attached to different loop"
-    errors. The performance impact is acceptable for the test suite size.
+    Uses NullPool to avoid connection pool management overhead and prevent
+    ConnectionDoesNotExistError under parallel xdist execution. Each operation
+    gets a fresh connection, eliminating pool exhaustion and stale connection issues.
 
-    Alternative approaches (session-scoped with asyncio.run) cause event loop conflicts
-    between the fixture setup and pytest-asyncio's test execution.
+    Also sets api_common.database globals so that code paths using get_session()
+    (e.g. overlay router tests via FastAPI TestClient) work correctly.
     """
-    engine, session_local = await _create_engine_with_schema(database_url)
+    engine = create_async_engine(database_url, echo=False, poolclass=NullPool)
+    session_local = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    # Set globals so get_session() works for router tests using TestClient
+    db_module.engine = engine
+    db_module.session_maker = session_local
 
     yield engine, session_local
 

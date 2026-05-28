@@ -24,7 +24,7 @@ Create AIWB Secret
     ...
     ...    Args:
     ...    namespace (str): Kubernetes namespace
-    ...    body (dict): Secret creation payload (name, data, use_case)
+    ...    body (dict): Secret creation payload (name, data, useCase)
     ...    expected_status (int/str): Expected HTTP status code
     ...
     ...    Returns:
@@ -47,11 +47,11 @@ Create AIWB Secret
 
 List AIWB Secrets
     [Documentation]    List all secrets in a namespace via AIWB API.
-    ...    Optionally filter by use_case query parameter.
+    ...    Optionally filter by useCase query parameter.
     ...
     ...    Args:
     ...    namespace (str): Kubernetes namespace
-    ...    use_case (str): Optional use_case filter
+    ...    use_case (str): Optional useCase filter
     ...    expected_status (int/str): Expected HTTP status code
     ...
     ...    Returns:
@@ -63,7 +63,7 @@ List AIWB Secrets
 
     &{params}=    Create Dictionary
     IF    $use_case is not None
-        Set To Dictionary    ${params}    use_case=${use_case}
+        Set To Dictionary    ${params}    useCase=${use_case}
     END
 
     Log    GET ${endpoint} params=${params}    DEBUG

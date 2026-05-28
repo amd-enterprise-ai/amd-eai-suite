@@ -13,8 +13,8 @@ import {
 
 import { addUsersToProject, deleteUserFromProject } from '@/services/app';
 
-import { ClusterStatus } from '@amdenterpriseai/types';
-import { QuotaStatus } from '@amdenterpriseai/types';
+import { ClusterStatus } from '@/types/enums/cluster-status';
+import { QuotaStatus } from '@/types/enums/quotas';
 import { UserRole } from '@amdenterpriseai/types';
 
 import { Projects } from '@/components/features/user';

@@ -32,10 +32,10 @@ Create workspace
     ...    workspace_data (dict): Workspace configuration including:
     ...    - image: Container image to use
     ...    - gpus: Number of GPUs (0-8)
-    ...    - memory_per_gpu: Memory per GPU in Gi
-    ...    - cpu_per_gpu: CPU per GPU in vCPUs
-    ...    project_id (str): UUID of the project
-    ...    display_name (str): Display name for the workspace
+    ...    - memoryPerGpu: Memory per GPU in Gi
+    ...    - cpuPerGpu: CPU per GPU in vCPUs
+    ...    projectId (str): UUID of the project
+    ...    displayName (str): Display name for the workspace
     ...    expected_status (int): Expected HTTP status code (default: any)
     ...
     ...    Returns:
@@ -47,12 +47,12 @@ Create workspace
     Create api session    aiwb
 
     TRY
-        # Build query parameters - project_id is required, display_name is optional
+        # Build query parameters - projectId is required, displayName is optional
         &{params}=    Create Dictionary
-        ...    project_id=${project_id}
+        ...    projectId=${project_id}
 
         IF    "${display_name}" != "${None}"
-            Set To Dictionary    ${params}    display_name=${display_name}
+            Set To Dictionary    ${params}    displayName=${display_name}
         END
 
         # Get endpoint - uses AIWB /namespaces/{namespace}/workspaces/{workspace_type}

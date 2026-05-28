@@ -9,6 +9,7 @@ Documentation       Low-level keywords for Catalog API datasets endpoints.
 Library             RequestsLibrary
 Library             Collections
 Library             OperatingSystem
+Library             libraries.DatasetUploader
 Resource            resources/api/common.resource
 Resource            resources/airm_projects.resource
 
@@ -97,7 +98,7 @@ Upload dataset
     &{headers}=             Create Dictionary       Authorization=Bearer ${access_token}
 
     Log                     POST ${endpoint} with data: ${data}             DEBUG
-    ${response}=            POST                    ${endpoint}             headers=${headers}      data=${data}            files=${files}          expected_status=${expected_status}
+    ${response}=            POST                    ${endpoint}             headers=${headers}      data=${data}            files=${files}          expected_status=${expected_status}    verify=${VERIFY_SSL}
     Log                     Upload dataset response: status=${response.status_code}                 DEBUG
     IF    ${response.status_code} in [200, 201]
         ${response_json}=       Set Variable            ${response.json()}
@@ -257,6 +258,24 @@ Batch delete datasets
         ${count}=               Get Length              ${dataset_ids}
         Log                     Batch deleted ${count} datasets         INFO
     END
+    RETURN                  ${response}
+
+Upload oversized dataset
+    [Documentation]    Upload an oversized dataset using in-memory generated JSONL data.
+    ...    Uses the DatasetUploader Python library to generate data exceeding the size limit
+    ...    and send it directly via requests, bypassing file-based upload keywords.
+    ...
+    ...    Args:
+    ...    name (str): Name of the dataset
+    ...    namespace (str): Namespace for the request
+    ...    size_mb (int): Size of the generated JSONL data in MB (default: 101)
+    ...
+    ...    Returns:
+    ...    response: HTTP response from the upload attempt
+    [Arguments]             ${name}                 ${namespace}            ${size_mb}=101
+    ${endpoint}=            Datasets endpoint       action=upload           namespace=${namespace}
+    ${access_token}=        Authorization token
+    ${response}=            Send oversized dataset upload                   ${endpoint}             ${access_token}         ${name}                 ${size_mb}    verify=${VERIFY_SSL}
     RETURN                  ${response}
 
 Download dataset

@@ -21,6 +21,8 @@
 ../../../../testing
 --pythonpath
 ../../../../testing/libraries
+--pythonpath
+libraries
 
 # Helper that prints guidance on using robot-extract after test execution
 --listener

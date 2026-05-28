@@ -1,0 +1,16 @@
+# Copyright (c) Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Modified overlay for E2E testing of overlay update operations
+replicaCount: 2
+resources:
+  limits:
+    cpu: "4"
+    memory: "8Gi"
+  requests:
+    cpu: "2"
+    memory: "4Gi"
+env:
+  - name: TEST_VAR
+    value: "updated"

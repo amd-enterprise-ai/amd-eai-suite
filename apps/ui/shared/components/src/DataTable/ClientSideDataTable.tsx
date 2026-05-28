@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { Selection, SortDescriptor } from '@heroui/react';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { TFunction } from 'next-i18next';
 
@@ -243,11 +243,10 @@ export const ClientSideDataTable = <T, K extends keyof T, C>({
     PageFrameSize.SMALL,
   );
 
-  const [prevDataLength, setPrevDataLength] = useState<number>();
-  if (prevDataLength !== data.length) {
-    setPrevDataLength(data.length);
-    setCurrentPage(1);
-  }
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(data.length / frameSize));
+    setCurrentPage((prevPage) => Math.min(prevPage, totalPages));
+  }, [data.length, frameSize]);
 
   const sortedData = useMemo(() => {
     const column = sortedBy.column as C;
@@ -282,6 +281,8 @@ export const ClientSideDataTable = <T, K extends keyof T, C>({
     <BaseDataTable
       data={dataFrame}
       total={data.length}
+      page={currentPage}
+      pageSize={frameSize}
       className={className}
       columns={columns}
       customRenderers={customRenderers}

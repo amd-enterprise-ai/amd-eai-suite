@@ -15,8 +15,8 @@ import { updateStorageAssignment } from '@/services/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { FormField } from '@amdenterpriseai/types';
-import { Project } from '@amdenterpriseai/types';
-import { AssignStorageFormData, Storage } from '@amdenterpriseai/types';
+import { Project } from '@/types/projects';
+import { AssignStorageFormData, Storage } from '@/types/storages';
 
 import { DrawerForm } from '@amdenterpriseai/components';
 import { FormFieldComponent } from '@amdenterpriseai/components';
@@ -52,7 +52,7 @@ export const AssignStorage: React.FC<Props> = ({
         throw new Error('Storage is null');
       }
       return updateStorageAssignment(storage.id, {
-        project_ids: data.projectIds,
+        projectIds: data.projectIds,
       });
     },
     onSuccess: () => {

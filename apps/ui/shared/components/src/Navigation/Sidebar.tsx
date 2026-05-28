@@ -8,32 +8,31 @@ import React, { useEffect, useState } from 'react';
 
 import router from 'next/router';
 
-import { useNavigationState } from '@amdenterpriseai/hooks';
-
-import { CollapsibleSection } from './CollapsibleSection';
+import { Section } from './Section';
 
 import { AMDLogo, AMDLogoSymbol } from '@amdenterpriseai/assets/svg/logo';
 import { SidebarItem } from '@amdenterpriseai/types';
 
-// Add props
 interface SidebarProps {
   appTitle: string;
   menuItems: SidebarItem[];
+  projectPrefix?: string;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ appTitle, menuItems }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  appTitle,
+  menuItems,
+  projectPrefix,
+}) => {
   const { data: session } = useSession({
     required: true,
   });
   const [isSidebarMini, setSidebarMini] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const { toggleSection } = useNavigationState();
 
   const toggleSidebar = () => {
     setSidebarMini(!isSidebarMini);
   };
-
-  const handleSectionToggle = (sectionId: string) => toggleSection(sectionId);
 
   useEffect(() => {
     setMounted(true);
@@ -53,7 +52,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ appTitle, menuItems }) => {
         <div className="mb-6 px-4 flex flex-row w-full justify-between items-center text-default-800">
           <div
             className="flex items-center cursor-pointer"
-            onClick={() => router.push('/')}
+            onClick={() =>
+              router.push(projectPrefix ? `/${projectPrefix}/` : '/')
+            }
           >
             <AMDLogo
               className={`mr-1 text-default-800 h-3.5 transition-all opacity-100 translate-x-[-200%] ease-in-out overflow-hidden duration-100 ${!isSidebarMini ? 'translate-x-[0%] ' : 'hidden group-hover:translate-x-[0%] group-hover:block'}`}
@@ -87,14 +88,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ appTitle, menuItems }) => {
         </div>
         {session ? (
           <div>
-            <CollapsibleSection
+            <Section
               title={appTitle}
-              icon={IconServer}
               items={menuItems}
               isSidebarMini={isSidebarMini}
-              isExpanded={true}
-              sectionId="navigation"
-              onToggle={handleSectionToggle}
+              projectPrefix={projectPrefix}
             />
           </div>
         ) : null}

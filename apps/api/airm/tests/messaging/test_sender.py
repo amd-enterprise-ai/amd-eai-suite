@@ -7,9 +7,10 @@ from uuid import uuid4
 
 import pytest
 
-from app.messaging.schemas import ClusterQuotaAllocation, ClusterQuotasAllocationMessage, GPUVendor
 from app.messaging.sender import MessageSender, message_sender_scope
+from app.quotas.messaging import ClusterQuotaAllocation, ClusterQuotasAllocationMessage
 from app.quotas.utils import format_quotas_allocation_message
+from app.utilities.enums import GPUVendor
 
 
 @pytest.mark.asyncio

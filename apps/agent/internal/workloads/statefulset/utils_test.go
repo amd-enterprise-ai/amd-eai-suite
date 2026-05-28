@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 
+	"github.com/silogen/agent/internal/testutils"
 	"github.com/silogen/agent/internal/workloads/common"
 )
 
@@ -25,7 +26,7 @@ func TestGetStatus(t *testing.T) {
 			name: "no replicas defined",
 			sts: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr(int32(0)),
+					Replicas: testutils.Ptr(int32(0)),
 				},
 			},
 			expectedStatus: common.StatusPending,
@@ -35,7 +36,7 @@ func TestGetStatus(t *testing.T) {
 			name: "scaling up (current < desired)",
 			sts: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr(int32(3)),
+					Replicas: testutils.Ptr(int32(3)),
 				},
 				Status: appsv1.StatefulSetStatus{
 					CurrentReplicas: 1,
@@ -48,7 +49,7 @@ func TestGetStatus(t *testing.T) {
 			name: "ready (ready == desired and available == desired)",
 			sts: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr(int32(3)),
+					Replicas: testutils.Ptr(int32(3)),
 				},
 				Status: appsv1.StatefulSetStatus{
 					CurrentReplicas:   3,
@@ -63,7 +64,7 @@ func TestGetStatus(t *testing.T) {
 			name: "partially ready",
 			sts: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr(int32(3)),
+					Replicas: testutils.Ptr(int32(3)),
 				},
 				Status: appsv1.StatefulSetStatus{
 					CurrentReplicas:   3,
@@ -78,7 +79,7 @@ func TestGetStatus(t *testing.T) {
 			name: "scaling up with 0 current replicas (still scaling up)",
 			sts: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr(int32(3)),
+					Replicas: testutils.Ptr(int32(3)),
 				},
 				Status: appsv1.StatefulSetStatus{
 					CurrentReplicas: 0,
@@ -102,5 +103,3 @@ func TestGetStatus(t *testing.T) {
 		})
 	}
 }
-
-func ptr[T any](v T) *T { return &v }

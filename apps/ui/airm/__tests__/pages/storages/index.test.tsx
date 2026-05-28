@@ -23,12 +23,10 @@ import {
 } from '@/__mocks__/utils/secrets-mock';
 import { generateMockStorages } from '@/__mocks__/utils/storages-mock';
 
-import { ProjectStatus } from '@amdenterpriseai/types';
-import { SecretStatus } from '@amdenterpriseai/types';
+import { ProjectStatus } from '@/types/enums/projects';
+import { SecretStatus } from '@/types/enums/secrets';
 
 import StoragesPage, { getServerSideProps } from '@/pages/storages';
-
-import { AssignStorage } from '@/components/features/storages';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 
@@ -53,12 +51,13 @@ vi.mock('@/services/app', () => ({
   fetchProjects: (...args: any[]) => mockFetchProjects(...args),
 }));
 
+const mockAssignStorage = vi.hoisted(() => vi.fn());
 vi.mock('@/components/features/storages', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@/components/features/storages')>();
   return {
     ...actual,
-    AssignStorage: vi.fn(),
+    AssignStorage: mockAssignStorage,
   };
 });
 
@@ -228,11 +227,10 @@ describe('storages page', async () => {
     });
 
     await waitFor(() => {
-      expect(AssignStorage).toBeCalledWith(
+      expect(mockAssignStorage.mock.lastCall?.[0]).toEqual(
         expect.objectContaining({
           isOpen: true,
         }),
-        expect.anything(),
       );
     });
   });
@@ -332,11 +330,10 @@ describe('storages page', async () => {
     });
 
     await waitFor(() => {
-      expect(AssignStorage).toHaveBeenCalledWith(
+      expect(mockAssignStorage.mock.lastCall?.[0]).toEqual(
         expect.objectContaining({
           disabledProjectIds: expect.arrayContaining(['2']),
         }),
-        expect.anything(),
       );
     });
   });

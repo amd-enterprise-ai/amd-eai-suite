@@ -11,29 +11,53 @@ import {
   Switch,
   cn,
 } from '@heroui/react';
-import { IconLogout, IconMoon, IconSun, IconUser } from '@tabler/icons-react';
+import {
+  IconFlag,
+  IconLogout,
+  IconMoon,
+  IconSun,
+  IconUser,
+} from '@tabler/icons-react';
+import { CollectionElement } from '@react-types/shared';
 import { useSession } from 'next-auth/react';
 import React from 'react';
 
 import { useTranslation } from 'next-i18next';
 import { useTheme } from 'next-themes';
 
-import { logout } from '@amdenterpriseai/utils/app';
+import { useSystemInfo } from '@amdenterpriseai/hooks';
+import { createMailtoLink, logout } from '@amdenterpriseai/utils/app';
 
-export const UserMenu: React.FC = () => {
+interface UserMenuProps {
+  additionalMenuItems?: CollectionElement<object>;
+}
+
+export const UserMenu: React.FC<UserMenuProps> = ({ additionalMenuItems }) => {
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation('common');
+  const getSystemInfo = useSystemInfo();
 
   const handleLogout = async () => {
     await logout();
   };
 
+  const reportIssueHref = createMailtoLink({
+    subject: 'Issue report: [describe the problem shortly]',
+    body: [
+      'Issue:',
+      '[Please describe the issue in detail, include steps to reproduce and what result was expected]',
+      '',
+      '--- System info ---',
+      ...getSystemInfo(),
+    ],
+  });
+
   return (
     <div>
       <Dropdown>
         <DropdownTrigger>
-          <div className="flex items-center cursor-pointer gap-3 capitalize">
+          <div className="flex items-center cursor-pointer gap-3 capitalize outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-lg">
             <div className="hidden md:flex flex-col justify-start text-right">
               <span className="font-semibold text-sm text-default-800">
                 {session?.user?.name}
@@ -79,6 +103,15 @@ export const UserMenu: React.FC = () => {
               {t('menu.actions.theme', { theme: t(`theme.${theme}`) })}
             </DropdownItem>
           </DropdownSection>
+          {additionalMenuItems ?? null}
+          <DropdownItem
+            as="a"
+            href={reportIssueHref}
+            endContent={<IconFlag size={16} stroke={2} />}
+            key={'menu-report-issue'}
+          >
+            {t('menu.actions.reportIssue')}
+          </DropdownItem>
           <DropdownItem
             onPress={handleLogout}
             endContent={<IconLogout size={16} stroke={2} />}

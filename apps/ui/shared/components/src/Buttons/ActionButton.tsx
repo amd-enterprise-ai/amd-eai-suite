@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 import React, { useMemo } from 'react';
-import { Button, ButtonProps } from '@heroui/react';
+import { Button } from './Button';
+import type { ButtonProps } from './Button';
 import { VARIANT_CONFIGS, SPINNER_ELEMENT } from './constants';
 
 type ExclusiveButtonProps =
@@ -102,8 +103,10 @@ export const ActionButton = React.memo(
       startContent,
       primary = false,
       tertiary = false,
+      // react-toastify / overlay code sometimes forwards toast helpers onto buttons
+      closeToast: _closeToast,
       ...buttonProps
-    } = props;
+    } = props as ActionButtonProps & { closeToast?: unknown };
 
     const variantConfig = useMemo(() => {
       if (primary) return VARIANT_CONFIGS.primary;

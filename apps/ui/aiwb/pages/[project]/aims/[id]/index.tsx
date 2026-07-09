@@ -3,17 +3,23 @@
 // SPDX-License-Identifier: MIT
 
 import {
+  Button,
   Card,
   CardBody,
   CardHeader,
-  Skeleton,
+  Select,
+  SelectItem,
+  ActionButton,
+  DateSince,
+  HeroMessage,
+  Status,
+  StatusDisplay,
   Input,
   Accordion,
   AccordionItem,
-  Select,
-  SelectItem,
   Tooltip,
-} from '@heroui/react';
+  Skeleton,
+} from '@amdenterpriseai/components';
 import {
   IconAlertTriangle,
   IconArrowLeft,
@@ -23,6 +29,7 @@ import {
   IconDashboard,
   IconDatabase,
   IconFileText,
+  IconLink,
   IconMessage,
   IconRefresh,
   IconTrash,
@@ -31,11 +38,9 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
 
-import { getServerSession } from 'next-auth';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
-import { authOptions } from '@amdenterpriseai/utils/server';
 import {
   DOCS_WORKBENCH_BASE,
   WithDocumentationLink,
@@ -44,51 +49,46 @@ import {
 import { useSystemToast } from '@amdenterpriseai/hooks';
 
 import {
-  ActionButton,
-  DateSince,
-  HeroMessage,
-  Status,
-  StatusDisplay,
-} from '@amdenterpriseai/components';
-
-import {
   aiWorkbenchMenuItems,
   APIRequestError,
 } from '@amdenterpriseai/utils/app';
 import { get } from 'lodash';
 import {
-  getAimClusterModel,
-  getAimNamespaceModel,
-  getAimService,
-  getAimClusterServiceTemplates,
-  getAimNamespaceServiceTemplates,
+  getAimClusterProfileByName,
+  getProjectAimProfileByName,
+  getProjectFineTunedModel,
   aimParser,
   getAIMServiceStatusVariants,
-  undeployAim,
-  getAimServiceHistory,
-  historicalAimParser,
-  getAimServiceReplicas,
+  getMetricTranslationKey,
 } from '@/lib/app/aims';
+import {
+  deleteInferenceDeployment,
+  getInferenceDeployment,
+  getInferenceModel,
+  getInferenceReplicas,
+  listAllInferenceDeployments,
+} from '@/lib/app/inference';
+import { getCustomModel } from '@/lib/app/custom-models';
 import type { AutoscalingFieldValues } from '@/lib/app/aims';
-import type { AimServiceReplica } from '@/types/aims';
+import type { AIMService, InferenceReplica } from '@/types/aims';
 import {
   AIM_PROFILE_TYPE_OPTIMIZED,
   AIMClusterModel,
-  AIMClusterServiceTemplate,
   AIMModel,
-  AIMServiceHistoryResponse,
+  AIMProfileSpec,
   FINE_TUNED_LABEL,
+  NAMESPACE_AIM_MODEL_LABEL,
 } from '@/types/aims';
 import { useState, useCallback } from 'react';
+import AIMConnectModal from '@/components/features/models/AIMConnectModal';
 import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
 import WorkloadLogsModal from '@/components/features/workloads/WorkloadLogsModal';
-import { LogSource } from '@/components/features/workloads/WorkloadLogs';
 import InferenceMetrics from '@/components/features/workloads/InferenceMetrics';
 import { Intent, WorkloadType } from '@amdenterpriseai/types';
 import { ResourceType } from '@/types/enums/workloads';
 import { AIMServiceStatus } from '@/types/aims';
 import { WorkloadStatus } from '@/types/enums/workloads';
-import type { ResourceMetrics } from '@/types/namespaces';
+import type { ResourceMetrics } from '@/types/projects';
 import { useProject } from '@/contexts/ProjectContext';
 import { ScalingStatusCard } from '@/components/features/workloads/ScalingStatusCard';
 import { SUBMITTER_ANNOTATION_KEY } from '@/components/features/secrets/constants';
@@ -119,12 +119,11 @@ const extractProfileOverrides = (
     typeof overrides?.precision === 'string' ? overrides.precision : undefined;
   const metricRaw =
     typeof overrides?.metric === 'string' ? overrides.metric : undefined;
-  const gpuNode = get(overrides, 'hardware.gpu') as
-    | Record<string, unknown>
-    | undefined;
   const gpuModel =
-    typeof gpuNode?.model === 'string' ? gpuNode.model : undefined;
-  const rawGpuRequests = gpuNode?.requests;
+    typeof overrides?.acceleratorModel === 'string'
+      ? overrides.acceleratorModel
+      : undefined;
+  const rawGpuRequests = overrides?.acceleratorCount;
   const gpuRequestsNum =
     typeof rawGpuRequests === 'number'
       ? rawGpuRequests
@@ -137,7 +136,7 @@ const extractProfileOverrides = (
   return { precision, metricRaw, gpuModel, gpuRequestsNum };
 };
 
-/** True when deploy `spec.overrides` carries any profile-related field (used to skip template skeleton). */
+/** True when deploy `spec.profileOverrides` carries any profile-related field (used to skip template skeleton). */
 const hasDeployProfileOverrides = (o: ProfileOverrides): boolean =>
   Boolean(o.gpuModel) ||
   o.gpuRequestsNum != null ||
@@ -174,11 +173,18 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
   const { toast } = useSystemToast();
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPollingForConvergence, setIsPollingForConvergence] = useState(false);
   const [selectedReplica, setSelectedReplica] = useState<string>('all');
-  const { activeProject: namespace, projectPath, projectUrl } = useProject();
+  const {
+    activeProject: namespace,
+    projectPath,
+    projectUrl,
+    aiGatewayEnabled,
+    aiGatewayUrl,
+  } = useProject();
 
   const {
     data: aimService,
@@ -188,13 +194,17 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     refetch: refetchAimService,
   } = useQuery({
     queryKey: ['aimService', namespace, id],
-    queryFn: () => getAimService(namespace as string, id as string),
+    queryFn: () => getInferenceDeployment(namespace as string, id as string),
     enabled: !!namespace && !!id && !isDeleting,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     refetchInterval: isPollingForConvergence
       ? CONVERGENCE_POLL_INTERVAL_MS
       : false,
+    // Skip retries on 404 so the deleted-history fallback below runs immediately.
+    retry: (failureCount, error) =>
+      !(error instanceof APIRequestError && error.statusCode === 404) &&
+      failureCount < 3,
   });
 
   const stopConvergencePolling = useCallback(
@@ -214,58 +224,95 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     onTimeout: handleConvergenceTimeout,
   });
 
-  const {
-    data: aimServiceHistory,
-    isLoading: isLoadingAimServiceHistory,
-    isError: isAimServiceHistoryError,
-  } = useQuery({
-    queryKey: ['aimServiceHistory', namespace, id],
-    queryFn: () => getAimServiceHistory(namespace as string),
-    enabled: !!namespace && !!id && !isDeleting,
-    select: (data: AIMServiceHistoryResponse[]) =>
-      data.filter((s) => s.status === AIMServiceStatus.DELETED),
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
+  const liveQuery404 =
+    aimServiceError instanceof APIRequestError &&
+    aimServiceError.statusCode === 404;
 
-  const historicalService = aimServiceHistory?.find((h) => h.id === id);
+  // The history query walks the entire Deleted list via fetchAllPages — gate it
+  // on liveQuery404 so live-AIM visits don't pay that cost.
+  const { data: aimServiceHistory, isLoading: isLoadingAimServiceHistory } =
+    useQuery({
+      queryKey: ['aimServiceHistory', namespace, id],
+      queryFn: () =>
+        listAllInferenceDeployments(namespace as string, {
+          statusFilter: [AIMServiceStatus.DELETED],
+        }),
+      enabled: !!namespace && !!id && !isDeleting && liveQuery404,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+    });
 
+  const historicalService: AIMService | undefined = aimServiceHistory?.find(
+    (h) => h.id === id,
+  );
+
+  // The AIMClusterModel/AIMModel resource name. AIWB always sets
+  // `spec.model.name` at create time; the backend (`AIMServiceResource`)
+  // backfills it from `status.resolvedModel.name` for legacy v1alpha1
+  // deploy-by-image services where the user only set `spec.model.image`.
   const resourceName =
-    aimService?.status?.resolvedModel?.name || historicalService?.model;
+    aimService?.spec?.model?.name || historicalService?.spec?.model?.name;
 
-  const _isNotFoundError =
-    (aimServiceError as APIRequestError)?.statusCode === 404;
   const _isHistorical = !aimService && !!historicalService;
 
   const isFinetunedModel =
     aimService?.metadata?.labels?.[FINE_TUNED_LABEL] === 'true';
 
+  const isCustomModel =
+    aimService?.metadata?.labels?.[NAMESPACE_AIM_MODEL_LABEL] === 'true';
+
+  // The cluster-model branch shares its cache with useInferenceModelsByName via
+  // ['inferenceModel', resourceName] so list pages and this details page resolve to a
+  // single fetch per name. The fine-tuned, custom-model, and historical-fallback branches
+  // keep their namespace-scoped key because they hit different endpoints.
+  const clusterModelQueryKey = ['inferenceModel', resourceName] as const;
+  const finetunedQueryKey = [
+    'aim',
+    namespace,
+    id,
+    resourceName,
+    isFinetunedModel,
+  ] as const;
+  const customModelQueryKey = ['customModel', namespace, resourceName] as const;
   const {
     data: aimClusterModel,
     isLoading: isLoadingAim,
     isError: isAimError,
   } = useQuery<AIMClusterModel | AIMModel>({
-    queryKey: ['aim', namespace, id, resourceName, isFinetunedModel],
+    queryKey:
+      isFinetunedModel || _isHistorical
+        ? finetunedQueryKey
+        : isCustomModel
+          ? customModelQueryKey
+          : clusterModelQueryKey,
     queryFn: async () => {
       if (isFinetunedModel) {
-        return getAimNamespaceModel(
+        return getProjectFineTunedModel(
           resourceName as string,
           namespace as string,
         );
       }
+      if (isCustomModel) {
+        // Custom (BYOM) models are namespace-scoped AIMModels; their detail
+        // data lives on the custom-models endpoint, not the cluster catalog.
+        return getCustomModel(
+          namespace as string,
+          resourceName as string,
+        ) as unknown as AIMModel;
+      }
       // For historical services isFinetunedModel is always false (aimService is gone).
-      // Try cluster-scoped first; if it 404s, the model was namespace-scoped (finetuned).
+      // Try cluster-scoped first; if it 404s, the model was namespace-scoped (finetuned or custom).
       if (_isHistorical) {
         try {
-          return await getAimClusterModel(resourceName as string);
+          return await getInferenceModel(resourceName as string);
         } catch {
-          return getAimNamespaceModel(
+          return getProjectFineTunedModel(
             resourceName as string,
             namespace as string,
           );
         }
       }
-      return getAimClusterModel(resourceName as string);
+      return getInferenceModel(resourceName as string);
     },
     enabled:
       !!resourceName && (!isFinetunedModel || !!namespace) && !isDeleting,
@@ -273,29 +320,9 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     refetchOnMount: false,
   });
 
-  const { data: serviceTemplates, isLoading: templatesLoading } = useQuery<
-    AIMClusterServiceTemplate[]
-  >({
-    queryKey: ['aim-templates', resourceName, isFinetunedModel],
-    queryFn: async () => {
-      if (isFinetunedModel) {
-        const templates = await getAimNamespaceServiceTemplates(
-          namespace as string,
-          resourceName as string,
-        );
-        return templates as unknown as AIMClusterServiceTemplate[];
-      }
-      return getAimClusterServiceTemplates(resourceName as string);
-    },
-    enabled:
-      !!resourceName && (!isFinetunedModel || !!namespace) && !isDeleting,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
-
-  const { data: replicas } = useQuery<AimServiceReplica[]>({
-    queryKey: ['aimServiceReplicas', namespace, id],
-    queryFn: () => getAimServiceReplicas(namespace as string, id as string),
+  const { data: replicas } = useQuery<InferenceReplica[]>({
+    queryKey: ['inferenceReplicas', namespace, id],
+    queryFn: () => getInferenceReplicas(namespace as string, id as string),
     enabled:
       !!namespace &&
       !!id &&
@@ -306,19 +333,31 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     refetchOnWindowFocus: false,
   });
 
-  const resolvedTemplateName = aimService?.status?.resolvedTemplate?.name;
-  const resolvedTemplate = (serviceTemplates ?? []).find(
-    (t) => t.metadata?.name === resolvedTemplateName,
-  );
+  const resolvedProfile = aimService?.status?.resolvedProfile;
+  const resolvedProfileName = resolvedProfile?.name ?? null;
+  const isNamespaceScoped = resolvedProfile?.scope === 'Namespace';
+  const { data: resolvedProfileResource } = useQuery({
+    queryKey: isNamespaceScoped
+      ? (['aim-profile', 'project', namespace, resolvedProfileName] as const)
+      : (['aim-profile', 'cluster', resolvedProfileName] as const),
+    queryFn: () =>
+      isNamespaceScoped
+        ? getProjectAimProfileByName(namespace as string, resolvedProfileName!)
+        : getAimClusterProfileByName(resolvedProfileName!),
+    enabled: !!resolvedProfileName && (!isNamespaceScoped || !!namespace),
+    staleTime: Infinity,
+  });
+  const resolvedProfileSpec: AIMProfileSpec | null =
+    resolvedProfileResource?.spec ?? null;
+
   const isMetricUnoptimized =
-    !!resolvedTemplate &&
-    resolvedTemplate.status?.profile?.metadata?.type !==
-      AIM_PROFILE_TYPE_OPTIMIZED;
+    !!resolvedProfileSpec &&
+    resolvedProfileSpec.type !== AIM_PROFILE_TYPE_OPTIMIZED;
 
   const { mutate: deleteWorkloadMutation } = useMutation({
     mutationFn: (serviceId: string) => {
       setIsDeleting(true);
-      return undeployAim(namespace!, serviceId);
+      return deleteInferenceDeployment(namespace!, serviceId);
     },
     onSuccess: () => {
       queryClient.removeQueries({
@@ -346,13 +385,10 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     router.back();
   };
 
-  // Show loading state if:
-  // 1. Service data hasn't loaded yet (either current or historical)
-  // 2. AIM cluster model is still loading after service data arrives
+  // History only starts loading after the live query 404s, so the two loading
+  // flags must be ORed (not ANDed) — sequenced via liveQuery404.
   const isLoadingFirstQuery =
-    (isLoadingAimService || isLoadingAimServiceHistory) &&
-    !isAimServiceError &&
-    !isAimServiceHistoryError;
+    isLoadingAimService || (liveQuery404 && isLoadingAimServiceHistory);
   const isLoadingSecondQuery =
     !!resourceName && !aimClusterModel && !isAimError;
   const isLoading = isLoadingFirstQuery || isLoadingSecondQuery;
@@ -379,9 +415,8 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     );
   }
 
-  const hasServiceError =
-    (!_isHistorical && isAimServiceError) ||
-    (_isHistorical && !_isNotFoundError);
+  // A live error that isn't recovered by a historical lookup is the error path.
+  const hasServiceError = isAimServiceError && !_isHistorical;
   const hasAimError = isAimError || !aimClusterModel;
 
   if ((hasServiceError && !isLoading) || hasAimError) {
@@ -416,12 +451,20 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     });
   };
 
-  const parsedAim = !_isHistorical
-    ? aimParser(aimClusterModel, aimService ? [aimService] : undefined)
-    : historicalAimParser(aimClusterModel, historicalService);
+  // Deleted/historical entries arrive as standard AIMServiceResponse shapes
+  // (synthesized from the DB row), so the regular aimParser handles both live
+  // and historical services uniformly.
+  const parsedAim = aimParser(
+    aimClusterModel,
+    aimService
+      ? [aimService]
+      : historicalService
+        ? [historicalService]
+        : undefined,
+  );
   const deployedService = parsedAim.deployedService;
 
-  const specOverrides = deployedService?.spec?.overrides as
+  const specOverrides = deployedService?.spec?.profileOverrides as
     | Record<string, unknown>
     | undefined;
   const profileOverrides = extractProfileOverrides(specOverrides);
@@ -434,18 +477,16 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     gpuRequestsNum: overrideGpuRequestsNum,
   } = profileOverrides;
 
-  const profileMeta = resolvedTemplate?.status?.profile?.metadata;
-  const profileGpuDisplay = overrideGpuModel ?? profileMeta?.gpu;
+  const profileSpec = resolvedProfileSpec;
+  const profileGpuDisplay = overrideGpuModel ?? profileSpec?.acceleratorModel;
   const profileGpuCountDisplay =
     toGpuCountLabel(overrideGpuRequestsNum) ??
-    toGpuCountLabel(profileMeta?.gpuCount);
-  const profileMetricKey = overrideMetricRaw ?? profileMeta?.metric;
+    toGpuCountLabel(profileSpec?.acceleratorCount);
+  const profileMetricKey = overrideMetricRaw ?? profileSpec?.metric;
   const profileMetricDisplay = profileMetricKey
-    ? t(`models:performanceMetrics.values.${profileMetricKey}`, {
-        defaultValue: profileMetricKey,
-      })
+    ? t(getMetricTranslationKey(String(profileMetricKey)), { ns: 'models' })
     : undefined;
-  const profilePrecisionDisplay = overridePrecision ?? profileMeta?.precision;
+  const profilePrecisionDisplay = overridePrecision ?? profileSpec?.precision;
 
   const isMetricOverride = Boolean(overrideMetricRaw);
   const isGpuOverride = Boolean(overrideGpuModel);
@@ -459,10 +500,17 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
   const externalHost = external ? `${external}/v1/chat/completions` : '';
   const internalHost = internal ? `${internal}/v1/chat/completions` : '';
 
+  // When the unified Envoy AI Gateway is enabled and configured, inference goes
+  // through a single endpoint (the model is selected via the OpenAI `model`
+  // field), shown in place of the per-service external host.
+  const gatewayHost =
+    aiGatewayEnabled && aiGatewayUrl
+      ? `${aiGatewayUrl.replace(/\/$/, '')}/v1/chat/completions`
+      : '';
+  const useGateway = !!gatewayHost;
+
   const workloadCreatedBy =
-    deployedService?.metadata?.annotations?.[SUBMITTER_ANNOTATION_KEY] ||
-    historicalService?.createdBy ||
-    null;
+    deployedService?.metadata?.annotations?.[SUBMITTER_ANNOTATION_KEY] || null;
 
   // Construct workload object for WorkloadLogsModal
   const aimWorkload: ResourceMetrics = {
@@ -476,6 +524,7 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
     gpuCount: null,
     templateGpuCount: null,
     gpu: null,
+    acceleratorType: null,
     metric: null,
     precision: null,
     vram: null,
@@ -742,13 +791,6 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
                     <Skeleton className="h-4 w-full rounded-lg" />
                     <Skeleton className="h-4 w-full rounded-lg" />
                   </div>
-                ) : templatesLoading && !hasProfileDataFromSpec ? (
-                  <div className="flex flex-col space-y-3">
-                    <Skeleton className="h-4 w-full rounded-lg" />
-                    <Skeleton className="h-4 w-full rounded-lg" />
-                    <Skeleton className="h-4 w-full rounded-lg" />
-                    <Skeleton className="h-4 w-full rounded-lg" />
-                  </div>
                 ) : (
                   <>
                     <div className="space-y-3">
@@ -801,7 +843,7 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
                         </p>
                       </div>
                     </div>
-                    {!templatesLoading && isMetricUnoptimized && (
+                    {isMetricUnoptimized && (
                       <div className="border-t border-default-100 pt-4">
                         <div className="flex items-start gap-1.5">
                           <IconAlertTriangle
@@ -881,22 +923,31 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
           </CardBody>
         </Card>
         {/* Output Information */}
-        {(externalHost || internalHost) && (
+        {(useGateway || externalHost || internalHost) && (
           <Card className="break-inside-avoid mb-6 border-1 border-default-200 shadow-sm">
-            <CardHeader className="flex items-center px-4 py-3">
+            <CardHeader className="flex items-center justify-between px-4 py-3">
               <h3 className="text-base font-semibold flex items-center space-x-2">
                 <IconWorld size={16} className="text-default-500" />
                 <span>{t('details.sections.output')}</span>
               </h3>
+              <Button
+                data-testid="connect-to-model-button"
+                size="sm"
+                variant="light"
+                startContent={<IconLink size={14} />}
+                onPress={() => setIsConnectModalOpen(true)}
+              >
+                {t('models:aimCatalog.actions.connect.label')}
+              </Button>
             </CardHeader>
             <CardBody className="space-y-2 px-4 pb-4 pt-0">
-              {externalHost && (
+              {useGateway ? (
                 <div className="space-y-2">
                   <h5 className="text-sm text-default-700">
-                    {t('details.fields.externalHost')}
+                    {t('models:aimCatalog.actions.connect.modal.inferenceUrl')}
                   </h5>
                   <Input
-                    value={externalHost}
+                    value={gatewayHost}
                     readOnly
                     variant="bordered"
                     classNames={{
@@ -907,10 +958,10 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
                         tertiary
                         size="sm"
                         onPress={() =>
-                          handleCopyToClipboard(externalHost, 'externalHost')
+                          handleCopyToClipboard(gatewayHost, 'inferenceUrl')
                         }
                         icon={
-                          copiedField === 'externalHost' ? (
+                          copiedField === 'inferenceUrl' ? (
                             <IconCircleCheck
                               size={16}
                               className="text-success"
@@ -923,6 +974,41 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
                     }
                   />
                 </div>
+              ) : (
+                externalHost && (
+                  <div className="space-y-2">
+                    <h5 className="text-sm text-default-700">
+                      {t('details.fields.externalHost')}
+                    </h5>
+                    <Input
+                      value={externalHost}
+                      readOnly
+                      variant="bordered"
+                      classNames={{
+                        input: 'font-mono text-sm',
+                      }}
+                      endContent={
+                        <ActionButton
+                          tertiary
+                          size="sm"
+                          onPress={() =>
+                            handleCopyToClipboard(externalHost, 'externalHost')
+                          }
+                          icon={
+                            copiedField === 'externalHost' ? (
+                              <IconCircleCheck
+                                size={16}
+                                className="text-success"
+                              />
+                            ) : (
+                              <IconCopy size={16} />
+                            )
+                          }
+                        />
+                      }
+                    />
+                  </div>
+                )
               )}
 
               {internalHost && (
@@ -977,8 +1063,23 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
           isOpen={isLogsModalOpen}
           onOpenChange={setIsLogsModalOpen}
           workload={aimWorkload}
-          logSource={LogSource.AIM}
           namespace={namespace as string}
+        />
+      )}
+
+      {isConnectModalOpen && (
+        <AIMConnectModal
+          isOpen={isConnectModalOpen}
+          onOpenChange={setIsConnectModalOpen}
+          endpoints={deployedService?.endpoints}
+          modelName={deployedService?.status?.resolvedModel?.name}
+          serviceId={deployedService?.id ?? undefined}
+          onChatRequested={(serviceId) => {
+            router.push({
+              pathname: projectPath('/chat'),
+              query: { workload: serviceId },
+            });
+          }}
         />
       )}
     </div>
@@ -986,29 +1087,11 @@ const AimDetailsPage: React.FC<AimDetailsPageProps> & WithDocumentationLink = ({
 };
 
 export async function getServerSideProps(context: {
-  req: any;
-  res: any;
   locale: any;
   params: any;
   query: any;
 }) {
-  const { req, res, locale, params, query } = context;
-
-  const session = await getServerSession(req, res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
+  const { locale, params, query } = context;
 
   const id = params?.id;
   const project = params?.project as string;

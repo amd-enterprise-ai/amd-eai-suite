@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Selection, SortDescriptor } from '@heroui/react';
+import type { Selection } from '../Select/Select';
+import { SortDescriptor } from './TablePrimitive';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-
-import { TFunction } from 'next-i18next';
 
 import { defaultComparator } from '@amdenterpriseai/utils/app';
 
@@ -23,7 +22,7 @@ interface Props<T, K extends keyof T, C> {
   className?: string;
   defaultSortByField: C;
   defaultSortDirection?: SortDirection;
-  translation: TFunction;
+  translation: (key: string, options?: Record<string, unknown>) => string;
   translationKeyPrefix?: string;
   idKey: keyof T;
   isLoading?: boolean;

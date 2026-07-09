@@ -14,6 +14,7 @@ from .schemas import (
     FilterCondition,
     FilterOperator,
     PaginationConditions,
+    PaginationMetadata,
     SortCondition,
     SortDirection,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "FilterCondition",
     "FilterOperator",
     "PaginationConditions",
+    "PaginationMetadata",
     "SortCondition",
     "SortDirection",
     # Utils

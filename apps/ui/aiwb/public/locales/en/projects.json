@@ -94,7 +94,7 @@
           "title": "Status"
         },
         "gpuCount": {
-          "title": "GPUs"
+          "title": "Accelerators"
         },
         "vram": {
           "title": "VRAM"

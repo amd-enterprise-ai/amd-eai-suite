@@ -103,12 +103,6 @@ Delete overlay request is sent
     ${response}=            Delete overlay          ${TEST_OVERLAY_ID}
     Set Test Variable       ${TEST_RESPONSE}        ${response}
 
-Batch delete overlays request is sent
-    [Documentation]    Sends a batch delete request for all created overlay IDs.
-    ...    Resolves overlay IDs from the tracking list automatically.
-    ${response}=            Batch delete overlays request    ${CREATED_OVERLAY_IDS}
-    Set Test Variable       ${TEST_RESPONSE}        ${response}
-
 # --- Then keywords ---
 
 Overlay should exist in system

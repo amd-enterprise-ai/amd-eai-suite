@@ -92,7 +92,7 @@ export const WORKLOAD_STATUS_COLOR_MAP: Record<
   [WorkloadStatus.PENDING]: 'gray',
   [WorkloadStatus.RUNNING]: 'blue',
   [WorkloadStatus.COMPLETE]: 'green',
-  [WorkloadStatus.DELETE_FAILED]: 'amber',
+  [WorkloadStatus.DELETE_FAILED]: 'red',
   [WorkloadStatus.TERMINATED]: 'gray',
   [WorkloadStatus.UNKNOWN]: 'darkgray',
   [WorkloadStatus.DELETED]: 'emerald',
@@ -108,8 +108,8 @@ export const getWorkloadStatusVariants = (
   },
   [WorkloadStatus.RUNNING]: {
     label: t(`status.${WorkloadStatus.RUNNING}`),
-    icon: IconCircleCaretRight,
     color: 'primary',
+    icon: IconCircleCaretRight,
   },
   [WorkloadStatus.DELETING]: {
     label: t(`status.${WorkloadStatus.DELETING}`),

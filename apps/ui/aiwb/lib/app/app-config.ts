@@ -8,6 +8,8 @@ export interface AppConfig {
   isStandaloneMode: boolean;
   defaultNamespace: string | null;
   clusterAuthEnabled: boolean;
+  aiGatewayEnabled: boolean;
+  aiGatewayUrl?: string;
   airmAppUrl?: string;
 }
 

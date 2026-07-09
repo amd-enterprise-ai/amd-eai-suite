@@ -5,7 +5,7 @@
 """Common Pydantic schemas for API services."""
 
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Query
@@ -50,6 +50,20 @@ class ListResponse[T](BaseModel):
     """Generic wrapper for list responses. Use as ListResponse[YourItemType]."""
 
     data: list[T] = Field(description="List of items")
+
+
+class ErrorResponse(BaseModel):
+    """Standard error envelope returned by exception handlers.
+
+    The ``additional_info`` field serializes as ``additionalInfo`` via the
+    inherited camelCase alias generator, so handlers must dump with
+    ``model_dump(by_alias=True, exclude_none=True)`` to match the API contract.
+    The type mirrors ``BaseApiException.detail`` plus the string body that
+    other handlers (Kubernetes ApiException, IntegrityError) pass through.
+    """
+
+    detail: str
+    additional_info: str | dict[str, Any] | list[Any] | None = None
 
 
 class BaseEntityPublic(BaseModel):

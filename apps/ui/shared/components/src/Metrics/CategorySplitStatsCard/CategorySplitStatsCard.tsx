@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Card, CardBody, Skeleton, cn } from '@heroui/react';
+import { Card, CardBody, Skeleton } from '@amdenterpriseai/components';
+import { cn } from '@heroui/react';
 import { ReactNode, useMemo } from 'react';
 
 import {

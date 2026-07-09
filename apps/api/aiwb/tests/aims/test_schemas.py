@@ -4,16 +4,12 @@
 
 """Tests for AIMs Pydantic schemas."""
 
-from datetime import UTC, datetime
-from uuid import uuid4
-
 import pytest
 
 from app.aims.constants import AIM_COND_HTTP_ROUTE_READY, AIM_COND_INFERENCE_SERVICE_READY
 from app.aims.enums import AIMServiceStatus, OptimizationMetric
 from app.aims.schemas import (
     AIMDeployRequest,
-    AIMServiceHistoryResponse,
     AIMServicePatchRequest,
 )
 from tests.factory import make_aim_service_k8s
@@ -24,7 +20,6 @@ def test_aim_deploy_request_defaults() -> None:
     r = AIMDeployRequest(model="meta-llama-3-8b")
     assert r.replicas == 1
     assert r.metric is None
-    assert r.allow_unoptimized is False
     assert r.min_replicas is None
 
 
@@ -43,11 +38,22 @@ def test_aim_deploy_request_with_all_fields() -> None:
         metric=OptimizationMetric.LATENCY,
         image_pull_secrets=["secret1"],
         hf_token="hf_token",
-        allow_unoptimized=True,
     )
     assert r.replicas == 4
     assert r.metric == OptimizationMetric.LATENCY
-    assert r.allow_unoptimized is True
+
+
+def test_aim_deploy_request_parses_engine_override_camelcase_input() -> None:
+    """Deploy-time engine override fields accept camelCase wire keys."""
+    r = AIMDeployRequest(
+        model="meta-llama-3-8b",
+        engineArgs={"max-model-len": 8192},
+        engineEnv=[{"name": "VLLM_LOGGING_LEVEL", "value": "DEBUG"}],
+        containerEnv=[{"name": "FOO", "value": "bar"}],
+    )
+    assert r.engine_args == {"max-model-len": 8192}
+    assert r.engine_env == [{"name": "VLLM_LOGGING_LEVEL", "value": "DEBUG"}]
+    assert r.container_env == [{"name": "FOO", "value": "bar"}]
 
 
 def test_aim_deploy_request_parses_camelcase_input() -> None:
@@ -56,14 +62,12 @@ def test_aim_deploy_request_parses_camelcase_input() -> None:
         model="meta-llama-3-8b",
         imagePullSecrets=["secret1", "secret2"],
         hfToken="hf_secret_name",
-        allowUnoptimized=True,
         minReplicas=2,
         maxReplicas=10,
         autoScaling={"metrics": []},
     )
     assert r.image_pull_secrets == ["secret1", "secret2"]
     assert r.hf_token == "hf_secret_name"
-    assert r.allow_unoptimized is True
     assert r.min_replicas == 2
     assert r.max_replicas == 10
     assert r.auto_scaling == {"metrics": []}
@@ -132,25 +136,6 @@ def test_aim_service_patch_request_max_gte_min() -> None:
     """Test max >= min validation."""
     with pytest.raises(ValueError, match="maxReplicas .* must be >= minReplicas"):
         AIMServicePatchRequest(min_replicas=10, max_replicas=5, auto_scaling={"metrics": []})
-
-
-def test_aim_service_history_response() -> None:
-    """Test AIMServiceHistoryResponse."""
-    now = datetime.now(UTC)
-    r = AIMServiceHistoryResponse.model_validate(
-        {
-            "id": str(uuid4()),
-            "model": "llama3-8b",
-            "status": "Running",
-            "metric": "latency",
-            "created_at": now,
-            "updated_at": now,
-            "created_by": "test@example.com",
-            "updated_by": "test@example.com",
-        }
-    )
-    assert r.model == "llama3-8b"
-    assert r.metric == OptimizationMetric.LATENCY
 
 
 def test_aim_service_response_endpoints_with_httproute() -> None:

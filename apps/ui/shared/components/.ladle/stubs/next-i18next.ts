@@ -13,6 +13,9 @@ import React, {
 const fallbacks: Record<string, string> = {
   'statistics.noData': 'No data',
   'statistics.upperLimitPrefix': 'out of',
+  'actions.previous': 'Previous',
+  'actions.next': 'Next',
+  'actions.close.title': 'Close',
 };
 
 export const useTranslation = (ns?: string) => ({

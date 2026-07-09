@@ -58,7 +58,8 @@ Valid chart data is prepared
 
     # Generate unique chart name to avoid 409 conflicts from stale data
     IF    $chart_name is None
-        ${random_suffix}=       Generate random string                          8                       [LETTERS][NUMBERS]
+        # Chart names must be lowercase (K8s/DB constraint).
+        ${random_suffix}=       Generate random string                          8                       [LOWER][NUMBERS]
         ${prefix}=              Test Prefix
         ${test_chart_name}=     Set Variable            ${prefix}chart-${random_suffix}
     ELSE

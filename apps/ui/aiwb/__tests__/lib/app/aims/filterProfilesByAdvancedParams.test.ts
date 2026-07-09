@@ -7,23 +7,40 @@ import {
   filterProfilesByAdvancedParams,
 } from '@/lib/app/aims/filterProfilesByAdvancedParams';
 import {
-  AIMClusterServiceTemplate,
+  AIMClusterProfile,
   AIMMetric,
   AIM_PROFILE_TYPE_OPTIMIZED,
 } from '@/types/aims';
 
-function makeTemplate(
+type LegacyMeta = {
+  metric?: string;
+  type?: string;
+  gpu?: string;
+  gpuCount?: number;
+  precision?: string;
+};
+
+/**
+ * Builds an AIMClusterProfile fixture from a legacy v1alpha1-style metadata
+ * shape. Centralized here so individual cases keep the readable old field
+ * names while the fixture maps them to the v1alpha2 spec layout.
+ */
+function makeProfile(
   name: string,
-  meta: NonNullable<AIMClusterServiceTemplate['status']['profile']>['metadata'],
+  meta: LegacyMeta,
   specMetric: AIMMetric.Latency | AIMMetric.Throughput = AIMMetric.Latency,
-): AIMClusterServiceTemplate {
+): AIMClusterProfile {
   return {
     metadata: { name, labels: {} },
-    spec: { modelName: 'test-model', metric: specMetric },
-    status: {
-      status: 'Ready',
-      profile: { metadata: meta },
+    spec: {
+      modelName: 'test-model',
+      metric: meta.metric ?? specMetric,
+      type: meta.type,
+      acceleratorModel: meta.gpu,
+      acceleratorCount: meta.gpuCount,
+      precision: meta.precision,
     },
+    status: { status: 'Ready' },
   };
 }
 
@@ -36,14 +53,14 @@ const automatic = {
 };
 
 describe('filterProfilesByAdvancedParams', () => {
-  const latencyA = makeTemplate('a', {
+  const latencyA = makeProfile('a', {
     metric: 'latency',
     type: AIM_PROFILE_TYPE_OPTIMIZED,
     gpu: 'MI300X',
     precision: 'fp8',
     gpuCount: 8,
   });
-  const latencyB = makeTemplate(
+  const latencyB = makeProfile(
     'b',
     {
       metric: 'latency',
@@ -54,7 +71,7 @@ describe('filterProfilesByAdvancedParams', () => {
     },
     AIMMetric.Latency,
   );
-  const throughputOnly = makeTemplate(
+  const throughputOnly = makeProfile(
     'c',
     {
       metric: 'throughput',
@@ -88,10 +105,10 @@ describe('filterProfilesByAdvancedParams', () => {
     expect(out.map((t) => t.metadata.name)).toEqual(['c']);
   });
 
-  it('excludes templates with no profile metadata when a metric is selected', () => {
-    const noMeta: AIMClusterServiceTemplate = {
+  it('excludes profiles with no metric when a metric is selected', () => {
+    const noMeta: AIMClusterProfile = {
       metadata: { name: 'x', labels: {} },
-      spec: { modelName: 'm', metric: AIMMetric.Latency },
+      spec: { modelName: 'm' },
       status: { status: 'Ready' },
     };
     const out = filterProfilesByAdvancedParams([noMeta, latencyA], {
@@ -139,7 +156,7 @@ describe('filterProfilesByAdvancedParams', () => {
   });
 
   it('treats empty string optimizationClass as automatic (matches type equality via empty string)', () => {
-    const preview = makeTemplate('p', {
+    const preview = makeProfile('p', {
       metric: 'latency',
       type: 'preview',
       gpu: 'MI300X',

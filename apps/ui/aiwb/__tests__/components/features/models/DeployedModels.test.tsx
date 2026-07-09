@@ -10,20 +10,25 @@ import {
   within,
 } from '@testing-library/react';
 
+import { APIRequestError } from '@amdenterpriseai/utils/app';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 import { mockModels } from '@/__mocks__/services/app/models.data';
-import { getModels } from '@/lib/app/models';
-import { deleteWorkload, listWorkloads } from '@/lib/app/workloads';
+import { listAllProjectFineTunedModels } from '@/lib/app/models';
+import { listAllWorkloads } from '@/lib/app/workloads';
+import { resolveAIMServiceDisplay } from '@/lib/app/aims';
 import {
-  fetchProfilesForServices,
-  getAimClusterModels,
-  getAimServices,
-  resolveAIMServiceDisplay,
-} from '@/lib/app/aims';
+  deleteInferenceDeployment,
+  getInferenceModel,
+  listAllInferenceDeployments,
+} from '@/lib/app/inference';
 
 import { WorkloadType } from '@amdenterpriseai/types';
 import { WorkloadStatus } from '@/types/enums/workloads';
 import { Workload } from '@/types/workloads';
+import {
+  AIM_DISPLAY_NAME_ANNOTATION,
+  NAMESPACE_AIM_MODEL_LABEL,
+} from '@/types/aims';
 
 import DeployedModels from '@/components/features/models/DeployedModels';
 
@@ -34,21 +39,33 @@ import { Mock, vi } from 'vitest';
 const ROW_OVERFLOW_MENU_KEY = 'list.actions.label';
 
 vi.mock('@/lib/app/models', () => ({
-  getModels: vi.fn(),
+  listAllProjectFineTunedModels: vi.fn(),
+  // FinetuneDrawer (rendered transitively) calls the single-page variant
+  listProjectFineTunedModels: vi.fn().mockResolvedValue({
+    data: [],
+    pagination: { page: 1, pageSize: 10, total: 0 },
+  }),
 }));
 
 vi.mock('@/lib/app/workloads', () => ({
-  listWorkloads: vi.fn(),
-  deleteWorkload: vi.fn(),
+  listAllWorkloads: vi.fn(),
 }));
 
-vi.mock('@/lib/app/aims', () => ({
-  getAimClusterModels: vi.fn(),
-  getAimServices: vi.fn(),
-  fetchProfilesForServices: vi.fn().mockResolvedValue(new Map()),
+vi.mock('@/lib/app/aims', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/app/aims')>()),
   mapAIMServiceStatusToWorkloadStatus: vi.fn((s: string) => s),
-  undeployAim: vi.fn(),
   resolveAIMServiceDisplay: vi.fn(),
+  // Profile fetches are now per-aimId (batched by the multi-aimId query
+  // param). Default to empty so unrelated tests don't hit the network;
+  // tests that exercise profile rendering override via mockResolvedValue.
+  getAimClusterProfilesByAimIds: vi.fn().mockResolvedValue([]),
+  getProjectAimProfilesByAimIds: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('@/lib/app/inference', () => ({
+  getInferenceModel: vi.fn(),
+  listAllInferenceDeployments: vi.fn(),
+  deleteInferenceDeployment: vi.fn(),
 }));
 
 // Mock hooks
@@ -123,7 +140,6 @@ const createMockAimService = (
     cacheModel: false,
     routing: { annotations: {}, enabled: true },
     runtimeConfigName: 'default',
-    template: {},
   },
   status: { status: 'Running', resolvedModel: { name: modelName } },
   endpoints: {
@@ -140,27 +156,22 @@ const mockAimServices = [
 ];
 
 describe('DeployedModels', () => {
-  const mockListWorkloads = listWorkloads as Mock;
-  const mockDeleteWorkload = deleteWorkload as Mock;
-  const mockGetModels = getModels as Mock;
-  const mockGetAimServices = getAimServices as Mock;
-  const mockGetAimClusterModels = getAimClusterModels as Mock;
-  const mockFetchProfilesForServices = fetchProfilesForServices as Mock;
+  const mockListWorkloads = listAllWorkloads as Mock;
+  const mockListAllProjectFineTunedModels =
+    listAllProjectFineTunedModels as Mock;
+  const mockGetAimServices = listAllInferenceDeployments as Mock;
+  const mockGetInferenceModel = getInferenceModel as Mock;
   const mockResolveAIMServiceDisplay = resolveAIMServiceDisplay as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockListWorkloads.mockResolvedValue({
-      data: mockInferenceWorkloads,
-      total: mockInferenceWorkloads.length,
-      page: 1,
-      pageSize: 100,
-    });
-    mockDeleteWorkload.mockResolvedValue({ success: true });
-    mockGetModels.mockResolvedValue(mockModels);
+    mockListWorkloads.mockResolvedValue(mockInferenceWorkloads);
+    mockListAllProjectFineTunedModels.mockResolvedValue(mockModels);
     mockGetAimServices.mockResolvedValue([]);
-    mockGetAimClusterModels.mockResolvedValue([]);
-    mockFetchProfilesForServices.mockResolvedValue(new Map());
+    // Default: per-name catalog lookups 404. Tests can override per call.
+    mockGetInferenceModel.mockRejectedValue(
+      new APIRequestError('not found', 404),
+    );
     mockResolveAIMServiceDisplay.mockImplementation(
       (service: {
         status?: { resolvedModel?: { name?: string } };
@@ -281,12 +292,7 @@ describe('DeployedModels', () => {
 
   it('displays only inference workloads', async () => {
     // Use the standard mock workloads to verify only INFERENCE workloads are shown
-    mockListWorkloads.mockResolvedValue({
-      data: mockInferenceWorkloads,
-      total: mockInferenceWorkloads.length,
-      page: 1,
-      pageSize: 10,
-    });
+    mockListWorkloads.mockResolvedValue(mockInferenceWorkloads);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -416,45 +422,43 @@ describe('DeployedModels', () => {
     expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
   });
 
-  it('handles workload deletion', async () => {
+  it('routes workload deletion to the inference capability endpoint', async () => {
+    const mockDeleteInferenceDeployment = deleteInferenceDeployment as Mock;
+    mockDeleteInferenceDeployment.mockResolvedValue(undefined);
+
+    // Surface an AIM-backed deployment so the row picks up the inference path.
+    mockGetAimServices.mockResolvedValue([
+      createMockAimService('workload-11', 'aim-1'),
+    ]);
+
     await act(async () => {
       render(<DeployedModels />, { wrapper });
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('Llama 7B Inference')).toBeInTheDocument();
-    });
-
-    // Open row actions menu for the last workload (Llama 7B)
-    const rowActionButtons = screen.getAllByRole('button', {
-      name: ROW_OVERFLOW_MENU_KEY,
-    });
+    const rowActionButtons = await waitFor(() =>
+      screen.getAllByRole('button', { name: ROW_OVERFLOW_MENU_KEY }),
+    );
+    // Pick the AIM-backed row (rendered last after the workload fixtures).
     await act(async () => {
       fireEvent.click(rowActionButtons[rowActionButtons.length - 1]);
     });
 
-    // Click the undeploy/delete button
     const undeployButton = await screen.findByTestId('undeploy');
     await act(async () => {
       fireEvent.click(undeployButton);
     });
 
-    // Verify confirmation modal is open
-    expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
-
-    // Find and click the confirm button in the modal
     const confirmButton = await screen.findByTestId('confirm-button');
-
-    // Clear mock calls before the action
-    mockDeleteWorkload.mockClear();
+    mockDeleteInferenceDeployment.mockClear();
 
     await act(async () => {
       fireEvent.click(confirmButton);
     });
 
-    // Verify the delete API was called with the correct workload ID
+    // Post-EAI-6313 all deployed-model deletes route to the inference capability
+    // endpoint; the legacy /workloads DELETE no longer exists.
     await waitFor(() => {
-      expect(mockDeleteWorkload).toHaveBeenCalled(); // Llama 7B Inference workload
+      expect(mockDeleteInferenceDeployment).toHaveBeenCalled();
     });
   }, 10000);
 
@@ -470,12 +474,7 @@ describe('DeployedModels', () => {
       },
     };
 
-    mockListWorkloads.mockResolvedValue({
-      data: [workspaceWorkload],
-      total: 1,
-      page: 1,
-      pageSize: 10,
-    });
+    mockListWorkloads.mockResolvedValue([workspaceWorkload]);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -611,12 +610,7 @@ describe('DeployedModels', () => {
       status: WorkloadStatus.FAILED,
     };
 
-    mockListWorkloads.mockResolvedValue({
-      data: [deletedWorkload],
-      total: 1,
-      page: 1,
-      pageSize: 10,
-    });
+    mockListWorkloads.mockResolvedValue([deletedWorkload]);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -656,12 +650,7 @@ describe('DeployedModels', () => {
       },
     ];
 
-    mockListWorkloads.mockResolvedValue({
-      data: workloadsWithDeleted,
-      total: workloadsWithDeleted.length,
-      page: 1,
-      pageSize: 10,
-    });
+    mockListWorkloads.mockResolvedValue(workloadsWithDeleted);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -690,12 +679,7 @@ describe('DeployedModels', () => {
       mockInferenceWorkloads[5], // workload-13 - aimId
     ];
 
-    mockListWorkloads.mockResolvedValue({
-      data: workloadsWithModelOrAim,
-      total: workloadsWithModelOrAim.length,
-      page: 1,
-      pageSize: 10,
-    });
+    mockListWorkloads.mockResolvedValue(workloadsWithModelOrAim);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -736,22 +720,78 @@ describe('DeployedModels', () => {
     }
   });
 
-  it('displays AIM workloads with canonical name, version, and profile summary', async () => {
-    const profile = {
-      metric: 'throughput',
-      gpu: 'MI300X',
-      templateGpuCount: 8,
-      precision: 'fp8',
+  it('displays canonical name + version and profile summary when the AIM display name only echoes the resource name', async () => {
+    // With no metrics workload to supply a user-facing displayName, the AIM
+    // row's displayName falls back to the K8s resource name, so the NAME column
+    // shows canonical name + version (from resolveAIMServiceDisplay) plus the
+    // profile summary.
+    // status.resolvedProfile only carries the *name* on the wire; the FE
+    // joins it against the cluster-profile catalog client-side. Mock both
+    // the service list and the catalog so the row renderer has data to join.
+    const resolvedProfile = { name: 'aim-1-throughput' };
+    const matchingProfile = {
+      metadata: { name: 'aim-1-throughput', labels: {} },
+      spec: {
+        aimId: 'aim-1',
+        metric: 'throughput',
+        acceleratorModel: 'MI300X',
+        acceleratorCount: 8,
+        precision: 'fp8',
+      },
+      status: { status: 'Ready' },
     };
     const services = [
-      createMockAimService('workload-11', 'aim-1'),
-      createMockAimService('workload-12', 'aim-2'),
-      createMockAimService('workload-13', 'aim-3'),
+      createMockAimService('workload-11', 'aim-1', {
+        status: {
+          status: 'Running',
+          resolvedModel: { name: 'aim-1' },
+          resolvedProfile,
+        },
+      }),
+      createMockAimService('workload-12', 'aim-2', {
+        status: {
+          status: 'Running',
+          resolvedModel: { name: 'aim-2' },
+          resolvedProfile,
+        },
+      }),
+      createMockAimService('workload-13', 'aim-3', {
+        status: {
+          status: 'Running',
+          resolvedModel: { name: 'aim-3' },
+          resolvedProfile,
+        },
+      }),
     ];
+    // No metrics workloads: the AIM row's displayName echoes the resource name,
+    // triggering the canonical + version fallback.
+    mockListWorkloads.mockResolvedValue([]);
     mockGetAimServices.mockResolvedValue(services);
-    mockFetchProfilesForServices.mockResolvedValue(
-      new Map(services.map((s) => [s.id, profile])),
+    // useInferenceModelsByName fans out per-name; each cluster model carries
+    // a status.aimId that useProfileSpecsForServices uses to pick the right
+    // AIMClusterProfile from the mocked profile fetch below.
+    mockGetInferenceModel.mockImplementation(
+      async (name: string) =>
+        ({
+          metadata: {
+            name,
+            namespace: '',
+            uid: '',
+            labels: {},
+            annotations: {},
+          },
+          spec: { image: `${name}:latest` },
+          status: {
+            status: 'Ready',
+            aimId: name,
+            imageMetadata: { model: { tags: [] }, oci: {} },
+          },
+        }) as unknown as Awaited<ReturnType<typeof getInferenceModel>>,
     );
+    (
+      vi.mocked(await import('@/lib/app/aims'))
+        .getAimClusterProfilesByAimIds as Mock
+    ).mockResolvedValue([matchingProfile]);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -763,11 +803,11 @@ describe('DeployedModels', () => {
     });
 
     await waitFor(() => {
+      // Canonical name + version is the row's name when no display name resolved.
       const titles = screen.getAllByText('meta-llama/Llama-2-7B (1.0.0)');
       expect(titles.length).toBeGreaterThan(0);
       expect(
-        screen.getAllByText('models:performanceMetrics.values.throughput ·')
-          .length,
+        screen.getAllByText('performanceMetrics.values.throughput ·').length,
       ).toBeGreaterThan(0);
       expect(screen.getAllByText('MI300X ·').length).toBeGreaterThan(0);
       expect(screen.getAllByText('8x GPU ·').length).toBeGreaterThan(0);
@@ -775,15 +815,48 @@ describe('DeployedModels', () => {
     });
   });
 
+  it('renders the deploy display name for custom-imported namespace models', async () => {
+    // Custom imports carry NAMESPACE_AIM_MODEL_LABEL (not FINE_TUNED_LABEL); the
+    // user-entered deploy name lives on the display-name annotation, becomes the
+    // row's displayName, and is shown as the primary label with no canonical
+    // subtitle.
+    const customService = createMockAimService('workload-21', 'custom-model', {
+      metadata: {
+        name: 'wb-aim-custom',
+        namespace: 'test-project',
+        uid: 'uid-workload-21',
+        labels: { [NAMESPACE_AIM_MODEL_LABEL]: 'true' },
+        annotations: { [AIM_DISPLAY_NAME_ANNOTATION]: 'My TinyLlama' },
+        creationTimestamp: '2023-01-11T00:00:00Z',
+        ownerReferences: [],
+      },
+    });
+    mockListWorkloads.mockResolvedValue([]);
+    mockGetAimServices.mockResolvedValue([customService]);
+
+    await act(async () => {
+      render(<DeployedModels />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(mockGetAimServices).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('My TinyLlama')).toBeInTheDocument();
+      // The canonical + version fallback must not be used for this row.
+      expect(
+        screen.queryByText('meta-llama/Llama-2-7B (1.0.0)'),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it('shows Connect to model action for running AIM workloads', async () => {
     mockGetAimServices.mockResolvedValue(mockAimServices);
-    mockGetAimClusterModels.mockResolvedValue([]);
-    mockListWorkloads.mockResolvedValue({
-      data: [],
-      total: 0,
-      page: 1,
-      pageSize: 10,
-    });
+    mockGetInferenceModel.mockRejectedValue(
+      new APIRequestError('not found', 404),
+    );
+    mockListWorkloads.mockResolvedValue([]);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -833,12 +906,7 @@ describe('DeployedModels', () => {
       },
     };
 
-    mockListWorkloads.mockResolvedValue({
-      data: [workloadWithoutModelOrAim],
-      total: 1,
-      page: 1,
-      pageSize: 10,
-    });
+    mockListWorkloads.mockResolvedValue([workloadWithoutModelOrAim]);
 
     await act(async () => {
       render(<DeployedModels />, { wrapper });
@@ -861,5 +929,62 @@ describe('DeployedModels', () => {
     expect(canonicalNameText).not.toMatch(/\//);
     expect(canonicalNameText).not.toMatch(/^org\//);
     expect(canonicalNameText).not.toMatch(/^meta-/);
+  });
+
+  it('prefers AIM service fields over workload fields when ids overlap', async () => {
+    // Workload has FAILED status; AIM service with the same id contributes RUNNING status.
+    // After merge ({...workload, ...aimWorkload}), AIM fields win — RUNNING overrides FAILED.
+    const workloadWithSharedId: Workload = {
+      id: 'shared-deployment-id',
+      displayName: 'Workload Display Name',
+      name: 'workload-name',
+      type: WorkloadType.INFERENCE,
+      status: WorkloadStatus.FAILED,
+      createdBy: 'workload-user',
+      chartId: 'chart-shared',
+      createdAt: '2023-01-01T00:00:00Z',
+      updatedAt: '2023-01-01T01:00:00Z',
+      updatedBy: 'workload-user',
+      allocatedResources: { gpuCount: 1, vram: 2147483648.0 },
+    };
+
+    // AIM service with same id: status.status 'Running' maps to RUNNING; aimId is set.
+    const aimService = createMockAimService(
+      'shared-deployment-id',
+      'aim-model',
+    );
+
+    mockListWorkloads.mockResolvedValue([workloadWithSharedId]);
+    mockGetAimServices.mockResolvedValue([aimService]);
+
+    await act(async () => {
+      render(<DeployedModels />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(mockListWorkloads).toHaveBeenCalled();
+      expect(mockGetAimServices).toHaveBeenCalled();
+    });
+
+    // One merged row, not two separate rows.
+    const table = screen.getByRole('grid');
+    await waitFor(() => {
+      const rows = within(table).getAllByRole('row');
+      expect(rows).toHaveLength(2); // 1 header + 1 merged data row
+    });
+
+    // AIM status (RUNNING) wins over workload status (FAILED): the RUNNING-only
+    // "chat" and "connect" actions confirm AIM fields took precedence.
+    const rowActionButton = screen.getByRole('button', {
+      name: ROW_OVERFLOW_MENU_KEY,
+    });
+    await act(async () => {
+      fireEvent.click(rowActionButton);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chat')).toBeInTheDocument();
+      expect(screen.getByTestId('connect')).toBeInTheDocument();
+    });
   });
 });

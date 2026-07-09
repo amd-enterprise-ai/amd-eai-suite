@@ -18,6 +18,7 @@ from ..charts.models import Chart
 class Overlay(BaseEntity):
     __tablename__ = "overlays"
 
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
     canonical_name: Mapped[str] = mapped_column(String, nullable=True)
     overlay: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     chart_id: Mapped[UUID] = mapped_column(

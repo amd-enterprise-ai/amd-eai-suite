@@ -14,6 +14,7 @@ import (
 	agent "github.com/silogen/agent/internal/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +33,17 @@ func setupReconciler(objs ...client.Object) *Reconciler {
 	return setupReconcilerWithPublisher(testutils.NewMockPublisher(), objs...)
 }
 
+// Tests use v1alpha1-typed objects because the reconciler uses the v1alpha1
+// typed client (see controller.go for why). There is intentionally no v1alpha2
+// variant of these tests: the fake client keys objects by exact GroupVersion
+// and does not emulate the API server's None-strategy cross-version serving, so
+// a v1alpha2-stored object is simply "not found" when fetched as v1alpha1 here.
+// In production the API server does serve v1alpha2-created objects through the
+// v1alpha1 endpoint (identical Spec/Status schemas, apiVersion relabeled), so
+// the reconciler does handle both — but that guarantee belongs to Kubernetes
+// and can only be exercised with envtest (a real API server + CRD), not the
+// fake client. The dual-version surface that IS faithfully testable here lives
+// in the webhook tests, which decode each version directly.
 func setupReconcilerWithPublisher(publisher messaging.MessagePublisher, objs ...client.Object) *Reconciler {
 	scheme := runtime.NewScheme()
 	_ = aimv1alpha1.AddToScheme(scheme)
@@ -205,6 +217,55 @@ func TestReconcile_HandlesDeletionWithValidLabels(t *testing.T) {
 	assert.Equal(t, "Deleted", msg.Status)
 	assert.Equal(t, workloadID.String(), msg.WorkloadID)
 	assert.Equal(t, componentID.String(), msg.ID)
+}
+
+// Regression guard for the v1alpha1→v1alpha2 migration trap. An AIMService
+// created before the migration may still carry spec.template (a v1alpha1-only
+// field that v1alpha2 CEL rejects). The reconciler must still be able to drop
+// its finalizer so K8s can GC the object — using the v1alpha1 typed client is
+// what makes this safe in production. The fake client does not evaluate CRD
+// CEL, so this test guards the data-shape contract rather than the CEL
+// rejection itself.
+func TestReconcile_HandlesDeletionOfLegacyTemplateSpec(t *testing.T) {
+	workloadID := uuid.New()
+	componentID := uuid.New()
+	projectID := uuid.New()
+	now := metav1.Now()
+
+	aimService := &aimv1alpha1.AIMService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "stuck-legacy-template",
+			Namespace:         "test-namespace",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{common.WorkloadFinalizer},
+			Labels: map[string]string{
+				common.WorkloadIDLabel:  workloadID.String(),
+				common.ComponentIDLabel: componentID.String(),
+				agent.ProjectIDLabel:    projectID.String(),
+			},
+		},
+		Spec: aimv1alpha1.AIMServiceSpec{
+			Template: &aimv1alpha1.AIMServiceTemplateConfig{Name: "legacy-template"},
+			Model:    &aimv1alpha1.AIMServiceModel{Name: testutils.Ptr("legacy-model")},
+		},
+	}
+
+	r := setupReconciler(aimService)
+	key := types.NamespacedName{Name: aimService.Name, Namespace: aimService.Namespace}
+
+	_, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: key})
+	require.NoError(t, err)
+
+	// Success means the finalizer is gone: either the object was garbage-collected
+	// (fake client behavior after the last finalizer is removed) or it still exists
+	// without the workload finalizer.
+	var updated aimv1alpha1.AIMService
+	err = r.Client.Get(context.Background(), key, &updated)
+	if err == nil {
+		assert.False(t, controllerutil.ContainsFinalizer(&updated, common.WorkloadFinalizer))
+	} else {
+		assert.True(t, apierrors.IsNotFound(err), "unexpected error: %v", err)
+	}
 }
 
 func TestReconcile_HandlesDeletionWithMissingLabels(t *testing.T) {

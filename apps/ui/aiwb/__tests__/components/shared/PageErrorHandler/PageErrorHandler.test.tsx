@@ -65,6 +65,7 @@ const setProjectState = (
   mockUseProject.mockReturnValue({
     isStandaloneMode: false,
     clusterAuthEnabled: true,
+    aiGatewayEnabled: true,
     airmAppUrl: undefined,
     activeProject: 'project-1',
     projects: [{ id: 'project-1', name: 'Project 1' }],
@@ -120,7 +121,7 @@ describe('PageErrorHandler Component', () => {
         </PageErrorHandler>,
       );
 
-      expect(screen.getByText('charts.loading')).toBeInTheDocument();
+      expect(screen.getByText('pageLoader.loading')).toBeInTheDocument();
       expect(screen.queryByTestId('chat-content')).not.toBeInTheDocument();
     });
 

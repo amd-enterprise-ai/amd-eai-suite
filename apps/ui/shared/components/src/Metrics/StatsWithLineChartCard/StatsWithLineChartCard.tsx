@@ -4,7 +4,13 @@
 
 'use client';
 
-import { Card, CardBody, CardHeader, Skeleton, Tooltip } from '@heroui/react';
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  Skeleton,
+  Tooltip,
+} from '@amdenterpriseai/components';
 import { IconInfoCircle } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 

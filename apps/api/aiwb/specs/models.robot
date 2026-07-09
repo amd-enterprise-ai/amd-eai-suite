@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: MIT
 
 *** Settings ***
-Documentation       Test scenarios for model deletion endpoints.
-...                 Verifies deletion of AIMModel CRs via the API and error handling.
+Documentation       Test scenarios for AIM model API endpoints.
+...                 Verifies model listing, retrieval, deletion, and error handling.
 ...
 ...                 IMPORTANT: Models are created through finetuning workflows (see finetuning.robot),
 ...                 not through direct POST /v1/models endpoint (which was removed from the API).
 ...                 The delete endpoint uses the AIMModel CR name (not a DB UUID).
-...                 Pre-created AIMModel CRs via kubectl are used for successful deletion tests.
+...                 Pre-created AIMModel CRs via kubectl are used for CPU tests.
 Resource    resources/airm_keywords.resource
 Resource    resources/airm_projects.resource
 Resource    resources/aiwb_models.resource
@@ -19,6 +19,32 @@ Test Teardown       Clean Up All Created Models
 
 
 *** Test Cases ***
+AIM model appears in namespace model list
+    [Documentation]    Verify that an AIM model appears in the namespace model list.
+    [Tags]    models    list    cpu
+
+    Given Project exists in system
+    And a dummy AIMModel CR exists in the namespace
+
+    Then the dummy AIMModel should appear in the namespace model list
+
+AIM model is retrievable by resource name
+    [Documentation]    Verify that an AIM model can be retrieved by resource name.
+    [Tags]    models    get    cpu
+
+    Given Project exists in system
+    And a dummy AIMModel CR exists in the namespace
+
+    Then the dummy AIMModel should be retrievable by resource name
+
+Requesting a non-existent AIM model returns not-found error
+    [Documentation]    Verify that requesting a non-existent model by resource name returns 404.
+    [Tags]    models    error    cpu
+
+    Given Project exists in system
+
+    Then getting a non-existent model should return 404
+
 Finetunable models include GPU hardware compatibility information
     [Documentation]    Verify finetunable models are returned with GPU hardware details
     ...    so users can identify which models are compatible with their cluster's accelerators.
@@ -28,13 +54,9 @@ Finetunable models include GPU hardware compatibility information
     When finetunable models list is requested
     Then each finetunable model should include GPU hardware compatibility details
 
-Delete non-existent model
-    [Documentation]    Verify proper error when deleting a model that does not exist.
-    ...    Tests DELETE /v1/namespaces/{namespace}/models/{name} with a non-existent name.
-    ...
-    ...    Steps:
-    ...    1. Attempt to delete a model with a name that has no matching AIMModel CR
-    ...    2. Verify 404 error response
+Deleting a non-existent model returns not-found error
+    [Documentation]    Verify the API returns a not-found error when attempting to delete
+    ...    a model that does not exist.
     [Tags]                  models                  delete                  negative
     Given Project exists in system
     And a model does not exist
@@ -47,7 +69,7 @@ Delete AIMModel CR via API
     ...
     ...    Steps:
     ...    1. Pre-create an AIMModel CR directly in the cluster
-    ...    2. Call DELETE /v1/namespaces/{namespace}/models/{name}
+    ...    2. Call the fine-tuning capability delete endpoint with the CR name
     ...    3. Verify 204 No Content response
     ...    4. Verify the AIMModel CR no longer exists in the cluster
     [Tags]                  models                  delete                  kubectl
@@ -58,5 +80,5 @@ Delete AIMModel CR via API
     And the AIMModel CR should not exist
 
 # Note: Model creation tests are in finetuning.robot since models are created
-# through POST /v1/models/{id}/finetune endpoint, not through direct creation.
-# The POST /v1/models endpoint was removed from the API.
+# through the fine-tuning capability endpoint (POST /v1/projects/{project}/fine-tuning/jobs),
+# not through direct creation. The POST /v1/models endpoint was removed from the API.

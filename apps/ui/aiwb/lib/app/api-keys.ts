@@ -2,16 +2,25 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { getErrorMessage } from '@amdenterpriseai/utils/app';
-import { APIRequestError } from '@amdenterpriseai/utils/app';
-import { ApiKeyDetails } from '@/types/api-keys';
-import { ApiKeysResponse } from '@/types/api-keys';
+import { APIRequestError, getErrorMessage } from '@amdenterpriseai/utils/app';
+import {
+  ApiKey,
+  ApiKeyDetails,
+  ApiKeyMetrics,
+  ApiKeysResponse,
+} from '@/types/api-keys';
+import { PaginatedList } from '@/types/pagination';
 
-export const fetchProjectApiKeys = async (
+import { fetchAllPages } from './pagination';
+
+const fetchApiKeysPage = async (
   projectId: string,
-): Promise<ApiKeysResponse> => {
-  const response = await fetch(`/api/namespaces/${projectId}/api-keys`);
-
+  page: number,
+  pageSize: number,
+): Promise<PaginatedList<ApiKey>> => {
+  const response = await fetch(
+    `/api/projects/${projectId}/api-keys?pageSize=${pageSize}&page=${page}`,
+  );
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
     throw new APIRequestError(
@@ -19,13 +28,28 @@ export const fetchProjectApiKeys = async (
       response.status,
     );
   }
-
-  return response.json();
+  return await response.json();
 };
 
-export const deleteApiKey = async (projectId: string, apiKeyId: string) => {
+export const fetchProjectApiKeys = async (
+  projectId: string,
+): Promise<ApiKeysResponse> => {
+  // Walks every page via the shared fetchAllPages utility (bounded
+  // concurrency, throttled). EAI-6598 tracks migrating ApiKeysTable to
+  // ServerSideDataTable so this loader can be retired in favour of a
+  // server-side paginated table.
+  const data = await fetchAllPages<ApiKey>((page, pageSize) =>
+    fetchApiKeysPage(projectId, page, pageSize),
+  );
+  return { data };
+};
+
+export const deleteApiKey = async (
+  projectId: string,
+  apiKeyId: string,
+): Promise<void> => {
   const response = await fetch(
-    `/api/namespaces/${projectId}/api-keys/${apiKeyId}`,
+    `/api/projects/${projectId}/api-keys/${apiKeyId}`,
     {
       method: 'DELETE',
       headers: {
@@ -44,9 +68,9 @@ export const deleteApiKey = async (projectId: string, apiKeyId: string) => {
 
 export const createApiKey = async (
   projectId: string,
-  data: { name: string; ttl?: string; aimIds?: string[] },
+  data: { displayName: string; ttl?: string; aimIds?: string[] },
 ) => {
-  const response = await fetch(`/api/namespaces/${projectId}/api-keys`, {
+  const response = await fetch(`/api/projects/${projectId}/api-keys`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -68,7 +92,7 @@ export const fetchApiKeyDetails = async (
   apiKeyId: string,
 ): Promise<ApiKeyDetails> => {
   const response = await fetch(
-    `/api/namespaces/${projectId}/api-keys/${apiKeyId}`,
+    `/api/projects/${projectId}/api-keys/${apiKeyId}`,
   );
 
   if (!response.ok) {
@@ -82,13 +106,38 @@ export const fetchApiKeyDetails = async (
   return response.json();
 };
 
+export const fetchApiKeyMetrics = async (
+  projectId: string,
+  apiKeyId: string,
+  params?: { start?: string; end?: string },
+): Promise<ApiKeyMetrics> => {
+  const searchParams = new URLSearchParams();
+  if (params?.start) searchParams.set('start', params.start);
+  if (params?.end) searchParams.set('end', params.end);
+  const query = searchParams.toString();
+
+  const response = await fetch(
+    `/api/projects/${projectId}/api-keys/${apiKeyId}/metrics${query ? `?${query}` : ''}`,
+  );
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(response);
+    throw new APIRequestError(
+      `Failed to fetch API key metrics: ${errorMessage}`,
+      response.status,
+    );
+  }
+
+  return response.json();
+};
+
 export const updateApiKeyBindings = async (
   projectId: string,
   apiKeyId: string,
   aimIds: string[],
-) => {
+): Promise<ApiKeyDetails> => {
   const response = await fetch(
-    `/api/namespaces/${projectId}/api-keys/${apiKeyId}`,
+    `/api/projects/${projectId}/api-keys/${apiKeyId}`,
     {
       method: 'PATCH',
       headers: {

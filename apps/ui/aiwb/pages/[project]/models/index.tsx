@@ -2,29 +2,28 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tab, Tabs } from '@heroui/react';
+import {
+  AiwbDocsPage,
+  aiwbDocumentationMapping,
+  RelevantDocs,
+  Tab,
+  Tabs,
+} from '@amdenterpriseai/components';
 import React, { useCallback } from 'react';
 
 import { GetServerSidePropsContext } from 'next';
-import { getServerSession } from 'next-auth';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 import { useProject } from '@/contexts/ProjectContext';
 
-import { authOptions } from '@amdenterpriseai/utils/server';
-
 import { PageBreadcrumbs } from '@amdenterpriseai/types';
 
 import DeployedModels from '@/components/features/models/DeployedModels';
 import AIMCatalog from '@/components/features/models/AIMCatalog';
 import CustomModels from '@/components/features/models/CustomModels';
-import {
-  RelevantDocs,
-  AiwbDocsPage,
-  aiwbDocumentationMapping,
-} from '@amdenterpriseai/components';
+import FineTuneModels from '@/components/features/models/FineTuneModels';
 import { toCamelCase } from '@amdenterpriseai/utils/app';
 import {
   DOCS_WORKBENCH_BASE,
@@ -34,6 +33,7 @@ import {
 enum ModelTab {
   AimCatalog = 'aim-catalog',
   CustomModels = 'custom-models',
+  FineTuneModels = 'fine-tune-models',
   DeployedModels = 'deployed-models',
 }
 
@@ -74,6 +74,9 @@ const ModelsPage: React.FC<Props> & WithDocumentationLink = ({
           <Tab key={ModelTab.CustomModels} title={t('tabs.customModels')}>
             <CustomModels />
           </Tab>
+          <Tab key={ModelTab.FineTuneModels} title={t('tabs.fineTuneModels')}>
+            <FineTuneModels />
+          </Tab>
           <Tab key={ModelTab.DeployedModels} title={t('tabs.deployedModels')}>
             <DeployedModels />
           </Tab>
@@ -86,24 +89,8 @@ const ModelsPage: React.FC<Props> & WithDocumentationLink = ({
 };
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const { req, res, query } = context;
+  const { query } = context;
   const locale = context.locale || 'en';
-
-  const session = await getServerSession(req, res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   const translations = await serverSideTranslations(locale, [
     'catalog',

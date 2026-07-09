@@ -7,14 +7,14 @@ from typing import Any
 
 from pydantic import Field, computed_field, model_validator
 
-from api_common.schemas import BaseEntityPublic, BaseModel
+from api_common.schemas import BaseModel
 
 from .constants import (
     AIM_CHATTABLE_CONDITIONS,
     CLUSTER_AUTH_GROUP_ANNOTATION,
 )
-from .crds import AIMClusterModelResource, AIMServiceResource, HTTPRouteResource
-from .enums import AIMServiceStatus, OptimizationMetric
+from .crds import AIMModelResource, AIMServiceResource, HTTPRouteResource
+from .enums import AIMModelStatus, OptimizationMetric
 from .utils import extract_endpoints, is_condition_true
 
 
@@ -32,11 +32,13 @@ class ScalingPolicyMixin(BaseModel):
         None,
         ge=1,
         description="Minimum number of replicas for autoscaling. Requires autoScaling config.",
+        examples=[1],
     )
     max_replicas: int | None = Field(
         None,
         ge=1,
         description="Maximum number of replicas for autoscaling. Requires autoScaling config.",
+        examples=[5],
     )
     auto_scaling: dict[str, Any] | None = Field(
         None,
@@ -72,18 +74,20 @@ class ScalingPolicyMixin(BaseModel):
         return self
 
 
-class AIMServiceTemplateQuery(BaseModel):
-    aim_resource_name: str = Field(..., description="AIMClusterModel resource name")
+class ListAimsQuery(BaseModel):
+    status_filter: list[AIMModelStatus] | None = Field(default=None, description="Filter by status(es)")
 
 
-class AIMServiceListQuery(BaseModel):
-    status_filter: list[AIMServiceStatus] | None = Field(default=None, description="Filter by status(es)")
+class AIMResponse(AIMModelResource):
+    """AIMResponse API response schema.
 
-
-class AIMResponse(AIMClusterModelResource):
-    """AIMResponse API response schema."""
-
-    pass
+    Pure pass-through of the ``AIMModelResource`` CRD shape, which backs both
+    cluster-scoped ``AIMClusterModel`` and namespace-scoped ``AIMModel``
+    resources. AIWB performs no enrichment or formatting on the response —
+    consumers read accelerator metadata directly from
+    ``status.discoveredProfiles.byHardware[]`` on the resource, mirroring what
+    the aim-engine controller publishes.
+    """
 
 
 class AIMDeployRequest(ScalingPolicyMixin):
@@ -100,43 +104,95 @@ class AIMDeployRequest(ScalingPolicyMixin):
             "or a namespace-scoped AIMModel name (fine-tuned model UUID). "
             "The API auto-detects which type it is."
         ),
+        examples=["meta-llama-3-8b", "7f3b6c8e-2a1d-4b9f-9c12-1a2b3c4d5e6f"],
     )
     replicas: int = Field(
         1,
         description="Number of replicas for this service.",
+        examples=[1, 3],
     )
     image_pull_secrets: list[str] | None = Field(
         None,
-        description="Names of the secrets for pulling AIM container images. Only applies to cluster-scoped AIMClusterModel deployments.",
+        description=(
+            "Names of the secrets for pulling AIM container images. "
+            "Honored only on cluster-scoped AIMClusterModel deployments; "
+            "rejected with 400 when sent for custom-onboarded/fine-tuned models."
+        ),
+        examples=[["registry-credentials"]],
     )
     hf_token: str | None = Field(
         None,
-        description="Hugging Face token for accessing private models (if required). Only applies to cluster-scoped AIMClusterModel deployments.",
+        description=(
+            "Hugging Face token for accessing private models (if required). "
+            "Honored only on cluster-scoped AIMClusterModel deployments; "
+            "rejected with 400 when sent for custom-onboarded/fine-tuned models."
+        ),
+        examples=["hf_xxxxxxxxxxxx"],
     )
     metric: OptimizationMetric | None = Field(
         None,
-        description="Performance optimization metric (latency or throughput). Only applies to cluster-scoped AIMClusterModel deployments.",
-    )
-    allow_unoptimized: bool = Field(
-        False,
-        description="Allow unoptimized deployment configurations if available in the cluster.",
+        description=(
+            "Profile-selector field written to spec.profile.selector.metric "
+            "(latency or throughput). Ignored when profileName is set."
+        ),
     )
     precision: str | None = Field(
         None,
-        description="Runtime precision (e.g. fp8, fp16). Passed to AIMServiceOverrides.precision. Only applies to cluster-scoped AIMClusterModel deployments.",
+        description=(
+            "Profile-selector field written to spec.profile.selector.precision "
+            "(e.g. fp8, fp16). Ignored when profileName is set."
+        ),
+        examples=["fp8", "fp16"],
     )
     gpu_model: str | None = Field(
         None,
-        description="GPU model (e.g. MI300X). Passed to AIMServiceOverrides.hardware. Only applies to cluster-scoped AIMClusterModel deployments.",
+        description=(
+            "Profile-selector field written to spec.profile.selector.acceleratorModel "
+            "(e.g. MI300X). Ignored when profileName is set."
+        ),
+        examples=["MI300X"],
     )
     gpu_count: int | None = Field(
         None,
         ge=1,
-        description="Number of GPUs per replica. Passed to AIMServiceOverrides.hardware. Only applies to cluster-scoped AIMClusterModel deployments.",
+        description=(
+            "Number of GPUs per replica. Not a profile selector — per ADR 006b §3 "
+            "the selector picks profiles by hardware model. When set, written to "
+            "``spec.profileOverrides.acceleratorCount`` as a per-service override "
+            "on top of the resolved profile."
+        ),
+        examples=[1, 8],
     )
-    template_name: str | None = Field(
+    engine_args: dict[str, Any] | None = Field(
         None,
-        description="Explicit AIMServiceTemplate name (profile). When set, spec.template.name is used.",
+        description="Engine launch arguments (e.g. vLLM flags). Forwarded to AIMService.spec.profileOverrides.engineArgs.",
+        examples=[{"max-model-len": 8192}],
+    )
+    engine_env: list[dict[str, Any]] | None = Field(
+        None,
+        description=(
+            "Engine-process environment variables as name/value entries. "
+            "Converted to AIMService.spec.profileOverrides.engineEnv."
+        ),
+        examples=[[{"name": "VLLM_LOGGING_LEVEL", "value": "DEBUG"}]],
+    )
+    container_env: list[dict[str, Any]] | None = Field(
+        None,
+        description="Container env entries (K8s EnvVar shape). Forwarded to AIMService.spec.profileOverrides.containerEnv.",
+    )
+    profile_name: str | None = Field(
+        None,
+        description=(
+            "Explicit AIMProfile/AIMClusterProfile name. When set, "
+            "spec.profile.name is written. When unset, the engine resolves "
+            "the profile via the model's aimId. Rejected with 400 when sent "
+            "for fine-tuned models."
+        ),
+        examples=["mi300x-throughput-fp8"],
+    )
+    display_name: str | None = Field(
+        None,
+        description="User-visible display name for this AIM deployment. Stored as a K8s annotation; any characters are allowed.",
     )
 
 
@@ -178,68 +234,3 @@ class AIMServiceResponse(AIMServiceResource):
             return None
         routing_annotations = self.spec.routing.get("annotations", {})
         return routing_annotations.get(CLUSTER_AUTH_GROUP_ANNOTATION)
-
-
-class AIMServiceHistoryResponse(BaseEntityPublic):
-    """AIMService history data from database."""
-
-    model: str = Field(..., description="AIM model resource name")
-    status: str = Field(..., description="Status")
-    metric: OptimizationMetric | None = Field(None, description="Performance optimization metric")
-
-
-# ---------------------------------------------------------------------------
-# Replica response schema
-# ---------------------------------------------------------------------------
-# These models mirror the subset of Kubernetes pod fields that are useful for
-# displaying replica status. Field names follow camelCase via alias_generator,
-# with one explicit override: podIP (Kubernetes uses uppercase "IP", not "Ip").
-# ---------------------------------------------------------------------------
-
-
-class ReplicaContainerStatus(BaseModel):
-    ready: bool | None = None
-    restart_count: int | None = None
-    state: dict[str, Any] | None = None
-
-
-class ReplicaCondition(BaseModel):
-    type: str | None = None
-    status: str | None = None
-    reason: str | None = None
-    message: str | None = None
-
-
-class ReplicaStatus(BaseModel):
-    phase: str | None = None
-    # sanitize_for_serialization produces "podIP" (K8s JSON format); the serialization alias
-    # uses "podIp" (standard camelCase) so the API response is consistent with other fields.
-    pod_ip: str | None = Field(None, alias="podIP", serialization_alias="podIp")
-    container_statuses: list[ReplicaContainerStatus] | None = None
-    conditions: list[ReplicaCondition] | None = None
-
-
-class ReplicaResources(BaseModel):
-    limits: dict[str, str] | None = None
-
-
-class ReplicaContainer(BaseModel):
-    resources: ReplicaResources | None = None
-
-
-class ReplicaSpec(BaseModel):
-    node_name: str | None = None
-    containers: list[ReplicaContainer] | None = None
-
-
-class ReplicaMetadata(BaseModel):
-    name: str
-    creation_timestamp: str | None = None
-
-
-class AIMServiceReplicaResponse(BaseModel):
-    """Kubernetes pod data for a single AIM service replica."""
-
-    metadata: ReplicaMetadata
-    status: ReplicaStatus | None = None
-    spec: ReplicaSpec | None = None

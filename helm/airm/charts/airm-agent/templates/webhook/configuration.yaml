@@ -239,7 +239,7 @@ webhooks:
   rules:
     - operations: ["CREATE", "UPDATE"]
       apiGroups: ["aim.eai.amd.com"]
-      apiVersions: ["v1alpha1"]
+      apiVersions: ["v1alpha1", "v1alpha2"]
       resources: ["aimservices"]
       scope: "Namespaced"
 

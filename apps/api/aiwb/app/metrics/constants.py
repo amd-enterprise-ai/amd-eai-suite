@@ -9,6 +9,17 @@ CLUSTER_NAME_METRIC_LABEL = "kube_cluster_name"
 VLLM_POD_METRIC_LABEL = "service_instance_id"
 GPU_POD_METRIC_LABEL = "pod"
 
+# API key metric label selectors — sourced from ext-proc metricsRequestHeaderAttributes
+API_KEY_ID_METRIC_LABEL = "api_key_id"
+AIM_SERVICE_ID_METRIC_LABEL = "aim_service_id"
+
+# ext-proc Prometheus metric names (OTel Semantic Conventions for Generative AI)
+EXTPROC_TOKEN_USAGE_METRIC = (
+    "gen_ai_client_token_usage_sum"  # `_sum`: cumulative-sum series; increase() gives the period delta
+)
+EXTPROC_REQUEST_DURATION_COUNT_METRIC = "gen_ai_server_request_duration_seconds_count"
+GEN_AI_TOKEN_TYPE_LABEL = "gen_ai_token_type"
+
 MAX_DAYS_FOR_TIMESERIES = 8
 MAX_DAYS_FOR_METRICS = 30
 

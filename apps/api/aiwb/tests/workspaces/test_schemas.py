@@ -2,13 +2,15 @@
 #
 # SPDX-License-Identifier: MIT
 
+from app.workspaces.enums import WorkspaceType
 from app.workspaces.schemas import DevelopmentWorkspaceRequest
 
 
 def test_development_workspace_request_defaults():
     """Test that DevelopmentWorkspaceRequest has expected defaults."""
-    request = DevelopmentWorkspaceRequest()
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.VSCODE)
 
+    assert request.workspace_type == WorkspaceType.VSCODE
     assert request.image is None
     assert request.image_pull_secrets == []
     assert request.gpus == 1

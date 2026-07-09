@@ -11,3 +11,20 @@ export type ClusterResources = {
   };
   totalNodeCount: number;
 };
+
+export type AimImageFamily = {
+  familyId: string;
+  displayName: string;
+  repository: string | null;
+  tags: string[];
+};
+
+export type ClusterAccelerator = {
+  deviceId: string;
+  productName: string;
+  allocatableCount: number;
+};
+
+export type ListResponse<T> = {
+  data: T[];
+};

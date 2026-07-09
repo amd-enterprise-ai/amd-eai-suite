@@ -14,7 +14,8 @@ import { FormSelect } from '../../../src/ManagedForm/FormSelect';
 import { FormSlider } from '../../../src/ManagedForm/FormSlider';
 import { FormFileUpload } from '../../../src/ManagedForm/FormFileUpload/FormFileUpload';
 import type { FormField } from '@amdenterpriseai/types';
-import { SelectItem } from '@heroui/react';
+import { SelectItem } from '@amdenterpriseai/components';
+
 import { ZodType, z } from 'zod';
 
 type SampleFormData = { name: string; email: string };

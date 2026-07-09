@@ -171,6 +171,7 @@ async def test_create_kubernetes_secret_sets_created_by_annotation(mock_kube_api
         kube_client=mock_kube_api_client,
         namespace="test-ns",
         name="my-secret",
+        display_name="my-secret",
         data={"token": "base64value"},
         use_case=SecretUseCase.HUGGING_FACE,
         submitter="user@example.com",

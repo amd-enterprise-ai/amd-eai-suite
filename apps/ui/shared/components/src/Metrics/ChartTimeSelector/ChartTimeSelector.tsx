@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tab, Tabs } from '@heroui/react';
+import { Tab, Tabs } from '../../Tabs';
 import { useCallback } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -61,7 +61,9 @@ export const ChartTimeSelector: React.FC<ChartTimeSelectorProps> = ({
       />
       <Tabs
         isDisabled={isFetching}
-        aria-label={t(`${translationPrefix}.description`) || ''}
+        aria-label={
+          (t(`${translationPrefix}.description` as any) as string) || ''
+        }
         items={tabItems}
         placement="top"
         classNames={{
@@ -73,7 +75,7 @@ export const ChartTimeSelector: React.FC<ChartTimeSelectorProps> = ({
         {(item) => (
           <Tab
             key={item.id}
-            title={t(`${translationPrefix}.range.${item.id}`)}
+            title={t(`${translationPrefix}.range.${item.id}` as any) as string}
           ></Tab>
         )}
       </Tabs>

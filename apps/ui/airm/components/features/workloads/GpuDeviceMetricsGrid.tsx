@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button } from '@heroui/react';
+import { Button, StatsWithLineChart } from '@amdenterpriseai/components';
 import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
 
@@ -10,8 +10,6 @@ import { AvailableChartColorsKeys } from '@amdenterpriseai/types';
 import { WorkloadGpuDeviceSnapshot } from '@/types/workloads';
 import { ClusterNode } from '@/types/clusters';
 import { TimeSeriesDataPoint } from '@amdenterpriseai/types';
-
-import { StatsWithLineChart } from '@amdenterpriseai/components';
 
 interface GpuDeviceMetricsGridProps {
   devices: WorkloadGpuDeviceSnapshot[];

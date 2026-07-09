@@ -2,14 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useDisclosure } from '@heroui/react';
 import { IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 
 import { Trans, useTranslation } from 'next-i18next';
 import { useSession } from 'next-auth/react';
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 import {
@@ -28,9 +27,13 @@ import { TableColumns } from '@amdenterpriseai/types';
 import { ProjectUsersTableField } from '@/types/enums/project-users-table-fields';
 import { InviteMemberFormData } from '@/types/projects';
 import { InvitedUsersResponse, User, UsersResponse } from '@/types/users';
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { DrawerForm } from '@amdenterpriseai/components';
+import {
+  ActionButton,
+  ActionsToolbar,
+  ClientSideDataTable,
+  ConfirmationModal,
+  DrawerForm,
+} from '@amdenterpriseai/components';
 
 import { UserMultiSelect } from './UserMultiSelect';
 import { ZodType, z } from 'zod';
@@ -41,8 +44,6 @@ import { compareUsersByFullName } from '@amdenterpriseai/utils/app';
 import { getFilteredData } from '@amdenterpriseai/utils/app';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { ActionsToolbar } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
 interface Props {
   project: ProjectWithMembers;
 }
@@ -78,13 +79,13 @@ export const Members: React.FC<Props> = ({ project }) => {
     isOpen: isAddUserOpen,
     onOpen: onAddUserOpen,
     onOpenChange: onAddUserOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isRemoveConfirmOpen,
     onOpen: onRemoveConfirmOpen,
     onOpenChange: onRemoveConfirmOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const [filter, setFilter] = useState<ClientSideDataFilter<User>[]>([]);
 

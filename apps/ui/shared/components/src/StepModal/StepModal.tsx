@@ -2,14 +2,14 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { cn } from '@heroui/react';
 import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  cn,
-} from '@heroui/react';
+  ModalPrimitive,
+  ModalPrimitiveBody,
+  ModalPrimitiveContent,
+  ModalPrimitiveFooter,
+  ModalPrimitiveHeader,
+} from '../Modal/ModalPrimitive';
 import { useCallback, useState } from 'react';
 import { forwardRef, useImperativeHandle } from 'react';
 
@@ -110,7 +110,7 @@ export const StepModal = forwardRef<StepModalHandle, Props>(
     }, [resetOnClose, onCancel]);
 
     return (
-      <Modal
+      <ModalPrimitive
         isOpen={isOpen}
         size={size}
         onOpenChange={onOpenChange}
@@ -130,9 +130,11 @@ export const StepModal = forwardRef<StepModalHandle, Props>(
             steps[currentStep]?.canCloseByOverlayPress)
         }
       >
-        <ModalContent>
-          <ModalHeader>{title ?? steps?.[currentStep].label}</ModalHeader>
-          <ModalBody className="w-full">
+        <ModalPrimitiveContent>
+          <ModalPrimitiveHeader>
+            {title ?? steps?.[currentStep].label}
+          </ModalPrimitiveHeader>
+          <ModalPrimitiveBody className="w-full">
             <div className="mx-auto w-5/6">
               <Stepper
                 step={currentStep}
@@ -140,8 +142,8 @@ export const StepModal = forwardRef<StepModalHandle, Props>(
               />
             </div>
             {steps?.[currentStep].content}
-          </ModalBody>
-          <ModalFooter>
+          </ModalPrimitiveBody>
+          <ModalPrimitiveFooter>
             {steps?.[currentStep]?.customActions ? (
               steps?.[currentStep]?.customActions
             ) : (
@@ -180,9 +182,9 @@ export const StepModal = forwardRef<StepModalHandle, Props>(
                 ) : null}
               </div>
             )}
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+          </ModalPrimitiveFooter>
+        </ModalPrimitiveContent>
+      </ModalPrimitive>
     );
   },
 );

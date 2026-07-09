@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectItem } from '@heroui/react';
+import {
+  Select,
+  SelectItem,
+  DrawerForm,
+  FormFieldComponent,
+} from '@amdenterpriseai/components';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import type { DefaultValues } from 'react-hook-form';
@@ -30,9 +35,6 @@ import {
   ProjectWithResourceAllocation,
 } from '@/types/projects';
 import { UpdateQuotaRequest } from '@/types/quotas';
-
-import { DrawerForm } from '@amdenterpriseai/components';
-import { FormFieldComponent } from '@amdenterpriseai/components';
 
 import { CREATE_PROJECT_GPU_PREEMPTION_DEFAULTS } from '@/components/features/projects/constants';
 import {

@@ -3,8 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 *** Settings ***
-Documentation       Low-level keywords for Catalog API AIMs endpoints.
-...                 Provides direct API operation wrappers for the /aims endpoints.
+Documentation       Low-level keywords for AIWB inference and AIM catalog endpoints.
+...                 Provides direct API operation wrappers for the inference capability
+...                 (cluster-scoped /v1/inference/models and project-scoped
+...                 /v1/projects/{project}/inference) plus the namespace-scoped
+...                 fine-tuned model templates endpoint.
 ...                 This is part of the API layer that handles raw HTTP requests/responses.
 Library             RequestsLibrary
 Library             Collections
@@ -13,19 +16,19 @@ Resource            resources/api/common.resource
 
 
 *** Keywords ***
-AIMs endpoint
-    [Documentation]    Return the full AIMs endpoint url
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=cluster/aims/models
+Inference models endpoint
+    [Documentation]    Return the cluster-scoped inference base models endpoint URL.
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=inference/models
     RETURN                  ${endpoint}
 
-AIM Services endpoint
-    [Documentation]    Return the AIMServices endpoint url for a namespace
-    [Arguments]             ${namespace}
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/aims/services
+Project inference endpoint
+    [Documentation]    Return the project-scoped inference deployments endpoint URL.
+    [Arguments]             ${project}
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=projects/${project}/inference
     RETURN                  ${endpoint}
 
 Get AIM
-    [Documentation]    Retrieve a specific AIM by resource name
+    [Documentation]    Retrieve a specific cluster-scoped inference base model by resource name.
     ...
     ...    Args:
     ...    resource_name (str): Kubernetes resource name of the AIMClusterModel
@@ -34,34 +37,75 @@ Get AIM
     ...    response: API response containing the AIM details
     [Arguments]             ${resource_name}        ${expected_status}=any
     Create api session    aiwb
-    ${endpoint}=            AIMs endpoint
+    ${endpoint}=            Inference models endpoint
     ${response}=            Safe Get Request        ${endpoint}/${resource_name}                    expected_status=${expected_status}
     RETURN                  ${response}
 
 List AIMs
-    [Documentation]    List all available AIMs (AIMClusterModels from Kubernetes)
+    [Documentation]    List the cluster catalog of inference base models.
+    ...
+    ...    Args:
+    ...    status_filter (str, optional): AIM status value to filter by (e.g. Ready)
+    ...    accelerator_type (str or list, optional): Accelerator family to filter by
+    ...        (cpu or gpu). Pass a list to repeat ``acceleratorType`` for OR semantics
+    ...        on the wire, e.g. ['cpu','gpu'].
     ...
     ...    Return:
     ...    response: API response containing list of AIMs
-    [Arguments]             ${expected_status}=any
+    [Arguments]             ${expected_status}=any    ${status_filter}=${None}    ${accelerator_type}=${None}
+    ...                     ${page_size}=${None}
     Create api session    aiwb
-    ${endpoint}=            AIMs endpoint
-    ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
+    ${endpoint}=            Inference models endpoint
+    # When accelerator_type is a list we need repeating params, which requires the
+    # list-of-tuples form rather than the dict form RequestsLibrary normally takes.
+    ${is_list}=             Evaluate    isinstance($accelerator_type, list)
+    IF    ${is_list}
+        VAR    @{tuples}    @{EMPTY}
+        IF    $status_filter != $None
+            ${pair}=                Evaluate                ("statusFilter", "${status_filter}")
+            Append To List          ${tuples}               ${pair}
+        END
+        FOR    ${value}    IN    @{accelerator_type}
+            ${pair}=                Evaluate                ("acceleratorType", "${value}")
+            Append To List          ${tuples}               ${pair}
+        END
+        IF    $page_size != $None
+            ${pair}=                Evaluate                ("pageSize", "${page_size}")
+            Append To List          ${tuples}               ${pair}
+        END
+        ${response}=            Safe Get Request        ${endpoint}             params=${tuples}        expected_status=${expected_status}
+        RETURN                  ${response}
+    END
+    VAR    ${params}    ${None}
+    IF    $status_filter != $None or $accelerator_type != $None or $page_size != $None
+        ${params}=              Create Dictionary
+        IF    $status_filter != $None
+            Set To Dictionary       ${params}               statusFilter=${status_filter}
+        END
+        IF    $accelerator_type != $None
+            Set To Dictionary       ${params}               acceleratorType=${accelerator_type}
+        END
+        IF    $page_size != $None
+            Set To Dictionary       ${params}               pageSize=${page_size}
+        END
+    END
+    ${response}=            Safe Get Request        ${endpoint}             params=${params}        expected_status=${expected_status}
     RETURN                  ${response}
 
 Deploy AIM
-    [Documentation]    Deploy an AIM by creating an AIMService in a namespace
+    [Documentation]    Deploy a model for inference in the given project.
     ...
     ...    Args:
-    ...    model (str): AIMClusterModel resource name (e.g., 'meta-llama-3-8b')
+    ...    model (str): AIMClusterModel resource name (e.g., 'meta-llama-3-8b') or
+    ...                 project-scoped AIMModel name. The backend auto-detects.
     ...    deploy_data (dict): Deployment configuration (replicas, hfToken, etc.)
-    ...    namespace (str): Kubernetes namespace to deploy into
+    ...    namespace (str): Project (1:1 with namespace) to deploy into
     ...
     ...    Return:
-    ...    response: API response containing the AIMService details
+    ...    response: API response containing the inference deployment details
     [Arguments]             ${model}                ${deploy_data}          ${namespace}            ${expected_status}=any
     Create api session    aiwb
-    ${endpoint}=            AIM Services endpoint   ${namespace}
+    ${endpoint}=            Project inference endpoint    ${namespace}
     # Add model name to deploy data
     ${full_deploy_data}=    Create Dictionary       model=${model}
     Set To Dictionary       ${full_deploy_data}     &{deploy_data}
@@ -69,105 +113,164 @@ Deploy AIM
     RETURN                  ${response}
 
 Undeploy AIM
-    [Documentation]    Undeploy an AIM by deleting its AIMService from a namespace
+    [Documentation]    Undeploy an inference deployment from the given project.
     ...
     ...    Args:
-    ...    service_id (str): UUID of the AIMService to undeploy
-    ...    namespace (str): Kubernetes namespace where AIM is deployed
+    ...    service_id (str): UUID of the inference deployment to undeploy
+    ...    namespace (str): Project (1:1 with namespace) where the deployment lives
     ...
     ...    Return:
     ...    response: API response
     [Arguments]             ${service_id}           ${namespace}            ${expected_status}=any
     Create api session    aiwb
-    ${endpoint}=            AIM Services endpoint   ${namespace}
+    ${endpoint}=            Project inference endpoint    ${namespace}
     ${response}=            Safe Delete Request     ${endpoint}/${service_id}                       expected_status=${expected_status}
     RETURN                  ${response}
 
 List AIM Services
-    [Documentation]    List deployed AIMServices in a namespace
+    [Documentation]    List inference deployments in a project.
     ...
     ...    Args:
-    ...    namespace (str): Kubernetes namespace to list services from
+    ...    namespace (str): Project (1:1 with namespace) to list deployments from
+    ...    capability (str): Optional capability filter (e.g. 'chat') to narrow the
+    ...                      list to deployments matching a specific capability.
+    ...    status_filter (str|list): Optional status value or list of status values
+    ...                              to filter by (sent as repeated statusFilter query).
     ...
     ...    Return:
-    ...    response: API response containing list of AIMServices
+    ...    response: API response containing list of inference deployments
     [Arguments]             ${namespace}            ${expected_status}=any
+    ...                     ${capability}=${None}    ${status_filter}=${None}
     Create api session    aiwb
-    ${endpoint}=            AIM Services endpoint   ${namespace}
-    ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
+    ${endpoint}=            Project inference endpoint    ${namespace}
+    VAR    ${params}    ${None}
+    ${has_filter}=          Evaluate    $capability is not None or $status_filter is not None
+    IF    ${has_filter}
+        ${params}=              Create Dictionary
+        IF    $capability is not None
+            Set To Dictionary       ${params}    capability=${capability}
+        END
+        IF    $status_filter is not None
+            Set To Dictionary       ${params}    statusFilter=${status_filter}
+        END
+    END
+    ${response}=            Safe Get Request        ${endpoint}             params=${params}        expected_status=${expected_status}
     RETURN                  ${response}
 
 Get AIM Service
-    [Documentation]    Get a specific AIMService by ID
+    [Documentation]    Get a specific inference deployment by ID.
     ...
     ...    Args:
-    ...    service_id (str): UUID of the AIMService
-    ...    namespace (str): Kubernetes namespace
+    ...    service_id (str): UUID of the inference deployment
+    ...    namespace (str): Project (1:1 with namespace)
     ...
     ...    Return:
-    ...    response: API response containing the AIMService details
+    ...    response: API response containing the inference deployment details
     [Arguments]             ${service_id}           ${namespace}            ${expected_status}=any
     Create api session    aiwb
-    ${endpoint}=            AIM Services endpoint   ${namespace}
+    ${endpoint}=            Project inference endpoint    ${namespace}
     ${response}=            Safe Get Request        ${endpoint}/${service_id}                       expected_status=${expected_status}
     RETURN                  ${response}
 
-List AIM Templates
-    [Documentation]    List AIM cluster service templates for a given model
+Get AIM Service Metric
+    [Documentation]    Retrieve a single inference-scoped metric for a deployment.
     ...
     ...    Args:
-    ...    aim_resource_name (str): AIMClusterModel resource name to get templates for
+    ...    service_id (str): UUID of the inference deployment
+    ...    metric (str): Metric name (see MetricName enum, e.g. 'requests', 'total_tokens')
+    ...    namespace (str): Project (1:1 with namespace)
+    ...    params (dict): Optional query params (e.g. start/end/podName)
     ...
     ...    Return:
-    ...    response: API response containing list of AIMClusterServiceTemplates
-    [Arguments]             ${aim_resource_name}    ${expected_status}=any
+    ...    response: API response containing the metric value(s)
+    [Arguments]             ${service_id}           ${metric}               ${namespace}
+    ...                     ${expected_status}=any    ${params}=${None}
     Create api session    aiwb
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=cluster/aims/templates
-    ${params}=              Create Dictionary       aimResourceName=${aim_resource_name}
+    ${endpoint}=            Project inference endpoint    ${namespace}
+    ${response}=            Safe Get Request        ${endpoint}/${service_id}/metrics/${metric}
+    ...                     params=${params}        expected_status=${expected_status}
+    RETURN                  ${response}
+
+List AIM Profiles
+    [Documentation]    List AIMClusterProfiles, optionally filtered by aimId.
+    ...
+    ...    Args:
+    ...    aim_id (str, optional): Filter by AIMClusterProfile spec.aimId. Omit to list all.
+    ...    page (int, optional): Page number (default 1)
+    ...    page_size (int, optional): Page size (default 10, max 100)
+    ...
+    ...    Return:
+    ...    response: API response with paginated envelope (data + pagination)
+    [Arguments]             ${aim_id}=${None}       ${page}=${None}         ${page_size}=${None}    ${expected_status}=any
+    Create api session    aiwb
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=inference/profiles
+    ${params}=              Create Dictionary
+    IF    $aim_id is not None
+        Set To Dictionary       ${params}    aimId=${aim_id}
+    END
+    IF    $page is not None
+        Set To Dictionary       ${params}    page=${page}
+    END
+    IF    $page_size is not None
+        Set To Dictionary       ${params}    pageSize=${page_size}
+    END
     ${response}=            Safe Get Request        ${endpoint}             params=${params}        expected_status=${expected_status}
     RETURN                  ${response}
 
 Update AIM Service Scaling Policy
-    [Documentation]    Update the scaling policy of an AIMService
+    [Documentation]    Update the scaling policy of an inference deployment.
     ...
     ...    Args:
-    ...    service_id (str): UUID of the AIMService
+    ...    service_id (str): UUID of the inference deployment
     ...    scaling_data (dict): Scaling configuration (minReplicas, maxReplicas, autoScaling)
-    ...    namespace (str): Kubernetes namespace
+    ...    namespace (str): Project (1:1 with namespace)
     ...
     ...    Return:
-    ...    response: API response containing the updated AIMService details
+    ...    response: API response containing the updated inference deployment details
     [Arguments]             ${service_id}           ${scaling_data}         ${namespace}            ${expected_status}=any
     Create api session    aiwb
-    ${endpoint}=            AIM Services endpoint   ${namespace}
+    ${endpoint}=            Project inference endpoint    ${namespace}
     ${response}=            Safe Patch Request      ${endpoint}/${service_id}                       json=${scaling_data}                            expected_status=${expected_status}
     RETURN                  ${response}
 
-List Fine-Tuned AIM Service Templates
-    [Documentation]    List AIMServiceTemplates for a namespace-scoped fine-tuned model.
+List Fine-Tuned AIM Profiles
+    [Documentation]    List namespace-scoped AIMProfiles, optionally filtered by aimId.
     ...
     ...    Args:
-    ...    model_name (str): AIMModel CR name in the namespace
-    ...    namespace (str): Kubernetes namespace
+    ...    project (str): Project identifier (1:1 with Kubernetes namespace)
+    ...    aim_id (str, optional): Filter by AIMProfile spec.aimId. Omit to list all in the project.
+    ...    page (int, optional): Page number (default 1)
+    ...    page_size (int, optional): Page size (default 10, max 100)
     ...
     ...    Return:
-    ...    response: API response containing list of AIMServiceTemplates
-    [Arguments]             ${model_name}           ${namespace}            ${expected_status}=any
+    ...    response: API response with paginated envelope (data + pagination)
+    [Arguments]             ${project}              ${aim_id}=${None}       ${page}=${None}         ${page_size}=${None}    ${expected_status}=any
     Create api session    aiwb
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/models/${model_name}/templates
-    ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=projects/${project}/profiles
+    ${params}=              Create Dictionary
+    IF    $aim_id is not None
+        Set To Dictionary       ${params}    aimId=${aim_id}
+    END
+    IF    $page is not None
+        Set To Dictionary       ${params}    page=${page}
+    END
+    IF    $page_size is not None
+        Set To Dictionary       ${params}    pageSize=${page_size}
+    END
+    ${response}=            Safe Get Request        ${endpoint}             params=${params}        expected_status=${expected_status}
     RETURN                  ${response}
 
-List Chattable AIM Services
-    [Documentation]    List AIM services with ready conditions that support chat in a namespace.
+Get Inference Replicas
+    [Documentation]    List Kubernetes pod data for each replica of an inference deployment.
     ...
     ...    Args:
-    ...    namespace (str): Kubernetes namespace
+    ...    service_id (str): UUID of the inference deployment
+    ...    namespace (str): Project (1:1 with namespace) the deployment lives in
     ...
     ...    Return:
-    ...    response: API response containing list of chattable AIMServices
-    [Arguments]             ${namespace}            ${expected_status}=any
+    ...    response: API response containing list of replica pod records
+    [Arguments]             ${service_id}           ${namespace}            ${expected_status}=any
     Create api session    aiwb
-    ${endpoint}=            AIM Services endpoint   ${namespace}
-    ${response}=            Safe Get Request        ${endpoint}/chattable   expected_status=${expected_status}
+    ${endpoint}=            Project inference endpoint    ${namespace}
+    ${response}=            Safe Get Request        ${endpoint}/${service_id}/replicas               expected_status=${expected_status}
     RETURN                  ${response}

@@ -268,7 +268,10 @@ def test_update_overlay_empty_request(mock_update_overlay: MagicMock, overlay_re
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     response_data = resp.json()
     assert "detail" in response_data
-    assert "Either 'overlayFile' or 'chartId' or 'canonicalName' must be provided" in response_data["detail"]
+    assert (
+        "Either 'overlayFile' or 'chartId' or 'canonicalName' or 'displayName' must be provided"
+        in response_data["detail"]
+    )
 
 
 @override_dependencies(SESSION_OVERRIDES)
@@ -367,39 +370,3 @@ def test_list_overlays_with_chart_filter(mock_list_overlays: MagicMock, chart_id
     assert len(response_data["data"]) == 0
 
     mock_list_overlays.assert_awaited_once()
-
-
-@override_dependencies(SESSION_OVERRIDES)
-@patch("app.overlays.router.delete_overlays", autospec=True)
-def test_batch_delete_overlays(mock_delete_overlays: MagicMock) -> None:
-    """Test batch deleting overlays."""
-    ids_to_delete = [uuid4(), uuid4()]
-    mock_delete_overlays.return_value = ids_to_delete
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/v1/overlays/delete",
-            json={"ids": [str(id) for id in ids_to_delete]},
-        )
-
-    assert response.status_code == status.HTTP_204_NO_CONTENT
-    mock_delete_overlays.assert_awaited_once()
-
-
-@override_dependencies(SESSION_OVERRIDES)
-@patch("app.overlays.router.delete_overlays", autospec=True)
-def test_batch_delete_overlays_partial_not_found(mock_delete_overlays: MagicMock) -> None:
-    """Test batch delete when some overlays are not found."""
-    ids_to_delete = [uuid4(), uuid4()]
-    # Only return first ID as deleted
-    mock_delete_overlays.return_value = [ids_to_delete[0]]
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/v1/overlays/delete",
-            json={"ids": [str(id) for id in ids_to_delete]},
-        )
-
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert "not found" in response.json()["detail"]
-    mock_delete_overlays.assert_awaited_once()

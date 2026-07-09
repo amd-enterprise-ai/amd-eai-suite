@@ -56,7 +56,7 @@ Active clusters heading should be visible
     [Documentation]    Waits for the "Active Clusters" accordion heading to be visible.
     Wait For Elements State    css=h2:has-text("${ACTIVE_CLUSTERS_HEADING}")    visible    timeout=15s
 
-Enter search text
+Enter cluster search text
     [Documentation]    Types text into the search input field on the clusters page.
     [Arguments]    ${search_text}
     VAR    ${search_input}    css=input[placeholder="${SEARCH_INPUT_PLACEHOLDER}"]

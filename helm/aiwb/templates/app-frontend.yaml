@@ -43,7 +43,7 @@ spec:
         - name: aiwb-ui
           env:
             - name: NEXTAUTH_URL
-              value: "https://{{ .Values.kgateway.ui.prefixValue }}.{{ .Values.appDomain }}"
+              value: "https://{{ .Values.gateway.ui.prefixValue }}.{{ .Values.appDomain }}"
             - name: KEYCLOAK_ISSUER
               value: "{{ include "aiwb.keycloakPublicUrl" . }}/realms/{{ .Values.keycloak.realm }}"
             - name: KEYCLOAK_ID
@@ -68,6 +68,10 @@ spec:
               value: {{ .Values.defaultNamespace | quote }}
             - name: CLUSTER_AUTH_ENABLED
               value: {{ .Values.clusterAuth.enabled | quote }}
+            - name: AI_GATEWAY_ENABLED
+              value: {{ .Values.aiGateway.enabled | quote }}
+            - name: AI_GATEWAY_URL
+              value: {{ .Values.aiGateway.url | default (printf "https://ai.%s" .Values.appDomain) | quote }}
             {{- if not .Values.standAloneMode }}
             - name: AIRM_APP_URL
               value: {{ include "aiwb.airmAppUrl" . | quote }}

@@ -5,11 +5,9 @@
 /**
  * Footer component that shows when files are selected
  */
-import { Divider } from '@heroui/react';
+import { Divider } from '@amdenterpriseai/components';
 import { IconPlus, IconUpload } from '@tabler/icons-react';
 import { memo } from 'react';
-
-import { TFunction } from 'next-i18next';
 
 import { displayBytesInOptimalUnit } from '@amdenterpriseai/utils/app';
 import { ActionButton } from '../../Buttons';
@@ -25,7 +23,7 @@ const FileUploadFooter = memo(
     multiple: boolean;
     files: File[];
     onAddFiles: () => void;
-    t: TFunction;
+    t: (key: string, options?: Record<string, unknown>) => string;
   }) => {
     const filesCount = files.length;
     const totalSize = getTotalFileSizeInBytes(files);

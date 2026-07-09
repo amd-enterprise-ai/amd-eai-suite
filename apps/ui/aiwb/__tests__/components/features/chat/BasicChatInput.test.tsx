@@ -584,9 +584,16 @@ describe('BasicChatInput Component', () => {
   });
 
   describe('Stop Conversation', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('sets stopConversationRef when stop button is clicked', async () => {
       const stopConversationRef = { current: false };
-      const user = userEvent.setup();
 
       render(
         <ProviderWrapper>
@@ -600,17 +607,16 @@ describe('BasicChatInput Component', () => {
       );
 
       const stopButton = screen.getByTestId('stop-button');
-      await user.click(stopButton);
+      await act(async () => {
+        fireEvent.click(stopButton);
+      });
 
       expect(stopConversationRef.current).toBe(true);
 
-      // Wait for timeout to reset
-      await waitFor(
-        () => {
-          expect(stopConversationRef.current).toBe(false);
-        },
-        { timeout: 1100 },
-      );
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(stopConversationRef.current).toBe(false);
     });
   });
 

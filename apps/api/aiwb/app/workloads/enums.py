@@ -20,3 +20,7 @@ class WorkloadType(StrEnum):
     INFERENCE = "INFERENCE"
     FINE_TUNING = "FINE_TUNING"
     WORKSPACE = "WORKSPACE"
+
+
+class ModelSourceType(StrEnum):
+    CUSTOM = "custom"

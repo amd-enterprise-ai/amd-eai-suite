@@ -6,6 +6,7 @@
 Documentation       Feature-layer keywords for AIRM UI RBAC testing.
 ...                 Composes page-layer interactions into business-meaningful keywords
 ...                 that describe role-based access control behavior.
+Library             ../libraries/UICredentials.py
 Resource            common/session.resource
 Resource            common/navigation.resource
 Resource            pages/sidebar_page.resource
@@ -13,6 +14,18 @@ Resource            pages/projects_page.resource
 
 
 *** Keywords ***
+Skip the suite if team member is not provisioned
+    [Documentation]    Marks the suite as skipped (with a clear reason) when the
+    ...    team-member account does not exist in the target environment's Keycloak.
+    ...    Lets the RBAC suite run cleanly against environments without a
+    ...    provisioned team-member user (e.g. int-test) instead of failing during
+    ...    the first browser login.
+    ${provisioned}=    Team Member Is Provisioned
+    IF    not ${provisioned}
+        ${reason}=    Team Member Skip Reason
+        Skip    ${reason}
+    END
+
 A team member user is logged in
     [Documentation]    Logs in as a team member (non-admin) user.
     Team member user is logged in

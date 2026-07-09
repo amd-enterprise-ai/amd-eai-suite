@@ -248,13 +248,15 @@
             "label": "Log Level",
             "allLevels": "All levels"
           },
+          "loading": "Loading logs…",
           "noLogs": "No logs available",
           "noEvents": "No events available",
           "logTypeFilter": {
             "label": "Log Type",
             "workload": "Workload",
             "event": "Events"
-          }
+          },
+          "workloadNotFound": "Workload not found"
         }
       }
     },

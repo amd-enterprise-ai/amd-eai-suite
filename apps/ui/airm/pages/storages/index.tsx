@@ -1,7 +1,6 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { useDisclosure } from '@heroui/react';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -54,6 +53,7 @@ import {
   AirmDocsPage,
   airmDocumentationMapping,
 } from '@amdenterpriseai/components';
+import { useOverlayState } from '@amdenterpriseai/hooks';
 
 interface Props {
   projects: ProjectWithResourceAllocation[];
@@ -71,13 +71,13 @@ const StoragesPage: React.FC<Props> & WithDocumentationLink = ({
     isOpen: isAddStorageFormOpen,
     onOpenChange: onAddStorageFormOpenChange,
     onClose: onAddStorageFormClose,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isAddSecretFormOpen,
     onOpenChange: onAddSecretFormOpenChange,
     onClose: onAddSecretFormClose,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     data: storagesData,
@@ -138,12 +138,12 @@ const StoragesPage: React.FC<Props> & WithDocumentationLink = ({
   const {
     isOpen: isAssignStorageFormOpen,
     onOpenChange: onAssignStorageFormOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isDeleteStorageOpen,
     onOpenChange: onDeleteStorageOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const checkStorageActioning = (s: Storage) => {
     return (
@@ -291,35 +291,26 @@ export async function getServerSideProps(context: any) {
 
   const session = await getServerSession(context.req, context.res, authOptions);
 
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
+  try {
+    const projects = await getProjects(session?.accessToken as string);
+    const secrets = await getSecrets(session?.accessToken as string);
+    const storages = await getStorages(session?.accessToken as string);
+
     return {
-      redirect: {
-        destination: '/',
-        permanent: false,
+      props: {
+        ...(await serverSideTranslations(locale, [
+          'common',
+          'storages',
+          'secrets',
+          'sharedComponents',
+        ])),
+        projects: projects?.data || [],
+        secrets: secrets?.data || [],
+        storages: storages?.data || [],
       },
     };
+  } catch (error) {
+    console.error('Error fetching data on storages page:', error);
+    return { redirect: { destination: '/', permanent: false } };
   }
-
-  const projects = await getProjects(session?.accessToken as string);
-  const secrets = await getSecrets(session?.accessToken as string);
-  const storages = await getStorages(session?.accessToken as string);
-
-  return {
-    props: {
-      ...(await serverSideTranslations(locale, [
-        'common',
-        'storages',
-        'secrets',
-        'sharedComponents',
-      ])),
-      projects: projects?.data || [],
-      secrets: secrets?.data || [],
-      storages: storages?.data || [],
-    },
-  };
 }

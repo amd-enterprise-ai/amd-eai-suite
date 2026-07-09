@@ -8,7 +8,16 @@
  * this card should be hidden and "Autoscaling Disabled" shown in Resources card.
  */
 
-import { Card, CardBody, CardHeader, Button } from '@heroui/react';
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  ClientSideDataTable,
+  DateDisplay,
+  NoDataDisplay,
+  StatusDisplay,
+} from '@amdenterpriseai/components';
 import {
   IconArrowsMaximize,
   IconChevronDown,
@@ -21,21 +30,15 @@ import { useTranslation } from 'next-i18next';
 import { AIMServiceSpec, AIMServiceRuntime } from '@/types/aims';
 import { SCALING_METRIC_KEYS } from '@/lib/app/aims';
 import type { AutoscalingFieldValues } from '@/lib/app/aims';
-import type { AimServiceReplica } from '@/types/aims';
+import type { InferenceReplica } from '@/types/aims';
 import {
   Intent,
   StatusBadgeVariant,
   TableColumns,
 } from '@amdenterpriseai/types';
-import {
-  ClientSideDataTable,
-  DateDisplay,
-  NoDataDisplay,
-  StatusDisplay,
-} from '@amdenterpriseai/components';
 import { DeploymentSettingsDrawer } from './DeploymentSettingsDrawer';
 
-// Flat display type for the replicas table, derived from the nested AimServiceReplica
+// Flat display type for the replicas table, derived from the nested InferenceReplica
 type ReplicaRow = {
   name: string;
   gpuCount?: string;
@@ -57,8 +60,8 @@ const getPodPhaseVariants = (
 ): Record<string, StatusBadgeVariant> => ({
   Running: {
     label: t('podPhase.running'),
-    icon: IconCircleCaretRight,
     color: 'primary',
+    icon: IconCircleCaretRight,
   },
   Pending: { label: t('podPhase.pending'), intent: Intent.PENDING },
   Succeeded: { label: t('podPhase.succeeded'), intent: Intent.SUCCESS },
@@ -70,7 +73,7 @@ const getPodPhaseVariants = (
   },
 });
 
-function toReplicaRow(replica: AimServiceReplica): ReplicaRow {
+function toReplicaRow(replica: InferenceReplica): ReplicaRow {
   const gpuRaw =
     replica.spec?.containers?.[0]?.resources?.limits?.['amd.com/gpu'];
   return {
@@ -93,7 +96,7 @@ interface Props {
   /** Called after autoscaling settings are saved successfully with all saved form values */
   onSettingsSaved?: (savedValues: AutoscalingFieldValues) => void;
   /** Pod-level replica info for the running service */
-  replicas?: AimServiceReplica[];
+  replicas?: InferenceReplica[];
 }
 
 export const ScalingStatusCard = ({
@@ -207,18 +210,18 @@ export const ScalingStatusCard = ({
           <div className="flex items-center justify-between">
             <div className="flex gap-6 max-w-[30%]">
               <div>
-                <div className="text-small text-default-500">
+                <div className="text-sm text-default-500">
                   {t('scalingMetric.label')}
                 </div>
-                <div className="text-small font-medium text-foreground truncate">
+                <div className="text-sm font-medium text-foreground truncate">
                   {metricLabel}
                 </div>
               </div>
               <div>
-                <div className="text-small text-default-500">
+                <div className="text-sm text-default-500">
                   {t('targetValue.label')}
                 </div>
-                <div className="text-small font-medium text-foreground">
+                <div className="text-sm font-medium text-foreground">
                   {targetValue} ({operationOverTime})
                 </div>
               </div>

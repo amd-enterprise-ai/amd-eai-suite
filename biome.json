@@ -1,6 +1,10 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.2.6/schema.json",
-  "vcs": { "enabled": false, "clientKind": "git", "useIgnoreFile": false },
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": false
+  },
   "formatter": {
     "enabled": true,
     "formatWithErrors": false,
@@ -32,11 +36,135 @@
         "noRedeclare": "off"
       },
       "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "@heroui/react": {
+                "message": "Import from @amdenterpriseai/components or @amdenterpriseai/hooks instead. See EAI-5614 for migration status.",
+                "importNames": [
+                  "Accordion",
+                  "AccordionItem",
+                  "Button",
+                  "ButtonGroup",
+                  "ButtonProps",
+                  "BreadcrumbsProps",
+                  "Breadcrumbs",
+                  "BreadcrumbItemProps",
+                  "BreadcrumbItem",
+                  "Card",
+                  "CardBody",
+                  "CardFooter",
+                  "CardHeader",
+                  "Checkbox",
+                  "Chip",
+                  "ChipProps",
+                  "Code",
+                  "Divider",
+                  "Drawer",
+                  "DrawerBody",
+                  "DrawerContent",
+                  "DrawerFooter",
+                  "DrawerHeader",
+                  "Dropdown",
+                  "DropdownItem",
+                  "DropdownItemProps",
+                  "DropdownMenu",
+                  "DropdownSection",
+                  "DropdownTrigger",
+                  "getKeyValue",
+                  "Image",
+                  "Input",
+                  "InputProps",
+                  "Link",
+                  "LinkProps",
+                  "Listbox",
+                  "ListboxItem",
+                  "ListboxItemProps",
+                  "ListboxProps",
+                  "ListboxSection",
+                  "ListboxSectionProps",
+                  "Modal",
+                  "ModalBody",
+                  "ModalContent",
+                  "ModalFooter",
+                  "ModalHeader",
+                  "Navbar",
+                  "NavbarContent",
+                  "NavbarMenu",
+                  "NavbarMenuItem",
+                  "NavbarMenuToggle",
+                  "NumberInput",
+                  "NumberInputProps",
+                  "Popover",
+                  "PopoverContent",
+                  "PopoverContentProps",
+                  "PopoverProps",
+                  "PopoverTrigger",
+                  "PopoverTriggerProps",
+                  "Pagination",
+                  "PaginationProps",
+                  "Select",
+                  "Selection",
+                  "SelectItem",
+                  "SelectItemProps",
+                  "SelectProps",
+                  "Slider",
+                  "SliderProps",
+                  "Snippet",
+                  "SnippetProps",
+                  "Skeleton",
+                  "SkeletonProps",
+                  "SortDescriptor",
+                  "Spinner",
+                  "SpinnerProps",
+                  "Switch",
+                  "SwitchProps",
+                  "Tab",
+                  "Table",
+                  "TableBody",
+                  "TableCell",
+                  "TableColumn",
+                  "TableHeader",
+                  "TableRow",
+                  "Tabs",
+                  "Textarea",
+                  "Tooltip",
+                  "TooltipProps",
+                  "useDisclosure"
+                ]
+              }
+            }
+          }
+        },
         "noNonNullAssertion": "off",
         "useTemplate": "off",
         "useNodejsImportProtocol": "off",
         "useImportType": "off",
-        "useConst": "off"
+        "useConst": "off",
+        "useNamingConvention": {
+          "level": "warn",
+          "options": {
+            "strictCase": false,
+            "conventions": [
+              {
+                "selector": {
+                  "kind": "objectLiteralProperty"
+                },
+                "formats": ["camelCase", "PascalCase", "CONSTANT_CASE"]
+              },
+              {
+                "selector": {
+                  "kind": "typeProperty"
+                },
+                "formats": ["camelCase", "CONSTANT_CASE"]
+              },
+              {
+                "match": ".*"
+              }
+            ]
+          }
+        }
       },
       "correctness": {
         "noEmptyPattern": "off",
@@ -78,21 +206,84 @@
       "bracketSpacing": true
     }
   },
-  "html": { "formatter": { "selfCloseVoidElements": "always" } },
+  "html": {
+    "formatter": {
+      "selfCloseVoidElements": "always"
+    }
+  },
   "assist": {
     "enabled": false
   },
+  "overrides": [
+    {
+      "includes": [
+        "apps/ui/shared/components/src/Accordion/**",
+        "apps/ui/shared/components/src/Breadcrumbs/**",
+        "apps/ui/shared/components/src/Buttons/**",
+        "apps/ui/shared/components/src/Card/**",
+        "apps/ui/shared/components/src/Checkbox/**",
+        "apps/ui/shared/components/src/Chip/**",
+        "apps/ui/shared/components/src/CodeBlock/**",
+        "apps/ui/shared/components/src/CopySnippet/**",
+        "apps/ui/shared/components/src/DataTable/**",
+        "apps/ui/shared/components/src/Drawer/**",
+        "apps/ui/shared/components/src/Dropdown/**",
+        "apps/ui/shared/components/src/Input/**",
+        "apps/ui/shared/components/src/Link/**",
+        "apps/ui/shared/components/src/Listbox/**",
+        "apps/ui/shared/components/src/Modal/**",
+        "apps/ui/shared/components/src/NumberField/**",
+        "apps/ui/shared/components/src/Pagination/**",
+        "apps/ui/shared/components/src/Popover/**",
+        "apps/ui/shared/components/src/Select/**",
+        "apps/ui/shared/components/src/Separator/**",
+        "apps/ui/shared/components/src/Skeleton/**",
+        "apps/ui/shared/components/src/Slider/**",
+        "apps/ui/shared/components/src/Spinner/**",
+        "apps/ui/shared/components/src/Switch/**",
+        "apps/ui/shared/components/src/Tabs/**",
+        "apps/ui/shared/components/src/Textarea/**",
+        "apps/ui/shared/components/src/Tooltip/**",
+        "apps/ui/shared/hooks/src/useOverlayState/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/ui/shared/types/src/chat.ts",
+        "apps/ui/shared/utils/src/server/auth.ts",
+        "apps/ui/shared/utils/__tests__/server/auth.test.ts",
+        "apps/ui/aiwb/__tests__/**/chat/**",
+        "apps/ui/aiwb/components/features/chat/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    }
+  ],
   "files": {
     "ignoreUnknown": false,
     "includes": [
       "**",
+      "!**/next-env.d.ts",
       "!**/.next/**",
       "!**/coverage/**",
       "!**/dist/**",
       "!**/build/**",
       "!**/.turbo/**",
       "!**/node_modules/**",
-      "!**/.venv/**"
+      "!**/.venv/**",
+      "!**/types/react-i18next.d.ts"
     ]
   }
 }

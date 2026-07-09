@@ -12,43 +12,53 @@ import {
   within,
 } from '@testing-library/react';
 
-import { fetchNamespaceMetrics } from '@/lib/app/namespaces';
+import { APIRequestError } from '@amdenterpriseai/utils/app';
+import { fetchProjectWorkloadMetrics } from '@/lib/app/projects';
+import { resolveAIMServiceDisplay } from '@/lib/app/aims';
 import {
-  fetchProfilesForServices,
-  getAimServices,
-  getAimClusterModels,
-  resolveAIMServiceDisplay,
-  undeployAim,
-} from '@/lib/app/aims';
-import { deleteWorkload } from '@/lib/app/workloads';
+  deleteInferenceDeployment,
+  getInferenceModel,
+  listAllInferenceDeployments,
+} from '@/lib/app/inference';
+import { deleteWorkspace } from '@/lib/app/workloads';
+import { cancelFineTuningJob } from '@/lib/app/models';
 
 import { ResourceType } from '@/types/enums/workloads';
 import { WorkloadType } from '@amdenterpriseai/types';
 import { WorkloadStatus } from '@/types/enums/workloads';
-import type { ResourceMetrics } from '@/types/namespaces';
+import type { ResourceMetrics } from '@/types/projects';
+import { AIM_CANONICAL_NAME_ANNOTATION, AIMServiceStatus } from '@/types/aims';
+import type { AIMService } from '@/types/aims';
 
 import { NamespaceWorkloadsTable } from '@/components/features/projects/NamespaceWorkloadsTable';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { Mock, vi } from 'vitest';
 
-vi.mock('@/lib/app/namespaces', async (importOriginal) => {
+vi.mock('@/lib/app/projects', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    fetchNamespaceMetrics: vi.fn(),
+    fetchProjectWorkloadMetrics: vi.fn(),
   };
 });
 
 vi.mock('@/lib/app/workloads', () => ({
-  deleteWorkload: vi.fn(),
+  deleteWorkspace: vi.fn(),
 }));
 
-vi.mock('@/lib/app/aims', () => ({
-  fetchProfilesForServices: vi.fn().mockResolvedValue(new Map()),
-  getAimServices: vi.fn(),
-  getAimClusterModels: vi.fn(),
+vi.mock('@/lib/app/models', () => ({
+  cancelFineTuningJob: vi.fn(),
+}));
+
+vi.mock('@/lib/app/aims', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/app/aims')>()),
   resolveAIMServiceDisplay: vi.fn(),
-  undeployAim: vi.fn(),
+}));
+
+vi.mock('@/lib/app/inference', () => ({
+  getInferenceModel: vi.fn(),
+  listAllInferenceDeployments: vi.fn(),
+  deleteInferenceDeployment: vi.fn(),
 }));
 
 const mockPush = vi.fn();
@@ -104,6 +114,7 @@ const createMockResourceMetrics = (
   gpuCount: 1,
   templateGpuCount: null,
   gpu: null,
+  acceleratorType: null,
   metric: null,
   precision: null,
   vram: 2 * 1024 * 1024 * 1024,
@@ -126,27 +137,27 @@ const mockNamespaceMetricsResponse = {
       resourceType: ResourceType.AIM_SERVICE,
     }),
   ],
-  total: 2,
-  page: 1,
-  pageSize: 20,
-  totalPages: 1,
+  pagination: { page: 1, pageSize: 20, total: 2 },
 };
 
 describe('NamespaceWorkloadsTable', () => {
-  const mockFetchNamespaceMetrics = fetchNamespaceMetrics as Mock;
-  const mockGetAimServices = getAimServices as Mock;
-  const mockGetAimClusterModels = getAimClusterModels as Mock;
-  const mockFetchProfilesForServices = fetchProfilesForServices as Mock;
-  const mockDeleteWorkload = deleteWorkload as Mock;
-  const mockUndeployAim = undeployAim as Mock;
+  const mockFetchNamespaceMetrics = fetchProjectWorkloadMetrics as Mock;
+  const mockListInferenceDeployments = listAllInferenceDeployments as Mock;
+  const mockGetInferenceModel = getInferenceModel as Mock;
+  const mockCancelFineTuningJob = cancelFineTuningJob as Mock;
+  const mockDeleteInferenceDeployment = deleteInferenceDeployment as Mock;
+  const mockDeleteWorkspace = deleteWorkspace as Mock;
   const mockResolveAIMServiceDisplay = resolveAIMServiceDisplay as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchNamespaceMetrics.mockResolvedValue(mockNamespaceMetricsResponse);
-    mockGetAimServices.mockResolvedValue([]);
-    mockGetAimClusterModels.mockResolvedValue([]);
-    mockFetchProfilesForServices.mockResolvedValue(new Map());
+    mockListInferenceDeployments.mockResolvedValue([]);
+    // Default: per-name catalog lookups 404. Tests that exercise cluster-catalog
+    // enrichment override this with a per-name resolved value.
+    mockGetInferenceModel.mockRejectedValue(
+      new APIRequestError('not found', 404),
+    );
     mockResolveAIMServiceDisplay.mockImplementation(
       (_service: unknown, _parsedAIMs: unknown[]) => ({
         canonicalName: 'test/model',
@@ -241,7 +252,7 @@ describe('NamespaceWorkloadsTable', () => {
         query: { ref: '/' },
       });
     });
-  }, 10000);
+  });
 
   it('opens chat in new tab when chat action is clicked', async () => {
     await act(async () => {
@@ -269,7 +280,7 @@ describe('NamespaceWorkloadsTable', () => {
       '/project1/chat?workload=workload-1',
       '_blank',
     );
-  }, 10000);
+  });
 
   it('shows Connect to model action for running AIM workloads', async () => {
     await act(async () => {
@@ -294,6 +305,83 @@ describe('NamespaceWorkloadsTable', () => {
     });
   });
 
+  it('renders the served model id (status.resolvedModel.name) in the connect snippet', async () => {
+    // The served id lives on the AIMService's status.resolvedModel.name and is
+    // populated for fine-tuned services too. The connect snippet emits that id
+    // directly — never the annotation display name, which silently 404s against
+    // the engine.
+    const fineTunedAnnotationCanonicalName = 'meta-llama/Llama-3-8B-finetuned';
+    const fineTunedAimService: AIMService = {
+      id: 'aim-service-1',
+      metadata: {
+        name: 'fine-tuned-aim-service',
+        namespace: 'test-ns',
+        uid: 'uid-ft-1',
+        labels: {},
+        annotations: {
+          [AIM_CANONICAL_NAME_ANNOTATION]: fineTunedAnnotationCanonicalName,
+        },
+        creationTimestamp: '2024-01-01T00:00:00Z',
+        ownerReferences: [],
+      },
+      spec: {
+        model: { name: 'fine-tuned-model-ref' },
+        replicas: 1,
+        overrides: {},
+        cacheModel: false,
+        runtimeConfigName: 'default',
+      },
+      status: {
+        status: AIMServiceStatus.RUNNING,
+        resolvedModel: { name: 'fine-tuned-model-ref' },
+      },
+      clusterAuthGroupId: null,
+      endpoints: {
+        internal: 'http://fine-tuned-service.test-ns.svc.cluster.local',
+      },
+    };
+
+    // Cluster catalog returns no entries — the served id no longer depends on a
+    // catalog join; it is read straight off status.resolvedModel.name.
+    mockGetInferenceModel.mockRejectedValue(
+      new APIRequestError('not found', 404),
+    );
+    mockListInferenceDeployments.mockResolvedValue([fineTunedAimService]);
+
+    await act(async () => {
+      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('AIM Service')).toBeInTheDocument();
+    });
+
+    const rows = screen.getAllByRole('row');
+    const aimRow = rows.find((r) => r.textContent?.includes('AIM Service'));
+    const trigger = within(aimRow!).getByRole('button', {
+      name: 'list.actions.label',
+    });
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+
+    const connectAction = await screen.findByTestId('connect');
+    await act(async () => {
+      fireEvent.click(connectAction);
+    });
+
+    // The snippet renders the served id from status.resolvedModel.name, and the
+    // annotation display name must NOT leak into it.
+    await waitFor(() => {
+      expect(document.body).toHaveTextContent(
+        '"model": "fine-tuned-model-ref"',
+      );
+    });
+    expect(document.body).not.toHaveTextContent(
+      fineTunedAnnotationCanonicalName,
+    );
+  });
+
   it('opens logs modal when logs action is clicked', async () => {
     await act(async () => {
       render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
@@ -316,14 +404,40 @@ describe('NamespaceWorkloadsTable', () => {
       fireEvent.click(logsAction);
     });
 
-    await waitFor(() => {
-      expect(
-        screen.getByText('list.actions.logs.modal.title'),
-      ).toBeInTheDocument();
-    });
-  }, 10000);
+    await screen.findByText('list.actions.logs.modal.title');
+  });
 
   it('opens delete modal when delete action is clicked', async () => {
+    await act(async () => {
+      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
+    });
+
+    await screen.findByText('AIM Service');
+
+    // Use the AIM_SERVICE row — Delete is only offered for rows the mutation
+    // can dispatch to (AIM service / fine-tuning / workspace).
+    const rows = screen.getAllByRole('row');
+    const aimRow = rows.find((r) => r.textContent?.includes('AIM Service'));
+    const trigger = within(aimRow!).getByRole('button', {
+      name: 'list.actions.label',
+    });
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+
+    const deleteAction = await screen.findByTestId('delete');
+    await act(async () => {
+      fireEvent.click(deleteAction);
+    });
+
+    expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+  });
+
+  it('does not offer Delete action for non-AIM INFERENCE deployment rows', async () => {
+    // The Regular Workload row is type: INFERENCE, resourceType: DEPLOYMENT.
+    // The mutation can only dispatch by resourceType === AIM_SERVICE for
+    // inference rows; bare INFERENCE deployments have no capability surface,
+    // so Delete must be filtered out (would otherwise hit the defensive throw).
     await act(async () => {
       render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
     });
@@ -340,26 +454,22 @@ describe('NamespaceWorkloadsTable', () => {
       fireEvent.click(trigger);
     });
 
-    const deleteAction = await screen.findByTestId('delete');
-    await act(async () => {
-      fireEvent.click(deleteAction);
-    });
+    await screen.findByTestId('logs');
+    expect(screen.queryByTestId('delete')).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
-  }, 10000);
-
-  it('calls deleteWorkload when confirming delete for regular workload', async () => {
-    mockDeleteWorkload.mockResolvedValue(undefined);
+  it('calls deleteInferenceDeployment when confirming delete for an AIM-service row', async () => {
+    mockDeleteInferenceDeployment.mockResolvedValue(undefined);
 
     await act(async () => {
       render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Regular Workload')).toBeInTheDocument();
+      expect(screen.getByText('AIM Service')).toBeInTheDocument();
     });
 
-    const row = screen.getByText('Regular Workload').closest('tr');
+    const row = screen.getByText('AIM Service').closest('tr');
     const trigger = within(row!).getByRole('button', {
       name: 'list.actions.label',
     });
@@ -378,12 +488,63 @@ describe('NamespaceWorkloadsTable', () => {
     });
 
     await waitFor(() => {
-      expect(mockDeleteWorkload).toHaveBeenCalledWith('workload-1', 'test-ns');
+      expect(mockDeleteInferenceDeployment).toHaveBeenCalledWith(
+        'test-ns',
+        'aim-service-1',
+      );
     });
   });
 
-  it('calls undeployAim when confirming delete for AIM service', async () => {
-    mockUndeployAim.mockResolvedValue(undefined);
+  it('calls deleteWorkspace when confirming delete for workspace workload', async () => {
+    mockDeleteWorkspace.mockResolvedValue(undefined);
+    mockFetchNamespaceMetrics.mockResolvedValue({
+      data: [
+        createMockResourceMetrics({
+          id: 'workspace-1',
+          displayName: 'Workspace Workload',
+          type: WorkloadType.WORKSPACE,
+          resourceType: ResourceType.DEPLOYMENT,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 20, total: 1 },
+    });
+
+    await act(async () => {
+      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Workspace Workload')).toBeInTheDocument();
+    });
+
+    const row = screen.getByText('Workspace Workload').closest('tr');
+    const trigger = within(row!).getByRole('button', {
+      name: 'list.actions.label',
+    });
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+
+    const deleteAction = await screen.findByTestId('delete');
+    await act(async () => {
+      fireEvent.click(deleteAction);
+    });
+
+    const confirmButton = await screen.findByTestId('confirm-button');
+    await act(async () => {
+      fireEvent.click(confirmButton);
+    });
+
+    await waitFor(() => {
+      expect(mockDeleteWorkspace).toHaveBeenCalledWith(
+        'test-ns',
+        'workspace-1',
+      );
+    });
+  });
+
+  it('calls deleteInferenceDeployment when confirming delete for AIM service', async () => {
+    mockDeleteInferenceDeployment.mockResolvedValue(undefined);
 
     await act(async () => {
       render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
@@ -413,7 +574,283 @@ describe('NamespaceWorkloadsTable', () => {
     });
 
     await waitFor(() => {
-      expect(mockUndeployAim).toHaveBeenCalledWith('test-ns', 'aim-service-1');
+      expect(mockDeleteInferenceDeployment).toHaveBeenCalledWith(
+        'test-ns',
+        'aim-service-1',
+      );
     });
+  });
+
+  it('does not offer Delete action for MODEL_DOWNLOAD rows', async () => {
+    // MODEL_DOWNLOAD has no owning capability surface, so the row Delete action
+    // must be filtered out instead of routed into the defensive throw.
+    mockFetchNamespaceMetrics.mockResolvedValue({
+      data: [
+        createMockResourceMetrics({
+          id: 'model-download-1',
+          displayName: 'Model Download',
+          type: WorkloadType.MODEL_DOWNLOAD,
+          resourceType: ResourceType.DEPLOYMENT,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 20, total: 1 },
+    });
+
+    await act(async () => {
+      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Model Download')).toBeInTheDocument();
+    });
+
+    const row = screen.getByText('Model Download').closest('tr');
+    const trigger = within(row!).getByRole('button', {
+      name: 'list.actions.label',
+    });
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+
+    // logs is the last action that should still appear; delete must not.
+    await screen.findByTestId('logs');
+    expect(screen.queryByTestId('delete')).not.toBeInTheDocument();
+  });
+
+  it('does not offer Delete action for CUSTOM rows', async () => {
+    // CUSTOM rows reach this table too — same reasoning as MODEL_DOWNLOAD.
+    mockFetchNamespaceMetrics.mockResolvedValue({
+      data: [
+        createMockResourceMetrics({
+          id: 'custom-1',
+          displayName: 'Custom Workload',
+          type: WorkloadType.CUSTOM,
+          resourceType: ResourceType.DEPLOYMENT,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 20, total: 1 },
+    });
+
+    await act(async () => {
+      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Custom Workload')).toBeInTheDocument();
+    });
+
+    const row = screen.getByText('Custom Workload').closest('tr');
+    const trigger = within(row!).getByRole('button', {
+      name: 'list.actions.label',
+    });
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+
+    await screen.findByTestId('logs');
+    expect(screen.queryByTestId('delete')).not.toBeInTheDocument();
+  });
+
+  it('calls cancelFineTuningJob when confirming delete for fine-tuning workload', async () => {
+    mockCancelFineTuningJob.mockResolvedValue(undefined);
+    mockFetchNamespaceMetrics.mockResolvedValue({
+      data: [
+        createMockResourceMetrics({
+          id: 'ft-workload-1',
+          displayName: 'Fine-tuning Job',
+          type: WorkloadType.FINE_TUNING,
+          resourceType: ResourceType.DEPLOYMENT,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 20, total: 1 },
+    });
+
+    await act(async () => {
+      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fine-tuning Job')).toBeInTheDocument();
+    });
+
+    const row = screen.getByText('Fine-tuning Job').closest('tr');
+    const trigger = within(row!).getByRole('button', {
+      name: 'list.actions.label',
+    });
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+
+    const deleteAction = await screen.findByTestId('delete');
+    await act(async () => {
+      fireEvent.click(deleteAction);
+    });
+
+    const confirmButton = await screen.findByTestId('confirm-button');
+    await act(async () => {
+      fireEvent.click(confirmButton);
+    });
+
+    await waitFor(() => {
+      expect(mockCancelFineTuningJob).toHaveBeenCalledWith(
+        'ft-workload-1',
+        'test-ns',
+      );
+    });
+  });
+
+  it('displays createdAt and createdBy directly from namespace metrics response', async () => {
+    // The API now returns createdAt/createdBy populated for fine-tuned AIMs
+    // (sourced from K8s metadata when no DB row exists), so the FE no longer
+    // needs to merge values from the AIMService CR.
+    const metricsCreatedBy = 'metrics-user@example.com';
+    const metricsCreatedAt = '2024-01-01T00:00:00Z';
+    const metricsResponse = {
+      data: [
+        createMockResourceMetrics({
+          id: 'aim-service-1',
+          displayName: 'Fine-tuned AIM',
+          resourceType: ResourceType.AIM_SERVICE,
+          createdAt: metricsCreatedAt,
+          createdBy: metricsCreatedBy,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 20, total: 1 },
+    };
+    mockFetchNamespaceMetrics.mockResolvedValue(metricsResponse);
+
+    // Provide an AIMService whose annotation/creationTimestamp differ from the
+    // metrics row — proving the FE no longer overrides metrics-row values.
+    const divergentAimService: AIMService = {
+      id: 'aim-service-1',
+      metadata: {
+        name: 'fine-tuned-aim-service',
+        namespace: 'test-ns',
+        uid: 'uid-ft-1',
+        labels: {},
+        annotations: {
+          'silogen.ai/submitter': 'cr-user@example.com',
+        },
+        creationTimestamp: '2099-12-31T23:59:59Z',
+        ownerReferences: [],
+      },
+      spec: {
+        model: { name: 'fine-tuned-model-ref' },
+        replicas: 1,
+        overrides: {},
+        cacheModel: false,
+        runtimeConfigName: 'default',
+      },
+      status: {
+        status: AIMServiceStatus.RUNNING,
+        resolvedModel: { name: 'fine-tuned-model-ref' },
+      },
+      clusterAuthGroupId: null,
+      endpoints: {
+        internal: 'http://fine-tuned-service.test-ns.svc.cluster.local',
+      },
+    };
+    mockListInferenceDeployments.mockResolvedValue([divergentAimService]);
+
+    await act(async () => {
+      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fine-tuned AIM')).toBeInTheDocument();
+    });
+
+    const row = screen.getByText('Fine-tuned AIM').closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row!).getByText(metricsCreatedBy)).toBeInTheDocument();
+    expect(
+      within(row!).queryByText('cr-user@example.com'),
+    ).not.toBeInTheDocument();
+    // DateDisplay renders the metrics-row createdAt; for a date this old it
+    // shows an absolute format that always includes the source year.
+    const expectedYear = new Date(metricsCreatedAt).getFullYear().toString();
+    expect(
+      within(row!).getByText(new RegExp(expectedYear)),
+    ).toBeInTheDocument();
+  });
+
+  it('shows canonical name + version when the metrics display name only echoes the resource name', async () => {
+    // When the BE could not resolve a user-facing name, the metrics row's
+    // displayName just echoes the K8s resource name. In that case the row falls
+    // back to canonical name + version from resolveAIMServiceDisplay. This
+    // requires a resolvable cluster model so parsedAIMs is non-empty.
+    mockFetchNamespaceMetrics.mockResolvedValue({
+      data: [
+        createMockResourceMetrics({
+          id: 'aim-service-1',
+          name: 'cluster-aim-service',
+          displayName: 'cluster-aim-service',
+          resourceType: ResourceType.AIM_SERVICE,
+        }),
+      ],
+      pagination: { page: 1, pageSize: 20, total: 1 },
+    });
+    const clusterAimService: AIMService = {
+      id: 'aim-service-1',
+      metadata: {
+        name: 'cluster-aim-service',
+        namespace: 'test-ns',
+        uid: 'uid-cluster-1',
+        labels: {},
+        annotations: {},
+        creationTimestamp: '2024-01-01T00:00:00Z',
+        ownerReferences: [],
+      },
+      spec: {
+        model: { name: 'cluster-model' },
+        replicas: 1,
+        overrides: {},
+        cacheModel: false,
+        runtimeConfigName: 'default',
+      },
+      status: {
+        status: AIMServiceStatus.RUNNING,
+        resolvedModel: { name: 'cluster-model' },
+      },
+      clusterAuthGroupId: null,
+      endpoints: {
+        internal: 'http://cluster-aim-service.test-ns.svc.cluster.local',
+      },
+    };
+    mockListInferenceDeployments.mockResolvedValue([clusterAimService]);
+    // Resolve the cluster model so useInferenceModelsByName populates parsedAIMs.
+    mockGetInferenceModel.mockImplementation(
+      async (name: string) =>
+        ({
+          metadata: {
+            name,
+            namespace: '',
+            uid: '',
+            labels: {},
+            annotations: {},
+          },
+          spec: { image: `${name}:latest` },
+          status: {
+            status: 'Ready',
+            aimId: name,
+            imageMetadata: { model: { tags: [] }, oci: {} },
+          },
+        }) as unknown as Awaited<ReturnType<typeof getInferenceModel>>,
+    );
+
+    await act(async () => {
+      render(<NamespaceWorkloadsTable namespace="test-ns" />, { wrapper });
+    });
+
+    await waitFor(() => {
+      // The row shows canonical name + version, not the echoed resource name.
+      expect(screen.getByText('test/model (1.0)')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('cluster-aim-service')).not.toBeInTheDocument();
+    const aimRow = screen
+      .getAllByRole('row')
+      .find((r) => r.textContent?.includes('test/model (1.0)'));
+    expect(aimRow).toBeDefined();
+    expect(within(aimRow!).getByText('test/model (1.0)')).toBeInTheDocument();
   });
 });

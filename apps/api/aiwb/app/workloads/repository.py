@@ -125,6 +125,10 @@ async def get_workloads(
         query = query.where(Workload.status.in_(status_filter))
     if chart_name:
         query = query.join(Chart).where(Chart.name == chart_name)
+    # Stable order so pagination (in-memory today, SQL LIMIT/OFFSET tomorrow
+    # — see EAI-6624) is deterministic; without it the same row can appear
+    # on multiple pages or be skipped as a client navigates.
+    query = query.order_by(Workload.created_at.desc(), Workload.id.desc())
 
     result = await session.execute(query)
     return result.unique().scalars().all()

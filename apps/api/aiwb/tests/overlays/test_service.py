@@ -38,7 +38,7 @@ async def test_create_overlay_success(db_session: AsyncSession) -> None:
     canonical_name = "production"
     creator = "test@example.com"
 
-    result = await create_overlay(db_session, chart.id, overlay_data, canonical_name, creator)
+    result = await create_overlay(db_session, chart.id, overlay_data, canonical_name, creator=creator)
     assert result is not None
     assert result.chart_id == chart.id
     assert result.overlay == overlay_data
@@ -55,7 +55,7 @@ async def test_create_overlay_chart_not_found(db_session: AsyncSession) -> None:
     non_existent_chart_id = uuid.uuid4()
 
     with pytest.raises(NotFoundException, match=f"Chart with ID {non_existent_chart_id} not found"):
-        await create_overlay(db_session, non_existent_chart_id, overlay_data, canonical_name, creator)
+        await create_overlay(db_session, non_existent_chart_id, overlay_data, canonical_name, creator=creator)
 
 
 @pytest.mark.asyncio
@@ -67,9 +67,9 @@ async def test_create_overlay_duplicate_canonical_name(db_session: AsyncSession)
     canonical_name = "production"
     creator = "test@example.com"
 
-    await create_overlay(db_session, chart.id, overlay_data, canonical_name, creator)
+    await create_overlay(db_session, chart.id, overlay_data, canonical_name, creator=creator)
     with pytest.raises(ConflictException, match="already exists"):
-        await create_overlay(db_session, chart.id, overlay_data, canonical_name, creator)
+        await create_overlay(db_session, chart.id, overlay_data, canonical_name, creator=creator)
 
 
 @pytest.mark.asyncio

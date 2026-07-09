@@ -2,18 +2,25 @@
 #
 # SPDX-License-Identifier: MIT
 
-import math
 from enum import Enum, StrEnum
 
-from pydantic import computed_field, field_validator
+from pydantic import Field, field_validator
 from pydantic.alias_generators import to_snake
 
 from api_common.schemas import BaseModel
 
 
 class PaginationConditions(BaseModel):
-    page: int | None = 1
-    page_size: int | None = 10
+    """Base pagination query inputs.
+
+    Subclasses can override these defaults and tighten bounds (see AIWB
+    endpoint schemas, which cap ``page_size`` at 100). The base bounds
+    keep callers safe from obvious abuses: page must be 1-indexed and
+    positive, page_size must be at least 1.
+    """
+
+    page: int | None = Field(default=1, ge=1)
+    page_size: int | None = Field(default=10, ge=1)
 
 
 class SortDirection(StrEnum):
@@ -60,14 +67,28 @@ class BaseSortableList(BaseModel):
     sort: list[SortCondition] | None  # List of dictionaries with 'field' and 'direction' keys
 
 
-class BasePaginationList(PaginationConditions):
-    """Base Pagination response fields for paginated lists."""
+class PaginationMetadata(BaseModel):
+    """Pagination metadata block emitted under `pagination` in list responses.
 
+    `totalPages` is intentionally not exposed — clients derive it as
+    `ceil(total / pageSize)` when needed.
+    """
+
+    page: int
+    page_size: int
     total: int
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def total_pages(self) -> int:
-        if not self.page_size:
-            return 1
-        return max(1, math.ceil(self.total / self.page_size))
+
+class BasePaginationList(BaseModel):
+    """Base envelope for paginated list responses.
+
+    Subclasses declare only the typed `data` field, e.g.:
+
+        class InferenceDeploymentsList(BasePaginationList):
+            data: list[InferenceDeploymentResponse]
+
+    Wire shape:
+        { "data": [...], "pagination": { "page": 1, "pageSize": 10, "total": N } }
+    """
+
+    pagination: PaginationMetadata

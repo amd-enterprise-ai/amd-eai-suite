@@ -149,7 +149,7 @@ async def test_get_resource_version_crd_returns_storage_version(mock_get_client)
     mock_get_client.return_value = mock_client
 
     version1 = MagicMock(storage=False, served=True)
-    version1.name = "v1alpha1"
+    version1.name = "v1alpha2"
     version2 = MagicMock(storage=True, served=True)
     version2.name = "v1"
 
@@ -174,7 +174,7 @@ async def test_get_resource_version_crd_falls_back_to_served_version(mock_get_cl
     version1 = MagicMock(storage=False, served=True)
     version1.name = "v1beta1"
     version2 = MagicMock(storage=False, served=False)
-    version2.name = "v1alpha1"
+    version2.name = "v1alpha2"
 
     mock_crd = MagicMock(spec=V1CustomResourceDefinition)
     mock_crd.spec = MagicMock(spec=V1CustomResourceDefinitionSpec)

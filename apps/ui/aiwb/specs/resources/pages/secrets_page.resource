@@ -18,7 +18,7 @@ ${DRAWER_HEADER_SELECTOR}           [role="dialog"] header
 ${CONFIRMATION_MODAL_SELECTOR}      [data-testid="confirmation-modal"]
 ${CONFIRM_BUTTON_SELECTOR}          [data-testid="confirm-button"]
 ${USE_CASE_SELECT_SELECTOR}         [data-testid="useCaseSelect"]
-${ACTIONS_BUTTON_SELECTOR}          button[aria-label="list.actions.label"]
+${ACTIONS_BUTTON_SELECTOR}          button[aria-label="Actions"]
 ${TOAST_SUCCESS_SELECTOR}           [data-testid="toast-success"]
 
 

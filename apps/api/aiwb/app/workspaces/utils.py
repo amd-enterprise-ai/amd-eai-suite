@@ -2,8 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+from urllib.parse import urlparse
+
+import yaml
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import WORKSPACES_HOST
 from ..workloads.enums import WorkloadStatus, WorkloadType
 from ..workloads.repository import get_workloads
 from .enums import (
@@ -12,6 +17,49 @@ from .enums import (
     WorkspaceUsageScope,
     workspace_type_chart_name_mapping,
 )
+
+_HTTPROUTE_KIND = "HTTPRoute"
+
+
+def get_workspaces_hostname(workspaces_host: str = WORKSPACES_HOST) -> str | None:
+    """Host portion of ``WORKSPACES_HOST`` (e.g. ``workspaces.<domain>``), or None."""
+    if not workspaces_host:
+        return None
+    return urlparse(workspaces_host).hostname or None
+
+
+def pin_workspace_route_hostname(manifest: str) -> str:
+    """Pin workspace HTTPRoutes in a rendered manifest to the workspaces host.
+
+    Stamps ``spec.hostnames=[workspaces.<domain>]`` onto HTTPRoute documents that
+    don't already declare hostnames, so the route lands in its own
+    ``workspaces.<domain>`` virtual host. Without this the route stays in the
+    shared wildcard vhost and is shadowed by the inference routes' exact-match
+    vhost on ``workloads.<domain>`` → 404; the dedicated subdomain also keeps
+    workspaces clear of the inference routes' cluster-auth gate.
+
+    Returns the manifest unchanged when no host can be derived or there are no
+    unpinned HTTPRoutes (so formatting is preserved in the common no-op case).
+    """
+    hostname = get_workspaces_hostname()
+    if not hostname:
+        logger.warning("WORKSPACES_HOST has no usable hostname; workspace routes left unpinned (may 404)")
+        return manifest
+
+    # Drop empty documents (Helm may emit `---` separators with only comments);
+    # safe_load_all yields None for those and re-serializing them would inject
+    # explicit `null` docs that break apply/create.
+    docs = [doc for doc in yaml.safe_load_all(manifest) if doc is not None]
+    changed = False
+    for doc in docs:
+        if isinstance(doc, dict) and doc.get("kind") == _HTTPROUTE_KIND and not doc.get("spec", {}).get("hostnames"):
+            doc.setdefault("spec", {})["hostnames"] = [hostname]
+            changed = True
+            logger.debug(f"Pinned workspace HTTPRoute/{doc.get('metadata', {}).get('name', 'unknown')} to {hostname}")
+
+    if not changed:
+        return manifest
+    return yaml.safe_dump_all(docs, sort_keys=False, default_flow_style=False, explicit_start=True)
 
 
 async def check_workspace_availability_per_namespace(

@@ -4,7 +4,7 @@
 
 import React from 'react';
 
-import { Skeleton } from '@heroui/react';
+import { Skeleton } from '@amdenterpriseai/components';
 
 import {
   chartColors,

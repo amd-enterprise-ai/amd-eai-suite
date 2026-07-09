@@ -10,6 +10,6 @@ Use .Values.airm.keycloak.publicUrl if specified, otherwise construct from known
 {{- if .Values.airm.keycloak.publicUrl -}}
 {{ .Values.airm.keycloak.publicUrl }}
 {{- else -}}
-https://{{ .Values.kgateway.keycloak.prefixValue }}.{{ .Values.airm.appDomain }}
+https://{{ .Values.gateway.keycloak.prefixValue }}.{{ .Values.airm.appDomain }}
 {{- end -}}
 {{- end -}}

@@ -1,17 +1,17 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Image, useDisclosure } from '@heroui/react';
 import { IconAppWindow } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { useCallback, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import { getFilteredData } from '@amdenterpriseai/utils/app';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
@@ -27,17 +27,17 @@ import { CatalogItemCard } from '@/components/features/catalog/CatalogItemCard';
 import { DeployWorkspaceDrawer } from '@/components/features/catalog/DeployWorkspaceDrawer';
 import { RequestSoftware } from '@/components/shared/RequestSoftware/RequestSoftware';
 import {
-  RelevantDocs,
+  ActionsToolbar,
   AiwbDocsPage,
   aiwbDocumentationMapping,
+  ConfirmationModal,
+  RelevantDocs,
 } from '@amdenterpriseai/components';
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
 
 import { useProject } from '@/contexts/ProjectContext';
 import {
-  deleteWorkload,
-  listWorkloads,
+  deleteWorkspace,
+  listAllWorkloads,
   getCatalogItems,
 } from '@/lib/app/workloads';
 import {
@@ -82,7 +82,7 @@ const WorkspacesPage: React.FC & WithDocumentationLink = () => {
     queryFn: async () => {
       if (!activeProject) return [];
 
-      const response = await listWorkloads(activeProject, {
+      return await listAllWorkloads(activeProject, {
         type: [WorkloadType.WORKSPACE],
         status: [
           WorkloadStatus.RUNNING,
@@ -90,15 +90,14 @@ const WorkspacesPage: React.FC & WithDocumentationLink = () => {
           WorkloadStatus.FAILED,
         ],
       });
-      return response.data;
     },
     refetchInterval: 10000, // Refetch every 10 seconds
     enabled: !!activeProject,
   });
 
-  const { mutate: deleteWorkloadMutation, isPending: isDeletePending } =
+  const { mutate: deleteWorkspaceMutation, isPending: isDeletePending } =
     useMutation({
-      mutationFn: (id: string) => deleteWorkload(id, activeProject || ''),
+      mutationFn: (id: string) => deleteWorkspace(activeProject || '', id),
       onSuccess: () => {
         queryClient.invalidateQueries({
           queryKey: ['project', activeProject, 'workloads'],
@@ -129,7 +128,7 @@ const WorkspacesPage: React.FC & WithDocumentationLink = () => {
     isOpen: isDrawerOpen,
     onOpen: onDrawerOpen,
     onClose: onDrawerClose,
-  } = useDisclosure();
+  } = useOverlayState();
   const handleItemClick = (item: CatalogItem) => {
     setSelectedItem(item);
     onDrawerOpen();
@@ -156,7 +155,7 @@ const WorkspacesPage: React.FC & WithDocumentationLink = () => {
     isOpen: isUndeployOpen,
     onOpen: onUndeployOpen,
     onClose: onUndeployClose,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const refreshCatalog = () => {
     refetchCatalog();
@@ -321,10 +320,11 @@ const WorkspacesPage: React.FC & WithDocumentationLink = () => {
                   item.featuredImage ? (
                     <Image
                       alt="workload icon"
+                      className="rounded-md"
                       height={40}
-                      radius="md"
                       src={item.featuredImage}
                       width={40}
+                      unoptimized
                     />
                   ) : (
                     <IconAppWindow size={32} />
@@ -367,7 +367,7 @@ const WorkspacesPage: React.FC & WithDocumentationLink = () => {
         description={t('undeployModal.description')}
         isOpen={isUndeployOpen}
         loading={isDeletePending}
-        onConfirm={() => deleteWorkloadMutation(selectedWorkload)}
+        onConfirm={() => deleteWorkspaceMutation(selectedWorkload)}
         onClose={onUndeployClose}
       />
     </>

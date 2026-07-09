@@ -20,6 +20,7 @@ Resource            resources/api_keys.resource
 
 # API resources (infrastructure preconditions, resolved via pythonpath)
 Resource            resources/airm_projects.resource
+Resource            resources/aims/api_keys.resource
 
 Suite Setup         Initialize API Key Suite
 Suite Teardown      Clean Up All Created Projects
@@ -101,3 +102,16 @@ Delete API key through UI
     When user deletes API key "${TEST_API_KEY_NAME}-delete"
     Then API key deleted successfully toast should appear
     And API key "${TEST_API_KEY_NAME}-delete" should not be visible in table
+
+Edit API key drawer shows linked model deployments
+    [Documentation]    Verify that the Edit API Key drawer correctly shows the model
+    ...                deployments already associated with the key, without requiring
+    ...                the user to reopen the drawer.
+    [Tags]    ui    api-keys    edit    gpu
+
+    Given an AIM model is running with api key
+    And user is logged in
+    And project "${TEST_PROJECT}[name]" is selected
+    And user is on API keys page
+    When user opens edit drawer for API key "${TEST_API_KEY}[displayName]"
+    Then edit drawer should show linked deployment "${TEST_AIM_NAME}"

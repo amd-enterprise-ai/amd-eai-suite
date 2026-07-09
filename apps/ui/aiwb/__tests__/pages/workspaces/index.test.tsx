@@ -16,8 +16,8 @@ import {
 } from '@/__mocks__/services/app/catalogs.data';
 import {
   getCatalogItems,
-  listWorkloads,
-  deleteWorkload,
+  listAllWorkloads,
+  deleteWorkspace,
 } from '@/lib/app/workloads';
 
 import { generateMockWorkspaceWorkloads } from '@/__mocks__/utils/workloads-mock';
@@ -33,13 +33,28 @@ import { Mock, vi } from 'vitest';
 vi.mock('@/lib/app/workloads', async (importOriginal) => ({
   ...(await importOriginal()),
   getCatalogItems: vi.fn(),
-  listWorkloads: vi.fn(),
-  deleteWorkload: vi.fn(),
+  listAllWorkloads: vi.fn(),
+  deleteWorkspace: vi.fn(),
 }));
 
 // Mock RequestSoftware to avoid loading its bg.svg asset in jsdom
 vi.mock('@/components/shared/RequestSoftware/RequestSoftware', () => ({
   RequestSoftware: () => <div data-testid="request-software" />,
+}));
+
+// Mock next/image: the real component rejects relative srcs and requires a
+// configured loader, neither of which exist in jsdom.
+vi.mock('next/image', () => ({
+  default: ({ src, alt, width, height, className }: any) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      width={width}
+      height={height}
+      className={className}
+    />
+  ),
 }));
 
 const mockSession = {
@@ -56,7 +71,7 @@ describe('Catalog Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (getCatalogItems as Mock).mockResolvedValue(mockCatalogItems);
-    (listWorkloads as Mock).mockResolvedValue([]);
+    (listAllWorkloads as Mock).mockResolvedValue([]);
   });
 
   it('renders the catalog page', async () => {
@@ -149,8 +164,7 @@ describe('Catalog Page', () => {
 
   it('renders the catalog page with user scope without running workloads', async () => {
     (getCatalogItems as Mock).mockResolvedValue([mockCatalogItems[0]]);
-
-    (listWorkloads as Mock).mockResolvedValue([]);
+    (listAllWorkloads as Mock).mockResolvedValue([]);
 
     await act(async () => {
       render(
@@ -170,7 +184,7 @@ describe('Catalog Page', () => {
   it('renders the catalog page with user scope with running workloads', async () => {
     (getCatalogItems as Mock).mockResolvedValue([mockCatalogItems[0]]);
 
-    (listWorkloads as Mock).mockResolvedValue(
+    (listAllWorkloads as Mock).mockResolvedValue(
       generateMockWorkspaceWorkloads(
         1,
         mockCatalogItems[0].name,
@@ -198,8 +212,7 @@ describe('Catalog Page', () => {
 
   it('renders the catalog page with project scope without running workloads', async () => {
     (getCatalogItems as Mock).mockResolvedValue(mockProjectScopedCatalogItems);
-
-    (listWorkloads as Mock).mockResolvedValue([]);
+    (listAllWorkloads as Mock).mockResolvedValue([]);
 
     await act(async () => {
       render(
@@ -221,7 +234,7 @@ describe('Catalog Page', () => {
   it('renders the catalog page with project scope with running workloads', async () => {
     (getCatalogItems as Mock).mockResolvedValue(mockProjectScopedCatalogItems);
 
-    (listWorkloads as Mock).mockResolvedValue(
+    (listAllWorkloads as Mock).mockResolvedValue(
       generateMockWorkspaceWorkloads(
         1,
         mockProjectScopedCatalogItems[0].name,
@@ -249,7 +262,7 @@ describe('Catalog Page', () => {
     });
   });
 
-  it('Workspace page calls listWorkloads with type WORKSPACE and status RUNNING, PENDING, FAILED', async () => {
+  it('Workspace page calls listAllWorkloads with type WORKSPACE and status RUNNING, PENDING, FAILED', async () => {
     await act(async () => {
       render(
         <SessionProvider session={mockSession}>
@@ -259,7 +272,7 @@ describe('Catalog Page', () => {
       );
     });
 
-    expect(listWorkloads).toHaveBeenCalledWith('project1', {
+    expect(listAllWorkloads).toHaveBeenCalledWith('project1', {
       type: [WorkloadType.WORKSPACE],
       status: [
         WorkloadStatus.RUNNING,
@@ -272,7 +285,7 @@ describe('Catalog Page', () => {
   it('displays pending label on catalog item card when workload is pending', async () => {
     (getCatalogItems as Mock).mockResolvedValue([mockCatalogItems[0]]);
 
-    (listWorkloads as Mock).mockResolvedValue(
+    (listAllWorkloads as Mock).mockResolvedValue(
       generateMockWorkspaceWorkloads(
         1,
         mockCatalogItems[0].name,
@@ -306,7 +319,7 @@ describe('Catalog Page', () => {
       WorkloadStatus.FAILED,
       WorkloadType.WORKSPACE,
     );
-    (listWorkloads as Mock).mockResolvedValue(failedWorkloadsResponse);
+    (listAllWorkloads as Mock).mockResolvedValue(failedWorkloadsResponse);
 
     await act(async () => {
       render(
@@ -330,7 +343,7 @@ describe('Catalog Page', () => {
     });
   });
 
-  it('calls deleteWorkload with failed workload id when Delete failed workload is confirmed', async () => {
+  it('calls deleteWorkspace with failed workspace id when Delete failed workload is confirmed', async () => {
     (getCatalogItems as Mock).mockResolvedValue([mockCatalogItems[0]]);
 
     const failedWorkloadsResponse = generateMockWorkspaceWorkloads(
@@ -339,9 +352,9 @@ describe('Catalog Page', () => {
       WorkloadStatus.FAILED,
       WorkloadType.WORKSPACE,
     );
-    const failedWorkloadId = failedWorkloadsResponse.data[0].id;
-    (listWorkloads as Mock).mockResolvedValue(failedWorkloadsResponse);
-    (deleteWorkload as Mock).mockResolvedValue(undefined);
+    const failedWorkloadId = failedWorkloadsResponse[0].id;
+    (listAllWorkloads as Mock).mockResolvedValue(failedWorkloadsResponse);
+    (deleteWorkspace as Mock).mockResolvedValue(undefined);
 
     await act(async () => {
       render(
@@ -372,7 +385,10 @@ describe('Catalog Page', () => {
     });
 
     await waitFor(() => {
-      expect(deleteWorkload).toHaveBeenCalledWith(failedWorkloadId, 'project1');
+      expect(deleteWorkspace).toHaveBeenCalledWith(
+        'project1',
+        failedWorkloadId,
+      );
     });
   });
 });

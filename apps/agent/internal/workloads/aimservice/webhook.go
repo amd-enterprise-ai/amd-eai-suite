@@ -6,9 +6,11 @@ package aimservice
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	aimv1alpha1 "github.com/amd-enterprise-ai/aim-engine/api/v1alpha1"
+	aimv1alpha2 "github.com/amd-enterprise-ai/aim-engine/api/v1alpha2"
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -35,7 +37,18 @@ func (h *Webhook) Handle(ctx context.Context, req admission.Request) admission.R
 		return admission.Allowed("namespace not managed by AIRM")
 	}
 
-	aimService := &aimv1alpha1.AIMService{}
+	// AIM Engine uses None conversion strategy, so admission requests arrive
+	// in whatever apiVersion the client sent. Decode into the matching kind.
+	var aimService client.Object
+	switch req.Kind.Version {
+	case "v1alpha2":
+		aimService = &aimv1alpha2.AIMService{}
+	case "v1alpha1":
+		aimService = &aimv1alpha1.AIMService{}
+	default:
+		return admission.Errored(http.StatusBadRequest,
+			fmt.Errorf("unsupported AIMService apiVersion %q", req.Kind.Group+"/"+req.Kind.Version))
+	}
 	if err := h.Decoder.Decode(req, aimService); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}

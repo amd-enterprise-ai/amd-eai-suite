@@ -31,8 +31,8 @@ vi.mock('next-i18next', () => ({
   }),
 }));
 
-// Mock HeroUI components
-vi.mock('@heroui/react', () => ({
+// Mock shared component adapters
+vi.mock('@amdenterpriseai/components', () => ({
   Chip: ({ children, size, variant }: any) => (
     <span data-testid="chip" data-size={size} data-variant={variant}>
       {children}
@@ -53,6 +53,10 @@ vi.mock('@heroui/react', () => ({
       {children}
     </div>
   ),
+}));
+
+// Mock HeroUI utilities
+vi.mock('@heroui/react', () => ({
   cn: (...classes: string[]) => classes.filter(Boolean).join(' '),
 }));
 

@@ -2,14 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useDisclosure } from '@heroui/react';
-import { IconEdit, IconTrash } from '@tabler/icons-react';
+import { IconChartBar, IconEdit, IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
+import { useRouter } from 'next/router';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useProject } from '@/contexts/ProjectContext';
+
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import { deleteApiKey, fetchProjectApiKeys } from '@/lib/app/api-keys';
 
@@ -60,9 +62,10 @@ const API_KEYS_QUERY_KEY = 'project-api-keys';
 
 export const ApiKeysTable: React.FC<Props> = ({ projectId, createButton }) => {
   const { t } = useTranslation('api-keys');
+  const router = useRouter();
+  const { projectPath, aiGatewayEnabled } = useProject();
   const queryClient = useQueryClient();
   const { toast } = useSystemToast();
-
   const [apiKeySelected, setApiKeySelected] = useState<ApiKey | undefined>();
   const [filters, setFilters] = useState<ClientSideDataFilter<ApiKey>[]>([]);
 
@@ -70,13 +73,13 @@ export const ApiKeysTable: React.FC<Props> = ({ projectId, createButton }) => {
     isOpen: isDeleteApiKeyModalOpen,
     onOpen: onDeleteApiKeyModalOpen,
     onOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isEditApiKeyModalOpen,
     onOpen: onEditApiKeyModalOpen,
     onClose: onEditApiKeyModalClose,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const { mutate: deleteApiKeyMutation } = useMutation({
     mutationFn: ({
@@ -119,6 +122,7 @@ export const ApiKeysTable: React.FC<Props> = ({ projectId, createButton }) => {
   const customRenderers: Partial<
     Record<ApiKeysTableField, (item: ApiKey) => React.ReactNode | string>
   > = {
+    [ApiKeysTableField.NAME]: (item) => item.displayName,
     [ApiKeysTableField.SECRET_KEY]: (item) => (
       <code className="text-sm font-mono">{item.truncatedKey}</code>
     ),
@@ -131,6 +135,23 @@ export const ApiKeysTable: React.FC<Props> = ({ projectId, createButton }) => {
   };
 
   const rowActions = () => [
+    ...(aiGatewayEnabled
+      ? [
+          {
+            key: 'viewDetails',
+            label: t('list.actions.viewDetails.title'),
+            color: 'default',
+            startContent: <IconChartBar />,
+            onPress: (apiKey: ApiKey) => {
+              router.push(
+                projectPath(
+                  `/api-keys/${apiKey.id}?name=${encodeURIComponent(apiKey.displayName)}`,
+                ),
+              );
+            },
+          },
+        ]
+      : []),
     {
       key: 'edit',
       label: t('list.actions.edit.title'),
@@ -165,7 +186,7 @@ export const ApiKeysTable: React.FC<Props> = ({ projectId, createButton }) => {
     [t],
   );
 
-  const handleFilterChange = (newFilters: Record<string, any>) => {
+  const handleFilterChange = (newFilters: Record<string, string[]>) => {
     const clientFilters: ClientSideDataFilter<ApiKey>[] = [];
 
     if (
@@ -174,7 +195,7 @@ export const ApiKeysTable: React.FC<Props> = ({ projectId, createButton }) => {
       !(newFilters.search.length === 1 && newFilters.search[0] === '')
     ) {
       clientFilters.push({
-        field: 'name',
+        field: 'displayName',
         values: newFilters.search,
       });
     }

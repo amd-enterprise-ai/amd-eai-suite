@@ -2,12 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { SelectItem, Tab, Tabs } from '@heroui/react';
+import {
+  SelectItem,
+  FormInput,
+  FormSelect,
+  Tab,
+  Tabs,
+} from '@amdenterpriseai/components';
 import { useCallback, useMemo, useState } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { useTranslation } from 'next-i18next';
-
-import { FormInput, FormSelect } from '@amdenterpriseai/components';
 
 enum TokenSelectorMode {
   EXISTING = 'existing',
@@ -16,7 +20,7 @@ enum TokenSelectorMode {
 
 interface HuggingFaceTokenSelectorProps {
   form: UseFormReturn<any>;
-  existingTokens: { metadata: { name: string } }[];
+  existingTokens: { displayName: string }[];
   fieldNames?: {
     selectedToken?: string;
     name?: string;
@@ -33,7 +37,7 @@ export const HuggingFaceTokenSelector = ({
     token: 'token',
   },
 }: HuggingFaceTokenSelectorProps) => {
-  const { t } = useTranslation('models');
+  const { t } = useTranslation('models' as any);
 
   const selectedTokenField = fieldNames.selectedToken || 'selectedToken';
   const nameField = fieldNames.name || 'name';
@@ -121,14 +125,14 @@ export const HuggingFaceTokenSelector = ({
           placeholder={t(
             'huggingFaceTokenDrawer.fields.selectToken.placeholder',
           )}
-          onSelectionChange={(keys) => {
+          onSelectionChange={(keys: Iterable<unknown> | ArrayLike<unknown>) => {
             const selectedKey = Array.from(keys)[0] as string;
             form.setValue(selectedTokenField, selectedKey);
             form.clearErrors([selectedTokenField]);
           }}
         >
           {existingTokens.map((token, index) => (
-            <SelectItem key={index}>{token.metadata.name}</SelectItem>
+            <SelectItem key={index}>{token.displayName}</SelectItem>
           ))}
         </FormSelect>
       )}

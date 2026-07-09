@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tooltip } from '@heroui/react';
 import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -16,14 +15,15 @@ import { Secret } from '@/types/secrets';
 
 import { SecretStatus } from '@/types/enums/secrets';
 
-import { ClientSideDataTable } from '@amdenterpriseai/components';
 import {
-  StatusDisplay,
+  ClientSideDataTable,
   DateDisplay,
   NoDataDisplay,
+  StatusDisplay,
+  StatusError,
+  Tooltip,
 } from '@amdenterpriseai/components';
 
-import { StatusError } from '@amdenterpriseai/components';
 import SecretProjectAssignedTo from './SecretProjectAssignedTo';
 import { getSecretStatusVariants } from '@/utils/secrets-status-variants';
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tooltip } from '@heroui/react';
+import { Tooltip } from '@amdenterpriseai/components';
 import { IconChevronRight } from '@tabler/icons-react';
 import { useMemo } from 'react';
 

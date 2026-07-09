@@ -12,7 +12,7 @@ import { SidebarItem } from '@amdenterpriseai/types';
 
 import { CollapsibleItem } from './CollapsibleItem';
 import { SidebarButton } from './SidebarButton';
-import { Button } from '@heroui/react';
+import { Button } from '../Buttons/Button';
 
 interface Props {
   title: string;
@@ -51,7 +51,9 @@ export const Section: React.FC<Props> = ({
           ${isSidebarMini ? 'group-hover:flex hidden' : 'flex'}`}
         >
           <div className="flex items-center w-full">
-            <span className="flex-1 text-left">{t(title)}</span>
+            <span className="flex-1 text-left">
+              {t(title as any) as string}
+            </span>
           </div>
         </Button>
       </div>

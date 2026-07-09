@@ -78,7 +78,6 @@ const createMockService = (
     cacheModel: true,
     routing: { annotations: {}, enabled: true },
     runtimeConfigName: 'default',
-    template: {},
   },
   status: { status },
   clusterAuthGroupId: null,

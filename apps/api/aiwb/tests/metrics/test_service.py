@@ -9,15 +9,26 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.metrics.constants import GPU_POD_METRIC_LABEL, VLLM_POD_METRIC_LABEL
+from app.metrics.constants import (
+    AIM_SERVICE_ID_METRIC_LABEL,
+    API_KEY_ID_METRIC_LABEL,
+    EXTPROC_REQUEST_DURATION_COUNT_METRIC,
+    EXTPROC_TOKEN_USAGE_METRIC,
+    GPU_POD_METRIC_LABEL,
+    VLLM_POD_METRIC_LABEL,
+)
 from app.metrics.service import (
+    _escape_promql_label_value,
     _pod_selector,
     get_e2e_latency_metric,
     get_gpu_device_utilization_metric,
     get_gpu_memory_utilization_metric,
+    get_input_tokens_by_api_key,
     get_inter_token_latency_metric,
     get_kv_cache_usage_metric,
     get_max_requests_metric,
+    get_output_tokens_by_api_key,
+    get_requests_by_api_key,
     get_total_tokens_metric,
     get_ttft_latency_metric,
 )
@@ -316,3 +327,210 @@ async def test_gpu_metric_includes_pod_label_when_pod_name_set(
     query = mock_prometheus_client.custom_query_range.call_args.kwargs["query"]
     assert f'{GPU_POD_METRIC_LABEL}="pod-abc"' in query
     assert VLLM_POD_METRIC_LABEL not in query
+
+
+# =============================================================================
+# get_input_tokens_by_api_key
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_input_tokens_returns_value_when_data_present(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[{"metric": {}, "value": [end.timestamp(), "150"]}])
+
+    result = await get_input_tokens_by_api_key("my-key", start, end, mock_prometheus_client)
+
+    assert result.data == 150.0
+    assert result.range.start == start
+    assert result.range.end == end
+
+
+@pytest.mark.asyncio
+async def test_input_tokens_returns_zero_when_no_data(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    result = await get_input_tokens_by_api_key("my-key", start, end, mock_prometheus_client)
+
+    assert result.data == 0
+
+
+@pytest.mark.asyncio
+async def test_input_tokens_query_contains_api_key_id_and_token_type(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    await get_input_tokens_by_api_key("test-api-key", start, end, mock_prometheus_client)
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert f'{API_KEY_ID_METRIC_LABEL}="test-api-key"' in query
+    assert 'gen_ai_token_type="input"' in query
+    assert EXTPROC_TOKEN_USAGE_METRIC in query
+
+
+@pytest.mark.asyncio
+async def test_input_tokens_query_includes_aim_service_id_when_provided(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    await get_input_tokens_by_api_key("my-key", start, end, mock_prometheus_client, aim_service_id="svc-abc")
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert f'{AIM_SERVICE_ID_METRIC_LABEL}="svc-abc"' in query
+
+
+@pytest.mark.asyncio
+async def test_input_tokens_query_omits_aim_service_id_when_not_provided(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    await get_input_tokens_by_api_key("my-key", start, end, mock_prometheus_client)
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert AIM_SERVICE_ID_METRIC_LABEL not in query
+
+
+# =============================================================================
+# get_output_tokens_by_api_key
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_output_tokens_returns_value_when_data_present(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[{"metric": {}, "value": [end.timestamp(), "75"]}])
+
+    result = await get_output_tokens_by_api_key("my-key", start, end, mock_prometheus_client)
+
+    assert result.data == 75.0
+
+
+@pytest.mark.asyncio
+async def test_output_tokens_returns_zero_when_no_data(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    result = await get_output_tokens_by_api_key("my-key", start, end, mock_prometheus_client)
+
+    assert result.data == 0
+
+
+@pytest.mark.asyncio
+async def test_output_tokens_query_contains_api_key_id_and_token_type(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    await get_output_tokens_by_api_key("test-api-key", start, end, mock_prometheus_client)
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert f'{API_KEY_ID_METRIC_LABEL}="test-api-key"' in query
+    assert 'gen_ai_token_type="output"' in query
+    assert EXTPROC_TOKEN_USAGE_METRIC in query
+
+
+@pytest.mark.asyncio
+async def test_output_tokens_query_includes_aim_service_id_when_provided(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    await get_output_tokens_by_api_key("my-key", start, end, mock_prometheus_client, aim_service_id="svc-xyz")
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert f'{AIM_SERVICE_ID_METRIC_LABEL}="svc-xyz"' in query
+
+
+# =============================================================================
+# get_requests_by_api_key
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_requests_returns_value_when_data_present(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[{"metric": {}, "value": [end.timestamp(), "10"]}])
+
+    result = await get_requests_by_api_key("my-key", start, end, mock_prometheus_client)
+
+    assert result.data == 10.0
+
+
+@pytest.mark.asyncio
+async def test_requests_returns_zero_when_no_data(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    result = await get_requests_by_api_key("my-key", start, end, mock_prometheus_client)
+
+    assert result.data == 0
+
+
+@pytest.mark.asyncio
+async def test_requests_query_contains_api_key_id_and_uses_ceil(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    await get_requests_by_api_key("test-api-key", start, end, mock_prometheus_client)
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert f'{API_KEY_ID_METRIC_LABEL}="test-api-key"' in query
+    assert "ceil(" in query
+    assert EXTPROC_REQUEST_DURATION_COUNT_METRIC in query
+
+
+@pytest.mark.asyncio
+async def test_requests_query_includes_aim_service_id_when_provided(
+    mock_prometheus_client: Mock, time_range: tuple[datetime, datetime]
+) -> None:
+    start, end = time_range
+    mock_prometheus_client.custom_query = Mock(return_value=[])
+
+    await get_requests_by_api_key("my-key", start, end, mock_prometheus_client, aim_service_id="svc-abc")
+
+    query = mock_prometheus_client.custom_query.call_args.kwargs["query"]
+    assert f'{AIM_SERVICE_ID_METRIC_LABEL}="svc-abc"' in query
+
+
+# =============================================================================
+# _escape_promql_label_value
+# =============================================================================
+
+
+def test_escape_promql_label_value_passes_clean_values_through() -> None:
+    assert _escape_promql_label_value("my-api-key") == "my-api-key"
+
+
+def test_escape_promql_label_value_escapes_double_quotes() -> None:
+    assert _escape_promql_label_value('key"name') == 'key\\"name'
+
+
+def test_escape_promql_label_value_escapes_backslashes() -> None:
+    assert _escape_promql_label_value("key\\name") == "key\\\\name"
+
+
+def test_escape_promql_label_value_escapes_backslash_before_quote() -> None:
+    assert _escape_promql_label_value('key\\"') == 'key\\\\\\"'

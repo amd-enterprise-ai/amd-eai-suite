@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 import { useMemo } from 'react';
-import { Select, SelectItem } from '@heroui/react';
+import { Select, SelectItem } from '@amdenterpriseai/components';
+
 import { IconCpu } from '@tabler/icons-react';
 
 import { WorkloadType } from '@amdenterpriseai/types';

@@ -1,7 +1,14 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Card, CardFooter, CardHeader, Chip, Divider } from '@heroui/react';
+import {
+  ActionButton,
+  Card,
+  CardFooter,
+  CardHeader,
+  Chip,
+  Divider,
+} from '@amdenterpriseai/components';
 import { IconExternalLink, IconTrash } from '@tabler/icons-react';
 
 import { TruncatedTagsRow } from '@/components/shared/TruncatedTagsRow';
@@ -11,8 +18,6 @@ import { useTranslation } from 'next-i18next';
 import { CatalogItem } from '@/types/catalog';
 import { Color } from '@amdenterpriseai/types';
 import { ActionItem } from '@amdenterpriseai/types';
-
-import { ActionButton } from '@amdenterpriseai/components';
 
 interface Props {
   isDeployed?: boolean;

@@ -2,553 +2,170 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useDisclosure } from '@heroui/react';
-import {
-  IconAffiliate,
-  IconEye,
-  IconRocket,
-  IconTrash,
-} from '@tabler/icons-react';
+import { IconCloudUpload } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
-
-import {
-  deleteModel,
-  finetuneModel,
-  getFinetunableModels,
-  getModels,
-} from '@/lib/app/models';
-import {
-  AIM_MODEL_NAME_LABEL,
-  AIM_MODEL_WORKLOAD_ID_LABEL,
-  AIMService,
-  AIMStatus,
-} from '@/types/aims';
-import { AIMModelResponse, ModelFinetuneParams } from '@/types/models';
-import { deleteWorkload, listWorkloads } from '@/lib/app/workloads';
-import { getAimServices } from '@/lib/app/aims';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
+import { ActionButton, ActionsToolbar } from '@amdenterpriseai/components';
+import { PageLoader } from '@/components/shared/PageLoader';
+import { FilterComponentType, FilterValueMap } from '@amdenterpriseai/types';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
-
-import { getFilteredData } from '@amdenterpriseai/utils/app';
-import { getWorkloadStatusVariants } from '@/utils/workloads';
-
-import { ActionButton } from '@amdenterpriseai/components';
-import { ActionItem, TableColumns } from '@amdenterpriseai/types';
-import { FilterComponentType } from '@amdenterpriseai/types';
-import { ModelsTableField } from '@/types/enums/models-table-fields';
-import { SortDirection } from '@amdenterpriseai/types';
-import { WorkloadType } from '@amdenterpriseai/types';
-import { WorkloadStatus } from '@/types/enums/workloads';
-import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import { FinetunableModel, Model, ModelOnboardingStatus } from '@/types/models';
-
-import DeleteModelModal from '@/components/features/models/DeleteModelModal';
-import { DeployFinetuneAIMDrawer } from '@/components/features/models/DeployFinetuneAIMDrawer';
-import FinetuneDrawer from '@/components/features/models/FinetuneDrawer';
-import ModelDetailsModal from '@/components/features/models/ModelDetailsModal';
-import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { StatusDisplay } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
-
 import { useProject } from '@/contexts/ProjectContext';
-import { useRouter } from 'next/router';
-import { Workload } from '@/types/workloads';
+import {
+  CustomModelDeleteConflictError,
+  deleteCustomModel,
+  listCustomModels,
+} from '@/lib/app/custom-models';
+import { AggregatedAIM, AIMStatus, ParsedAIM } from '@/types/aims';
+import { OnboardPhase } from '@/types/custom-models';
+import { Model } from '@/types/models';
 
-type ModelRow = Model & { source: 'model' | 'workload' };
+import { CustomModelCard } from './CustomModelCard';
+import DeleteModelModal from './DeleteModelModal';
+import { DeployCustomAIMDrawer } from './DeployCustomAIMDrawer';
 
-const defaultStatusSet = [
-  WorkloadStatus.PENDING,
-  WorkloadStatus.RUNNING,
-  WorkloadStatus.COMPLETE,
-  WorkloadStatus.FAILED,
-];
+const CUSTOM_MODELS_REFETCH_INTERVAL = 30000;
 
-const convertFilterValueMap = (
-  filters: FilterValueMap,
-): ClientSideDataFilter<Model>[] => {
-  const newFilters: ClientSideDataFilter<Model>[] = [];
-  if (filters?.search) {
-    newFilters.push({
-      field: 'name',
-      values: filters.search,
-    });
+/**
+ * Maps the status filter dropdown selection to predicates against the
+ * derived {@link OnboardPhase}, which is what the card's status pill displays.
+ * Filtering on `onboardPhase` keeps the filter and card in sync — a model
+ * shown as "Importing" on its card will appear under the "Onboarding" bucket.
+ */
+const STATUS_FILTER_PREDICATES: Record<
+  string,
+  (phase: OnboardPhase | undefined) => boolean
+> = {
+  onboarding: (phase) => phase !== 'Ready' && phase !== 'Failed',
+  ready: (phase) => phase === 'Ready',
+  failed: (phase) => phase === 'Failed',
+};
+
+/**
+ * Search and status filtering is applied to the aggregated families rather
+ * than to the underlying {@link ParsedAIM} list, so {@link AggregatedAIM.isSupported}
+ * (which drives the Deploy button) keeps reflecting the full family — picking
+ * "Onboarding" must not turn a deployable family into a non-deployable one
+ * because some other version was filtered out.
+ */
+const matchesSearch = (aggregatedAim: AggregatedAIM, query: string) => {
+  const needle = query.toLowerCase();
+  const tagsHaystack = (aggregatedAim.aggregated.tags ?? [])
+    .join(' ')
+    .toLowerCase();
+  if (tagsHaystack.includes(needle)) {
+    return true;
   }
-  if (filters?.status && filters.status.length > 0) {
-    newFilters.push({
-      field: 'status',
-      values: filters.status,
-    });
+  if (
+    aggregatedAim.repository.toLowerCase().includes(needle) ||
+    aggregatedAim.aggregated.title.toLowerCase().includes(needle) ||
+    aggregatedAim.aggregated.canonicalName.toLowerCase().includes(needle) ||
+    aggregatedAim.aggregated.description.short.toLowerCase().includes(needle)
+  ) {
+    return true;
   }
-  return newFilters;
+  return aggregatedAim.parsedAIMs.some((aim) => {
+    const haystack = [
+      aim.title,
+      aim.canonicalName,
+      aim.model,
+      aim.imageVersion,
+      aim.imageReference,
+      aim.sourceUri ?? '',
+      (aim.tags ?? []).join(' '),
+    ]
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(needle);
+  });
+};
+
+function aggregatedToDeleteModalModel(aggregatedAim: AggregatedAIM): Model {
+  return {
+    name: aggregatedAim.aggregated.title,
+    resourceName: aggregatedAim.repository,
+    canonicalName: aggregatedAim.aggregated.canonicalName,
+  };
+}
+
+const matchesStatusSelection = (
+  aggregatedAim: AggregatedAIM,
+  selection: string[],
+) => {
+  if (selection.length === 0) return true;
+  const predicates = selection
+    .map((key) => STATUS_FILTER_PREDICATES[key])
+    .filter((p): p is (phase: OnboardPhase | undefined) => boolean =>
+      Boolean(p),
+    );
+  if (predicates.length === 0) return true;
+  return predicates.some((predicate) =>
+    predicate(aggregatedAim.aggregated.onboardPhase),
+  );
 };
 
 const CustomModels = () => {
   const { t } = useTranslation('models');
-  const { t: tCustomModels } = useTranslation('models', {
-    keyPrefix: 'customModels',
-  });
-  const { t: tWorkloads } = useTranslation('workloads');
+  const { toast } = useSystemToast();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { toast } = useSystemToast();
   const { activeProject, projectPath } = useProject();
 
-  const [modelForDeletion, setModelForDeletion] = useState<Model | undefined>(
-    undefined,
-  );
-  const [workloadForDeletion, setWorkloadForDeletion] = useState<
-    Workload | undefined
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusSelection, setStatusSelection] = useState<string[]>([]);
+
+  const [aimForDeployment, setAimForDeployment] = useState<
+    AggregatedAIM | undefined
   >(undefined);
-  const [hasActiveDeployments, setHasActiveDeployments] = useState(false);
-  const [modelForAIMDeploy, setModelForAIMDeploy] = useState<Model | null>(
-    null,
-  );
-  const [modelToFinetune, setModelToFinetune] = useState<Model | undefined>(
-    undefined,
-  );
+  const deployDisclosure = useOverlayState();
 
-  const finetuneDisclosure = useDisclosure();
-
-  const { data: finetunableModels } = useQuery({
-    queryKey: ['models', 'finetunable'],
-    queryFn: (): Promise<FinetunableModel[]> => getFinetunableModels(),
-  });
-
-  const deleteModelDisclosure = useDisclosure();
-  const deleteWorkloadDisclosure = useDisclosure();
-
-  const [filters, setFilters] = useState<ClientSideDataFilter<Model>[]>(
-    convertFilterValueMap({
-      status: defaultStatusSet,
-    }),
-  );
-
-  const {
-    data: rawModels,
-    isLoading: isModelsLoading,
-    isRefetching: isModelsRefetching,
-    refetch: refetchModels,
-    error: modelsError,
-    dataUpdatedAt: modelsDataUpdatedAt,
-  } = useQuery<AIMModelResponse[]>({
-    queryKey: ['project', activeProject, 'models', 'custom'],
-    queryFn: () => getModels(activeProject!),
-    refetchInterval: 30000,
-    enabled: !!activeProject,
-  });
-
-  const models: ModelRow[] = useMemo(
-    () =>
-      (rawModels ?? []).map((item) => {
-        const labels = item.metadata.labels ?? {};
-        return {
-          id: labels[AIM_MODEL_WORKLOAD_ID_LABEL],
-          name: labels[AIM_MODEL_NAME_LABEL] || item.metadata.name,
-          canonicalName: item.spec?.modelSources?.[0]?.modelId || '',
-          resourceName: item.metadata.name,
-          source: 'model' as const,
-          status: (() => {
-            switch (item.status?.status as AIMStatus | string) {
-              case AIMStatus.READY:
-                return WorkloadStatus.COMPLETE;
-              case AIMStatus.FAILED:
-              case AIMStatus.DEGRADED:
-                return WorkloadStatus.FAILED;
-              default:
-                return WorkloadStatus.PENDING;
-            }
-          })(),
-          workloadId: labels[AIM_MODEL_WORKLOAD_ID_LABEL],
-          createdAt: item.metadata?.creationTimestamp,
-        };
-      }),
-    [rawModels],
-  );
-
-  const {
-    data: workloads,
-    isLoading: isWorkloadsLoading,
-    refetch: refetchWorkloads,
-    dataUpdatedAt: workloadsDataUpdatedAt,
-  } = useQuery({
-    queryKey: ['project', activeProject, 'workloads'],
-    queryFn: async () => {
-      if (!activeProject) return [];
-
-      const response = await listWorkloads(activeProject, {
-        type: [WorkloadType.INFERENCE, WorkloadType.FINE_TUNING],
-        // No need to show the deleted workloads in the table.
-        status: [
-          WorkloadStatus.PENDING,
-          WorkloadStatus.STARTING,
-          WorkloadStatus.RUNNING,
-          WorkloadStatus.COMPLETE,
-          WorkloadStatus.FAILED,
-        ],
-      });
-      return response.data;
-    },
-    refetchInterval: 30000, // Refetch every 30 seconds
-    enabled: !!activeProject,
-  });
-
-  const {
-    data: aimServices = [],
-    refetch: refetchAimServices,
-    dataUpdatedAt: aimServicesDataUpdatedAt,
-  } = useQuery<AIMService[]>({
-    queryKey: ['project', activeProject, 'aim-services'],
-    queryFn: () => getAimServices(activeProject!),
-    refetchInterval: 30000,
-    enabled: !!activeProject,
-  });
-
-  const dataUpdatedAt =
-    modelsDataUpdatedAt || workloadsDataUpdatedAt || aimServicesDataUpdatedAt;
-
-  const refetchModelsAndWorkloads = useCallback(async () => {
-    await Promise.all([
-      refetchModels(),
-      refetchWorkloads(),
-      refetchAimServices(),
-    ]);
-  }, [refetchModels, refetchWorkloads, refetchAimServices]);
-
-  const deleteModelMutation = useMutation({
-    mutationFn: async (variables: { name: string; force?: boolean }) => {
-      if (!activeProject) {
-        throw new Error('No active project selected');
-      }
-      await deleteModel(variables.name, activeProject, variables.force);
-    },
-    onSuccess: () => {
-      setHasActiveDeployments(false);
-      queryClient.invalidateQueries({
-        queryKey: ['project', activeProject, 'models'],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ['project', activeProject, 'workloads'],
-      });
-      toast.success(
-        t(
-          'customModels.list.actions.delete.notification.success',
-          'Model deleted successfully',
-        ),
-      );
-      deleteModelDisclosure.onClose();
-    },
-    onError: (error: unknown) => {
-      if (error instanceof APIRequestError && error.statusCode === 409) {
-        setHasActiveDeployments(true);
-        return;
-      }
-      deleteModelDisclosure.onClose();
-      const message =
-        error instanceof APIRequestError ? error.message : undefined;
-      toast.error(
-        message ||
-          t(
-            'customModels.list.actions.delete.notification.error',
-            'Error deleting model',
-          ),
-      );
-      console.error('Error deleting model:', error);
-    },
-  });
-
-  const deleteWorkloadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      if (!activeProject) {
-        throw new Error('No active project selected');
-      }
-      await deleteWorkload(id, activeProject);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['project', activeProject, 'models'],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ['project', activeProject, 'workloads'],
-      });
-      toast.success(
-        t(
-          'customModels.list.actions.delete.workloadNotification.success',
-          'Workload deleted successfully',
-        ),
-      );
-      deleteWorkloadDisclosure.onClose();
-    },
-    onError: (error: unknown) => {
-      const message =
-        error instanceof APIRequestError ? error.message : undefined;
-      toast.error(
-        message ||
-          t(
-            'customModels.list.actions.delete.notification.error',
-            'Error deleting workload',
-          ),
-      );
-      console.error('Error deleting workload:', error);
-    },
-  });
-
-  const handleOpenDeleteModal = useCallback(
-    (item: ModelRow) => {
-      if (item.source === 'model') {
-        setModelForDeletion(item);
-        setHasActiveDeployments(false);
-        deleteModelDisclosure.onOpen();
-      } else {
-        setWorkloadForDeletion({
-          id: item.workloadId!,
-          name: item.resourceName || item.name,
-          displayName: item.canonicalName,
-        } as Workload);
-        deleteWorkloadDisclosure.onOpen();
-      }
-    },
-    [deleteModelDisclosure, deleteWorkloadDisclosure],
-  );
-
-  const finetuneModelMutation = useMutation({
-    mutationFn: async (variables: {
-      id: string;
-      params: ModelFinetuneParams;
-    }) => {
-      if (!activeProject) {
-        throw new Error('No active project selected');
-      }
-      return finetuneModel(variables.id, variables.params, activeProject);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['project', activeProject, 'models'],
-      });
-      toast.success(
-        t(
-          'customModels.list.actions.finetune.notification.success',
-          'Adapter fine-tuning started',
-        ),
-      );
-      finetuneDisclosure.onClose();
-    },
-    onError: (error) => {
-      toast.error(
-        t(
-          'customModels.list.actions.finetune.notification.error',
-          'Error fine-tuning model',
-        ),
-      );
-      console.error('Error fine-tuning model:', error);
-    },
-  });
-
-  const handleOpenFinetuneModal = useCallback(
-    (model?: Model) => {
-      setModelToFinetune(model);
-      finetuneDisclosure.onOpen();
-    },
-    [finetuneDisclosure],
-  );
-
-  // Count active workloads per model from two sources:
-  // - Fine-tuning jobs (PENDING/RUNNING): keyed by workload.id → matches model.id (AIM_MODEL_WORKLOAD_ID_LABEL)
-  // - AIM service deployments: keyed by resolvedModel name → matches model.resourceName
-  const workloadsCount = useMemo(() => {
-    const countMap = new Map<string, number>();
-    if (workloads) {
-      workloads.forEach((workload) => {
-        if (
-          workload.type === WorkloadType.FINE_TUNING &&
-          (workload.status === WorkloadStatus.PENDING ||
-            workload.status === WorkloadStatus.RUNNING)
-        ) {
-          countMap.set(workload.id, (countMap.get(workload.id) || 0) + 1);
-        }
-      });
-    }
-    aimServices.forEach((aim) => {
-      const modelName = aim.status.resolvedModel?.name;
-      if (modelName) {
-        countMap.set(modelName, (countMap.get(modelName) || 0) + 1);
-      }
-    });
-    return countMap;
-  }, [workloads, aimServices]);
-
-  // Synthesize in-progress fine-tuning workloads as Model objects so they
-  // appear in the table even before an AIMModel CR is created.
-  const inProgressFinetuningModels = useMemo<ModelRow[]>(() => {
-    if (!workloads || !models) return [];
-    const completedResourceNames = new Set(
-      models.map((m) => m.resourceName).filter(Boolean),
-    );
-    return workloads
-      .filter(
-        (w) =>
-          w.type === WorkloadType.FINE_TUNING &&
-          w.status !== WorkloadStatus.COMPLETE &&
-          !completedResourceNames.has(w.name),
-      )
-      .map((w) => ({
-        name: w.name,
-        canonicalName: w.displayName,
-        resourceName: w.name,
-        source: 'workload' as const,
-        status: w.status,
-        workloadId: w.id,
-      }));
-  }, [workloads, models]);
-
-  const filteredModels = useMemo(() => {
-    const allModels = [...inProgressFinetuningModels, ...(models ?? [])];
-    if (allModels.length === 0) return [];
-
-    const filteredModels = getFilteredData(allModels, filters);
-    return filteredModels.reduce<
-      (ModelRow & { [ModelsTableField.WORKLOADS]: number })[]
-    >((result, model) => {
-      const ftCount = model.id ? workloadsCount.get(model.id) || 0 : 0;
-      const aimCount = model.resourceName
-        ? workloadsCount.get(model.resourceName) || 0
-        : 0;
-      result.push({
-        ...model,
-        [ModelsTableField.WORKLOADS]: ftCount + aimCount,
-      });
-
-      return result;
-    }, []);
-  }, [models, inProgressFinetuningModels, filters, workloadsCount]);
-
-  const {
-    isOpen: isModelDetailsModalOpen,
-    onOpen: onModelDetailsModalOpen,
-    onOpenChange: onModelDetailsModalOpenChange,
-  } = useDisclosure();
-
-  const [modelBeingSelected, setModelBeingSelected] = useState<
-    AIMModelResponse | undefined
+  const [aggregatedForDeletion, setAggregatedForDeletion] = useState<
+    AggregatedAIM | undefined
   >(undefined);
+  const deleteDisclosure = useOverlayState();
 
-  const statusFilterItems = useMemo(
-    () => [
-      {
-        key: WorkloadStatus.PENDING,
-        label: t('status.pending'),
-      },
-      {
-        key: WorkloadStatus.RUNNING,
-        label: t('status.running'),
-      },
-      {
-        key: WorkloadStatus.COMPLETE,
-        label: t('status.complete'),
-      },
-      {
-        key: WorkloadStatus.FAILED,
-        label: t('status.failed'),
-      },
-    ],
-    [t],
-  );
+  const {
+    data: allAggregatedAims,
+    isLoading,
+    refetch,
+    error,
+    dataUpdatedAt,
+    isFetching,
+  } = useQuery<AggregatedAIM[]>({
+    queryKey: ['project', activeProject, 'custom-models'],
+    queryFn: () => listCustomModels(activeProject!),
+    refetchInterval: CUSTOM_MODELS_REFETCH_INTERVAL,
+    enabled: !!activeProject,
+  });
 
   useEffect(() => {
-    if (modelsError) {
+    if (error) {
       toast.error(
         t('notifications.refresh.error', {
-          error: String(modelsError.message),
+          error: String(error.message),
         }),
       );
     }
-  }, [modelsError, toast, t]);
+  }, [error, toast, t]);
 
-  const columns: TableColumns<ModelsTableField> = [
-    {
-      key: ModelsTableField.NAME,
-      sortable: true,
-    },
-    {
-      key: ModelsTableField.CANONICAL_NAME,
-      sortable: true,
-    },
-    {
-      key: ModelsTableField.STATUS,
-      sortable: true,
-    },
-    {
-      key: ModelsTableField.WORKLOADS,
-      sortable: true,
-    },
-  ];
-
-  const actions = (item: ModelRow) => {
-    const actionsList: ActionItem<ModelRow>[] = [
-      {
-        key: 'details',
-        color: 'default',
-        startContent: <IconEye />,
-        onPress: (m: ModelRow) => {
-          if (m.source === 'workload') {
-            router.push({
-              pathname: projectPath(`/workloads/${m.workloadId}`),
-              query: { ref: router.asPath },
-            });
-          } else {
-            const raw = rawModels?.find(
-              (r) => r.metadata.name === m.resourceName,
-            );
-            setModelBeingSelected(raw);
-            onModelDetailsModalOpen();
-          }
-        },
-        label: t('customModels.list.actions.details.label'),
-      },
-    ];
-
-    if (item.status === WorkloadStatus.COMPLETE) {
-      actionsList.push({
-        key: 'deploy',
-        color: 'default',
-        startContent: <IconRocket />,
-        onPress: (model: ModelRow) => {
-          setModelForAIMDeploy(model);
-        },
-        label: t('customModels.list.actions.deploy.label'),
-      });
-    }
-
-    actionsList.push({
-      key: 'delete',
-      color: 'danger',
-      startContent: <IconTrash />,
-      onPress: (m: ModelRow) => {
-        handleOpenDeleteModal(m);
-      },
-      label: t('customModels.list.actions.delete.label'),
+  const aggregatedAims = useMemo(() => {
+    const trimmed = searchQuery.trim();
+    return (allAggregatedAims ?? []).filter((aggregatedAim) => {
+      if (trimmed.length > 0 && !matchesSearch(aggregatedAim, trimmed)) {
+        return false;
+      }
+      return matchesStatusSelection(aggregatedAim, statusSelection);
     });
-    return actionsList;
-  };
-
-  const customRenderers: Partial<
-    Record<ModelsTableField, (item: ModelRow) => React.ReactNode | string>
-  > = {
-    [ModelsTableField.STATUS]: (item: ModelRow) => (
-      <StatusDisplay
-        type={item[ModelsTableField.STATUS] as WorkloadStatus}
-        variants={getWorkloadStatusVariants(tWorkloads)}
-      />
-    ),
-  };
+  }, [allAggregatedAims, searchQuery, statusSelection]);
 
   const filterConfig = useMemo(
     () => ({
       search: {
+        className: 'w-full',
         name: 'search',
         label: t('customModels.list.filters.search.placeholder'),
         placeholder: t('customModels.list.filters.search.placeholder'),
@@ -559,109 +176,279 @@ const CustomModels = () => {
         label: t('customModels.list.filters.status.label'),
         placeholder: t('customModels.list.filters.status.placeholder'),
         type: FilterComponentType.DROPDOWN,
-        defaultSelectedValues: defaultStatusSet,
-        fields: statusFilterItems,
+        fields: [
+          {
+            key: 'onboarding',
+            label: t('customModels.card.status.onboarding'),
+          },
+          { key: 'ready', label: t('customModels.card.status.ready') },
+          { key: 'failed', label: t('customModels.card.status.failed') },
+        ],
       },
     }),
-    [t, statusFilterItems],
+    [t],
   );
 
-  const handleFilterChange = (filters: FilterValueMap) => {
-    const newFilters: ClientSideDataFilter<Model>[] =
-      convertFilterValueMap(filters);
-    setFilters(newFilters);
-  };
+  const handleFilterChange = useCallback((next: FilterValueMap) => {
+    // FilterValueMap models every field as string[]; the TEXT search field is
+    // delivered as a single-element array (or empty when cleared).
+    const search = next?.search;
+    setSearchQuery(Array.isArray(search) ? (search[0] ?? '') : '');
+    setStatusSelection(next?.status ?? []);
+  }, []);
+
+  const handleImportClick = useCallback(() => {
+    router.push(projectPath('/models/custom-models/onboard'));
+  }, [router, projectPath]);
+
+  const handleEditModel = useCallback(
+    (aggregatedAim: AggregatedAIM) => {
+      router.push(
+        projectPath(
+          `/models/custom-models/${encodeURIComponent(aggregatedAim.repository)}/edit`,
+        ),
+      );
+    },
+    [router, projectPath],
+  );
+
+  const deleteCustomModelMutation = useMutation({
+    mutationFn: async ({
+      project,
+      modelName,
+    }: {
+      project: string;
+      modelName: string;
+      displayName: string;
+    }) => {
+      if (!project) {
+        throw new Error('No active project selected');
+      }
+      await deleteCustomModel(project, modelName);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['project', variables.project, 'custom-models'],
+      });
+      toast.success(t('customModels.list.actions.delete.notification.success'));
+      deleteDisclosure.onClose();
+      setAggregatedForDeletion(undefined);
+    },
+    onError: (error: unknown, variables) => {
+      const displayName = variables.displayName;
+      if (error instanceof CustomModelDeleteConflictError) {
+        const services = error.blockingServices.join(', ');
+        toast.error(
+          services.length > 0
+            ? t(
+                'customModels.list.actions.delete.notification.conflictWithServices',
+                { displayName, services },
+              )
+            : t(
+                'customModels.list.actions.delete.notification.conflictGeneric',
+                { displayName },
+              ),
+        );
+        deleteDisclosure.onClose();
+        setAggregatedForDeletion(undefined);
+        return;
+      }
+      if (error instanceof APIRequestError && error.statusCode === 404) {
+        queryClient.invalidateQueries({
+          queryKey: ['project', variables.project, 'custom-models'],
+        });
+        toast.error(
+          t('customModels.list.actions.delete.notification.notFound'),
+        );
+        deleteDisclosure.onClose();
+        setAggregatedForDeletion(undefined);
+        return;
+      }
+      deleteDisclosure.onClose();
+      setAggregatedForDeletion(undefined);
+      const message =
+        error instanceof APIRequestError ? error.message : undefined;
+      toast.error(
+        message ?? t('customModels.list.actions.delete.notification.error'),
+      );
+    },
+  });
+
+  const handleOpenDeleteModal = useCallback(
+    (aggregatedAim: AggregatedAIM) => {
+      setAggregatedForDeletion(aggregatedAim);
+      deleteDisclosure.onOpen();
+    },
+    [deleteDisclosure],
+  );
+
+  const handleCloseDeleteModal = useCallback(() => {
+    deleteDisclosure.onClose();
+    setAggregatedForDeletion(undefined);
+  }, [deleteDisclosure]);
+
+  const handleConfirmDelete = useCallback(
+    ({ name }: { name: string }) => {
+      if (!aggregatedForDeletion || !activeProject) {
+        return;
+      }
+      deleteCustomModelMutation.mutate({
+        project: activeProject,
+        modelName: name,
+        displayName: aggregatedForDeletion.aggregated.title,
+      });
+    },
+    [activeProject, aggregatedForDeletion, deleteCustomModelMutation],
+  );
+
+  // The remaining "..." menu callbacks are intentionally stubbed for now
+  // (EAI-6124). They will be wired to real flows in follow-up tickets; until
+  // then, surface a "coming soon" toast instead of writing to the production
+  // console so the menu is exercisable in QA without leaking implementation
+  // noise to users.
+  const stubAction = useCallback(
+    (actionLabel: string) => () => {
+      toast.info(
+        t('customModels.card.actions.comingSoon', { action: actionLabel }),
+      );
+    },
+    [toast, t],
+  );
+
+  const handleDeploy = useCallback(
+    (aggregatedAim: AggregatedAIM) => {
+      setAimForDeployment(aggregatedAim);
+      deployDisclosure.onOpen();
+    },
+    [deployDisclosure],
+  );
+
+  // The custom deploy drawer targets a single AIM version. Pick the same
+  // default the catalog drawer uses: the latest READY release, else any READY
+  // version, else the first available — so deploying from a family card lands
+  // on the most sensible version. ParsedAIM.model is the AIMModel CR name that
+  // the deploy request is keyed on.
+  const deployAim: ParsedAIM | null = useMemo(() => {
+    if (!aimForDeployment) return null;
+    return (
+      aimForDeployment.latestAim ??
+      aimForDeployment.parsedAIMs.find((a) => a.status === AIMStatus.READY) ??
+      aimForDeployment.parsedAIMs[0] ??
+      null
+    );
+  }, [aimForDeployment]);
+
+  const deployModel: Model | null = useMemo(
+    () =>
+      deployAim
+        ? {
+            name: deployAim.title,
+            canonicalName: deployAim.canonicalName,
+            resourceName: deployAim.model,
+          }
+        : null,
+    [deployAim],
+  );
+
+  if (isLoading) {
+    return (
+      <PageLoader
+        label={t('customModels.list.loading')}
+        testId="custom-models-loading"
+        className="h-64"
+      />
+    );
+  }
+
+  // Distinguish the two empty cases so we don't tell the user "no custom
+  // models yet" when models exist but are hidden by their current filters.
+  const hasAnyCustomModels = (allAggregatedAims ?? []).length > 0;
+  const isFiltered =
+    searchQuery.trim().length > 0 || statusSelection.length > 0;
+  const isEmpty = aggregatedAims.length === 0;
+  const emptyCopyKey =
+    hasAnyCustomModels && isFiltered
+      ? ('customModels.list.empty.filtered' as const)
+      : ('customModels.list.empty' as const);
+  const emptyTestId =
+    hasAnyCustomModels && isFiltered
+      ? 'custom-models-empty-filtered'
+      : 'custom-models-empty';
 
   return (
     <div data-testid="custom-models" className="flex flex-col w-full">
+      <p className="text-lg mb-4">{t('customModels.list.description')}</p>
+
       <ActionsToolbar
         filterConfig={filterConfig}
         onFilterChange={handleFilterChange}
-        onRefresh={refetchModelsAndWorkloads}
+        onRefresh={refetch}
         updatedTimestamp={dataUpdatedAt}
-        isRefreshing={isModelsLoading || isWorkloadsLoading}
+        isRefreshing={isFetching}
         endContent={
           <ActionButton
             primary
-            isDisabled={isModelsLoading || isWorkloadsLoading}
-            onPress={() => handleOpenFinetuneModal(undefined)}
-            icon={<IconAffiliate size={16} stroke={3} />}
+            onPress={handleImportClick}
+            icon={<IconCloudUpload size={16} stroke={2} />}
+            data-testid="custom-models-import-model"
           >
-            {t('customModels.list.actions.finetune.title')}
+            {t('customModels.list.actions.importModel.title')}
           </ActionButton>
         }
       />
 
-      <ClientSideDataTable
-        data={filteredModels}
-        columns={columns}
-        className="flex-1 overflow-y-auto"
-        defaultSortByField={ModelsTableField.NAME}
-        defaultSortDirection={SortDirection.ASC}
-        customRenderers={
-          customRenderers as Record<string, (item: unknown) => React.ReactNode>
-        }
-        isLoading={isModelsLoading || isWorkloadsLoading}
-        isFetching={isModelsRefetching}
-        translation={tCustomModels}
-        idKey={'resourceName' as never}
-        rowActions={actions}
-      />
+      {isEmpty ? (
+        <div
+          data-testid={emptyTestId}
+          className="flex flex-col items-center justify-center text-center gap-2 py-12"
+        >
+          <p className="text-lg font-semibold">{t(`${emptyCopyKey}.title`)}</p>
+          <p className="text-sm text-foreground/60">
+            {t(`${emptyCopyKey}.description`)}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-6 mb-6">
+          {aggregatedAims.map((aggregatedAim) => (
+            <CustomModelCard
+              key={aggregatedAim.repository}
+              aggregatedAim={aggregatedAim}
+              onDeploy={handleDeploy}
+              onModelSettings={handleEditModel}
+              onDelete={handleOpenDeleteModal}
+            />
+          ))}
+        </div>
+      )}
 
-      <ModelDetailsModal
-        onOpenChange={onModelDetailsModalOpenChange}
-        isOpen={isModelDetailsModalOpen}
-        model={modelBeingSelected}
-      />
-
-      <DeleteModelModal
-        isOpen={deleteModelDisclosure.isOpen}
-        onClose={deleteModelDisclosure.onClose}
-        model={modelForDeletion}
-        hasActiveDeployments={hasActiveDeployments}
-        loading={deleteModelMutation.isPending}
-        onConfirmAction={({ name }: { name: string }) => {
-          deleteModelMutation.mutate({
-            name,
-            force: hasActiveDeployments,
-          });
-        }}
-      />
-
-      <DeleteWorkloadModal
-        isOpen={deleteWorkloadDisclosure.isOpen}
-        onOpenChange={deleteWorkloadDisclosure.onOpenChange}
-        workload={workloadForDeletion}
-        onConfirmAction={(id: string) => {
-          deleteWorkloadMutation.mutate(id);
-        }}
-      />
-
-      {modelForAIMDeploy && activeProject && (
-        <DeployFinetuneAIMDrawer
-          model={modelForAIMDeploy}
-          namespace={activeProject}
-          isOpen={true}
-          onClose={() => setModelForAIMDeploy(null)}
+      {aggregatedForDeletion && (
+        <DeleteModelModal
+          isOpen={deleteDisclosure.isOpen}
+          onClose={handleCloseDeleteModal}
+          onConfirmAction={handleConfirmDelete}
+          model={aggregatedToDeleteModalModel(aggregatedForDeletion)}
+          hasActiveDeployments={false}
+          loading={deleteCustomModelMutation.isPending}
         />
       )}
 
-      <FinetuneDrawer
-        isOpen={finetuneDisclosure.isOpen}
-        onOpenChange={finetuneDisclosure.onOpenChange}
-        model={modelToFinetune}
-        finetunableModels={finetunableModels || []}
-        onConfirmAction={({
-          id,
-          params,
-        }: {
-          id: string;
-          params: ModelFinetuneParams;
-        }) => {
-          const id_ = modelToFinetune?.id || id;
-          finetuneModelMutation.mutate({ id: id_, params });
-        }}
-      />
+      {deployModel && activeProject && (
+        <DeployCustomAIMDrawer
+          isOpen={deployDisclosure.isOpen}
+          onClose={() => {
+            deployDisclosure.onClose();
+            setAimForDeployment(undefined);
+          }}
+          onDeployed={() => {
+            queryClient.invalidateQueries({
+              queryKey: ['project', activeProject, 'custom-models'],
+            });
+          }}
+          model={deployModel}
+          namespace={activeProject}
+          sourceUri={deployAim?.sourceUri}
+        />
+      )}
     </div>
   );
 };

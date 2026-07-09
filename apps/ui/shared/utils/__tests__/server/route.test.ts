@@ -15,14 +15,19 @@ vi.mock('next-auth', () => ({
   getServerSession: vi.fn(),
 }));
 
-// Mock the logger
-vi.mock('@/src/server/logger', () => ({
-  default: () => ({
+// Single shared logger instance so tests can assert on the same vi.fn() that
+// route.ts captured at module load via `const logger = getLogger()`.
+// Hoisted because vi.mock is hoisted above top-level declarations.
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: {
     error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     debug: vi.fn(),
-  }),
+  },
+}));
+vi.mock('@/src/server/logger', () => ({
+  default: () => mockLogger,
 }));
 
 describe('RouteError', () => {
@@ -140,7 +145,7 @@ describe('proxyRequest', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: vi.fn().mockResolvedValue(responseBody),
+      text: vi.fn().mockResolvedValue(JSON.stringify(responseBody)),
     } as any);
 
     const req = {
@@ -154,6 +159,7 @@ describe('proxyRequest', () => {
       'http://service/api?foo=1&bar=2',
       expect.objectContaining({
         method: 'GET',
+        redirect: 'manual',
         headers: expect.objectContaining({ Authorization: 'Bearer token' }),
       }),
     );
@@ -165,7 +171,7 @@ describe('proxyRequest', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: vi.fn().mockResolvedValue({ ok: true }),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ ok: true })),
     } as any);
 
     const req = {
@@ -177,7 +183,7 @@ describe('proxyRequest', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       'http://service/api?existing=1&foo=1',
-      expect.objectContaining({ method: 'GET' }),
+      expect.objectContaining({ method: 'GET', redirect: 'manual' }),
     );
   });
 
@@ -186,7 +192,7 @@ describe('proxyRequest', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: vi.fn().mockResolvedValue({ ok: true }),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ ok: true })),
     } as any);
 
     const req = {
@@ -201,6 +207,7 @@ describe('proxyRequest', () => {
       'http://service/api?',
       expect.objectContaining({
         method: 'POST',
+        redirect: 'manual',
         body: JSON.stringify({ foo: 'bar' }),
       }),
     );
@@ -224,6 +231,66 @@ describe('proxyRequest', () => {
     expect(result).toEqual({ status: 204 });
   });
 
+  it('should return empty object for ok responses with an empty body', async () => {
+    const mockFetch = vi.mocked(global.fetch);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue(''),
+    } as any);
+
+    const req = {
+      method: 'PATCH',
+      nextUrl: new URL('http://localhost/api'),
+      json: vi.fn().mockResolvedValue({}),
+    } as any;
+
+    const result = await proxyRequest(req, 'http://service/api', 'token');
+
+    expect(result).toEqual({});
+  });
+
+  it('parses JSON with a leading UTF-8 BOM', async () => {
+    const mockFetch = vi.mocked(global.fetch);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue('\uFEFF{"bom":true}'),
+    } as any);
+
+    const req = {
+      method: 'GET',
+      nextUrl: new URL('http://localhost/api'),
+    } as any;
+
+    await expect(
+      proxyRequest(req, 'http://service/api', 'token'),
+    ).resolves.toEqual({ bom: true });
+  });
+
+  it('throws a descriptive RouteError when upstream returns HTML with 200', async () => {
+    const mockFetch = vi.mocked(global.fetch);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: vi
+        .fn()
+        .mockResolvedValue('<!DOCTYPE html><html><body>login</body></html>'),
+    } as any);
+
+    const req = {
+      method: 'GET',
+      nextUrl: new URL('http://localhost/api'),
+    } as any;
+
+    await expect(
+      proxyRequest(req, 'http://service/api', 'token'),
+    ).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining('HTML'),
+    });
+  });
+
   it('should throw RouteError on non-ok response', async () => {
     const mockFetch = vi.mocked(global.fetch);
     mockFetch.mockResolvedValueOnce({
@@ -241,11 +308,48 @@ describe('proxyRequest', () => {
       proxyRequest(req, 'http://service/api', 'token'),
     ).rejects.toMatchObject({ status: 500, message: 'server error' });
   });
+
+  it('maps upstream 3xx to 502; Location stays on internal message, not userMessage', async () => {
+    const mockFetch = vi.mocked(global.fetch);
+    const headers = new Headers({
+      Location: 'https://login.example/authorize',
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 302,
+      headers,
+      text: vi.fn().mockResolvedValue(''),
+    } as any);
+
+    const req = {
+      method: 'GET',
+      nextUrl: new URL('http://localhost/api'),
+    } as any;
+
+    const err = (await proxyRequest(req, 'http://service/api', 'token').catch(
+      (e) => e,
+    )) as RouteError;
+
+    expect(err).toMatchObject({
+      status: 502,
+      message: expect.stringContaining(
+        'Location: https://login.example/authorize',
+      ),
+      userMessage: expect.not.stringContaining('login.example'),
+    });
+    expect(err.userMessage).toContain('302 (redirect)');
+
+    const res = handleError(err);
+    const body = await res.json();
+    expect(body.error).toBe(err.userMessage);
+    expect(body.error).not.toContain('login.example');
+  });
 });
 
 describe('handleError', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLogger.error.mockClear();
   });
 
   it('should return NextResponse with error message and status', () => {
@@ -355,5 +459,58 @@ describe('handleError', () => {
     const response = handleError(error);
 
     expect(response.status).toBe(500);
+  });
+
+  it('passes through structured JSON upstream errors and sets flattened error', async () => {
+    const payload = {
+      detail: 'Model blocked',
+      additionalInfo: { blockingServices: ['aim-svc'] },
+    };
+    const response = handleError(new RouteError(409, JSON.stringify(payload)));
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body).toEqual({
+      ...payload,
+      error: 'Model blocked',
+    });
+  });
+
+  it('uses generic flattened error when structured body has non-string detail', async () => {
+    const payload = {
+      detail: [{ type: 'validation_error', msg: 'invalid' }],
+      extra: 'kept',
+    };
+    const response = handleError(new RouteError(422, JSON.stringify(payload)));
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      ...payload,
+      error: 'Request failed',
+    });
+  });
+
+  describe('logger.error gating', () => {
+    it('does not log RouteError with 4xx status', () => {
+      handleError(new RouteError(400, 'Bad request'));
+      handleError(new RouteError(401, 'Unauthorized'));
+      handleError(new RouteError(404, 'Not found'));
+      handleError(new RouteError(499, 'Client closed'));
+
+      expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
+    it('logs RouteError with 5xx status', () => {
+      handleError(new RouteError(500, 'Internal'));
+      handleError(new RouteError(502, 'Bad gateway'));
+
+      expect(mockLogger.error).toHaveBeenCalledTimes(2);
+    });
+
+    it('logs non-RouteError errors regardless of status field', () => {
+      handleError(new Error('Generic error'));
+      handleError(Object.assign(new Error('With status'), { status: 400 }));
+
+      expect(mockLogger.error).toHaveBeenCalledTimes(2);
+    });
   });
 });

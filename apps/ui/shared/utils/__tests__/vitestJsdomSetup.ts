@@ -6,6 +6,85 @@ import { vi } from 'vitest';
 
 import { installElementScrollToPolyfill } from './installElementScrollToPolyfill';
 
+const unsupportedCssShimMarker = Symbol.for(
+  'amdenterpriseai.test.unsupportedCssShimInstalled',
+);
+
+function unwrapUnsupportedLayerCss(cssText: string): string {
+  const trimmedCssText = cssText.trim();
+  const layerPrefix = '@layer {';
+
+  if (
+    !trimmedCssText.startsWith(layerPrefix) ||
+    !trimmedCssText.endsWith('}')
+  ) {
+    return cssText;
+  }
+
+  return trimmedCssText.slice(layerPrefix.length, -1).trim();
+}
+
+function sanitizeStyleNodeForJsdom(node: unknown): void {
+  if (
+    !node ||
+    typeof node !== 'object' ||
+    !('nodeType' in node) ||
+    !('nodeName' in node)
+  ) {
+    return;
+  }
+
+  const possibleStyleNode = node as {
+    nodeType: number;
+    nodeName: string;
+    textContent: string | null;
+  };
+
+  if (
+    possibleStyleNode.nodeType !== 1 ||
+    possibleStyleNode.nodeName !== 'STYLE'
+  ) {
+    return;
+  }
+
+  if (!possibleStyleNode.textContent?.includes('@layer')) {
+    return;
+  }
+
+  possibleStyleNode.textContent = unwrapUnsupportedLayerCss(
+    possibleStyleNode.textContent,
+  );
+}
+
+// HeroUI emits @layer rules that jsdom rejects with a CSSStyleSheet parse error.
+// This shim intercepts STYLE nodes being prepended to <head> and unwraps any
+// anonymous `@layer { ... }` wrapper (i.e. the literal prefix "@layer {") so
+// jsdom can parse the inner rules safely. Named layers like `@layer base { ... }`
+// are not handled here and pass through unchanged.
+export function installUnsupportedCssRuleShim(): void {
+  const headPrototype = HTMLHeadElement.prototype as HTMLHeadElement & {
+    [unsupportedCssShimMarker]?: boolean;
+  };
+
+  if (headPrototype[unsupportedCssShimMarker]) {
+    return;
+  }
+
+  const originalPrepend = HTMLHeadElement.prototype.prepend;
+
+  HTMLHeadElement.prototype.prepend = function (
+    ...nodes: Array<Node | string>
+  ) {
+    for (const node of nodes) {
+      sanitizeStyleNodeForJsdom(node);
+    }
+
+    return originalPrepend.apply(this, nodes);
+  };
+
+  headPrototype[unsupportedCssShimMarker] = true;
+}
+
 export const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
@@ -83,6 +162,7 @@ export function installPackageTestJsdom(): void {
   stubAuthEnv();
   shimNodeGlobalAsWindow();
   installResizeObserverMock();
+  installUnsupportedCssRuleShim();
   installHeavyJsdomMocks();
 }
 

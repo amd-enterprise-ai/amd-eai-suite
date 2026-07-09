@@ -2,15 +2,18 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { cn } from '@heroui/react';
+
 import {
+  FormFieldComponent,
+  SliderInput,
   Table,
   TableBody,
   TableCell,
   TableColumn,
   TableHeader,
   TableRow,
-  cn,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
 import { useMemo } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 
@@ -24,8 +27,6 @@ import { QuotaResource } from '@/types/enums/quotas';
 import { QuotaAllocationEditFields } from '@/types/enums/quotas-form-fields';
 import { Quota } from '@/types/quotas';
 
-import { FormFieldComponent } from '@amdenterpriseai/components';
-import { SliderInput } from '@amdenterpriseai/components';
 import { ProjectQuotaFormData } from '@/types/projects';
 
 interface Props {

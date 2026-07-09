@@ -2,7 +2,21 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Card, CardBody, CardHeader } from '@heroui/react';
+import {
+  AirmDocsPage,
+  airmDocumentationMapping,
+  AreaChart,
+  BarChart,
+  Card,
+  CardBody,
+  CardHeader,
+  ChartTimeSelector,
+  ClientSideDataTable,
+  HorizontalStatisticsCards,
+  RelevantDocs,
+  StatisticsCard,
+  StatisticsCardProps,
+} from '@amdenterpriseai/components';
 import { useIsFetching, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
@@ -21,7 +35,6 @@ import { getClusterStats } from '@/services/server';
 
 import {
   airmMenuItems,
-  getAuthRedirect,
   getFirstAccessibleRoute,
   getTickGap,
   rollupTimeSeriesData,
@@ -43,21 +56,6 @@ import { ConsumptionByProjectTableField } from '@/types/enums/project-consumptio
 import { UserRole } from '@amdenterpriseai/types';
 import { TimeRange, TimeSeriesResponse } from '@amdenterpriseai/types';
 import { UtilizationResponse } from '@/types/metrics';
-
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { AreaChart } from '@amdenterpriseai/components';
-import { BarChart } from '@amdenterpriseai/components';
-import { ChartTimeSelector } from '@amdenterpriseai/components';
-import {
-  HorizontalStatisticsCards,
-  StatisticsCard,
-  StatisticsCardProps,
-} from '@amdenterpriseai/components';
-import {
-  RelevantDocs,
-  AirmDocsPage,
-  airmDocumentationMapping,
-} from '@amdenterpriseai/components';
 
 import { SortDirection } from '@amdenterpriseai/types';
 
@@ -282,7 +280,7 @@ const DashboardPage: React.FC<Props> & WithDocumentationLink = ({
 
   return (
     <div className="inline-flex flex-col w-full h-full max-h-full">
-      <h2 className="font-semibold text-medium my-8">
+      <h2 className="font-semibold text-base my-8">
         {t('clusterAndNodes.title')}
       </h2>
 
@@ -290,7 +288,7 @@ const DashboardPage: React.FC<Props> & WithDocumentationLink = ({
         cards={clusterStatsCards}
         isLoading={isClusterStatisticsDataLoading}
       />
-      <h2 className="font-semibold text-medium my-8">
+      <h2 className="font-semibold text-base my-8">
         {t('allocationAndWorkloads.title')}
       </h2>
 
@@ -389,12 +387,6 @@ export async function getServerSideProps(context: any) {
 
   const session = await getServerSession(context.req, context.res, authOptions);
 
-  // Redirect unauthenticated users to '/'
-  const authRedirect = getAuthRedirect(session, airmMenuItems);
-  if (authRedirect && !session?.user) {
-    return authRedirect;
-  }
-
   // Redirect authenticated users without access to this page to their first accessible route
   const userRoles = session?.user?.roles ?? [];
   const isAdministrator = userRoles.includes(UserRole.PLATFORM_ADMIN);
@@ -411,16 +403,21 @@ export async function getServerSideProps(context: any) {
     }
   }
 
-  const clusterStats = await getClusterStats(session?.accessToken as string);
+  try {
+    const clusterStats = await getClusterStats(session?.accessToken as string);
 
-  return {
-    props: {
-      ...(await serverSideTranslations(locale, [
-        'common',
-        'sharedComponents',
-        'dashboard',
-      ])),
-      clusterStats,
-    },
-  };
+    return {
+      props: {
+        ...(await serverSideTranslations(locale, [
+          'common',
+          'sharedComponents',
+          'dashboard',
+        ])),
+        clusterStats,
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    return { redirect: { destination: '/', permanent: false } };
+  }
 }

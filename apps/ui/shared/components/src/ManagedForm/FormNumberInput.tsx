@@ -2,7 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { NumberInput, NumberInputProps } from '@heroui/react';
+import {
+  NumberInput,
+  type NumberInputProps,
+} from '@amdenterpriseai/components';
 import { cn } from '@heroui/react';
 import { ComponentType, useCallback } from 'react';
 import { FieldValues, Path, PathValue, UseFormReturn } from 'react-hook-form';

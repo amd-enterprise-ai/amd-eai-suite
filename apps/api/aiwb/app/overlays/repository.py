@@ -5,7 +5,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ async def insert_overlay(
     chart_id: UUID,
     overlay_data: dict[str, Any],
     canonical_name: str | None = None,
+    display_name: str | None = None,
     creator: str | None = None,
 ) -> Overlay:
     """
@@ -30,6 +31,7 @@ async def insert_overlay(
     """
     overlay = Overlay(
         canonical_name=canonical_name,
+        display_name=display_name,
         chart_id=chart_id,
         overlay=overlay_data,
         created_by=creator,
@@ -93,24 +95,3 @@ async def delete_overlay(
         return True
     else:
         return False
-
-
-async def delete_overlays(session: AsyncSession, ids: list[UUID]) -> list[UUID]:
-    """Delete overlays by IDs. Returns list of IDs that were actually deleted."""
-    ids_to_delete = set(ids)
-
-    if not ids_to_delete:
-        return []
-
-    # Find which IDs exist
-    stmt = select(Overlay.id).where(Overlay.id.in_(ids_to_delete))
-    result = await session.execute(stmt)
-    found_ids = {row[0] for row in result.fetchall()}
-
-    # Only delete existing overlays
-    if found_ids:
-        query = delete(Overlay).where(Overlay.id.in_(found_ids))
-        await session.execute(query)
-        await session.flush()
-
-    return list(found_ids)

@@ -1075,20 +1075,9 @@ Clean Up All Created Projects With Wait
     Log    Waiting for all ${count} project deletions to complete    INFO
     FOR    ${project_id}    IN    @{tracking_list}
         TRY
-            # Set project ID temporarily for verification (The project should not exist in database uses TEST_PROJECT_ID)
-            ${original_test_project_id}=    Get Variable Value    ${TEST_PROJECT_ID}    ${None}
-            Set Test Variable    ${TEST_PROJECT_ID}    ${project_id}
-            Wait Until Keyword Succeeds    1 min    3 sec    The project should not exist in database
-            # Restore original value
-            IF    $original_test_project_id != $None
-                Set Test Variable    ${TEST_PROJECT_ID}    ${original_test_project_id}
-            END
+            Wait Until Project Deleted    ${project_id}    timeout=1 min
             Log    Project ${project_id} deletion confirmed    DEBUG
         EXCEPT    AS    ${wait_error}
-            # Restore original value on error too
-            IF    $original_test_project_id != $None
-                Set Test Variable    ${TEST_PROJECT_ID}    ${original_test_project_id}
-            END
             Log    Project ${project_id} deletion verification failed: ${wait_error}    WARN
         END
     END

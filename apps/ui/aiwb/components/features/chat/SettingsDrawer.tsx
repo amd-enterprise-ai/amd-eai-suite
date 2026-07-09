@@ -5,20 +5,20 @@
 import {
   Checkbox,
   Divider,
-  Drawer,
   DrawerBody,
   DrawerContent,
   DrawerHeader,
+  DrawerPrimitive as Drawer,
   Slider,
-} from '@heroui/react';
+  Textarea,
+  Tooltip,
+} from '@amdenterpriseai/components';
+import { IconInfoCircle } from '@tabler/icons-react';
 import React from 'react';
 
 import { useTranslation } from 'next-i18next';
 import { InferenceSettings } from '@/types/models';
 import { Workload } from '@/types/workloads';
-
-import { InputWrapper } from '@amdenterpriseai/components';
-import { TextAreaWrapper } from '@amdenterpriseai/components';
 
 interface Props {
   showSyncSettings: boolean;
@@ -57,7 +57,7 @@ const SettingsDrawer: React.FC<Props> = ({
           </div>
         </DrawerHeader>
         <Divider />
-        <DrawerBody className="overflow-y-scroll max-h-[600px] p-6">
+        <DrawerBody className="p-6">
           <div className="w-full">
             {showSyncSettings && (
               <div className="flex justify-between items-center border-b pb-4 mb-4 dark:border-default-100">
@@ -73,86 +73,137 @@ const SettingsDrawer: React.FC<Props> = ({
               </div>
             )}
 
-            <InputWrapper
-              label={t('modelSettings.temperature.label') ?? ''}
+            <Slider
+              label={
+                <div className="flex items-center gap-1">
+                  {t('modelSettings.temperature.label')}
+                  <Tooltip
+                    classNames={{ content: 'max-w-sm' }}
+                    content={t('modelSettings.temperature.tooltip')}
+                  >
+                    <button
+                      aria-label={t('modelSettings.temperature.tooltip')}
+                      type="button"
+                      className="inline-flex cursor-pointer rounded-small border-0 bg-transparent p-0 text-default-400 outline-offset-2 hover:opacity-80"
+                    >
+                      <IconInfoCircle aria-hidden size={16} />
+                    </button>
+                  </Tooltip>
+                </div>
+              }
+              aria-label={t('modelSettings.temperature.changeLabel')}
+              getValue={(v) => String(v)}
               value={settings.temperature}
-              description={t('modelSettings.temperature.description') ?? ''}
-              tooltip={t('modelSettings.temperature.tooltip') ?? ''}
-            >
-              <Slider
-                aria-label="Change temperature"
-                value={settings.temperature}
-                onChange={(value) =>
-                  typeof value == 'number' &&
-                  onSettingsChange({ ...settings, temperature: value })
-                }
-                minValue={0}
-                maxValue={1}
-                step={0.05}
-                classNames={{
-                  thumb: 'dark:after:bg-white',
-                }}
-              />
-            </InputWrapper>
-
-            <InputWrapper
-              label={t('modelSettings.frequencyPenalty.label') ?? ''}
-              value={settings.frequencyPenalty}
-              description={
-                t('modelSettings.frequencyPenalty.description') ?? ''
-              }
-              tooltip={t('modelSettings.frequencyPenalty.tooltip') ?? ''}
-            >
-              <Slider
-                aria-label="Change frequency penalty"
-                value={settings.frequencyPenalty}
-                onChange={(value) =>
-                  typeof value == 'number' &&
-                  onSettingsChange({ ...settings, frequencyPenalty: value })
-                }
-                minValue={-2}
-                maxValue={2}
-                step={0.05}
-                classNames={{
-                  thumb: 'dark:after:bg-white',
-                }}
-              />
-            </InputWrapper>
-
-            <InputWrapper
-              label={t('modelSettings.presencePenalty.label') ?? ''}
-              description={t('modelSettings.presencePenalty.description') ?? ''}
-              value={settings.presencePenalty}
-              tooltip={t('modelSettings.presencePenalty.tooltip') ?? ''}
-            >
-              <Slider
-                aria-label="Change presence penalty"
-                value={settings.presencePenalty}
-                onChange={(value) =>
-                  typeof value == 'number' &&
-                  onSettingsChange({ ...settings, presencePenalty: value })
-                }
-                minValue={-2}
-                maxValue={2}
-                step={0.05}
-                classNames={{
-                  thumb: 'dark:after:bg-white',
-                }}
-              />
-            </InputWrapper>
-
-            <TextAreaWrapper
-              label={t('modelSettings.systemPrompt.label') ?? ''}
-              ariaLabel={t('modelSettings.systemPrompt.label') ?? ''}
-              placeholder={t('modelSettings.systemPrompt.placeholder') ?? ''}
-              value={settings.systemPrompt}
               onChange={(value) =>
-                onSettingsChange({ ...settings, systemPrompt: value })
+                typeof value == 'number' &&
+                onSettingsChange({ ...settings, temperature: value })
               }
-              description={t('modelSettings.systemPrompt.description') ?? ''}
-              tooltip={t('modelSettings.systemPrompt.tooltip') ?? ''}
-              rows={6}
+              minValue={0}
+              maxValue={1}
+              step={0.05}
+              classNames={{ thumb: 'dark:after:bg-white' }}
+              className="py-4 first:pt-0"
             />
+
+            <Slider
+              label={
+                <div className="flex items-center gap-1">
+                  {t('modelSettings.frequencyPenalty.label')}
+                  <Tooltip
+                    classNames={{ content: 'max-w-sm' }}
+                    content={t('modelSettings.frequencyPenalty.tooltip')}
+                  >
+                    <button
+                      aria-label={t('modelSettings.frequencyPenalty.tooltip')}
+                      type="button"
+                      className="inline-flex cursor-pointer rounded-small border-0 bg-transparent p-0 text-default-400 outline-offset-2 hover:opacity-80"
+                    >
+                      <IconInfoCircle aria-hidden size={16} />
+                    </button>
+                  </Tooltip>
+                </div>
+              }
+              aria-label={t('modelSettings.frequencyPenalty.changeLabel')}
+              getValue={(v) => String(v)}
+              value={settings.frequencyPenalty}
+              onChange={(value) =>
+                typeof value == 'number' &&
+                onSettingsChange({ ...settings, frequencyPenalty: value })
+              }
+              minValue={-2}
+              maxValue={2}
+              step={0.05}
+              classNames={{ thumb: 'dark:after:bg-white' }}
+              className="py-4"
+            />
+
+            <Slider
+              label={
+                <div className="flex items-center gap-1">
+                  {t('modelSettings.presencePenalty.label')}
+                  <Tooltip
+                    classNames={{ content: 'max-w-sm' }}
+                    content={t('modelSettings.presencePenalty.tooltip')}
+                  >
+                    <button
+                      aria-label={t('modelSettings.presencePenalty.tooltip')}
+                      type="button"
+                      className="inline-flex cursor-pointer rounded-small border-0 bg-transparent p-0 text-default-400 outline-offset-2 hover:opacity-80"
+                    >
+                      <IconInfoCircle aria-hidden size={16} />
+                    </button>
+                  </Tooltip>
+                </div>
+              }
+              aria-label={t('modelSettings.presencePenalty.changeLabel')}
+              getValue={(v) => String(v)}
+              value={settings.presencePenalty}
+              onChange={(value) =>
+                typeof value == 'number' &&
+                onSettingsChange({ ...settings, presencePenalty: value })
+              }
+              minValue={-2}
+              maxValue={2}
+              step={0.05}
+              classNames={{ thumb: 'dark:after:bg-white' }}
+              className="py-4"
+            />
+
+            <div className="flex flex-col gap-3 py-4">
+              <div className="flex items-center gap-1">
+                <span className="text-small">
+                  {t('modelSettings.systemPrompt.label')}
+                </span>
+                <Tooltip
+                  classNames={{ content: 'max-w-sm' }}
+                  content={t('modelSettings.systemPrompt.tooltip')}
+                >
+                  <button
+                    type="button"
+                    aria-label={t('modelSettings.systemPrompt.tooltip')}
+                    className="inline-flex cursor-pointer rounded-small border-0 bg-transparent p-0 text-default-400 outline-offset-2 hover:opacity-80"
+                  >
+                    <IconInfoCircle aria-hidden size={16} />
+                  </button>
+                </Tooltip>
+              </div>
+              <Textarea
+                aria-label={t('modelSettings.systemPrompt.label')}
+                placeholder={t('modelSettings.systemPrompt.placeholder')}
+                value={settings.systemPrompt}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  onSettingsChange({
+                    ...settings,
+                    systemPrompt: e.target.value,
+                  })
+                }
+                minRows={6}
+                maxRows={6}
+                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) =>
+                  e.stopPropagation()
+                }
+              />
+            </div>
           </div>
         </DrawerBody>
       </DrawerContent>

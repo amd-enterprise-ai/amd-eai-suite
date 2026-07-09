@@ -12,19 +12,19 @@
     "./postcss": "./postcss.config.js"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-dom": "*",
     "@heroui/react": "*",
     "next": "*",
     "next-auth": "*",
     "next-i18next": "*",
-    "next-themes": "*"
+    "next-themes": "*",
+    "react": "*",
+    "react-dom": "*"
   },
   "devDependencies": {
-    "@types/react": "*",
     "@tailwindcss/postcss": "*",
     "@tailwindcss/typography": "*",
-    "postcss": "*",
+    "@types/react": "*",
+    "postcss": "^8.5.13",
     "tailwindcss": "*"
   }
 }

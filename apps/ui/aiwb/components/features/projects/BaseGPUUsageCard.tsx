@@ -11,6 +11,7 @@ import type {
 
 import { StatsWithLineChart } from '@amdenterpriseai/components';
 import { useGPUMetrics } from '@/hooks/useGPUMetrics';
+import type { projectsKeys } from '@/types/react-i18next';
 
 // Constants
 const CHART_GUIDE_COLOR = 'gray' as const;
@@ -54,10 +55,10 @@ type ChartColor =
 export interface GPUUsageCardConfig {
   metricName: string;
   chartColor: ChartColor;
-  titleKey: string;
-  tooltipKey: string;
-  upperLimitUnallocatedKey: string;
-  upperLimitKey: string;
+  titleKey: projectsKeys;
+  tooltipKey: projectsKeys;
+  upperLimitUnallocatedKey: projectsKeys;
+  upperLimitKey: projectsKeys;
   dataFormatter: (value: number | null) => string;
 }
 

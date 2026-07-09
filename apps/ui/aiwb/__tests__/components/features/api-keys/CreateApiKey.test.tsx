@@ -16,12 +16,18 @@ import {
   updateApiKeyBindings,
 } from '@/lib/app/api-keys';
 
+import { resolveAIMServiceDisplay } from '@/lib/app/aims';
 import {
-  getAimClusterModels,
-  getAimServices,
-  resolveAIMServiceDisplay,
-} from '@/lib/app/aims';
-import { AIMMetric, AIMService, AIMServiceStatus } from '@/types/aims';
+  getInferenceModel,
+  listAllInferenceDeployments,
+} from '@/lib/app/inference';
+import {
+  AIM_DISPLAY_NAME_ANNOTATION,
+  AIMMetric,
+  AIMService,
+  AIMServiceStatus,
+  FINE_TUNED_LABEL,
+} from '@/types/aims';
 
 import { generateMockApiKey } from '@/__mocks__/utils/api-keys-mock';
 
@@ -37,11 +43,11 @@ const mockApiKeyDetails = {
   ttl: null,
   renewable: true,
   numUses: 0,
-  groups: ['auth-group-1', 'auth-group-2'],
+  groups: ['auth-group-1', 'auth-group-2', 'auth-group-finetuned'],
 };
 
 // Mock AIM services data matching the AIMService type
-const mockAimServices = [
+const mockAimServices: AIMService[] = [
   {
     id: 'aim-service-1',
     metadata: {
@@ -63,7 +69,6 @@ const mockAimServices = [
         enabled: true,
       },
       runtimeConfigName: 'default',
-      template: {},
     },
     status: {
       status: AIMServiceStatus.RUNNING,
@@ -96,7 +101,6 @@ const mockAimServices = [
         enabled: true,
       },
       runtimeConfigName: 'default',
-      template: {},
     },
     status: {
       status: AIMServiceStatus.RUNNING,
@@ -129,7 +133,6 @@ const mockAimServices = [
         enabled: true,
       },
       runtimeConfigName: 'default',
-      template: {},
     },
     status: {
       status: AIMServiceStatus.RUNNING,
@@ -141,6 +144,38 @@ const mockAimServices = [
       external: 'https://mistral.example.com',
     },
   },
+  {
+    id: 'aim-service-finetuned',
+    metadata: {
+      name: 'finetuned-service',
+      namespace: 'project-1',
+      uid: 'uid-finetuned',
+      labels: { [FINE_TUNED_LABEL]: 'true' },
+      annotations: { [AIM_DISPLAY_NAME_ANNOTATION]: 'my-finetuned-model' },
+      creationTimestamp: '2023-01-14T00:00:00Z',
+      ownerReferences: [],
+    },
+    spec: {
+      model: { name: 'aim-finetuned-model' },
+      replicas: 1,
+      overrides: {},
+      cacheModel: false,
+      routing: {
+        annotations: { clusterAuthAllowedGroup: 'auth-group-finetuned' },
+        enabled: true,
+      },
+      runtimeConfigName: 'default',
+    },
+    status: {
+      status: AIMServiceStatus.RUNNING,
+      resolvedModel: { name: 'aim-finetuned-model' },
+    },
+    clusterAuthGroupId: 'auth-group-finetuned',
+    endpoints: {
+      internal: 'https://finetuned.internal',
+      external: 'https://finetuned.example.com',
+    },
+  },
 ];
 
 vi.mock('@/lib/app/api-keys', () => ({
@@ -149,10 +184,14 @@ vi.mock('@/lib/app/api-keys', () => ({
   updateApiKeyBindings: vi.fn(),
 }));
 
-vi.mock('@/lib/app/aims', () => ({
-  getAimServices: vi.fn(),
-  getAimClusterModels: vi.fn(),
+vi.mock('@/lib/app/aims', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/app/aims')>()),
   resolveAIMServiceDisplay: vi.fn(),
+}));
+
+vi.mock('@/lib/app/inference', () => ({
+  getInferenceModel: vi.fn(),
+  listAllInferenceDeployments: vi.fn(),
 }));
 
 vi.mock('@amdenterpriseai/hooks', () => ({
@@ -167,21 +206,52 @@ vi.mock('@amdenterpriseai/hooks', () => ({
 const mockCreateApiKey = vi.mocked(createApiKey);
 const mockFetchApiKeyDetails = vi.mocked(fetchApiKeyDetails);
 const mockUpdateApiKeyBindings = vi.mocked(updateApiKeyBindings);
-const mockGetAimServices = vi.mocked(getAimServices);
-const mockGetAimClusterModels = vi.mocked(getAimClusterModels);
+const mockGetAimServices = vi.mocked(listAllInferenceDeployments);
+const mockGetInferenceModel = vi.mocked(getInferenceModel);
 const mockResolveAIMServiceDisplay = vi.mocked(resolveAIMServiceDisplay);
 const mockOnClose = vi.fn();
+
+// Minimal cluster-model shape so aimParser can run without crashing. Display
+// resolution is covered by the resolveAIMServiceDisplay mock; this only needs
+// to satisfy the parser's structural reads.
+const buildMockClusterModel = (name: string) => ({
+  metadata: { name, namespace: '', uid: '', labels: {}, annotations: {} },
+  spec: { image: `${name}:latest` },
+  status: {
+    status: 'Ready',
+    imageMetadata: {
+      model: { tags: [] },
+      oci: {},
+    },
+  },
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetAimServices.mockResolvedValue(mockAimServices);
-  mockGetAimClusterModels.mockResolvedValue(mockAims);
+  // Per-name catalog lookups: return a minimal cluster model so the hook fan-out
+  // populates byName. Display resolution comes from resolveAIMServiceDisplay below.
+  mockGetInferenceModel.mockImplementation(
+    async (name: string) =>
+      buildMockClusterModel(name) as unknown as Awaited<
+        ReturnType<typeof getInferenceModel>
+      >,
+  );
   const deploymentDisplayNames: Record<string, string> = {
     'aim-service-1': 'AIM GPT-4 Deployment',
     'aim-service-2': 'AIM LLaMA 2 Deployment',
     'aim-service-3': 'AIM Mistral Deployment',
   };
   mockResolveAIMServiceDisplay.mockImplementation((aimService: AIMService) => {
+    if (aimService.id === 'aim-service-finetuned') {
+      return {
+        canonicalName: 'meta-llama/Llama-3.2-3B-Instruct',
+        imageVersion: '0.11.0',
+        metric: AIMMetric.Default,
+        title: 'my-finetuned-model',
+        name: aimService.metadata.name,
+      };
+    }
     const displayName =
       deploymentDisplayNames[aimService.id!] ?? mockAims[0].canonicalName;
     return {
@@ -310,11 +380,14 @@ describe('CreateApiKey', () => {
       mockCreateApiKey.mockResolvedValue({
         id: 'api-key-1',
         name: 'Test API Key',
-        keyPrefix: 'sk_live_1234',
-        secretKey: 'sk_live_abcdef1234567890',
+        truncatedKey: 'sk_live_...1234',
+        fullKey: 'sk_live_abcdef1234567890',
         projectId: 'project-1',
         createdAt: '2024-01-01T00:00:00Z',
         createdBy: 'test@example.com',
+        ttl: null,
+        renewable: false,
+        numUses: 0,
       });
 
       await act(async () => {
@@ -396,6 +469,30 @@ describe('CreateApiKey', () => {
       });
     });
 
+    it('shows the user-given name for fine-tuned model deployments', async () => {
+      await act(async () => {
+        render(<CreateApiKey {...defaultProps} />, {
+          wrapper,
+        });
+      });
+
+      const modelDeploymentSelect = screen.getByRole('button', {
+        name: /form.create.field.modelDeployment.label/i,
+      });
+      await act(async () => {
+        fireEvent.click(modelDeploymentSelect);
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText(/my-finetuned-model/).length,
+        ).toBeGreaterThan(0);
+      });
+      expect(
+        screen.queryByText(/meta-llama\/Llama-3.2-3B-Instruct/),
+      ).not.toBeInTheDocument();
+    });
+
     it('handles optional validity period selection', async () => {
       await act(async () => {
         render(<CreateApiKey {...defaultProps} />, {
@@ -440,12 +537,37 @@ describe('CreateApiKey', () => {
       });
 
       // Name should be displayed as readonly text
-      expect(screen.getByText(mockApiKey.name)).toBeInTheDocument();
+      expect(screen.getByText(mockApiKey.displayName)).toBeInTheDocument();
 
       // Expiration date label should be displayed
       expect(
         screen.getByText('form.create.field.expiresAt.label'),
       ).toBeInTheDocument();
+    });
+
+    it('shows the user-given name for fine-tuned linked deployments', async () => {
+      mockFetchApiKeyDetails.mockResolvedValue(mockApiKeyDetails);
+
+      await act(async () => {
+        render(<CreateApiKey {...editProps} />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(mockFetchApiKeyDetails).toHaveBeenCalledWith(
+          'project-1',
+          mockApiKey.id,
+        );
+      });
+
+      await waitFor(() => {
+        const matches = screen.queryAllByText(/my-finetuned-model/);
+        expect(matches.length).toBeGreaterThan(0);
+      });
+      expect(
+        screen.queryByText(/meta-llama\/Llama-3.2-3B-Instruct/),
+      ).not.toBeInTheDocument();
     });
 
     it('calls updateApiKeyBindings when saving in edit mode', async () => {
@@ -898,11 +1020,14 @@ describe('CreateApiKey', () => {
       mockCreateApiKey.mockResolvedValue({
         id: 'new-key-id',
         name: 'New API Key',
-        keyPrefix: 'sk_live_test',
-        secretKey: 'sk_live_secret123',
+        truncatedKey: 'sk_live_...t123',
+        fullKey: 'sk_live_secret123',
         projectId: 'project-1',
         createdAt: '2024-01-01T00:00:00Z',
         createdBy: 'test@example.com',
+        ttl: null,
+        renewable: false,
+        numUses: 0,
       });
 
       await act(async () => {
@@ -926,7 +1051,7 @@ describe('CreateApiKey', () => {
       // Verify createApiKey is called with aim_ids
       await waitFor(() => {
         expect(mockCreateApiKey).toHaveBeenCalledWith('project-1', {
-          name: 'New API Key',
+          displayName: 'New API Key',
           ttl: '0',
           aimIds: expect.any(Array),
         });

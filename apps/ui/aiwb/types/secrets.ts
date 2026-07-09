@@ -7,6 +7,7 @@ import { SecretUseCase } from '@amdenterpriseai/types';
 export type SecretResponseData = {
   metadata: SecretMetadata;
   useCase: SecretUseCase;
+  displayName: string;
 };
 
 type SecretMetadata = {
@@ -19,7 +20,7 @@ type SecretMetadata = {
 };
 
 export type CreateSecretRequest = {
-  name: string;
+  displayName: string;
   data: Record<string, string>;
   useCase: SecretUseCase;
 };
@@ -30,7 +31,7 @@ export type SecretDataEntry = {
 };
 
 export type CreateSecretForm = {
-  name: string;
+  displayName: string;
   useCase: SecretUseCase;
   key?: string;
   value?: string;

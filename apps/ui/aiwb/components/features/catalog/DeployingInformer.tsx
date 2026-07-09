@@ -2,10 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Card, CardBody, CardFooter, CardHeader, Divider } from '@heroui/react';
+import {
+  ActionButton,
+  Card,
+  CardBody,
+  CardFooter,
+  CardHeader,
+  Divider,
+} from '@amdenterpriseai/components';
 import { IconExternalLink } from '@tabler/icons-react';
-import { ActionButton } from '@amdenterpriseai/components';
-import type { TFunction } from 'next-i18next';
+import type { TFunction } from 'i18next';
 import { useCallback } from 'react';
 
 interface Props {
@@ -13,7 +19,7 @@ interface Props {
   isDeployed: boolean;
   workloadId: string;
   workloadData: any;
-  t: TFunction;
+  t: TFunction<'catalog'>;
 }
 
 const DeployingInformer = (props: Props) => {

@@ -2,13 +2,14 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Popover, PopoverContent, PopoverTrigger, cn } from '@heroui/react';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
+import { cn } from '@heroui/react';
 import { IconChevronRight } from '@tabler/icons-react';
 
-import { DropdownItem } from './types';
+import { DropdownActionItem } from './types';
 import { isActionDisabled } from './utils';
 
-const buildMenuItemClasses = (action: DropdownItem) => {
+const buildMenuItemClasses = (action: DropdownActionItem) => {
   return cn(
     'group',
     'relative',
@@ -35,7 +36,7 @@ const buildMenuItemClasses = (action: DropdownItem) => {
 };
 
 interface ActionMenuItemProps {
-  action: DropdownItem;
+  action: DropdownActionItem;
   isFocused: boolean;
   isSubmenuOpen?: boolean;
   onPress: () => void;
@@ -44,7 +45,7 @@ interface ActionMenuItemProps {
   onSubmenuClose?: () => void;
   onMenuClose: () => void;
   NestedDropdownMenu: React.ComponentType<{
-    actions: DropdownItem[];
+    actions: DropdownActionItem[];
     onClose: () => void;
     onRequestClose?: () => void;
   }>;

@@ -25,7 +25,8 @@ vi.mock('next/router', () => ({
 }));
 
 // Mock HeroUI components
-vi.mock('@heroui/react', () => ({
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@heroui/react')>()),
   Button: ({
     children,
     onPress,

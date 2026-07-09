@@ -7,6 +7,9 @@ import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { ChipDisplayVariant } from '@amdenterpriseai/types';
 import { Dataset, DatasetType } from '@/types/datasets';
+import { PaginatedList } from '@/types/pagination';
+
+import { fetchAllPages } from './pagination';
 
 export const DATASET_FILESIZE_LIMIT = 100 * 1024 * 1024; // 100MB
 
@@ -17,36 +20,62 @@ export const getDatasetTypeVariants = (
     label: t(`types.${DatasetType.Finetuning}`),
     color: 'warning',
   },
-  [DatasetType.Evaluation]: {
-    label: t(`types.${DatasetType.Evaluation}`),
-    color: 'secondary',
-  },
 });
 
-export const getDatasets = async (
+export interface ListDatasetsOptions {
+  type?: DatasetType;
+  name?: string;
+}
+
+// TODO(EAI-6599): Replace getAllDatasets callers (e.g. FinetuneDrawer) with a
+// server-side picker so the UI scales to projects with >100 datasets without
+// walking every page.
+
+const buildDatasetsListUrl = (
   projectId: string,
-  params?: {
-    type?: DatasetType;
-    name?: string;
-  },
+  page: number,
+  pageSize: number,
+  options: ListDatasetsOptions,
 ) => {
-  const urlParams = new URLSearchParams();
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        urlParams.append(key, String(value));
-      }
-    });
+  const params = new URLSearchParams();
+  params.append('pageSize', String(pageSize));
+  params.append('page', String(page));
+  if (options.type) {
+    params.append('type', options.type);
   }
-  const queryParams = urlParams.toString();
+  if (options.name) {
+    params.append('name', options.name);
+  }
+  return `/api/projects/${projectId}/datasets?${params}`;
+};
 
-  const url = queryParams
-    ? `/api/namespaces/${projectId}/datasets?${queryParams}`
-    : `/api/namespaces/${projectId}/datasets`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-  });
+/**
+ * Fetches a single page of datasets for a project.
+ *
+ * Backed by GET /v1/projects/{project}/datasets. Returns the raw paginated
+ * envelope so callers can drive UI pagination. The `type` filter is a single
+ * exact match (backend does not support repeated values), and `name` matches
+ * a single exact dataset name.
+ *
+ * @param {string} projectId - The project (1:1 with namespace) to list in.
+ * @param {object} [options] - Optional filters and pagination controls.
+ * @returns {Promise<PaginatedList<Dataset>>} The requested page and pagination metadata.
+ * @throws {APIRequestError} If the API request fails.
+ */
+export const listDatasets = async (
+  projectId: string,
+  options: ListDatasetsOptions & {
+    page?: number;
+    pageSize?: number;
+  } = {},
+): Promise<PaginatedList<Dataset>> => {
+  const { page = 1, pageSize = 10, ...filters } = options;
+  const response = await fetch(
+    buildDatasetsListUrl(projectId, page, pageSize, filters),
+    {
+      method: 'GET',
+    },
+  );
 
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
@@ -56,9 +85,28 @@ export const getDatasets = async (
     );
   }
 
-  const json = await response.json();
-  return json.data;
+  return await response.json();
 };
+
+/**
+ * Lists every dataset for a project by walking all pages.
+ *
+ * Thin wrapper around fetchAllPages — see `apps/ui/aiwb/AGENTS.md`
+ * "Paginated list loaders". Intended for callers that need an exhaustive
+ * list (e.g., populating a fine-tuning dataset dropdown).
+ *
+ * @param {string} projectId - The project (1:1 with namespace) to list in.
+ * @param {ListDatasetsOptions} [options] - Optional type and name filters.
+ * @returns {Promise<Dataset[]>} All datasets matching the filters.
+ * @throws {APIRequestError} If any underlying page request fails.
+ */
+export const getAllDatasets = (
+  projectId: string,
+  options: ListDatasetsOptions = {},
+): Promise<Dataset[]> =>
+  fetchAllPages<Dataset>((page, pageSize) =>
+    listDatasets(projectId, { ...options, page, pageSize }),
+  );
 
 /**
  * Retrieves a single dataset by ID.
@@ -72,7 +120,7 @@ export const getDataset = async (
   id: string,
   projectId: string,
 ): Promise<Dataset> => {
-  const response = await fetch(`/api/namespaces/${projectId}/datasets/${id}`, {
+  const response = await fetch(`/api/projects/${projectId}/datasets/${id}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -90,31 +138,50 @@ export const getDataset = async (
   return await response.json();
 };
 
-export const deleteDatasets = async (ids: string[], projectId: string) => {
-  const response = await fetch(`/api/namespaces/${projectId}/datasets/delete`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      ids: ids,
-    }),
+export const deleteDataset = async (
+  id: string,
+  projectId: string,
+): Promise<void> => {
+  const response = await fetch(`/api/projects/${projectId}/datasets/${id}`, {
+    method: 'DELETE',
   });
-
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
     throw new APIRequestError(
-      `Failed to delete datasets: ${errorMessage}`,
+      `Failed to delete dataset ${id}: ${errorMessage}`,
       response.status,
     );
   }
+};
 
-  return await response.json();
+export interface DeleteDatasetsResult {
+  succeededIds: string[];
+  failed: Array<{ id: string; error: APIRequestError | Error }>;
+}
+
+export const deleteDatasets = async (
+  ids: string[],
+  projectId: string,
+): Promise<DeleteDatasetsResult> => {
+  const results = await Promise.allSettled(
+    ids.map((id) => deleteDataset(id, projectId)),
+  );
+  const succeededIds: string[] = [];
+  const failed: DeleteDatasetsResult['failed'] = [];
+  results.forEach((result, idx) => {
+    const id = ids[idx];
+    if (result.status === 'fulfilled') {
+      succeededIds.push(id);
+    } else {
+      failed.push({ id, error: result.reason });
+    }
+  });
+  return { succeededIds, failed };
 };
 
 export const downloadDatasetById = async (id: string, projectId: string) => {
   const response = await fetch(
-    `/api/namespaces/${projectId}/datasets/${id}/download`,
+    `/api/projects/${projectId}/datasets/${id}/download`,
     {
       method: 'GET',
       headers: {
@@ -162,7 +229,7 @@ export const uploadDataset = async (
   formData.append('jsonl', dataset);
   formData.append('type', type);
 
-  const response = await fetch(`/api/namespaces/${projectId}/datasets/upload`, {
+  const response = await fetch(`/api/projects/${projectId}/datasets`, {
     method: 'POST',
     body: formData,
   });

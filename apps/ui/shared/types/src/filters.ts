@@ -2,7 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DropdownItemProps, SelectItemProps } from '@heroui/react';
+import {
+  DropdownItemProps,
+  SelectItemProps,
+} from '@amdenterpriseai/components';
 
 import { FilterComponentType } from './enums/filters';
 import { FilterOperator } from './enums/server-collection';

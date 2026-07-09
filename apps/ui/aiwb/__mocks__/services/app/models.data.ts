@@ -5,13 +5,10 @@
 import {
   AIM_MODEL_NAME_LABEL,
   AIM_MODEL_WORKLOAD_ID_LABEL,
+  AIMModel,
 } from '@/types/aims';
-import { AIMModelResponse } from '@/types/models';
 
-const makeModel = (
-  n: number,
-  extra?: Partial<AIMModelResponse>,
-): AIMModelResponse => ({
+const makeModel = (n: number, extra?: Partial<AIMModel>): AIMModel => ({
   metadata: {
     name: `wb-finetune-cr-${n}`, // K8s auto-generated resource name
     creationTimestamp: '2026-01-01T00:00:00Z',
@@ -21,19 +18,22 @@ const makeModel = (
     },
   },
   spec: {
-    image: 'amdenterpriseai/aim-base:0.10',
-    modelSources: [
-      { modelId: `org/model-${n}`, sourceUri: `s3://bucket/model-${n}` },
-    ],
+    profiles: {
+      overrides: {
+        modelSources: [
+          { modelId: `org/model-${n}`, sourceUri: `s3://bucket/model-${n}` },
+        ],
+      },
+    },
   },
   status: { status: 'Ready' },
   ...extra,
 });
 
 /**
- * Mock data matching the AIMModelResponse shape returned by GET /namespaces/{ns}/aims/models.
+ * Mock data matching the AIMModel item shape inside the ListResponse returned by GET /v1/projects/{project}/fine-tuning/models.
  */
-export const mockModels: AIMModelResponse[] = [
+export const mockModels: AIMModel[] = [
   makeModel(1),
   makeModel(2, { status: { status: 'NotReady' } }),
   makeModel(3),

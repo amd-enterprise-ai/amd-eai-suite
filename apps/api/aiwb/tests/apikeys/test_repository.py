@@ -20,14 +20,14 @@ async def test_create_api_key(db_session: AsyncSession, test_namespace: str, tes
 
     api_key = await create_api_key(
         session=db_session,
-        name=name,
+        display_name=name,
         truncated_key="aiwb_api_key_••••••••1234",
         cluster_auth_key_id="cluster-auth-key-id-123",
         namespace=test_namespace,
         creator=test_user,
     )
 
-    assert api_key.name == name
+    assert api_key.display_name == name
     assert api_key.truncated_key == "aiwb_api_key_••••••••1234"
     assert api_key.cluster_auth_key_id == "cluster-auth-key-id-123"
     assert api_key.namespace == test_namespace
@@ -45,7 +45,7 @@ async def test_create_api_key_duplicate_name_raises_conflict(
     # Create first API key
     await create_api_key(
         session=db_session,
-        name=name,
+        display_name=name,
         truncated_key="aiwb_api_key_••••••••1234",
         cluster_auth_key_id="cluster-auth-key-id-123",
         namespace=test_namespace,
@@ -56,7 +56,7 @@ async def test_create_api_key_duplicate_name_raises_conflict(
     with pytest.raises(ConflictException) as exc_info:
         await create_api_key(
             session=db_session,
-            name=name,
+            display_name=name,
             truncated_key="aiwb_api_key_••••••••5678",
             cluster_auth_key_id="cluster-auth-key-id-456",
             namespace=test_namespace,
@@ -72,16 +72,16 @@ async def test_get_api_keys_for_namespace(db_session: AsyncSession, test_namespa
     unique_suffix = str(uuid4())[:8]
 
     api_key1 = await factory.create_api_key(
-        db_session, name=f"Key 1 {unique_suffix}", namespace=test_namespace, created_by=test_user
+        db_session, display_name=f"Key 1 {unique_suffix}", namespace=test_namespace, created_by=test_user
     )
 
     api_key2 = await factory.create_api_key(
-        db_session, name=f"Key 2 {unique_suffix}", namespace=test_namespace, created_by=test_user
+        db_session, display_name=f"Key 2 {unique_suffix}", namespace=test_namespace, created_by=test_user
     )
 
     # Create key in different namespace
     await factory.create_api_key(
-        db_session, name=f"Other NS Key {unique_suffix}", namespace="other-namespace", created_by=test_user
+        db_session, display_name=f"Other NS Key {unique_suffix}", namespace="other-namespace", created_by=test_user
     )
 
     keys = await get_api_keys_for_namespace(db_session, test_namespace)
@@ -99,7 +99,7 @@ async def test_get_api_key_by_id(db_session: AsyncSession, test_namespace: str, 
 
     created_key = await factory.create_api_key(
         db_session,
-        name=f"Specific Key {unique_suffix}",
+        display_name=f"Specific Key {unique_suffix}",
         namespace=test_namespace,
         truncated_key="aiwb_api_key_••••••••9999",
         cluster_auth_key_id="specific-key-id",
@@ -110,7 +110,7 @@ async def test_get_api_key_by_id(db_session: AsyncSession, test_namespace: str, 
 
     assert retrieved_key is not None
     assert retrieved_key.id == created_key.id
-    assert retrieved_key.name == f"Specific Key {unique_suffix}"
+    assert retrieved_key.display_name == f"Specific Key {unique_suffix}"
 
 
 @pytest.mark.asyncio
@@ -120,7 +120,7 @@ async def test_get_api_key_by_id_wrong_namespace_returns_none(db_session: AsyncS
 
     created_key = await factory.create_api_key(
         db_session,
-        name=f"Namespace 1 Key {unique_suffix}",
+        display_name=f"Namespace 1 Key {unique_suffix}",
         namespace="namespace-1",
         truncated_key="aiwb_api_key_••••••••8888",
         cluster_auth_key_id="ns1-key-id",
@@ -139,7 +139,7 @@ async def test_delete_api_key(db_session: AsyncSession, test_namespace: str, tes
 
     created_key = await factory.create_api_key(
         db_session,
-        name=f"Key to Delete {unique_suffix}",
+        display_name=f"Key to Delete {unique_suffix}",
         namespace=test_namespace,
         truncated_key="aiwb_api_key_••••••••6666",
         cluster_auth_key_id="delete-key-id",

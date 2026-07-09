@@ -9,8 +9,20 @@ import {
   installPackageTestJsdom,
   resetActiveProjectLocalStorage,
 } from '@/../shared/utils/__tests__/vitestJsdomSetup';
+import { withMockAmdenterpriseaiButtonStubs } from '@/../shared/utils/__tests__/mockAmdenterpriseaiButtonStubs';
 
 installPackageTestJsdom();
+
+// HeroUI v3 (React Aria) triggers async state updates that must be flushed
+// inside act(). This flag tells React that the test environment supports act()
+// so those updates are batched correctly instead of causing waitFor timeouts.
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock('@amdenterpriseai/components', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/components')>();
+  return withMockAmdenterpriseaiButtonStubs(actual);
+});
 
 configure({ asyncUtilTimeout: 15_000 });
 

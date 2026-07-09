@@ -5,12 +5,10 @@
 import { useEffect, useMemo } from 'react';
 
 import type { GetServerSidePropsContext } from 'next/types';
-import { getServerSession } from 'next-auth';
 import { useRouter } from 'next/router';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 import { useLocalStorage } from '@amdenterpriseai/hooks';
-import { authOptions } from '@amdenterpriseai/utils/server';
 
 import { useProject } from '@/contexts/ProjectContext';
 import { ProjectSelectPrompt } from '@/components/shared/ProjectSelect';
@@ -57,22 +55,6 @@ export default RootPage;
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
   const { locale = 'en' } = context;
-
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/api/auth/signin',
-        permanent: false,
-      },
-    };
-  }
 
   const translations = await serverSideTranslations(locale, ['common']);
 

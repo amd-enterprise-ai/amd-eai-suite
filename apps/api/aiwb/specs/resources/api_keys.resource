@@ -83,15 +83,15 @@ Create api key
     &{empty_meta}=    Create dictionary
     @{empty_aims}=    Create list
     ${key_data}=    Create dictionary
-    ...    name=${key_name}
+    ...    displayName=${key_name}
     ...    ttl=${ttl}
     ...    renewable=${renewable}
     ...    numUses=${0}
     ...    meta=${empty_meta}
     ...    aimIds=${empty_aims}
 
-    ${namespace}=    Get Project Namespace
-    ${response}=    api_keys_api.Create api key    ${key_data}    namespace=${namespace}    expected_status=any
+    ${project}=    Get Project Namespace
+    ${response}=    api_keys_api.Create api key    ${key_data}    project=${project}    expected_status=any
 
     Set test variable    ${TEST_RESPONSE}    ${response}
 
@@ -104,8 +104,8 @@ Create api key
 # API Key Renewal Keywords
 Api key is renewed
     [Documentation]    BDD wrapper: Renews the current API key's lease
-    ${namespace}=    Get Project Namespace
-    ${response}=    api_keys_api.Renew api key    ${TEST_API_KEY}[id]    namespace=${namespace}    expected_status=any
+    ${project}=    Get Project Namespace
+    ${response}=    api_keys_api.Renew api key    ${TEST_API_KEY}[id]    project=${project}    expected_status=any
 
     Set test variable    ${TEST_RESPONSE}    ${response}
 
@@ -137,17 +137,23 @@ Api key renewal should fail with expected error
 
 Renew non-existent api key
     [Documentation]    Attempts renewal of a non-existent API key ID
-    ${namespace}=    Get Project Namespace
-    ${response}=    api_keys_api.Renew api key    non-existent-key-id-12345    namespace=${namespace}    expected_status=any
+    ${project}=    Get Project Namespace
+    ${response}=    api_keys_api.Renew api key    non-existent-key-id-12345    project=${project}    expected_status=any
 
     Set test variable    ${TEST_RESPONSE}    ${response}
 
 Api key is revoked
     [Documentation]    Revokes/deletes the current API key (AIWB API)
-    ${namespace}=    Get Project Namespace
-    ${response}=    api_keys_api.Delete api key    ${TEST_API_KEY}[id]    namespace=${namespace}    expected_status=any
+    ${project}=    Get Project Namespace
+    ${response}=    api_keys_api.Delete api key    ${TEST_API_KEY}[id]    project=${project}    expected_status=any
 
     Set test variable    ${TEST_RESPONSE}    ${response}
+
+Api keys are listed for the project
+    [Documentation]    BDD wrapper: List API keys for the current project via AIWB API
+    ${project}=    Get Project Namespace
+    ${response}=    api_keys_api.List api keys    ${project}
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
 
 # Assertion Keywords
 Api key should be created successfully
@@ -173,9 +179,9 @@ Key assignment should succeed
 Key-model mapping should be visible in management interface
     [Documentation]    Verifies that key-model mapping is visible via AIWB API
     ...    Gets API key details and checks that it has group bindings
-    # API requires namespace in path
-    ${namespace}=    Get Project Namespace
-    ${response}=    api_keys_api.Get api key    ${TEST_API_KEY}[id]    namespace=${namespace}    expected_status=200
+    # API requires project in path
+    ${project}=    Get Project Namespace
+    ${response}=    api_keys_api.Get api key    ${TEST_API_KEY}[id]    project=${project}    expected_status=200
 
     ${key_details}=    Set variable    ${response.json()}
     Should contain    ${key_details}    groups
@@ -188,12 +194,14 @@ Request should succeed
     [Documentation]    Verifies that the request was successful
     Should be equal as integers    ${TEST_RESPONSE.status_code}    200
 
-Request should fail with 401 unauthorized
-    [Documentation]    Verifies that request failed with 401 or 403 status
-    ...    403 Forbidden is returned when Envoy gateway enforces authentication
-    ...    401 Unauthorized would be returned by the service itself
+Request should be rejected as unauthorized
+    [Documentation]    Verifies that request was rejected due to an auth failure.
+    ...    401/403 cover the broad case of a request rejected by an auth layer,
+    ...    including a missing credential.
+    ...    404 is returned specifically by the gateway when a credential is present
+    ...    but unknown (invalid or revoked), to avoid leaking whether a key ever existed.
     ${status}=    Set variable    ${TEST_RESPONSE.status_code}
-    Should be true    ${status} in [401, 403]    Expected 401 or 403, got ${status}
+    Should be true    ${status} in [401, 403, 404]    Expected 401, 403, or 404, got ${status}
 
 Error message should indicate missing api key
     [Documentation]    Verifies error message indicates missing API key
@@ -217,10 +225,10 @@ Revocation should succeed
 
 Key status should show as revoked
     [Documentation]    Verifies key is deleted (AIWB API returns 404 for deleted keys)
-    ${namespace}=    Get Project Namespace
+    ${project}=    Get Project Namespace
     ${response}=    api_keys_api.Get api key
     ...    ${TEST_API_KEY}[id]
-    ...    namespace=${namespace}
+    ...    project=${project}
     ...    expected_status=any
 
     # AIWB API should return 404 for deleted key
@@ -248,9 +256,9 @@ Api key should show no active mappings
     ...    NOTE: Known limitation - AIWB currently does NOT clean up group mappings when AIMs are deleted.
     ...    This test documents the current behavior. The groups remain but the AIM is gone.
     ...    TODO: Once AIWB implements automatic cleanup, update this to verify groups are empty.
-    ${namespace}=    Get Project Namespace
+    ${project}=    Get Project Namespace
     ${response}=    api_keys_api.Get api key    ${TEST_API_KEY}[id]
-    ...    namespace=${namespace}    expected_status=200
+    ...    project=${project}    expected_status=200
 
     ${key_info}=    Set variable    ${response.json()}
 
@@ -267,9 +275,9 @@ Key status should indicate resource removed
     [Documentation]    Verifies key status via AIWB API after AIM deletion
     ...    NOTE: Known limitation - groups are NOT automatically cleaned up when AIMs are deleted.
     ...    The key exists and can be queried, even though the AIM it was mapped to is gone.
-    ${namespace}=    Get Project Namespace
+    ${project}=    Get Project Namespace
     ${response}=    api_keys_api.Get api key    ${TEST_API_KEY}[id]
-    ...    namespace=${namespace}    expected_status=200
+    ...    project=${project}    expected_status=200
 
     ${key_info}=    Set variable    ${response.json()}
 
@@ -278,9 +286,9 @@ Key status should indicate resource removed
 Api key should remain valid for other uses
     [Documentation]    Verifies API key remains valid for other uses via AIWB API
     ...    The key should still exist in the system even though its AIM mappings were removed
-    ${namespace}=    Get Project Namespace
+    ${project}=    Get Project Namespace
     ${response}=    api_keys_api.Get api key    ${TEST_API_KEY}[id]
-    ...    namespace=${namespace}    expected_status=200
+    ...    project=${project}    expected_status=200
 
     ${key_info}=    Set variable    ${response.json()}
 

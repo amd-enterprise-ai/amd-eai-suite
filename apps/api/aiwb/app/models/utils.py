@@ -27,6 +27,43 @@ def get_finetuned_model_weights_path(base_canonical_name: str, finetuning_name: 
     return os.path.join(slugified_project, "finetuned-models", base_canonical_name, finetuning_name)
 
 
+def get_custom_model_manifest_path(namespace: str, resource_name: str) -> str:
+    """S3 key for the YAML manifest of a custom (BYOM) AIMModel.
+
+    Format: {slugified_namespace}/custom-models/{resource_name}/manifest.yaml.
+    The resource_name is the AIMModel CR's `metadata.name`, which is the only
+    stable, deterministic identifier we need: it never changes, it's unique
+    within the namespace, and the CR itself is the link between the cluster
+    record and the manifest in object storage.
+    """
+    return os.path.join(slugify(namespace), "custom-models", resource_name, "manifest.yaml")
+
+
+def get_custom_model_root_path(namespace: str, resource_name: str) -> str:
+    """S3 key prefix for the entire object-storage tree of a custom (BYOM) AIMModel.
+
+    Format: {slugified_namespace}/custom-models/{resource_name}/.
+    This is the common parent of both the ``manifest.yaml`` mirror and the
+    ``weights/`` tree, so a single recursive delete under this prefix reclaims
+    all workbench-owned object storage for the model. aim-engine downloads
+    *from* the weights URI into a PVC and never writes here, so this tree is
+    the workbench's to clean up.
+    """
+    return os.path.join(slugify(namespace), "custom-models", resource_name) + "/"
+
+
+def get_custom_model_weights_path(namespace: str, resource_name: str) -> str:
+    """S3 key prefix where weights for a custom (BYOM) AIMModel are imported.
+
+    Format: {slugified_namespace}/custom-models/{resource_name}/weights/.
+    This is the object-storage tree that inference loads from (shards, config,
+    tokenizer). A sibling ticket performs the actual Hub-to-S3 weight import;
+    this PR only writes the prefix into AIMModel.spec.modelSources[0].sourceUri
+    so the manifest is fully formed from day one.
+    """
+    return os.path.join(slugify(namespace), "custom-models", resource_name, "weights") + "/"
+
+
 @retry(
     wait=wait_exponential(multiplier=1, min=MINIO_MIN_WAIT, max=MINIO_MAX_WAIT),
     stop=stop_after_attempt(MINIO_MAX_ATTEMPTS),

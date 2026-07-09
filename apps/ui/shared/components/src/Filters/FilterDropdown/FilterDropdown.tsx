@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
+import type { Selection } from '../../Select/Select';
 import {
   Dropdown,
   DropdownItem,
   DropdownMenu,
   DropdownSection,
-  Selection,
-} from '@heroui/react';
+} from '../../Dropdown/DropdownPrimitive';
 import {
   forwardRef,
   useCallback,

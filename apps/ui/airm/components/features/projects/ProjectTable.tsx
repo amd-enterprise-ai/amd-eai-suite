@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tooltip, useDisclosure } from '@heroui/react';
 import {
   IconAlertTriangle,
   IconExternalLink,
@@ -16,7 +15,7 @@ import { useTranslation } from 'next-i18next';
 import router from 'next/router';
 
 import { useAccessControl } from '@/hooks/useAccessControl';
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import {
   deleteProject as deleteProjectAPI,
@@ -37,14 +36,16 @@ import { CustomComparatorConfig } from '@amdenterpriseai/types';
 import { ProjectTableField } from '@/types/enums/project-table-fields';
 import { ProjectWithResourceAllocation } from '@/types/projects';
 
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { StatusDisplay } from '@amdenterpriseai/components';
+import {
+  ClientSideDataTable,
+  ConfirmationModal,
+  StatusDisplay,
+  StatusError,
+  Tooltip,
+} from '@amdenterpriseai/components';
 
 import { ProjectStatus } from '@/types/enums/projects';
 import { getProjectStatusVariants } from '@/utils/projects-status-variants';
-
-import { StatusError } from '@amdenterpriseai/components';
 
 interface Props {
   projects: ProjectWithResourceAllocation[];
@@ -107,7 +108,7 @@ export const ProjectTable: React.FC<Props> = ({ projects }) => {
     isOpen: isDeleteModalOpen,
     onOpen: onDeleteModalOpen,
     onOpenChange: onDeleteModalOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const openProjectDetails = useCallback((id: string) => {
     router.push(`/projects/${id}`);

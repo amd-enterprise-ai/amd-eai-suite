@@ -4,6 +4,7 @@
 
 """AIMService syncer for polling framework."""
 
+import asyncio
 from uuid import UUID
 
 from loguru import logger
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import SUBMITTER_ANNOTATION
 from ..dispatch.kube_client import KubernetesClient
-from ..namespaces.gateway import get_namespaces
+from ..projects.gateway import get_namespaces
 from ..workloads.constants import WORKLOAD_ID_LABEL
 from .enums import AIMServiceStatus
 from .gateway import get_aim_by_name, list_aim_services
@@ -46,10 +47,8 @@ async def sync_aim_services(session: AsyncSession, kube_client: KubernetesClient
     # Get all accessible namespaces (workbench namespaces with project-id label)
     # In standalone mode, this returns only the default namespace
     accessible_namespaces = await get_namespaces(kube_client)
-    k8s_aim_services = []
-    for namespace in accessible_namespaces:
-        services = await list_aim_services(kube_client, namespace.name)
-        k8s_aim_services.extend(services)
+    service_lists = await asyncio.gather(*(list_aim_services(kube_client, ns.name) for ns in accessible_namespaces))
+    k8s_aim_services = [svc for sublist in service_lists for svc in sublist]
 
     # Map by id from labels
     # Only process services that have been labeled by Kyverno/AIRM
@@ -95,9 +94,9 @@ async def sync_aim_services(session: AsyncSession, kube_client: KubernetesClient
                 logger.debug(f"Skipping AIMService {service.metadata.name} - missing namespace")
                 continue
 
-            model_name = service.status.resolved_model.name if service.status.resolved_model else None
+            model_name = service.spec.model.get("name")
             if not model_name:
-                logger.debug(f"Skipping AIMService {service.metadata.name} - missing resolved model")
+                logger.debug(f"Skipping AIMService {service.metadata.name} - missing model name")
                 continue
 
             try:
@@ -106,12 +105,19 @@ async def sync_aim_services(session: AsyncSession, kube_client: KubernetesClient
                     logger.debug(f"Skipping AIMService {service.metadata.name} - AIM {model_name} not found")
                     continue
 
+                # Per ADR 006b §3 the optimization metric lives in
+                # spec.profile.selector.metric (v1alpha2), not the legacy
+                # spec.overrides.metric (v1alpha1). When the profile is
+                # auto-resolved or chosen by name there's no metric to record.
+                profile = service.spec.profile
+                selector_metric = profile.selector.get("metric") if profile and profile.selector else None
+
                 await create_aim_service(
                     session=session,
                     namespace=service.metadata.namespace,
                     model=model_name,
                     status=service.status.status,
-                    metric=(service.spec.overrides or {}).get("metric"),
+                    metric=selector_metric,
                     submitter=service.metadata.annotations.get(SUBMITTER_ANNOTATION, "system"),
                     id=service_id,
                 )

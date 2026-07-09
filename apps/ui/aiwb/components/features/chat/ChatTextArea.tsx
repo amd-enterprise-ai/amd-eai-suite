@@ -11,7 +11,7 @@ import {
 import { MutableRefObject } from 'react';
 
 import { useTranslation } from 'next-i18next';
-import { Button } from '@heroui/react';
+import { Button } from '@amdenterpriseai/components';
 
 interface Props {
   content: string;
@@ -57,7 +57,7 @@ export const ChatTextArea = ({
       <div className="relative flex flex-row justify-center items-center">
         <textarea
           id="chat-input"
-          aria-label="chat-input"
+          aria-label={t('chatInput.label')}
           data-testid="chat-input"
           ref={textareaRef}
           disabled={disabled}

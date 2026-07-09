@@ -4,6 +4,7 @@
 
 import base64
 import json
+from uuid import uuid4
 
 from kubernetes_asyncio.client import ApiException
 from loguru import logger
@@ -12,6 +13,7 @@ from api_common.exceptions import ConflictException, NotFoundException, Validati
 from api_common.secrets import SecretUseCase
 
 from ..dispatch.kube_client import KubernetesClient
+from .constants import DISPLAY_NAME_ANNOTATION
 from .gateway import (
     create_kubernetes_secret,
     delete_kubernetes_secret,
@@ -19,6 +21,15 @@ from .gateway import (
     list_kubernetes_secrets,
 )
 from .schemas import SecretCreate, SecretResponse
+
+
+def generate_secret_name() -> str:
+    """Generate a unique K8s-compatible name for a secret.
+
+    Returns a name in the format 'wb-secret-{8-char-hex}' (18 chars total).
+    The generated name is returned in API responses as metadata.name; display_name holds the human-readable name.
+    """
+    return f"wb-secret-{uuid4().hex[:8]}"
 
 
 async def list_secrets_for_namespace(
@@ -93,21 +104,40 @@ async def create_secret(
                     detail=str(e),
                 ) from e
 
-    try:
-        secret_crd = await create_kubernetes_secret(
-            kube_client=kube_client,
-            namespace=namespace,
-            name=secret_in.name,
-            data=secret_in.data,
-            use_case=secret_in.use_case,
-            submitter=submitter,
-        )
-        logger.info(f"Created secret '{secret_in.name}' in namespace '{namespace}'")
-        return SecretResponse.model_validate(secret_crd.model_dump())
-    except ApiException as e:
-        if e.status == 409:
-            raise ConflictException(f"Secret '{secret_in.name}' already exists in namespace '{namespace}'")
-        raise
+    existing_secrets = await list_kubernetes_secrets(kube_client=kube_client, namespace=namespace)
+    for existing in existing_secrets:
+        existing_display_name = existing.metadata.annotations.get(DISPLAY_NAME_ANNOTATION) or existing.metadata.name
+        if existing_display_name == secret_in.display_name:
+            raise ConflictException(
+                f"A secret with display name '{secret_in.display_name}' already exists in namespace '{namespace}'"
+            )
+
+    _max_retries = 3
+    for attempt in range(_max_retries):
+        secret_name = generate_secret_name()
+        try:
+            secret_crd = await create_kubernetes_secret(
+                kube_client=kube_client,
+                namespace=namespace,
+                name=secret_name,
+                display_name=secret_in.display_name,
+                data=secret_in.data,
+                use_case=secret_in.use_case,
+                submitter=submitter,
+            )
+            logger.info(f"Created secret '{secret_in.display_name}' ({secret_name}) in namespace '{namespace}'")
+            return SecretResponse.model_validate(secret_crd.model_dump())
+        except ApiException as e:
+            if e.status == 409 and attempt < _max_retries - 1:
+                logger.warning(f"Generated name '{secret_name}' already exists, retrying...")
+                continue
+            if e.status == 409:
+                raise ConflictException(
+                    f"Generated K8s name '{secret_name}' already exists in namespace '{namespace}' after {_max_retries} attempts"
+                )
+            raise
+
+    raise ConflictException(f"Failed to create secret in namespace '{namespace}' after {_max_retries} attempts")
 
 
 async def delete_secret(

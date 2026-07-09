@@ -99,7 +99,7 @@ AIWB E2E tests use prefixed resource names to allow concurrent execution. See `s
 
 The `aim_catalog.robot` suite uses dynamic test generation via `libraries/AimCatalogGenerator.py`.
 
-**Model Discovery:** Models are auto-discovered from the cluster API (`GET /v1/cluster/aims/models`), filtered to `Ready` status, and deduplicated by `image_name` (keeping the highest version). Authentication uses the OIDC token from kubectl (override with `AIWB_API_TOKEN` env var). The API URL resolves from `${AIM_CATALOG_API_URL}` → `${AIWB_BASE_URL}` → `AIWB_API_URL` env var → cluster Gateway auto-discovery. To test only a subset, create a text file with one model name per line and pass `--variable AIM_CATALOG_FILTER:config/aim_models.txt`.
+**Model Discovery:** Models are auto-discovered from the cluster API (`GET /v1/inference/models`), filtered to `Ready` status, and deduplicated by `image_name` (keeping the highest version). Authentication uses the OIDC token from kubectl (override with `AIWB_API_TOKEN` env var). The API URL resolves from `${AIM_CATALOG_API_URL}` → `${AIWB_BASE_URL}` → `AIWB_API_URL` env var → cluster Gateway auto-discovery. To test only a subset, create a text file with one model name per line and pass `--variable AIM_CATALOG_FILTER:config/aim_models.txt`.
 
 **Tag Filtering:** Use variables in `arguments.txt`:
 

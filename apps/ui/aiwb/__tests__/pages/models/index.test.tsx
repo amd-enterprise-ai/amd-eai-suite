@@ -17,6 +17,15 @@ vi.mock('@/components/features/models/CustomModels', () => ({
   ),
 }));
 
+// Mock FineTuneModels
+vi.mock('@/components/features/models/FineTuneModels', () => ({
+  default: () => (
+    <div data-testid="fine-tune-models">
+      <h2>Fine-tune models</h2>
+    </div>
+  ),
+}));
+
 // Mock AIMCatalog
 vi.mock('@/components/features/models/AIMCatalog', () => ({
   default: () => (
@@ -75,6 +84,7 @@ describe('Models Page', () => {
 
     expect(screen.getByText('tabs.aimCatalog')).toBeInTheDocument();
     expect(screen.getByText('tabs.customModels')).toBeInTheDocument();
+    expect(screen.getByText('tabs.fineTuneModels')).toBeInTheDocument();
     expect(screen.getByText('tabs.deployedModels')).toBeInTheDocument();
 
     expect(screen.getByTestId('aim-catalog')).toBeInTheDocument();
@@ -85,6 +95,7 @@ describe('Models Page', () => {
 
     expect(screen.getByTestId('aim-catalog')).toBeInTheDocument();
     expect(screen.queryByTestId('custom-models')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('fine-tune-models')).not.toBeInTheDocument();
     expect(screen.queryByTestId('deployed-models')).not.toBeInTheDocument();
 
     mockRouter.query = { tab: 'custom-models' };
@@ -95,12 +106,20 @@ describe('Models Page', () => {
       expect(screen.queryByTestId('aim-catalog')).not.toBeInTheDocument();
     });
 
+    mockRouter.query = { tab: 'fine-tune-models' };
+    rerender(<ModelsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('fine-tune-models')).toBeInTheDocument();
+      expect(screen.queryByTestId('custom-models')).not.toBeInTheDocument();
+    });
+
     mockRouter.query = { tab: 'deployed-models' };
     rerender(<ModelsPage />);
 
     await waitFor(() => {
       expect(screen.getByTestId('deployed-models')).toBeInTheDocument();
-      expect(screen.queryByTestId('custom-models')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('fine-tune-models')).not.toBeInTheDocument();
     });
   });
 

@@ -157,26 +157,32 @@ def upload_chart(workload_path: Path, api_url: httpx.URL) -> str | None:
 
 def get_chart_id(chart_name: str, api_url: httpx.URL) -> str | None:
     """Get the ID of a chart by name."""
-    success, response = make_api_request("GET", f"charts?name={chart_name}", api_url)
+    success, response = make_api_request("GET", "charts", api_url)
 
     if not success:
         logger.debug(f"Failed to get chart ID for {chart_name}: {response.get('error', 'Unknown error')}")
         return None
 
-    # The API might return a list of charts or a single chart
+    # The API returns a ListResponse with a "data" key containing a list of charts
+    charts: list = []
     if isinstance(response, dict):
-        chart_id = response.get("id")
-        if chart_id:
-            logger.debug(f"Found existing chart: {chart_name} (ID: {chart_id})")
-            return chart_id
+        if "data" in response:
+            charts = response["data"]
+        elif "id" in response:
+            # Single chart object returned directly
+            if response.get("name") == chart_name:
+                chart_id = response.get("id")
+                logger.debug(f"Found existing chart: {chart_name} (ID: {chart_id})")
+                return chart_id
     elif isinstance(response, list):
-        # If it's a list, find the chart with matching name
-        for chart in response:
-            if isinstance(chart, dict) and chart.get("name") == chart_name:
-                chart_id = chart.get("id")
-                if chart_id:
-                    logger.debug(f"Found existing chart: {chart_name} (ID: {chart_id})")
-                    return chart_id
+        charts = response
+
+    for chart in charts:
+        if isinstance(chart, dict) and chart.get("name") == chart_name:
+            chart_id = chart.get("id")
+            if chart_id:
+                logger.debug(f"Found existing chart: {chart_name} (ID: {chart_id})")
+                return chart_id
 
     logger.debug(f"No existing chart found for: {chart_name}")
     return None
@@ -184,14 +190,16 @@ def get_chart_id(chart_name: str, api_url: httpx.URL) -> str | None:
 
 def get_overlay_id(chart_id: str, canonical_name: str | None, api_url: httpx.URL) -> str | None:
     """Get the ID of an overlay by chart_id and optional canonical_name."""
-    success, response = make_api_request("GET", f"overlays?chart_id={chart_id}", api_url)
+    success, response = make_api_request("GET", f"overlays?chartId={chart_id}", api_url)
     if not success:
         logger.debug(f"Failed to get overlays: {response.get('error', 'Unknown error')}")
         return None
 
-    overlays = response if isinstance(response, list) else [response] if response else []
+    overlays = (
+        response.get("data", []) if isinstance(response, dict) else response if isinstance(response, list) else []
+    )
     for overlay in overlays:
-        if isinstance(overlay, dict) and canonical_name == overlay.get("canonical_name"):
+        if isinstance(overlay, dict) and canonical_name == overlay.get("canonicalName"):
             return overlay.get("id")
     return None
 
@@ -223,11 +231,11 @@ def process_single_overlay(overlay_file: Path, rel_path_str: str, api_url: httpx
                 logger.error(f"Failed to create temporary file for overlay: {overlay_file.name}")
                 return (ProcessingStatus.FAILED, "Error creating temp file")
 
-            data = {"chart_id": chart_id}
+            data = {"chartId": chart_id}
             if canonical_name:
-                data["canonical_name"] = canonical_name
+                data["canonicalName"] = canonical_name
 
-            files = {"overlay_file": [Path(temp_path)]}
+            files = {"overlayFile": [Path(temp_path)]}
 
             existing_id = get_overlay_id(chart_id, canonical_name, api_url)
             endpoint = f"overlays/{existing_id}" if existing_id else "overlays"

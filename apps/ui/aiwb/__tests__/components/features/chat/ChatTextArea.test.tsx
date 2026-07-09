@@ -11,8 +11,9 @@ import ProviderWrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
-// Mock HeroUI components
-vi.mock('@heroui/react', () => ({
+// Mock HeroUI components (preserve Card exports required by @amdenterpriseai/components adapter)
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@heroui/react')>()),
   Button: ({
     children,
     onPress,
@@ -42,6 +43,7 @@ vi.mock('next-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
+        'chatInput.label': 'Chat input',
         'chatInput.placeholder': 'Type your message...',
         'chatInput.placeholderDisabled': 'Chat is disabled',
       };
@@ -82,7 +84,7 @@ describe('ChatTextArea Component', () => {
       const textarea = screen.getByTestId('chat-input');
       expect(textarea).toBeInTheDocument();
       expect(textarea).toHaveAttribute('id', 'chat-input');
-      expect(textarea).toHaveAttribute('aria-label', 'chat-input');
+      expect(textarea).toHaveAttribute('aria-label', 'Chat input');
     });
 
     it('renders with correct placeholder when enabled', () => {
@@ -564,7 +566,7 @@ describe('ChatTextArea Component', () => {
       );
 
       const textarea = screen.getByTestId('chat-input');
-      expect(textarea).toHaveAttribute('aria-label', 'chat-input');
+      expect(textarea).toHaveAttribute('aria-label', 'Chat input');
     });
 
     it('has proper id for textarea', () => {

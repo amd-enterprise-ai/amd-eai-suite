@@ -5,7 +5,7 @@
 export type ApiKey = {
   id: string;
   projectId: string;
-  name: string;
+  displayName: string;
   truncatedKey: string;
   createdAt: string;
   createdBy: string;
@@ -30,4 +30,30 @@ export type ApiKeyDetails = ApiKey & {
 
 export type ApiKeysResponse = {
   data: ApiKey[];
+};
+
+export type ApiKeyMetricsDataPoint = {
+  date: string;
+  [serviceId: string]: number | string;
+};
+
+export type ApiKeyMetrics = {
+  stats: {
+    totalRequests: number;
+    successfulRequests: number;
+    failedRequests: number;
+    totalTokens: number;
+    linkedDeployments: number;
+  };
+  services: string[];
+  requestsOverTime: {
+    total: ApiKeyMetricsDataPoint[];
+    successful: ApiKeyMetricsDataPoint[];
+    failed: ApiKeyMetricsDataPoint[];
+  };
+  tokensOverTime: {
+    total: ApiKeyMetricsDataPoint[];
+    input: ApiKeyMetricsDataPoint[];
+    output: ApiKeyMetricsDataPoint[];
+  };
 };

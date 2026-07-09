@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Chip, Tooltip } from '@heroui/react';
+import { Chip } from '../Chip';
+import { Tooltip } from '../Tooltip';
 import { ReactNode } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -117,10 +118,12 @@ type TranslationDisplayProps = TranslationDisplayBaseProps &
  */
 const TranslationDisplay = (props: TranslationDisplayProps) => {
   const { tKey, ns, ...interpolationOptions } = props;
-  const { t } = useTranslation(ns);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { t } = useTranslation(ns as any);
   // The `interpolationOptions` object will contain all props other than tKey and ns.
   // This is directly compatible with what i18next's `t` function expects for options.
-  return <>{t(tKey, interpolationOptions)}</>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return <>{t(tKey as any, interpolationOptions)}</>;
 };
 
 /**

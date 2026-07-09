@@ -2,13 +2,20 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectItem, useDisclosure } from '@heroui/react';
+import {
+  Select,
+  SelectItem,
+  ConfirmationModal,
+  DrawerForm,
+  FormFieldComponent,
+  ActionButton,
+} from '@amdenterpriseai/components';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import {
   addUsersToProject as addUserToProjectAPI,
@@ -20,10 +27,6 @@ import { APIRequestError } from '@amdenterpriseai/utils/app';
 import { AssignProjectFormData, ProjectInUser } from '@/types/users';
 import { UserWithProjects } from '@/types/users';
 
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { DrawerForm } from '@amdenterpriseai/components';
-import { FormFieldComponent } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
 import ProjectAndRoleEntry from './ProjectAndRoleEntry';
 
 import { ZodType, z } from 'zod';
@@ -45,12 +48,12 @@ export const Projects: React.FC<Props> = ({ user, projects }) => {
     isOpen: isAddGroupOpen,
     onOpen: onAddGroupOpen,
     onOpenChange: onAddGroupOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
   const {
     isOpen: isDeleteConfirmOpen,
     onOpen: onDeleteConfirmOpen,
     onOpenChange: onDeleteConfirmOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const queryClient = useQueryClient();
 

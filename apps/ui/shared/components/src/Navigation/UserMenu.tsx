@@ -2,15 +2,15 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { cn } from '@heroui/react';
+import { Switch } from '@amdenterpriseai/components';
 import {
   Dropdown,
   DropdownItem,
   DropdownMenu,
   DropdownSection,
   DropdownTrigger,
-  Switch,
-  cn,
-} from '@heroui/react';
+} from '../Dropdown/DropdownPrimitive';
 import {
   IconFlag,
   IconLogout,
@@ -71,7 +71,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ additionalMenuItems }) => {
             </div>
           </div>
         </DropdownTrigger>
-        <DropdownMenu aria-label="Static Actions">
+        <DropdownMenu aria-label={t('list.actions.label')}>
           <DropdownSection
             aria-label={t('menu.actions.themeToggle') as string}
             showDivider
@@ -100,7 +100,9 @@ export const UserMenu: React.FC<UserMenuProps> = ({ additionalMenuItems }) => {
               }
               key={''}
             >
-              {t('menu.actions.theme', { theme: t(`theme.${theme}`) })}
+              {t('menu.actions.theme', {
+                theme: t(`theme.${theme}` as any) as string,
+              })}
             </DropdownItem>
           </DropdownSection>
           {additionalMenuItems ?? null}

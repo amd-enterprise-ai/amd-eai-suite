@@ -25,6 +25,11 @@ ${KEY_CREATED_TITLE}                   text="Key created"
 ${COPY_API_KEY_BUTTON}                 button[aria-label="Copy API key"]
 ${KEY_CREATED_DONE_BUTTON}             button:has-text("Done")
 
+# Edit API key drawer
+${EDIT_DRAWER_TITLE}                   css=header:has-text("Edit API Key")
+${EDIT_SUBMIT_BUTTON}                  button[type="submit"]
+${LINKED_DEPLOYMENTS_LABEL}            text="Linked deployments"
+
 # Delete confirmation modal
 ${DELETE_MODAL_SELECTOR}               [data-testid="confirmation-modal"]
 ${CONFIRM_DELETE_BUTTON}               [data-testid="confirm-button"]
@@ -32,6 +37,15 @@ ${CONFIRM_DELETE_BUTTON}               [data-testid="confirm-button"]
 # Table elements
 ${API_KEYS_TABLE_ROW}                  css=table tbody tr
 ${EMPTY_TABLE_TEXT}                     text="No API keys found for this project."
+
+# Metrics page elements
+${METRICS_KEY_NAME_HEADER}             [data-testid="metrics-header-key-name"]
+${METRICS_USAGE_METRICS_LABEL}         text=Usage metrics
+${METRICS_STAT_CARDS_GRID}             [data-testid="metrics-stat-cards"]
+${METRICS_INFERENCE_CHART_TITLE}       text=Inference requests
+${METRICS_TOKEN_CHART_TITLE}           text=Token consumption
+${METRICS_TIME_TAB_7DAYS}             css=[role="tab"]:has-text("7 days")
+${METRICS_TIME_TAB_7DAYS_SELECTED}    css=[role="tab"][aria-selected="true"]:has-text("7 days")
 
 
 *** Keywords ***
@@ -116,8 +130,27 @@ Click actions menu on API key row
     [Arguments]    ${key_name}
 
     VAR    ${row}    css=table tbody tr:has-text("${key_name}")
-    ${actions_btn}=    Get Element    ${row} >> css=button[aria-label="list.actions.label"]
+    ${actions_btn}=    Get Element    ${row} >> css=button[aria-label="Actions"]
     Click    ${actions_btn}
+
+Click edit action in actions menu
+    [Documentation]    Clicks the "Edit API Key" option in the actions dropdown.
+
+    VAR    ${edit_option}    text="Edit API Key"
+    Wait For Elements State    ${edit_option}    visible    timeout=5s
+    Click    ${edit_option}
+
+Wait for edit drawer
+    [Documentation]    Waits for the Edit API Key drawer to be visible and stable.
+
+    Wait For Elements State    ${EDIT_DRAWER_TITLE}    visible    timeout=15s
+    Wait For Elements State    css=${EDIT_SUBMIT_BUTTON}    stable    timeout=10s
+
+Linked deployments section should contain text "${text}"
+    [Documentation]    Verifies the linked deployments section contains the given text.
+
+    VAR    ${section}    css=*:has(${LINKED_DEPLOYMENTS_LABEL})
+    Wait For Elements State    ${section}:has-text("${text}")    visible    timeout=15s
 
 Click delete action in actions menu
     [Documentation]    Clicks the "Delete API Key" option in the actions dropdown.
@@ -146,3 +179,43 @@ Table row containing text should not exist
 
     VAR    ${row}    css=table tbody tr:has-text("${text}")
     Wait For Elements State    ${row}    hidden    timeout=15s
+
+Navigate to API key metrics page
+    [Documentation]    Navigates directly to the API key metrics page by URL.
+    ...                Used when no sidebar link exists (metrics page is accessed via direct URL).
+    [Arguments]    ${base_url}    ${project}    ${api_key_id}
+
+    Go To    ${base_url}/${project}${API_KEYS_PATH}/${api_key_id}
+    Wait For Elements State    ${METRICS_KEY_NAME_HEADER}    visible    timeout=15s
+
+API key name should be visible in metrics header
+    [Documentation]    Verifies the API key name appears in the metrics page header.
+    [Arguments]    ${key_name}
+
+    Wait For Elements State    ${METRICS_KEY_NAME_HEADER}:has-text("${key_name}")    visible    timeout=10s
+
+Stat cards should be present on metrics page
+    [Documentation]    Verifies the stat cards grid is visible on the metrics page.
+
+    Wait For Elements State    ${METRICS_STAT_CARDS_GRID}    visible    timeout=10s
+
+Inference requests chart should be visible
+    [Documentation]    Verifies the inference requests chart section is present.
+
+    Wait For Elements State    ${METRICS_INFERENCE_CHART_TITLE}    visible    timeout=10s
+
+Token consumption chart should be visible
+    [Documentation]    Verifies the token consumption chart section is present.
+
+    Wait For Elements State    ${METRICS_TOKEN_CHART_TITLE}    visible    timeout=10s
+
+Click 7 day time range tab
+    [Documentation]    Clicks the "7 days" tab in the time range selector.
+
+    Wait For Elements State    ${METRICS_TIME_TAB_7DAYS}    visible    timeout=10s
+    Click    ${METRICS_TIME_TAB_7DAYS}
+
+7 day tab should be selected
+    [Documentation]    Verifies the "7 days" tab is the selected time range.
+
+    Wait For Elements State    ${METRICS_TIME_TAB_7DAYS_SELECTED}    visible    timeout=5s

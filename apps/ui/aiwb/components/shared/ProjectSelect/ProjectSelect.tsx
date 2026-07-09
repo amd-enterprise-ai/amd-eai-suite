@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectItem, Tooltip } from '@heroui/react';
+import { Select, SelectItem, Tooltip } from '@amdenterpriseai/components';
 import { IconCheckupList } from '@tabler/icons-react';
 import { ReactNode, useCallback } from 'react';
 

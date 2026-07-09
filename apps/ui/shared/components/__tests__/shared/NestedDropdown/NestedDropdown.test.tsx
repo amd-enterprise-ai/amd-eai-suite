@@ -11,7 +11,10 @@ import {
 
 import { ActionFieldHintType } from '@amdenterpriseai/types';
 
-import { NestedDropdown, DropdownItem } from '@amdenterpriseai/components';
+import {
+  NestedDropdown,
+  DropdownActionItem,
+} from '@amdenterpriseai/components';
 
 vi.mock('@tabler/icons-react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tabler/icons-react')>();
@@ -37,6 +40,13 @@ vi.mock('@heroui/react', async () => {
   const actual = await vi.importActual('@heroui/react');
   return {
     ...actual,
+  };
+});
+vi.mock('@amdenterpriseai/components', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/components')>();
+  return {
+    ...actual,
     Tooltip: ({ children, content }: any) => (
       <div data-testid="mock-tooltip">
         {children}
@@ -46,10 +56,19 @@ vi.mock('@heroui/react', async () => {
   };
 });
 
+vi.mock('../../../src/Tooltip', () => ({
+  Tooltip: ({ children, content }: any) => (
+    <div data-testid="mock-tooltip">
+      {children}
+      {content && <div data-testid="tooltip-content">{content}</div>}
+    </div>
+  ),
+}));
+
 describe('NestedDropdown', () => {
   const createMockActions = (
-    overrides: Partial<DropdownItem>[] = [],
-  ): DropdownItem[] => [
+    overrides: Partial<DropdownActionItem>[] = [],
+  ): DropdownActionItem[] => [
     {
       key: 'edit',
       label: 'Edit',
@@ -123,7 +142,7 @@ describe('NestedDropdown', () => {
     });
 
     it('applies custom className to dropdown items', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'custom',
           label: 'Custom Action',
@@ -146,7 +165,7 @@ describe('NestedDropdown', () => {
     });
 
     it('applies color-based className to dropdown items', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'danger-action',
           label: 'Danger Action',
@@ -169,7 +188,7 @@ describe('NestedDropdown', () => {
     });
 
     it('does not apply color class for default color', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'default-action',
           label: 'Default Action',
@@ -193,7 +212,7 @@ describe('NestedDropdown', () => {
 
     it('renders startContent when provided', async () => {
       const startContentTestId = 'start-content';
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'with-icon',
           label: 'With Icon',
@@ -239,7 +258,7 @@ describe('NestedDropdown', () => {
 
   describe('Disabled actions', () => {
     it('handles disabled actions correctly', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'enabled',
           label: 'Enabled Action',
@@ -267,7 +286,7 @@ describe('NestedDropdown', () => {
     });
 
     it('handles multiple disabled actions', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'disabled1',
           label: 'Disabled 1',
@@ -302,7 +321,7 @@ describe('NestedDropdown', () => {
     });
 
     it('handles actions with undefined isDisabled property', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'undefined-disabled',
           label: 'Undefined Disabled',
@@ -327,7 +346,7 @@ describe('NestedDropdown', () => {
       const mockOnPress1 = vi.fn();
       const mockOnPress2 = vi.fn();
 
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action1',
           label: 'Action 1',
@@ -374,7 +393,7 @@ describe('NestedDropdown', () => {
     it('calls the correct action onPress when an action is triggered', async () => {
       const editAction = vi.fn();
       const deleteAction = vi.fn();
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'edit',
           label: 'Edit',
@@ -436,7 +455,7 @@ describe('NestedDropdown', () => {
     it('does not trigger action when clicking disabled items', async () => {
       const enabledAction = vi.fn();
       const disabledAction = vi.fn();
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'enabled-action',
           label: 'Enabled Action',
@@ -473,7 +492,7 @@ describe('NestedDropdown', () => {
 
   describe('Edge cases', () => {
     it('handles actions with undefined isDisabled property', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'undefined-disabled',
           label: 'Undefined Disabled',
@@ -495,7 +514,7 @@ describe('NestedDropdown', () => {
     });
 
     it('handles empty action label', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'empty-label',
           label: '',
@@ -518,7 +537,7 @@ describe('NestedDropdown', () => {
     });
 
     it('handles complex className combinations', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'complex-class',
           label: 'Complex Class',
@@ -558,7 +577,7 @@ describe('NestedDropdown', () => {
 
   describe('Hint rendering', () => {
     it('renders hints when provided', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action-with-hint',
           label: 'Action with Hint',
@@ -596,7 +615,7 @@ describe('NestedDropdown', () => {
     });
 
     it('does not render hints when not provided', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action-with-hint',
           label: 'Action with Hint',
@@ -618,7 +637,7 @@ describe('NestedDropdown', () => {
     });
 
     it('handles multiple hints with pre-filtering', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action-with-mixed-hints',
           label: 'Action with Mixed Hints',
@@ -648,7 +667,7 @@ describe('NestedDropdown', () => {
 
   describe('Description rendering', () => {
     it('renders string description when provided', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action-with-description',
           label: 'Action with Description',
@@ -669,7 +688,7 @@ describe('NestedDropdown', () => {
     });
 
     it('renders ReactNode description when provided', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action-with-node-description',
           label: 'Action with Node Description',
@@ -694,7 +713,7 @@ describe('NestedDropdown', () => {
     });
 
     it('renders description alongside other props', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'complex-action',
           label: 'Complex Action',
@@ -718,7 +737,7 @@ describe('NestedDropdown', () => {
     });
 
     it('works without description (undefined)', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action-no-description',
           label: 'No Description',
@@ -739,7 +758,7 @@ describe('NestedDropdown', () => {
 
   describe('Nested dropdown rendering', () => {
     it('renders nested dropdown when actions array exists', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'parent',
           label: 'Parent Action',
@@ -770,7 +789,7 @@ describe('NestedDropdown', () => {
     });
 
     it('displays chevron icon for nested items', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'parent',
           label: 'Parent Action',
@@ -797,7 +816,7 @@ describe('NestedDropdown', () => {
     });
 
     it('handles multiple levels of nesting', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'level1',
           label: 'Level 1',
@@ -830,7 +849,7 @@ describe('NestedDropdown', () => {
     });
 
     it('nested items have proper description support', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'parent',
           label: 'Parent',
@@ -859,7 +878,7 @@ describe('NestedDropdown', () => {
     });
 
     it('mixes nested and regular items', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'regular',
           label: 'Regular Action',
@@ -895,7 +914,7 @@ describe('NestedDropdown', () => {
   describe('Nested dropdown interaction', () => {
     it('regular items call onPress handler', async () => {
       const onPressMock = vi.fn();
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'regular',
           label: 'Regular Action',
@@ -921,7 +940,7 @@ describe('NestedDropdown', () => {
     it('nested items do NOT call parent onPress', async () => {
       const parentOnPress = vi.fn();
       const childOnPress = vi.fn();
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'parent',
           label: 'Parent Action',
@@ -949,7 +968,7 @@ describe('NestedDropdown', () => {
     });
 
     it('disabled state works for nested items', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'parent',
           label: 'Parent',
@@ -979,7 +998,7 @@ describe('NestedDropdown', () => {
   describe('Edge cases with nested dropdowns', () => {
     it('empty nested actions array renders as regular item', async () => {
       const onPressMock = vi.fn();
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action',
           label: 'Action',
@@ -1006,7 +1025,7 @@ describe('NestedDropdown', () => {
     });
 
     it('nested item with description and nested actions', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'parent',
           label: 'Parent',
@@ -1036,7 +1055,7 @@ describe('NestedDropdown', () => {
     });
 
     it('hints only collected from top-level actions', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'parent',
           label: 'Parent',
@@ -1077,7 +1096,7 @@ describe('NestedDropdown', () => {
 
   describe('Section rendering', () => {
     it('renders section with title only', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'section',
           label: 'Section Title',
@@ -1106,7 +1125,7 @@ describe('NestedDropdown', () => {
     });
 
     it('renders section with title and description', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'section',
           label: 'Section Title',
@@ -1136,7 +1155,7 @@ describe('NestedDropdown', () => {
     });
 
     it('renders section items at same visual level', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'regular',
           label: 'Regular Action',
@@ -1181,7 +1200,7 @@ describe('NestedDropdown', () => {
 
     it('section items are clickable and call onPress', async () => {
       const onPressMock = vi.fn();
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'section',
           label: 'Section',
@@ -1213,7 +1232,7 @@ describe('NestedDropdown', () => {
     });
 
     it('empty section renders just header', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'empty-section',
           label: 'Empty Section',
@@ -1235,7 +1254,7 @@ describe('NestedDropdown', () => {
     });
 
     it('mixed sections and regular actions', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'action1',
           label: 'Action 1',
@@ -1290,7 +1309,7 @@ describe('NestedDropdown', () => {
     });
 
     it('section without actions property renders just header', async () => {
-      const actions: DropdownItem[] = [
+      const actions: DropdownActionItem[] = [
         {
           key: 'section-no-actions',
           label: 'Section No Actions',

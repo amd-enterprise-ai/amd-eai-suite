@@ -40,6 +40,15 @@ List secrets for namespace
     When AIWB secrets are listed
     Then AIWB secret list should contain "2" secrets
 
+User can browse project secrets page by page
+    [Documentation]    Secrets in a project are served in pages rather than as
+    ...                one flat list.
+    [Tags]    secret    list    pagination
+
+    Given a ready project with user access exists
+    When AIWB secrets are listed
+    Then the result is returned page by page
+
 Filter secrets by use case
     [Documentation]    Verify useCase filtering returns only matching secrets
     [Tags]    secret    list
@@ -67,13 +76,44 @@ Delete secret via AIWB API
     When AIWB secret "to-delete" is deleted
     Then AIWB secret "to-delete" should not exist
 
-Cannot create duplicate secret name
-    [Documentation]    Verify 409 when creating a secret with the same name
-    [Tags]    secret    create
+Display name with special characters is stored and returned
+    [Documentation]    Verify a secret can be created with spaces, unicode, and special characters
+    ...    in the display name, and the display name is returned unchanged in the response.
+    [Tags]    secret    smoke    create    display-name
 
     Given a ready project with user access exists
-    And a secret "unique-name" is created via AIWB
-    Then creating duplicate AIWB secret "unique-name" should fail
+    When a secret is created with display name "My HF Token (2024) – v1!"
+    Then AIWB secret display name should be "${TEST_AIWB_SECRET_NAME}"
+
+K8s resource name is auto-generated and differs from display name
+    [Documentation]    Verify the K8s resource name is auto-generated
+    ...    and is distinct from the user-provided display name.
+    [Tags]    secret    smoke    create    display-name
+
+    Given a ready project with user access exists
+    When a secret "auto-name-check" is created via AIWB
+    Then AIWB secret K8s name should be auto-generated
+
+Display name is shown in secret list
+    [Documentation]    Verify the displayName field is populated in the list response.
+    [Tags]    secret    smoke    list    display-name
+
+    Given a ready project with user access exists
+    And a secret "listed-secret" is created via AIWB
+    When AIWB secrets are listed
+    Then the secret list should include display name for "listed-secret"
+
+Error response uses camelCase envelope
+    [Documentation]    When a request fails with extra error context, the additional
+    ...    information must be exposed under the camelCase key "additionalInfo" and
+    ...    never under the snake_case key "additional_info", per the API contract.
+    [Tags]    secret    smoke    api-contract
+
+    Given a ready project with user access exists
+    When an image pull secret with invalid JSON content is submitted
+    Then the response should fail with a validation error
+    And the error envelope should expose extra context under "additionalInfo"
+    And the error envelope should not contain "additional_info"
 
 AIWB-created secret is discovered by AIRM
     [Documentation]    Verify AIRM autodiscovery finds AIWB-created secrets

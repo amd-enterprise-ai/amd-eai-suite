@@ -1,0 +1,60 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+rules:
+  # Watch and manage KServe InferenceService objects (cluster-wide to support
+  # InferenceServices in any namespace).
+  - apiGroups: ["serving.kserve.io"]
+    resources: ["inferenceservices"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+
+  # Create and manage InferencePool resources (cluster-wide — pools live in the
+  # InferenceService namespace, which may be any namespace).
+  - apiGroups: ["inference.networking.k8s.io"]
+    resources: ["inferencepools"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Create and manage the shared AIGatewayRoute resource.
+  - apiGroups: ["aigateway.envoyproxy.io"]
+    resources: ["aigatewayroutes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Create and manage the inference-epp Deployment in each IS namespace.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Create and manage the inference-epp Service in each IS namespace.
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Create Role and RoleBinding in the IS namespace to grant inference-epp the
+  # RBAC it needs to watch InferencePools, Pods, and InferenceModelRewrites.
+  # The controller must hold each permission it grants (escalation prevention).
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["inference.networking.x-k8s.io"]
+    resources: ["inferencemodelrewrites", "inferenceobjectives"]
+    verbs: ["get", "list", "watch"]
+
+  # Required by controller-runtime for leader election and event recording.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

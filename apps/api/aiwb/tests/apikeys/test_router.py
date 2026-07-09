@@ -8,40 +8,118 @@ Tests for API keys router endpoints.
 Uses TestClient with dependency overrides for consistent HTTP-level testing.
 """
 
-from unittest.mock import patch
+from datetime import UTC, datetime, timedelta
+from unittest.mock import ANY, patch
 from uuid import uuid4
 
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from api_common.collections import PaginatedResult
+from api_common.exceptions import NotFoundException
 from app import app  # type: ignore[attr-defined]
-from app.apikeys.schemas import ApiKeyDetails, ApiKeyResponse, ApiKeyWithFullKey, GroupResponse
-from tests.dependency_overrides import CLUSTER_AUTH_OVERRIDES, override_dependencies
+from app.apikeys.schemas import (
+    ApiKeyDetails,
+    ApiKeyMetricsResponse,
+    ApiKeyMetricsStats,
+    ApiKeyRequestsTimeseries,
+    ApiKeyResponse,
+    ApiKeyTokensTimeseries,
+    ApiKeyWithFullKey,
+    GroupResponse,
+)
+from tests.dependency_overrides import CLUSTER_AUTH_OVERRIDES, PROMETHEUS_OVERRIDES, override_dependencies
+
+
+def _make_api_key_response(display_name: str = "Production Key") -> ApiKeyResponse:
+    return ApiKeyResponse(
+        id=uuid4(),
+        display_name=display_name,
+        truncated_key="amd_aim_api_key_••••••••1234",
+        namespace="test-project",
+        created_at="2025-01-01T00:00:00Z",
+        updated_at="2025-01-01T00:00:00Z",
+        created_by="test@example.com",
+        updated_by="test@example.com",
+    )
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
 def test_get_api_keys_success() -> None:
-    """Test listing API keys for a namespace."""
-    expected_keys = [
-        ApiKeyResponse(
-            id=uuid4(),
-            name="Production Key",
-            truncated_key="amd_aim_api_key_••••••••1234",
-            namespace="test-namespace",
-            created_at="2025-01-01T00:00:00Z",
-            updated_at="2025-01-01T00:00:00Z",
-            created_by="test@example.com",
-            updated_by="test@example.com",
-        )
-    ]
+    """Test listing API keys for a project returns the nested paginated envelope."""
+    expected_keys = [_make_api_key_response()]
 
     with patch("app.apikeys.router.list_api_keys_for_namespace") as mock_service:
-        mock_service.return_value = expected_keys
+        mock_service.return_value = PaginatedResult(items=expected_keys, total=1, page=1, page_size=10, total_pages=1)
         with TestClient(app) as client:
-            response = client.get("/v1/namespaces/test-namespace/api-keys")
+            response = client.get("/v1/projects/test-project/api-keys")
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["data"][0]["name"] == "Production Key"
+    body = response.json()
+    assert body["data"][0]["displayName"] == "Production Key"
+    assert body["pagination"]["page"] == 1
+    assert body["pagination"]["pageSize"] == 10
+    assert body["pagination"]["total"] == 1
+    # Nested pagination envelope must not leak loose top-level keys.
+    assert "page" not in body
+    assert "pageSize" not in body
+    assert "total" not in body
+    assert "totalPages" not in body
+    assert "totalPages" not in body["pagination"]
+
+
+@override_dependencies(CLUSTER_AUTH_OVERRIDES)
+def test_get_api_keys_paginates_results() -> None:
+    """`?page=2&pageSize=10` is forwarded to the service and reflected in the envelope."""
+    page_two_keys = [_make_api_key_response(display_name=f"Key {i}") for i in range(5)]
+
+    with patch("app.apikeys.router.list_api_keys_for_namespace") as mock_service:
+        mock_service.return_value = PaginatedResult(items=page_two_keys, total=15, page=2, page_size=10, total_pages=2)
+        with TestClient(app) as client:
+            response = client.get(
+                "/v1/projects/test-project/api-keys",
+                params={"page": 2, "pageSize": 10},
+            )
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert len(body["data"]) == 5
+    assert body["pagination"]["page"] == 2
+    assert body["pagination"]["pageSize"] == 10
+    assert body["pagination"]["total"] == 15
+    mock_service.assert_called_once_with(ANY, "test-namespace", page=2, page_size=10)
+
+
+@override_dependencies(CLUSTER_AUTH_OVERRIDES)
+def test_get_api_keys_uses_default_page_size_of_10() -> None:
+    """Without query params, the endpoint defaults to page=1 and pageSize=10."""
+    with patch("app.apikeys.router.list_api_keys_for_namespace") as mock_service:
+        mock_service.return_value = PaginatedResult(items=[], total=0, page=1, page_size=10, total_pages=1)
+        with TestClient(app) as client:
+            response = client.get("/v1/projects/test-project/api-keys")
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["pagination"]["page"] == 1
+    assert body["pagination"]["pageSize"] == 10
+    mock_service.assert_called_once_with(ANY, "test-namespace", page=1, page_size=10)
+
+
+@override_dependencies(CLUSTER_AUTH_OVERRIDES)
+def test_get_api_keys_rejects_invalid_page_size() -> None:
+    """`pageSize` must be in [1, 100]; values outside the bound are 422."""
+    with TestClient(app) as client:
+        too_small = client.get(
+            "/v1/projects/test-project/api-keys",
+            params={"pageSize": 0},
+        )
+        too_large = client.get(
+            "/v1/projects/test-project/api-keys",
+            params={"pageSize": 101},
+        )
+
+    assert too_small.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert too_large.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
@@ -49,9 +127,9 @@ def test_create_api_key_success() -> None:
     """Test creating a new API key."""
     expected_response = ApiKeyWithFullKey(
         id=uuid4(),
-        name="New Key",
+        display_name="New Key",
         truncated_key="amd_aim_api_key_••••••••5678",
-        namespace="test-namespace",
+        namespace="test-project",
         expires_at=None,
         renewable=True,
         num_uses=0,
@@ -67,12 +145,12 @@ def test_create_api_key_success() -> None:
         mock_service.return_value = expected_response
         with TestClient(app) as client:
             response = client.post(
-                "/v1/namespaces/test-namespace/api-keys",
-                json={"name": "New Key", "ttl": "24h", "renewable": True, "numUses": 0, "meta": {}},
+                "/v1/projects/test-project/api-keys",
+                json={"displayName": "New Key", "ttl": "24h", "renewable": True, "numUses": 0, "meta": {}},
             )
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["name"] == "New Key"
+    assert response.json()["displayName"] == "New Key"
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
@@ -81,9 +159,9 @@ def test_get_api_key_details_success() -> None:
     api_key_id = uuid4()
     expected_details = ApiKeyDetails(
         id=api_key_id,
-        name="Detailed Key",
+        display_name="Detailed Key",
         truncated_key="amd_aim_api_key_••••••••9999",
-        namespace="test-namespace",
+        namespace="test-project",
         expires_at=None,
         renewable=True,
         num_uses=0,
@@ -100,10 +178,10 @@ def test_get_api_key_details_success() -> None:
     with patch("app.apikeys.router.get_api_key_details_from_cluster_auth") as mock_service:
         mock_service.return_value = expected_details
         with TestClient(app) as client:
-            response = client.get(f"/v1/namespaces/test-namespace/api-keys/{api_key_id}")
+            response = client.get(f"/v1/projects/test-project/api-keys/{api_key_id}")
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["name"] == "Detailed Key"
+    assert response.json()["displayName"] == "Detailed Key"
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
@@ -112,7 +190,7 @@ def test_delete_api_key_success() -> None:
     with patch("app.apikeys.router.delete_api_key_from_cluster_auth") as mock_service:
         mock_service.return_value = None
         with TestClient(app) as client:
-            response = client.delete(f"/v1/namespaces/test-namespace/api-keys/{uuid4()}")
+            response = client.delete(f"/v1/projects/test-project/api-keys/{uuid4()}")
 
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
@@ -123,42 +201,53 @@ def test_renew_api_key_success() -> None:
     with patch("app.apikeys.router.renew_api_key_in_cluster_auth") as mock_service:
         mock_service.return_value = {"lease_duration": 3600}
         with TestClient(app) as client:
-            response = client.post(f"/v1/namespaces/test-namespace/api-keys/{uuid4()}/renew")
+            response = client.post(f"/v1/projects/test-project/api-keys/{uuid4()}/renew")
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["leaseDuration"] == 3600
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
-def test_bind_api_key_to_group_success() -> None:
-    """Test binding an API key to a Cluster Auth group."""
-    group_id = "test-group-123"
+def test_list_api_key_groups_success() -> None:
+    """Test listing the Cluster Auth groups an API key belongs to."""
+    expected_groups = ["group-1", "group-2"]
 
-    with patch("app.apikeys.router.bind_api_key_to_group_in_cluster_auth") as mock_service:
-        mock_service.return_value = {"groups": [group_id]}
+    with patch("app.apikeys.router.list_api_key_group_memberships") as mock_service:
+        mock_service.return_value = expected_groups
         with TestClient(app) as client:
-            response = client.post(
-                f"/v1/namespaces/test-namespace/api-keys/{uuid4()}/bind-group",
-                json={"groupId": group_id},
-            )
+            response = client.get(f"/v1/projects/test-project/api-keys/{uuid4()}/groups")
 
     assert response.status_code == status.HTTP_200_OK
-    assert group_id in response.json()["groups"]
+    assert response.json()["data"] == expected_groups
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
-def test_unbind_api_key_from_group_success() -> None:
-    """Test unbinding an API key from a Cluster Auth group."""
-    with patch("app.apikeys.router.unbind_api_key_from_group_in_cluster_auth") as mock_service:
-        mock_service.return_value = {"groups": []}
+def test_add_api_key_to_group_success() -> None:
+    """Test adding an API key to a Cluster Auth group."""
+    group_id = "test-group-123"
+    updated_groups = [group_id]
+
+    with patch("app.apikeys.router.add_api_key_group_membership") as mock_service:
+        mock_service.return_value = updated_groups
         with TestClient(app) as client:
             response = client.post(
-                f"/v1/namespaces/test-namespace/api-keys/{uuid4()}/unbind-group",
-                json={"groupId": "test-group"},
+                f"/v1/projects/test-project/api-keys/{uuid4()}/groups",
+                json={"groupId": group_id},
             )
 
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.json()["groups"]) == 0
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["data"] == updated_groups
+
+
+@override_dependencies(CLUSTER_AUTH_OVERRIDES)
+def test_remove_api_key_from_group_success() -> None:
+    """Test removing an API key from a Cluster Auth group."""
+    with patch("app.apikeys.router.remove_api_key_group_membership") as mock_service:
+        mock_service.return_value = []
+        with TestClient(app) as client:
+            response = client.delete(f"/v1/projects/test-project/api-keys/{uuid4()}/groups/test-group-123")
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
 @override_dependencies(CLUSTER_AUTH_OVERRIDES)
@@ -192,9 +281,9 @@ def test_update_api_key_bindings_success() -> None:
     api_key_id = uuid4()
     mock_updated_key = ApiKeyDetails(
         id=api_key_id,
-        name="Updated Key",
+        display_name="Updated Key",
         truncated_key="••••••••abcd",
-        namespace="test-namespace",
+        namespace="test-project",
         renewable=True,
         num_uses=0,
         ttl="1h",
@@ -210,9 +299,76 @@ def test_update_api_key_bindings_success() -> None:
         mock_service.return_value = mock_updated_key
         with TestClient(app) as client:
             response = client.patch(
-                f"/v1/namespaces/test-namespace/api-keys/{api_key_id}",
+                f"/v1/projects/test-project/api-keys/{api_key_id}",
                 json={"aimIds": [str(uuid4()), str(uuid4())]},
             )
 
     assert response.status_code == status.HTTP_200_OK
     assert len(response.json()["groups"]) == 2
+
+
+# ── Metrics endpoint ──────────────────────────────────────────────────────────
+
+
+def _make_metrics_response() -> ApiKeyMetricsResponse:
+    empty_ts: list = []
+    return ApiKeyMetricsResponse(
+        stats=ApiKeyMetricsStats(
+            total_requests=1000,
+            successful_requests=980,
+            failed_requests=20,
+            total_tokens=250000,
+            linked_deployments=2,
+        ),
+        services=["aim-service-a", "aim-service-b"],
+        requests_over_time=ApiKeyRequestsTimeseries(total=empty_ts, successful=empty_ts, failed=empty_ts),
+        tokens_over_time=ApiKeyTokensTimeseries(total=empty_ts, input=empty_ts, output=empty_ts),
+    )
+
+
+@override_dependencies(PROMETHEUS_OVERRIDES)
+def test_get_api_key_metrics_success() -> None:
+    """Metrics endpoint returns 200 with camelCase fields matching the response schema."""
+    api_key_id = uuid4()
+
+    with patch("app.apikeys.router.get_api_key_usage_metrics") as mock_service:
+        mock_service.return_value = _make_metrics_response()
+        with TestClient(app) as client:
+            response = client.get(
+                f"/v1/projects/test-namespace/api-keys/{api_key_id}/metrics",
+                params={
+                    "start": (datetime.now(UTC) - timedelta(hours=24)).isoformat(),
+                    "end": datetime.now(UTC).isoformat(),
+                },
+            )
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["stats"]["totalRequests"] == 1000
+    assert body["stats"]["successfulRequests"] == 980
+    assert body["stats"]["failedRequests"] == 20
+    assert body["stats"]["totalTokens"] == 250000
+    assert body["stats"]["linkedDeployments"] == 2
+    assert body["services"] == ["aim-service-a", "aim-service-b"]
+    assert "requestsOverTime" in body
+    assert "tokensOverTime" in body
+    # Verify camelCase — snake_case keys must not appear at the top level.
+    assert "requests_over_time" not in body
+    assert "tokens_over_time" not in body
+
+
+@override_dependencies(PROMETHEUS_OVERRIDES)
+def test_get_api_key_metrics_not_found() -> None:
+    """Metrics endpoint returns 404 when the API key does not exist in the project."""
+    with patch("app.apikeys.router.get_api_key_usage_metrics") as mock_service:
+        mock_service.side_effect = NotFoundException("API key not found")
+        with TestClient(app) as client:
+            response = client.get(
+                f"/v1/projects/test-namespace/api-keys/{uuid4()}/metrics",
+                params={
+                    "start": (datetime.now(UTC) - timedelta(hours=24)).isoformat(),
+                    "end": datetime.now(UTC).isoformat(),
+                },
+            )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND

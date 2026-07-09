@@ -73,6 +73,13 @@ User closes key created drawer
 
     Click done on key created drawer
 
+User opens edit drawer for API key "${key_name}"
+    [Documentation]    Opens the Edit API Key drawer via the row actions menu.
+
+    Click actions menu on API key row    ${key_name}
+    Click edit action in actions menu
+    Wait for edit drawer
+
 User deletes API key "${key_name}"
     [Documentation]    Deletes an API key via the actions menu and confirms the deletion.
 
@@ -125,3 +132,8 @@ API key deleted successfully toast should appear
     [Documentation]    Verifies the success toast notification appears after deletion.
 
     Wait For Elements State    text="API key deleted successfully"    visible    timeout=10s
+
+Edit drawer should show linked deployment "${deployment_name}"
+    [Documentation]    Verifies the linked deployments section lists the given deployment.
+
+    Linked deployments section should contain text "${deployment_name}"

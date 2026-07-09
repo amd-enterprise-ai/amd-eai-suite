@@ -5,8 +5,11 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 
-import { UserMenu } from '@amdenterpriseai/components';
-import { DropdownItem, DropdownSection } from '@heroui/react';
+import {
+  DropdownItem,
+  DropdownSection,
+  UserMenu,
+} from '@amdenterpriseai/components';
 
 vi.mock('next-auth/react', () => ({
   useSession: () => ({
@@ -29,9 +32,14 @@ vi.mock('next-i18next', () => ({
   }),
 }));
 
-vi.mock('@amdenterpriseai/hooks', () => ({
-  useSystemInfo: () => () => ['Version: 1.0.0', 'Platform: mac'],
-}));
+vi.mock('@amdenterpriseai/hooks', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/hooks')>();
+  return {
+    ...actual,
+    useSystemInfo: () => () => ['Version: 1.0.0', 'Platform: mac'],
+  };
+});
 
 vi.mock('@amdenterpriseai/utils/app', async (importOriginal) => {
   const actual =

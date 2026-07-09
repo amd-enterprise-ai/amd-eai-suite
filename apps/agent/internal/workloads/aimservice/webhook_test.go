@@ -7,6 +7,7 @@ package aimservice
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	agent "github.com/silogen/agent/internal/common"
@@ -21,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	aimv1alpha1 "github.com/amd-enterprise-ai/aim-engine/api/v1alpha1"
+	aimv1alpha2 "github.com/amd-enterprise-ai/aim-engine/api/v1alpha2"
 
 	"github.com/silogen/agent/internal/workloads/common"
 )
@@ -55,6 +57,7 @@ func setupWebhook(ns *corev1.Namespace) *Webhook {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = aimv1alpha1.AddToScheme(scheme)
+	_ = aimv1alpha2.AddToScheme(scheme)
 
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -68,10 +71,10 @@ func setupWebhook(ns *corev1.Namespace) *Webhook {
 	}
 }
 
-func createAIMService(labels map[string]string) *aimv1alpha1.AIMService {
-	return &aimv1alpha1.AIMService{
+func createAIMService(labels map[string]string) *aimv1alpha2.AIMService {
+	return &aimv1alpha2.AIMService{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "aim.eai.amd.com/v1alpha1",
+			APIVersion: "aim.eai.amd.com/v1alpha2",
 			Kind:       "AIMService",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -80,24 +83,24 @@ func createAIMService(labels map[string]string) *aimv1alpha1.AIMService {
 			Labels:    labels,
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			Model: aimv1alpha1.AIMServiceModel{
+			Model: &aimv1alpha1.AIMServiceModel{
 				Name: testutils.Ptr("test-model"),
 			},
-			Template: aimv1alpha1.AIMServiceTemplateConfig{
-				Name: "test-template",
+			Profile: &aimv1alpha1.AIMServiceProfileConfig{
+				Name: "test-profile",
 			},
 		},
 	}
 }
 
-func createAdmissionRequest(aimService *aimv1alpha1.AIMService, oldAIMService *aimv1alpha1.AIMService) admission.Request {
+func createAdmissionRequest(aimService *aimv1alpha2.AIMService, oldAIMService *aimv1alpha2.AIMService) admission.Request {
 	raw, _ := json.Marshal(aimService)
 	var oldRaw []byte
 	if oldAIMService != nil {
 		oldRaw, _ = json.Marshal(oldAIMService)
 	}
 	return testutils.AdmissionTestCreateRequest(
-		metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha1", Kind: "AIMService"},
+		metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha2", Kind: "AIMService"},
 		testNamespace,
 		aimService.Name,
 		raw,
@@ -205,7 +208,7 @@ func TestAIMServiceWebhook(t *testing.T) {
 				aimService.Annotations = scenario.resourceAnnotations
 			}
 
-			var oldAIMService *aimv1alpha1.AIMService
+			var oldAIMService *aimv1alpha2.AIMService
 			if scenario.oldResourceLabels != nil {
 				oldAIMService = createAIMService(scenario.oldResourceLabels)
 			}
@@ -233,7 +236,7 @@ func TestAIMServiceWebhook_PreservesUnknownSpecFields(t *testing.T) {
 	raw := testutils.AddUnknownKeyToJSON(t, svc)
 
 	req := testutils.AdmissionTestCreateRequest(
-		metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha1", Kind: "AIMService"},
+		metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha2", Kind: "AIMService"},
 		testNamespace, svc.Name, raw, nil, testUsername,
 	)
 	resp := wh.Handle(context.Background(), req)
@@ -255,6 +258,7 @@ func TestAIMServiceWebhook_NamespaceNotFound(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = aimv1alpha1.AddToScheme(scheme)
+	_ = aimv1alpha2.AddToScheme(scheme)
 
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -273,4 +277,75 @@ func TestAIMServiceWebhook_NamespaceNotFound(t *testing.T) {
 
 	assert.False(t, resp.Allowed)
 	assert.Equal(t, int32(500), resp.Result.Code)
+}
+
+// v1alpha1 admission requests must still flow through the webhook with workload-tracking
+// labels applied, since AIM Engine uses None conversion strategy and v1alpha1 clients
+// may keep sending until they migrate.
+func TestAIMServiceWebhook_V1Alpha1AdmissionRequest(t *testing.T) {
+	ns := createNamespace(map[string]string{agent.ProjectIDLabel: testProjectID})
+	wh := setupWebhook(ns)
+
+	svc := &aimv1alpha1.AIMService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "aim.eai.amd.com/v1alpha1",
+			Kind:       "AIMService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-aimservice-v1alpha1",
+			Namespace: testNamespace,
+		},
+		Spec: aimv1alpha1.AIMServiceSpec{
+			Model: &aimv1alpha1.AIMServiceModel{
+				Name: testutils.Ptr("test-model"),
+			},
+			Template: &aimv1alpha1.AIMServiceTemplateConfig{
+				Name: "test-template",
+			},
+		},
+	}
+	raw, err := json.Marshal(svc)
+	require.NoError(t, err)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha1", Kind: "AIMService"},
+		testNamespace, svc.Name, raw, nil, testUsername,
+	)
+	resp := wh.Handle(context.Background(), req)
+
+	expectedPatches := []testutils.ExpectedPatch{
+		testutils.AddMetadataLabels(map[string]interface{}{
+			agent.ProjectIDLabel:    testProjectID,
+			common.WorkloadIDLabel:  testutils.UUIDMatcher,
+			common.ComponentIDLabel: testutils.UUIDMatcher,
+		}),
+		testutils.AddMetadataAnnotations(map[string]interface{}{
+			agent.AutoDiscoveredAnnotation: "true",
+			agent.SubmitterAnnotation:      testUsername,
+		}),
+	}
+	testutils.AssertWebhookResponse(t, resp.Allowed, resp.Patches, expectedPatches)
+}
+
+// Unknown apiVersion must be rejected explicitly rather than silently defaulting to
+// a known version, otherwise a future v1alpha3 client would get its payload decoded
+// against the wrong schema.
+func TestAIMServiceWebhook_UnknownAPIVersionRejected(t *testing.T) {
+	ns := createNamespace(map[string]string{agent.ProjectIDLabel: testProjectID})
+	wh := setupWebhook(ns)
+
+	svc := createAIMService(nil)
+	raw, err := json.Marshal(svc)
+	require.NoError(t, err)
+
+	req := testutils.AdmissionTestCreateRequest(
+		metav1.GroupVersionKind{Group: "aim.eai.amd.com", Version: "v1alpha999", Kind: "AIMService"},
+		testNamespace, svc.Name, raw, nil, testUsername,
+	)
+	resp := wh.Handle(context.Background(), req)
+
+	assert.False(t, resp.Allowed)
+	assert.Equal(t, int32(http.StatusBadRequest), resp.Result.Code)
+	assert.Contains(t, resp.Result.Message, "unsupported AIMService apiVersion")
+	assert.Contains(t, resp.Result.Message, "aim.eai.amd.com/v1alpha999")
 }

@@ -18,18 +18,21 @@ from loguru import logger
 from ..aims.constants import (
     AIM_API_GROUP,
     AIM_CLUSTER_MODEL_PLURAL,
-    AIM_CLUSTER_SERVICE_TEMPLATE_PLURAL,
+    AIM_CLUSTER_PROFILE_PLURAL,
+    AIM_PROFILE_PLURAL,
     AIM_SERVICE_PLURAL,
     HTTP_ROUTE_API_GROUP,
     HTTP_ROUTE_PLURAL,
 )
 from .config import USE_LOCAL_KUBE_CONTEXT
 
-# Required CRDs for the service to function
+# Required CRDs for the service to function.
 REQUIRED_CRDS = [
     f"{AIM_SERVICE_PLURAL}.{AIM_API_GROUP}",
     f"{AIM_CLUSTER_MODEL_PLURAL}.{AIM_API_GROUP}",
-    f"{AIM_CLUSTER_SERVICE_TEMPLATE_PLURAL}.{AIM_API_GROUP}",
+    f"{AIM_CLUSTER_PROFILE_PLURAL}.{AIM_API_GROUP}",
+    f"{AIM_PROFILE_PLURAL}.{AIM_API_GROUP}",
+    f"aimprofilecaches.{AIM_API_GROUP}",
     f"{HTTP_ROUTE_PLURAL}.{HTTP_ROUTE_API_GROUP}",
 ]
 

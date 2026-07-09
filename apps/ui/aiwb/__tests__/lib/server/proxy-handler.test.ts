@@ -91,7 +91,21 @@ describe('proxy-handler', () => {
       );
     });
 
-    it('DELETE forwards request to proxyHandler', async () => {
+    it('DELETE returns 204 when proxyRequest returns no-content sentinel', async () => {
+      mockProxyRequest.mockResolvedValueOnce({ status: 204 });
+      const req = createNextRequest('/api/aims/123', 'DELETE');
+      const response = await DELETE(req);
+
+      expect(response.status).toBe(204);
+      expect(await response.text()).toBe('');
+      expect(mockProxyRequest).toHaveBeenCalledWith(
+        req,
+        `${MOCK_API_SERVICE_URL}/v1/aims/123`,
+        MOCK_ACCESS_TOKEN,
+      );
+    });
+
+    it('DELETE forwards JSON body when proxyRequest returns data', async () => {
       const req = createNextRequest('/api/aims/123', 'DELETE');
       const response = await DELETE(req);
       const body = await response.json();
@@ -226,15 +240,15 @@ describe('proxy-handler', () => {
 
     it('accepts encoded model ids with percent characters', async () => {
       const req = createNextRequest(
-        '/api/namespaces/demo/models/Qwen%252FQwen2.5-0.5B-Instruct/finetune',
+        '/api/projects/demo/fine-tuning/models/Qwen%252FQwen2.5-0.5B-Instruct',
       );
-      const response = await POST(req);
+      const response = await GET(req);
       const body = await response.json();
 
       expect(body).toEqual({ success: true });
       expect(mockProxyRequest).toHaveBeenCalledWith(
         req,
-        `${MOCK_API_SERVICE_URL}/v1/namespaces/demo/models/Qwen%252FQwen2.5-0.5B-Instruct/finetune`,
+        `${MOCK_API_SERVICE_URL}/v1/projects/demo/fine-tuning/models/Qwen%252FQwen2.5-0.5B-Instruct`,
         MOCK_ACCESS_TOKEN,
       );
     });

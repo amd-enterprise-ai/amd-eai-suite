@@ -60,7 +60,7 @@ Use .Values.keycloak.publicUrl if specified, otherwise construct from appDomain.
 {{- if .Values.keycloak.publicUrl -}}
 {{ .Values.keycloak.publicUrl }}
 {{- else -}}
-https://{{ .Values.kgateway.keycloak.prefixValue }}.{{ .Values.appDomain }}
+https://{{ .Values.gateway.keycloak.prefixValue }}.{{ .Values.appDomain }}
 {{- end -}}
 {{- end -}}
 
@@ -72,6 +72,6 @@ Use .Values.airmAppUrl if specified, otherwise construct from appDomain.
 {{- if .Values.airmAppUrl -}}
 {{ .Values.airmAppUrl }}
 {{- else -}}
-https://{{ .Values.kgateway.airm.prefixValue }}.{{ .Values.appDomain }}
+https://{{ .Values.gateway.airm.prefixValue }}.{{ .Values.appDomain }}
 {{- end -}}
 {{- end -}}

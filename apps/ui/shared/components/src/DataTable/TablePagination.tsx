@@ -2,10 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Pagination, Select, SelectItem } from '@heroui/react';
+import { Pagination, Select, SelectItem } from '@amdenterpriseai/components';
 import React from 'react';
-
-import { TFunction } from 'next-i18next';
 
 import { PageFrameSize } from '@amdenterpriseai/types';
 
@@ -13,7 +11,7 @@ interface Props {
   currentPage: number;
   frameSize: PageFrameSize;
   totalItems: number;
-  translation: TFunction;
+  translation: (key: string, options?: Record<string, unknown>) => string;
   translationKeyPrefix?: string;
   onFrameSizeChange: (frameSize: PageFrameSize) => void;
   onPageChange: (page: number) => void;

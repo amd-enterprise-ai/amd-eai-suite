@@ -103,7 +103,7 @@ describe('useWorkloadLogsStream', () => {
     it('should initialize with correct default values', () => {
       const { result } = renderHook(() =>
         useWorkloadLogsStream({
-          namespace: 'test-namespace',
+          projectId: 'test-namespace',
           workloadId: 'test-workload-id',
         }),
       );
@@ -127,7 +127,7 @@ describe('useWorkloadLogsStream', () => {
 
       const { result } = renderHook(() =>
         useWorkloadLogsStream({
-          namespace: 'test-namespace',
+          projectId: 'test-namespace',
           workloadId: 'test-workload-id',
         }),
       );
@@ -181,7 +181,7 @@ describe('useWorkloadLogsStream', () => {
 
       const { result } = renderHook(() =>
         useWorkloadLogsStream({
-          namespace: 'test-namespace',
+          projectId: 'test-namespace',
           workloadId: 'test-workload-id',
         }),
       );
@@ -192,14 +192,14 @@ describe('useWorkloadLogsStream', () => {
 
       const instance = MockEventSource.getLatestInstance();
       expect(instance?.url).toBe(
-        '/api/namespaces/test-namespace/workloads/test-workload-id/logs/stream?startTime=2023-01-01&level=error',
+        '/api/projects/test-namespace/workloads/test-workload-id/logs/stream?startTime=2023-01-01&level=error',
       );
     });
 
     it('should handle [DONE] marker and stop streaming', async () => {
       const { result } = renderHook(() =>
         useWorkloadLogsStream({
-          namespace: 'test-namespace',
+          projectId: 'test-namespace',
           workloadId: 'test-workload-id',
         }),
       );
@@ -240,7 +240,7 @@ describe('useWorkloadLogsStream', () => {
     it('should not start if already streaming', async () => {
       const { result } = renderHook(() =>
         useWorkloadLogsStream({
-          namespace: 'test-namespace',
+          projectId: 'test-namespace',
           workloadId: 'test-workload-id',
         }),
       );
@@ -269,46 +269,55 @@ describe('useWorkloadLogsStream', () => {
     });
 
     it('should handle invalid JSON gracefully', async () => {
-      const { result } = renderHook(() =>
-        useWorkloadLogsStream({
-          namespace: 'test-namespace',
-          workloadId: 'test-workload-id',
-        }),
-      );
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
 
-      act(() => {
-        result.current.startStreaming({});
-      });
+      try {
+        const { result } = renderHook(() =>
+          useWorkloadLogsStream({
+            projectId: 'test-namespace',
+            workloadId: 'test-workload-id',
+          }),
+        );
 
-      act(() => {
-        MockEventSource.simulateOpen();
-      });
+        act(() => {
+          result.current.startStreaming({});
+        });
 
-      await waitFor(() => {
-        expect(result.current.isStreaming).toBe(true);
-      });
+        act(() => {
+          MockEventSource.simulateOpen();
+        });
 
-      // Send valid log
-      act(() => {
-        MockEventSource.simulateMessage(JSON.stringify(mockLogEntry1));
-      });
+        await waitFor(() => {
+          expect(result.current.isStreaming).toBe(true);
+        });
 
-      // Send invalid JSON
-      act(() => {
-        MockEventSource.simulateMessage('invalid json {');
-      });
+        // Send valid log
+        act(() => {
+          MockEventSource.simulateMessage(JSON.stringify(mockLogEntry1));
+        });
 
-      // Send another valid log
-      act(() => {
-        MockEventSource.simulateMessage(JSON.stringify(mockLogEntry2));
-      });
+        // Send invalid JSON
+        act(() => {
+          MockEventSource.simulateMessage('invalid json {');
+        });
 
-      await waitFor(() => {
-        expect(result.current.data).toHaveLength(2);
-      });
+        // Send another valid log
+        act(() => {
+          MockEventSource.simulateMessage(JSON.stringify(mockLogEntry2));
+        });
 
-      // Should only have valid logs
-      expect(result.current.data).toEqual([mockLogEntry1, mockLogEntry2]);
+        await waitFor(() => {
+          expect(result.current.data).toHaveLength(2);
+        });
+
+        // Should only have valid logs
+        expect(result.current.data).toEqual([mockLogEntry1, mockLogEntry2]);
+        expect(consoleErrorSpy).toHaveBeenCalled();
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
     });
   });
 
@@ -316,7 +325,7 @@ describe('useWorkloadLogsStream', () => {
     it('should stop active stream', async () => {
       const { result } = renderHook(() =>
         useWorkloadLogsStream({
-          namespace: 'test-namespace',
+          projectId: 'test-namespace',
           workloadId: 'test-workload-id',
         }),
       );
@@ -349,7 +358,7 @@ describe('useWorkloadLogsStream', () => {
     it('should clear accumulated logs', async () => {
       const { result } = renderHook(() =>
         useWorkloadLogsStream({
-          namespace: 'test-namespace',
+          projectId: 'test-namespace',
           workloadId: 'test-workload-id',
         }),
       );
@@ -388,7 +397,7 @@ describe('useWorkloadLogsStream', () => {
     it('should close EventSource on unmount', async () => {
       const { result, unmount } = renderHook(() =>
         useWorkloadLogsStream({
-          namespace: 'test-namespace',
+          projectId: 'test-namespace',
           workloadId: 'test-workload-id',
         }),
       );

@@ -4,7 +4,8 @@
 
 import { ComponentType, forwardRef, useState } from 'react';
 
-import { Button, Input, InputProps } from '@heroui/react';
+import { Input, type InputProps } from './InputPrimitive';
+import { Button } from '../Buttons/Button';
 import { cn } from '@heroui/react';
 import { IconEye, IconEyeOff } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';

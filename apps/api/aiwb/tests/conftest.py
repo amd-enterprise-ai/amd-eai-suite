@@ -176,9 +176,9 @@ def postgres_container(tmp_path_factory: Any, worker_id: str) -> Generator[dict[
 
     yield info
 
-    # Only the process that created the container should stop it
-    if container is not None:
-        container.stop()
+    # Container shutdown is deferred to master's pytest_sessionfinish hook
+    # (cleanup_containers). Stopping here would race sibling xdist workers
+    # that may still hold a reference to the shared container.
 
 
 @pytest.fixture(scope="session")
@@ -456,7 +456,11 @@ def mock_minio_client():
     client = MagicMock(spec=MinioClient)
     client.upload_object = MagicMock()
     client.download_object = MagicMock(return_value=b'{"text": "test"}\n{"text": "test2"}')
-    client.client.stat_object = MagicMock(return_value=MagicMock(size=len(b'{"text": "test"}\n{"text": "test2"}')))
+    _stat = MagicMock(size=len(b'{"text": "test"}\n{"text": "test2"}'))
+    client.stat_object = MagicMock(return_value=_stat)
+    inner = MagicMock()
+    inner.stat_object = MagicMock(return_value=_stat)
+    client.client = inner
     return client
 
 

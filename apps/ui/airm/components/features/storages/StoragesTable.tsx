@@ -1,7 +1,6 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Tooltip } from '@heroui/react';
 import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -10,15 +9,16 @@ import { ActionItem, TableColumns } from '@amdenterpriseai/types';
 import { StoragesTableField } from '@/types/enums/storages';
 import { ProjectStorage, Storage } from '@/types/storages';
 
-import { ClientSideDataTable } from '@amdenterpriseai/components';
 import {
+  ClientSideDataTable,
   DateDisplay,
   NoDataDisplay,
   StatusDisplay,
+  StatusError,
+  Tooltip,
 } from '@amdenterpriseai/components';
 
 import { getStorageStatusVariants } from '@/utils/storages-status-variants';
-import { StatusError } from '@amdenterpriseai/components';
 import { StorageStatus } from '@/types/enums/storages';
 interface Props {
   actions?: ActionItem<Storage>[];

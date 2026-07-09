@@ -9,5 +9,3 @@ export const KUBERNETES_SECRETS_KIND = 'Secret';
 
 /** Annotation key for submitter (raw K8s annotation key, not camelCase). */
 export const SUBMITTER_ANNOTATION_KEY = 'airm.silogen.ai/submitter';
-
-export const nameRegex = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;

@@ -12,9 +12,10 @@ import pytest
 from fastapi import Request
 from minio import Minio
 from minio.datatypes import Object
-from minio.deleteobjects import DeleteObject
+from minio.deleteobjects import DeleteError, DeleteObject
 from minio.error import S3Error
 
+from api_common.exceptions import ExternalServiceError
 from app.minio import MinioClient, get_minio_client
 
 
@@ -189,7 +190,9 @@ def test_delete_objects():
     objects = [Object("bucket", name) for name in object_names]
     delete_objects = [DeleteObject(name) for name in object_names]
     client.list_objects.return_value = objects
-    client.remove_objects.return_value = []
+    # remove_objects returns a lazy generator (not a list); a successful delete
+    # yields nothing. Mirror that here so the test exercises the real return type.
+    client.remove_objects.return_value = iter([])
     minio_client = MinioClient(host="http://localhost:9000", access_key="access_key", secret_key="secret_key")
     minio_client.client = client
     minio_client.delete_objects("bucket", "prefix")
@@ -199,6 +202,20 @@ def test_delete_objects():
     assert client.remove_objects.call_count == 1
     assert client.remove_objects.call_args[0][0] == "bucket"
     assert set(obj.name for obj in client.remove_objects.call_args[0][1]) == set(obj.name for obj in delete_objects)
+
+
+def test_delete_objects_raises_on_real_errors():
+    """A genuine DeleteError yielded by remove_objects must surface as ExternalServiceError."""
+    client = MagicMock(spec=Minio)
+    objects = [Object("bucket", "prefix/1")]
+    client.list_objects.return_value = objects
+    client.remove_objects.return_value = iter(
+        [DeleteError(code="AccessDenied", message="denied", name="prefix/1", version_id=None)]
+    )
+    minio_client = MinioClient(host="http://localhost:9000", access_key="access_key", secret_key="secret_key")
+    minio_client.client = client
+    with pytest.raises(ExternalServiceError):
+        minio_client.delete_objects("bucket", "prefix")
 
 
 def test_get_minio_client_returns_client():

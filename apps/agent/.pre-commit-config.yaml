@@ -1,0 +1,29 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+orphan: true
+
+repos:
+  - repo: local
+    hooks:
+      - id: agent-format-check
+        name: Agent Go format check
+        entry: .pre-commit-gofmt.sh
+        language: script
+        pass_filenames: false
+        types: [go]
+      - id: agent-lint
+        name: Agent Go lint
+        entry: bash -c 'make lint > /dev/null 2>&1 || (make lint && exit 1)'
+        language: system
+        pass_filenames: false
+        types: [go]
+      - id: agent-test
+        name: Agent Go tests
+        entry: bash -c 'make test > /dev/null 2>&1 || (make test && exit 1)'
+        language: system
+        pass_filenames: false
+        types: [go]
+        stages: [pre-push]
+        fail_fast: true

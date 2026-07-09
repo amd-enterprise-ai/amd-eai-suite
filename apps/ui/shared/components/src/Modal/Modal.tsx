@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  Modal as NextModal,
-} from '@heroui/react';
+  ModalPrimitive,
+  ModalPrimitiveBody,
+  ModalPrimitiveContent,
+  ModalPrimitiveFooter,
+  ModalPrimitiveHeader,
+} from './ModalPrimitive';
 import React from 'react';
 import { CloseButton } from '../Buttons';
 
@@ -32,7 +32,7 @@ export const Modal: React.FC<ModalProps> = ({
   isDismissible,
 }) => {
   return (
-    <NextModal
+    <ModalPrimitive
       isOpen={true}
       onOpenChange={onClose}
       isDismissable={isDismissible}
@@ -46,8 +46,8 @@ export const Modal: React.FC<ModalProps> = ({
         footer: 'justify-center w-full',
       }}
     >
-      <ModalContent className="max-h-[95vh] sm:my-1">
-        <ModalHeader>
+      <ModalPrimitiveContent className="max-h-[95vh] sm:my-1">
+        <ModalPrimitiveHeader>
           <div className="flex flex-col gap-1">
             <h2>{title || ''}</h2>
             {subTitle ? (
@@ -56,10 +56,10 @@ export const Modal: React.FC<ModalProps> = ({
               </p>
             ) : null}
           </div>
-        </ModalHeader>
-        <ModalBody>{children}</ModalBody>
-        {footer ? <ModalFooter>{footer}</ModalFooter> : null}
-      </ModalContent>
-    </NextModal>
+        </ModalPrimitiveHeader>
+        <ModalPrimitiveBody>{children}</ModalPrimitiveBody>
+        {footer ? <ModalPrimitiveFooter>{footer}</ModalPrimitiveFooter> : null}
+      </ModalPrimitiveContent>
+    </ModalPrimitive>
   );
 };

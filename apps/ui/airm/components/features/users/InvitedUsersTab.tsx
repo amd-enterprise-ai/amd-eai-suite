@@ -5,9 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'next-i18next';
-import { useDisclosure } from '@heroui/react';
-
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 import {
   deleteUser,
   fetchInvitedUsers,
@@ -23,10 +21,12 @@ import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
 import { InvitedUser, InvitedUsersResponse } from '@/types/users';
 
 import { InviteUserButton } from '@/components/features/users/InviteUserButton';
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { DateDisplay } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
+import {
+  ActionsToolbar,
+  ClientSideDataTable,
+  ConfirmationModal,
+  DateDisplay,
+} from '@amdenterpriseai/components';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 const invitedColumns: TableColumns<InvitedUserTableField | null> = [
@@ -81,13 +81,13 @@ export const InvitedUsersTab = ({
     isOpen: isCancelInvitationModalOpen,
     onOpen: onCancelInvitationModalOpen,
     onOpenChange: onCancelInvitationModalOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isResendInvitationModalOpen,
     onOpen: onResendInvitationModalOpen,
     onOpenChange: onResendInvitationModalOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const queryClient = useQueryClient();
   const { toast } = useSystemToast();

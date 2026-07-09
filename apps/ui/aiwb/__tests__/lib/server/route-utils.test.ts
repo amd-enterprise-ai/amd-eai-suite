@@ -22,9 +22,9 @@ describe('extractApiPath', () => {
     expect(extractApiPath(req)).toBe('aims/232332/deploy');
   });
 
-  it('extracts namespace-style paths', () => {
-    const req = createNextRequest('/api/namespaces/ns1/aims/services/123/chat');
-    expect(extractApiPath(req)).toBe('namespaces/ns1/aims/services/123/chat');
+  it('extracts project-scoped capability paths', () => {
+    const req = createNextRequest('/api/projects/p1/inference/123/metrics/foo');
+    expect(extractApiPath(req)).toBe('projects/p1/inference/123/metrics/foo');
   });
 
   it('extracts paths with hyphens and underscores', () => {

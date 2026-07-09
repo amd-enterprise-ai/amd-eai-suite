@@ -30,7 +30,7 @@ from app.cluster_auth import get_cluster_auth_client
 from app.dispatch.kube_client import KubernetesClient, get_kube_client
 from app.metrics.client import get_prometheus_client
 from app.minio import get_minio_client
-from app.namespaces.security import ensure_access_to_workbench_namespace
+from app.projects.security import ensure_access_to_project, ensure_access_to_workbench_namespace
 
 
 @contextmanager
@@ -77,6 +77,7 @@ def override_dependencies(overrides: dict[Callable[..., Any], Callable[..., Any]
 BASE_OVERRIDES: dict[Callable[..., Any], Callable[..., Any]] = {
     get_user_email: lambda: "test@example.com",
     ensure_access_to_workbench_namespace: lambda: "test-namespace",
+    ensure_access_to_project: lambda: "test-namespace",
     get_kube_client: lambda: AsyncMock(spec=KubernetesClient),
 }
 

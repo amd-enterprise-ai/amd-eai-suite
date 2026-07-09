@@ -11,12 +11,17 @@ import { MetricScalarResponse, TimeRange } from '@amdenterpriseai/types';
 import { getScalarMetric } from '@/lib/app/metrics';
 import { useQuery } from '@tanstack/react-query';
 import { useProject } from '@/contexts/ProjectContext';
+import {
+  MetricLocaleKey,
+  METRIC_TITLE_KEYS,
+  METRIC_DESCRIPTION_KEYS,
+} from './TimeseriesMetricCard';
 
 export interface ScalarMetricConfig {
   /** Backend metric slug (e.g. 'max_requests') */
   metric: string;
   /** Locale key under details.metrics (e.g. 'maxRequests') */
-  localeKey: string;
+  localeKey: MetricLocaleKey;
   /** Transform raw scalar before display (default: Math.round) */
   transform?: (value: number) => number;
   /** Optional display formatter passed to StatisticsCard */
@@ -76,8 +81,8 @@ export const ScalarMetricCard: React.FC<Props> = ({
 
   return (
     <StatisticsCard
-      title={t(`details.metrics.${localeKey}.title`)}
-      tooltip={t(`details.metrics.${localeKey}.description`)}
+      title={t(METRIC_TITLE_KEYS[localeKey])}
+      tooltip={t(METRIC_DESCRIPTION_KEYS[localeKey])}
       statistic={statistic}
       statisticFormatter={formatter}
       isLoading={isLoading}

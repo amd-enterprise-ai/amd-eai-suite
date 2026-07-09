@@ -36,7 +36,7 @@ vi.mock('@amdenterpriseai/hooks', () => ({
 const mockApiKey: ApiKeyWithFullKey = {
   id: '123e4567-e89b-12d3-a456-426614174000',
   projectId: '123e4567-e89b-12d3-a456-426614174001',
-  name: 'test-api-key',
+  displayName: 'test-api-key',
   truncatedKey: 'amd_aim_api_key_••••••••1234',
   createdAt: '2024-01-01T00:00:00Z',
   createdBy: 'test@example.com',

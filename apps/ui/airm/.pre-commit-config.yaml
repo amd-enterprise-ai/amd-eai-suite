@@ -1,0 +1,32 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+orphan: true
+
+repos:
+  - repo: local
+    hooks:
+      - id: biome-format-airm
+        name: Biome format (AIRM UI)
+        entry: pnpm format:fix
+        language: system
+        pass_filenames: false
+      - id: ui-typecheck-airm
+        name: UI typecheck (AIRM UI)
+        entry: pnpm typecheck
+        language: system
+        pass_filenames: false
+      - id: ui-lint-airm
+        name: UI lint (AIRM UI)
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+      - id: ui-test-coverage-airm
+        name: UI test coverage (AIRM UI)
+        entry: pnpm test -- --coverage --bail=1
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        verbose: true
+        fail_fast: true

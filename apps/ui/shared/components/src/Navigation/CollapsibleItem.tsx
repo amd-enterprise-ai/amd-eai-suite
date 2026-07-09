@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button } from '@heroui/react';
+import { Button } from '../Buttons/Button';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 
@@ -83,7 +83,7 @@ export const CollapsibleItem: React.FC<Props> = ({
                   : 'flex-1 text-left text-nowrap scale-100'
               }
             >
-              {t(item.stringKey)}
+              {t(item.stringKey as any) as string}
             </span>
             <span
               className={

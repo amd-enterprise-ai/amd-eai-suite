@@ -1,14 +1,13 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Spinner, useDisclosure } from '@heroui/react';
-import { IconRocket, IconTag } from '@tabler/icons-react';
+import { IconCpu, IconRocket, IconTag } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import { getFilteredData } from '@amdenterpriseai/utils/app';
 
@@ -16,6 +15,7 @@ import { FilterComponentType } from '@amdenterpriseai/types';
 import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
 
 import { ActionsToolbar } from '@amdenterpriseai/components';
+import { PageLoader } from '@/components/shared/PageLoader';
 
 import { AIMCard } from './AIMCard';
 import { DeployAIMDrawer } from './DeployAIMDrawer';
@@ -24,10 +24,13 @@ import AIMConnectModal from './AIMConnectModal';
 
 import { useProject } from '@/contexts/ProjectContext';
 import {
-  getAimClusterModels,
+  buildFilteredCatalog,
   transformToAggregatedAIMs,
-  undeployAim,
 } from '@/lib/app/aims';
+import {
+  deleteInferenceDeployment,
+  getInferenceCatalog,
+} from '@/lib/app/inference';
 import { AIMWorkloadStatus, ParsedAIM, AggregatedAIM } from '@/types/aims';
 import { useRouter } from 'next/router';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
@@ -55,13 +58,18 @@ const AIMCatalog: React.FC = () => {
       }
     | undefined
   >(undefined);
-  const [aimForConnect, setAimForConnect] = useState<ParsedAIM | undefined>(
-    undefined,
-  );
+  const [connectInfo, setConnectInfo] = useState<
+    | {
+        serviceId?: string;
+        endpoints?: { internal?: string; external?: string };
+        modelName?: string;
+      }
+    | undefined
+  >(undefined);
 
-  const deployDisclosure = useDisclosure();
-  const undeployDisclosure = useDisclosure();
-  const connectDisclosure = useDisclosure();
+  const deployDisclosure = useOverlayState();
+  const undeployDisclosure = useOverlayState();
+  const connectDisclosure = useOverlayState();
 
   const {
     data: aims,
@@ -70,7 +78,7 @@ const AIMCatalog: React.FC = () => {
     error: modelsError,
   } = useQuery<ParsedAIM[]>({
     queryKey: ['project', activeProject, 'aim-catalog'],
-    queryFn: () => getAimClusterModels(activeProject || undefined),
+    queryFn: () => getInferenceCatalog(activeProject || undefined),
     refetchInterval: AIMS_REFETCH_INTERVAL,
     enabled: !!activeProject,
   });
@@ -83,11 +91,14 @@ const AIMCatalog: React.FC = () => {
     return transformToAggregatedAIMs(memoizedAims);
   }, [memoizedAims]);
 
-  const filteredAggregatedAims = useMemo(() => {
-    // Filter on the individual ParsedAIM level, then re-aggregate
-    const filteredAims = getFilteredData(memoizedAims, filters);
-    return transformToAggregatedAIMs(filteredAims);
-  }, [memoizedAims, filters]);
+  const filteredAggregatedAims = useMemo(
+    () =>
+      buildFilteredCatalog(
+        memoizedAims,
+        getFilteredData(memoizedAims, filters),
+      ),
+    [memoizedAims, filters],
+  );
 
   useEffect(() => {
     if (modelsError) {
@@ -113,10 +124,15 @@ const AIMCatalog: React.FC = () => {
 
   const handleAimDeploy = useCallback(
     (aggregatedAim: AggregatedAIM) => {
-      setAggregatedAimForDeployment(aggregatedAim);
+      // Always pass the unfiltered AggregatedAIM so the deploy drawer has the full
+      // parsedAIMs list including any Ready versions that the active filter hid.
+      setAggregatedAimForDeployment(
+        aggregatedAims.find((a) => a.repository === aggregatedAim.repository) ??
+          aggregatedAim,
+      );
       deployDisclosure.onOpen();
     },
-    [deployDisclosure],
+    [deployDisclosure, aggregatedAims],
   );
 
   const handleOpenDetails = useCallback(
@@ -135,25 +151,29 @@ const AIMCatalog: React.FC = () => {
 
   const handleConnectToModel = useCallback(
     (aim: ParsedAIM) => {
-      setAimForConnect(aim);
+      const service = aim.deployedServices?.[0];
+      setConnectInfo({
+        serviceId: service?.id ?? undefined,
+        endpoints: service?.endpoints,
+        modelName: service?.status?.resolvedModel?.name,
+      });
       connectDisclosure.onOpen();
     },
     [connectDisclosure],
   );
 
   const handleConnectConfirm = useCallback(
-    (aim: ParsedAIM) => {
-      const serviceId = aim.deployedServices?.[0]?.id;
-      if (serviceId) handleChatWithModel(serviceId);
+    (serviceId: string) => {
+      handleChatWithModel(serviceId);
       connectDisclosure.onClose();
-      setAimForConnect(undefined);
+      setConnectInfo(undefined);
     },
     [connectDisclosure, handleChatWithModel],
   );
 
   const handleConnectModalClose = useCallback(() => {
     connectDisclosure.onClose();
-    setAimForConnect(undefined);
+    setConnectInfo(undefined);
   }, [connectDisclosure]);
 
   const handleUndeploy = useCallback(
@@ -167,7 +187,7 @@ const AIMCatalog: React.FC = () => {
   const handleConfirmUndeploy = useCallback(
     async (namespace: string, serviceId: string) => {
       try {
-        await undeployAim(namespace, serviceId);
+        await deleteInferenceDeployment(namespace, serviceId);
         toast.success(t('actions.notifications.deleteSuccess'));
         await refetchModels();
       } catch (error) {
@@ -188,6 +208,17 @@ const AIMCatalog: React.FC = () => {
         label: t('list.filter.search.placeholder'),
         placeholder: t('list.filter.search.placeholder'),
         type: FilterComponentType.TEXT,
+      },
+      accelerator: {
+        name: 'accelerator',
+        icon: <IconCpu />,
+        label: t('list.filter.accelerator.placeholder'),
+        placeholder: t('list.filter.accelerator.placeholder'),
+        type: FilterComponentType.DROPDOWN,
+        fields: [
+          { label: t('list.filter.accelerator.gpu'), key: 'gpu' },
+          { label: t('list.filter.accelerator.cpu'), key: 'cpu' },
+        ],
       },
       tags: {
         name: 'tags',
@@ -236,8 +267,14 @@ const AIMCatalog: React.FC = () => {
       newFilters.push({
         compositeFields: [
           { field: 'title' },
+          { field: 'canonicalName' },
+          { field: 'model' },
+          { field: 'aimId' },
+          { field: 'imageReference' },
           { field: 'imageVersion' },
           { field: 'description', path: 'short' },
+          { field: 'tags' },
+          { field: 'sourceUri' },
         ],
         values: filters.search,
       });
@@ -258,17 +295,24 @@ const AIMCatalog: React.FC = () => {
       });
     }
 
+    if (filters?.accelerator && filters.accelerator.length > 0) {
+      newFilters.push({
+        field: 'acceleratorTypes',
+        values: filters.accelerator,
+        exact: true,
+      });
+    }
+
     setFilters(newFilters);
   }, []);
 
   if (isAIMSLoading) {
     return (
-      <div
-        className="flex justify-center items-center h-64"
-        data-testid="aim-catalog-loading"
-      >
-        <Spinner size="lg" color="primary" />
-      </div>
+      <PageLoader
+        label={t('list.loading')}
+        testId="aim-catalog-loading"
+        className="h-64"
+      />
     );
   }
 
@@ -325,8 +369,10 @@ const AIMCatalog: React.FC = () => {
       <AIMConnectModal
         isOpen={connectDisclosure.isOpen}
         onOpenChange={(isOpen) => !isOpen && handleConnectModalClose()}
-        aim={aimForConnect}
-        onConfirmAction={handleConnectConfirm}
+        serviceId={connectInfo?.serviceId}
+        endpoints={connectInfo?.endpoints}
+        modelName={connectInfo?.modelName}
+        onChatRequested={handleConnectConfirm}
       />
     </div>
   );

@@ -49,17 +49,6 @@ describe('pages/index getServerSideProps', () => {
     vi.clearAllMocks();
   });
 
-  it('redirects to / when no session', async () => {
-    getServerSessionMock.mockResolvedValue(undefined);
-    const result: any = await getServerSideProps({
-      locale: 'en',
-      req: {},
-      res: {},
-    } as any);
-    expect(result.redirect.destination).toBe('/');
-    expect(result.redirect.permanent).toBe(false);
-  });
-
   // Removed explicit missing-email admin test due to environment variance; core branches covered below
 
   it('redirects non-admin users to first accessible route', async () => {

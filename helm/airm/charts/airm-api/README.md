@@ -44,12 +44,12 @@ helm upgrade -n airm --set airm.appDomain=<PUBLIC-DOMAIN-HERE> airm-api ./airm-a
 
 | Field Path                                            | Description                                                     | Type   | Example / Default                                          |
 | ----------------------------------------------------- | --------------------------------------------------------------- | ------ | ---------------------------------------------------------- |
-| kgateway.namespace                                    | Namespace for kgateway resources                                | string | `kgateway-system`                                          |
-| kgateway.gatewayName                                  | Gateway name                                                    | string | `https`                                                    |
-| kgateway.airmapi.servicePort                          | Service port for airmapi                                        | int    | `80`                                                       |
-| kgateway.airmapi.prefixValue                          | URL prefix for airmapi service                                  | string | `airmapi`                                                  |
-| kgateway.airmui.servicePort                           | Service port for airmui                                         | int    | `80`                                                       |
-| kgateway.airmui.prefixValue                           | URL prefix for airmui service                                   | string | `airmui`                                                   |
+| gateway.namespace                                     | Namespace for gateway resources                                 | string | `envoy-gateway-system`                                     |
+| gateway.gatewayName                                   | Gateway name                                                    | string | `https`                                                    |
+| gateway.airmapi.servicePort                           | Service port for airmapi                                        | int    | `80`                                                       |
+| gateway.airmapi.prefixValue                           | URL prefix for airmapi service                                  | string | `airmapi`                                                  |
+| gateway.airmui.servicePort                            | Service port for airmui                                         | int    | `80`                                                       |
+| gateway.airmui.prefixValue                            | URL prefix for airmui service                                   | string | `airmui`                                                   |
 | airm.includeDemoSetup                                 | Include the demo organization and project setup when installing | bool   | `true`                                                     |
 | airm.appDomain                                        | Public IP or domain for airm                                    | string | `PUBLIC-IP`                                                |
 | airm.keycloak.publicUrl                               | Public URL to access keycloak                                   | string | `https://kc.{{ .Values.airm.appDomain }}`                  |

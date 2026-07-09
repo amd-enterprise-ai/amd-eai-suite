@@ -13,7 +13,7 @@ import { mockDatasets } from '@/__mocks__/services/app/datasets.data';
 import {
   deleteDatasets,
   downloadDatasetById,
-  getDatasets,
+  listDatasets,
 } from '@/lib/app/datasets';
 
 import DatasetsPage from '@/pages/[project]/datasets';
@@ -35,14 +35,21 @@ vi.mock('@tabler/icons-react', async (importOriginal) => {
 vi.mock('@/lib/app/datasets', () => ({
   downloadDatasetById: vi.fn(),
   deleteDatasets: vi.fn(),
-  getDatasets: vi.fn(),
+  listDatasets: vi.fn(),
   getDatasetTypeVariants: vi.fn(() => ({})),
 }));
 
 describe('Datasets Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (getDatasets as Mock).mockResolvedValue(mockDatasets);
+    (listDatasets as Mock).mockResolvedValue({
+      data: mockDatasets,
+      pagination: { page: 1, pageSize: 10, total: mockDatasets.length },
+    });
+    (deleteDatasets as Mock).mockResolvedValue({
+      succeededIds: ['1'],
+      failed: [],
+    });
   });
 
   it('renders the datasets page', async () => {
@@ -56,22 +63,23 @@ describe('Datasets Page', () => {
     });
   });
 
-  it('allows filtering datasets', async () => {
+  it('requests datasets from the server on initial load', async () => {
     await act(async () => {
       render(<DatasetsPage />, { wrapper });
     });
 
-    const filterButton = screen.getByText('actions.datasetTypeFilter');
-    await act(async () => {
-      fireEvent.click(filterButton);
+    // The page must drive its data via the paginated server-side helper.
+    // We assert the call shape here; filter wiring is verified separately
+    // through the FilterValueMap unit test in the DataFilter component.
+    await waitFor(() => {
+      expect(listDatasets).toHaveBeenCalledWith(
+        'project1',
+        expect.objectContaining({
+          page: expect.any(Number),
+          pageSize: expect.any(Number),
+        }),
+      );
     });
-
-    const evaluationOption = await screen.findAllByText('types.Evaluation');
-    await act(async () => {
-      fireEvent.click(evaluationOption[0]);
-    });
-
-    expect(screen.getByText('dataset-2')).toBeInTheDocument();
   });
 
   it('allows downloading a dataset', async () => {

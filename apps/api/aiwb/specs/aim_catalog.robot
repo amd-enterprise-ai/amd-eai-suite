@@ -16,7 +16,7 @@ Documentation       End-to-end testing of full AIM catalog.
 ...
 ...                 See CLAUDE.md and README.md for comprehensive documentation.
 
-Resource            resources/aim_catalog_templates.resource
+Resource            resources/aim_catalog.resource
 Resource            resources/airm_projects.resource
 Resource            resources/api/models.resource
 Resource            resources/api_keys.resource

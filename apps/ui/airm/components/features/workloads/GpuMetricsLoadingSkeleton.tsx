@@ -2,12 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Skeleton } from '@heroui/react';
+import { Skeleton, StatsWithLineChart } from '@amdenterpriseai/components';
 import { useTranslation } from 'next-i18next';
 
 import { AvailableChartColorsKeys } from '@amdenterpriseai/types';
-
-import { StatsWithLineChart } from '@amdenterpriseai/components';
 
 const PLACEHOLDER_ROWS = [1, 2];
 

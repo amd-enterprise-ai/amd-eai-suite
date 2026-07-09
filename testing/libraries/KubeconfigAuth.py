@@ -5,11 +5,20 @@
 """
 Robot Framework library for Keycloak authentication.
 
-Supports authentication via password grant flow with credentials from either:
-1. Environment variables (in-cluster): E2E_USERNAME, E2E_PASSWORD, KEYCLOAK_* config
-2. Kubeconfig file (local): Extracts OIDC configuration from ~/.kube/config
+Supports authentication via three modes (auto-detected):
 
-The library automatically detects the credential source based on environment.
+1. **Environment variables (legacy CI path)**: E2E_USERNAME, E2E_PASSWORD,
+   KEYCLOAK_* config — password grant against the pre-staged e2e-user.
+
+2. **User passthrough**: USER_PASSTHROUGH_ENABLED=true plus OIDC_ISSUER_URL,
+   OIDC_CLIENT_ID, OIDC_USERNAME, and an offline refresh_token file path at
+   SILODEV_OIDC_REFRESH_TOKEN_FILE. Acquires tokens via refresh-token grant so
+   no password ever lands in the pod. Used by silodev remote runs that
+   authenticate as the human invoking the test.
+
+3. **Kubeconfig file (local)**: Extracts OIDC configuration from
+   ~/.kube/config — password grant against the credentials baked into the
+   user's exec credential.
 """
 
 import json
@@ -69,6 +78,48 @@ class KubeconfigAuth:
             }
 
         return None
+
+    def _get_credentials_from_passthrough(self) -> dict[str, str] | None:
+        """Return refresh-token-grant credentials when running in passthrough mode.
+
+        silodev mounts an offline refresh_token as a file (per-job Secret) and
+        exports the OIDC config via env vars. We pull a fresh access_token on
+        demand using that refresh_token — no password needed in the pod.
+        """
+        if os.environ.get("USER_PASSTHROUGH_ENABLED", "").lower() != "true":
+            return None
+
+        issuer = os.environ.get("OIDC_ISSUER_URL")
+        client_id = os.environ.get("OIDC_CLIENT_ID")
+        username = os.environ.get("OIDC_USERNAME")
+        # Default to the path silodev mounts the per-job refresh-token Secret at,
+        # so passthrough works even when the env var wasn't explicitly exported.
+        rt_file = os.environ.get("SILODEV_OIDC_REFRESH_TOKEN_FILE", "/silodev-oidc/refresh_token")
+        if not issuer or not client_id or not username or not rt_file:
+            return None
+
+        rt_path = Path(rt_file)
+        if not rt_path.is_file():
+            logger.warning(f"USER_PASSTHROUGH_ENABLED but refresh_token file not found: {rt_path}")
+            return None
+        try:
+            refresh_token = rt_path.read_text().strip()
+        except OSError as e:
+            logger.warning(f"Failed to read refresh_token file {rt_path}: {e}")
+            return None
+        if not refresh_token:
+            logger.warning(f"refresh_token file {rt_path} is empty")
+            return None
+
+        logger.info(f"Using user-passthrough credentials for: {username}")
+        return {
+            "token_url": f"{issuer.rstrip('/')}/protocol/openid-connect/token",
+            "client_id": client_id,
+            "client_secret": os.environ.get("OIDC_CLIENT_SECRET", ""),
+            "username": username,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }
 
     def _get_credentials_from_kubeconfig(self) -> dict[str, str]:
         """Extract OIDC credentials from kubeconfig file."""
@@ -163,23 +214,37 @@ class KubeconfigAuth:
         raise Exception(f"User '{user_name}' not found in kubectl config")
 
     def _get_fresh_token(self) -> str:
-        """Get a fresh token from Keycloak using password grant."""
-        # Try environment variables first (in-cluster)
-        creds = self._get_credentials_from_env()
+        """Get a fresh token from Keycloak using password or refresh-token grant."""
+        # Passthrough mode wins when active (offline refresh_token from silodev)
+        creds = self._get_credentials_from_passthrough()
 
-        # Fall back to kubeconfig (local)
+        # Otherwise, env vars (in-cluster CI path)
+        if not creds:
+            creds = self._get_credentials_from_env()
+
+        # Fall back to kubeconfig (local dev)
         if not creds:
             creds = self._get_credentials_from_kubeconfig()
 
-        # Make token request with password grant
-        payload = {
-            "client_id": creds["client_id"],
-            "client_secret": creds["client_secret"],
-            "grant_type": "password",
-            "username": creds["username"],
-            "password": creds["password"],
-            "scope": "openid profile email",
-        }
+        # Build token request payload based on grant type.
+        if creds.get("grant_type") == "refresh_token":
+            payload = {
+                "client_id": creds["client_id"],
+                "grant_type": "refresh_token",
+                "refresh_token": creds["refresh_token"],
+            }
+        else:
+            payload = {
+                "client_id": creds["client_id"],
+                "grant_type": "password",
+                "username": creds["username"],
+                "password": creds["password"],
+                "scope": "openid profile email",
+            }
+        # Public OIDC clients reject an empty client_secret (invalid_client); only
+        # include it when one is configured.
+        if creds.get("client_secret"):
+            payload["client_secret"] = creds["client_secret"]
 
         try:
             logger.debug(f"Requesting token from: {creds['token_url']}")
@@ -284,20 +349,27 @@ class KubeconfigAuth:
         """
         Validate that authentication credentials are properly configured.
 
-        Checks for credentials in environment variables first, then falls back to kubeconfig.
-        Validates that all required parameters are present for password grant authentication.
+        Tries each supported credential source in order: user passthrough,
+        environment variables, then kubeconfig. Returns True for the first
+        source that produces valid credentials.
 
         Raises:
             Exception: If configuration is invalid or missing required settings.
         """
         try:
-            # Try environment variables first
+            # User passthrough (silodev --user-passthrough)
+            creds = self._get_credentials_from_passthrough()
+            if creds:
+                logger.info("User-passthrough credentials validated successfully")
+                return True
+
+            # Environment variables (legacy in-cluster path)
             creds = self._get_credentials_from_env()
             if creds:
                 logger.info("Environment variable credentials validated successfully")
                 return True
 
-            # Fall back to kubeconfig
+            # Fall back to kubeconfig (local dev)
             creds = self._get_credentials_from_kubeconfig()
             logger.info("Kubeconfig credentials validated successfully")
             return True

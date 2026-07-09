@@ -25,6 +25,7 @@ export const mockAims: ParsedAIM[] = [
     isPreview: false,
     isHfTokenRequired: true,
     model: 'aim-llama-2-7b-v2',
+    aimId: 'aim-llama-2-7b-v2',
     annotations: {
       'aim.eai.amd.com/source-registry': 'docker.io',
       'aim.eai.amd.com/source-repository':
@@ -55,7 +56,7 @@ export const mockAims: ParsedAIM[] = [
           enabled: true,
         },
         runtimeConfigName: 'default-runtime',
-        template: {},
+        profile: { name: 'mock-profile' },
       },
       status: {
         status: AIMServiceStatus.RUNNING,
@@ -93,7 +94,7 @@ export const mockAims: ParsedAIM[] = [
             enabled: true,
           },
           runtimeConfigName: 'default-runtime',
-          template: {},
+          profile: { name: 'mock-profile' },
         },
         status: {
           status: AIMServiceStatus.RUNNING,
@@ -124,6 +125,7 @@ export const mockAims: ParsedAIM[] = [
     isPreview: false,
     isHfTokenRequired: true,
     model: 'aim-llama-2-7b-v1',
+    aimId: 'aim-llama-2-7b-v1',
     annotations: {
       'aim.eai.amd.com/source-registry': 'docker.io',
       'aim.eai.amd.com/source-repository':
@@ -147,6 +149,7 @@ export const mockAims: ParsedAIM[] = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-stable-diffusion-xl',
+    aimId: 'aim-stable-diffusion-xl',
     annotations: {
       'aim.eai.amd.com/source-registry': 'docker.io',
       'aim.eai.amd.com/source-repository':
@@ -171,6 +174,7 @@ export const mockAims: ParsedAIM[] = [
     isPreview: true,
     isHfTokenRequired: false,
     model: 'aim-detection-model',
+    aimId: 'aim-detection-model',
     annotations: {
       'aim.eai.amd.com/source-registry': 'docker.io',
       'aim.eai.amd.com/source-repository':
@@ -202,7 +206,7 @@ export const mockAims: ParsedAIM[] = [
           enabled: true,
         },
         runtimeConfigName: 'default-runtime',
-        template: {},
+        profile: { name: 'mock-profile' },
       },
       status: {
         status: AIMServiceStatus.PENDING,
@@ -237,7 +241,7 @@ export const mockAims: ParsedAIM[] = [
             enabled: true,
           },
           runtimeConfigName: 'default-runtime',
-          template: {},
+          profile: { name: 'mock-profile' },
         },
         status: {
           status: AIMServiceStatus.PENDING,
@@ -375,7 +379,7 @@ const mockMultiDeployParsedAims = [
             enabled: true,
           },
           runtimeConfigName: 'default-runtime',
-          template: {},
+          profile: { name: 'mock-profile' },
         },
         status: {
           status: AIMServiceStatus.RUNNING,
@@ -413,7 +417,7 @@ const mockMultiDeployParsedAims = [
             enabled: true,
           },
           runtimeConfigName: 'default-runtime',
-          template: {},
+          profile: { name: 'mock-profile' },
         },
         status: {
           status: AIMServiceStatus.PENDING,
@@ -476,6 +480,7 @@ const mockUnsupportedParsedAims = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-unsupported-model',
+    aimId: 'aim-unsupported-model',
     annotations: {
       'aim.eai.amd.com/source-registry': 'docker.io',
       'aim.eai.amd.com/source-repository':
@@ -530,6 +535,7 @@ const mockMixedSupportParsedAims = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-mixed-v2',
+    aimId: 'aim-mixed-v2',
     annotations: {
       'aim.eai.amd.com/source-registry': 'docker.io',
       'aim.eai.amd.com/source-repository':
@@ -554,6 +560,7 @@ const mockMixedSupportParsedAims = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-mixed-v1',
+    aimId: 'aim-mixed-v1',
     annotations: {
       'aim.eai.amd.com/source-registry': 'docker.io',
       'aim.eai.amd.com/source-repository':
@@ -608,6 +615,7 @@ const mockStartingParsedAims = [
     isPreview: false,
     isHfTokenRequired: false,
     model: 'aim-starting-model',
+    aimId: 'aim-starting-model',
     annotations: {
       'aim.eai.amd.com/source-registry': 'docker.io',
       'aim.eai.amd.com/source-repository': 'amdenterpriseai/aim-starting-model',
@@ -637,7 +645,7 @@ const mockStartingParsedAims = [
           enabled: true,
         },
         runtimeConfigName: 'default-runtime',
-        template: {},
+        profile: { name: 'mock-profile' },
       },
       status: {
         status: AIMServiceStatus.STARTING,
@@ -672,7 +680,7 @@ const mockStartingParsedAims = [
             enabled: true,
           },
           runtimeConfigName: 'default-runtime',
-          template: {},
+          profile: { name: 'mock-profile' },
         },
         status: {
           status: AIMServiceStatus.STARTING,

@@ -8,7 +8,6 @@
 import { IconFile, IconX } from '@tabler/icons-react';
 import { memo } from 'react';
 
-import { TFunction } from 'next-i18next';
 import { ActionButton } from '../../Buttons';
 import { displayBytesInOptimalUnit } from '@amdenterpriseai/utils/app';
 
@@ -20,7 +19,7 @@ const FileElement = memo(
   }: {
     file: File;
     onRemove: () => void;
-    t: TFunction;
+    t: (key: string, options?: Record<string, unknown>) => string;
   }) => (
     <div className="flex items-center gap-1 rounded p-1 pl-2 bg-default-100">
       <IconFile size={16} />

@@ -20,6 +20,7 @@ import {
 import { ApiKeysTableField } from '@/types/enums/api-keys-table-fields';
 
 import ApiKeysTable from '@/components/features/api-keys/ApiKeysTable';
+import { useProject } from '@/contexts/ProjectContext';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 
@@ -29,12 +30,36 @@ vi.mock('@/lib/app/api-keys', () => ({
   deleteApiKey: vi.fn(),
 }));
 
+vi.mock('@/contexts/ProjectContext', () => ({
+  useProject: vi.fn(),
+}));
+
+const mockUseProject = vi.mocked(useProject);
 const mockFetchProjectApiKeys = vi.mocked(fetchProjectApiKeys);
 const mockDeleteApiKey = vi.mocked(deleteApiKey);
+
+const defaultProjectContext = {
+  isStandaloneMode: false,
+  clusterAuthEnabled: true,
+  aiGatewayEnabled: true,
+  airmAppUrl: undefined,
+  activeProject: 'project1',
+  projects: [{ id: 'project1', name: 'Project 1' }],
+  isLoading: false,
+  projectError: null,
+  refetchProjects: vi.fn(),
+  setActiveProject: vi.fn(),
+  projectPath: (path: string) =>
+    `/project1${path.startsWith('/') ? path : `/${path}`}`,
+  projectUrl: (path: string) =>
+    `/project1${path.startsWith('/') ? path : `/${path}`}`,
+};
 
 describe('ApiKeysTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockUseProject.mockReturnValue(defaultProjectContext);
 
     // Default mock implementation
     mockFetchProjectApiKeys.mockResolvedValue(generateMockApiKeyResponse());
@@ -90,8 +115,8 @@ describe('ApiKeysTable', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(mockApiKeys[0].name)).toBeInTheDocument();
-      expect(screen.getByText(mockApiKeys[1].name)).toBeInTheDocument();
+      expect(screen.getByText(mockApiKeys[0].displayName)).toBeInTheDocument();
+      expect(screen.getByText(mockApiKeys[1].displayName)).toBeInTheDocument();
     });
 
     expect(mockFetchProjectApiKeys).toHaveBeenCalledWith('project-1');
@@ -111,9 +136,9 @@ describe('ApiKeysTable', () => {
 
     // All API keys should be visible initially
     await waitFor(() => {
-      expect(screen.getByText(mockApiKeys[0].name)).toBeInTheDocument();
-      expect(screen.getByText(mockApiKeys[1].name)).toBeInTheDocument();
-      expect(screen.getByText(mockApiKeys[2].name)).toBeInTheDocument();
+      expect(screen.getByText(mockApiKeys[0].displayName)).toBeInTheDocument();
+      expect(screen.getByText(mockApiKeys[1].displayName)).toBeInTheDocument();
+      expect(screen.getByText(mockApiKeys[2].displayName)).toBeInTheDocument();
     });
 
     const searchInput = screen.getByPlaceholderText(
@@ -122,7 +147,9 @@ describe('ApiKeysTable', () => {
 
     // Type a search term that matches only one API key
     await act(async () => {
-      fireEvent.change(searchInput, { target: { value: mockApiKeys[0].name } });
+      fireEvent.change(searchInput, {
+        target: { value: mockApiKeys[0].displayName },
+      });
     });
 
     // Client-side filtering should show only matching results
@@ -167,7 +194,7 @@ describe('ApiKeysTable', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(mockApiKeys[0].name)).toBeInTheDocument();
+      expect(screen.getByText(mockApiKeys[0].displayName)).toBeInTheDocument();
     });
 
     // Click on the actions menu
@@ -208,7 +235,7 @@ describe('ApiKeysTable', () => {
 
     // Wait for data to load
     await waitFor(() => {
-      expect(screen.getByText(mockApiKeys[0].name)).toBeInTheDocument();
+      expect(screen.getByText(mockApiKeys[0].displayName)).toBeInTheDocument();
     });
 
     const nameHeader = screen.getByText(
@@ -268,5 +295,60 @@ describe('ApiKeysTable', () => {
     });
 
     expect(screen.getByText('Create API Key')).toBeInTheDocument();
+  });
+
+  describe('viewDetails action visibility', () => {
+    it('shows viewDetails action when aiGatewayEnabled is true', async () => {
+      const mockApiKeys = generateMockApiKeys(1);
+      mockFetchProjectApiKeys.mockResolvedValue({ data: mockApiKeys });
+
+      await act(async () => {
+        render(<ApiKeysTable {...defaultProps} />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(mockApiKeys[0].displayName),
+        ).toBeInTheDocument();
+      });
+
+      const actionsButton = screen.getByLabelText('list.actions.label');
+      await act(async () => {
+        fireEvent.click(actionsButton);
+      });
+
+      expect(
+        screen.getByText('list.actions.viewDetails.title'),
+      ).toBeInTheDocument();
+    });
+
+    it('hides viewDetails action when aiGatewayEnabled is false', async () => {
+      mockUseProject.mockReturnValue({
+        ...defaultProjectContext,
+        aiGatewayEnabled: false,
+      });
+
+      const mockApiKeys = generateMockApiKeys(1);
+      mockFetchProjectApiKeys.mockResolvedValue({ data: mockApiKeys });
+
+      await act(async () => {
+        render(<ApiKeysTable {...defaultProps} />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(mockApiKeys[0].displayName),
+        ).toBeInTheDocument();
+      });
+
+      const actionsButton = screen.getByLabelText('list.actions.label');
+      await act(async () => {
+        fireEvent.click(actionsButton);
+      });
+
+      expect(
+        screen.queryByText('list.actions.viewDetails.title'),
+      ).not.toBeInTheDocument();
+    });
   });
 });

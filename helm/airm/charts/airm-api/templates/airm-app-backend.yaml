@@ -48,7 +48,7 @@ spec:
             - name: DISABLE_JWT_VALIDATION
               value: "false"
             - name: POST_REGISTRATION_REDIRECT_URL
-              value: "https://{{ .Values.kgateway.airmui.prefixValue }}.{{ .Values.airm.appDomain }}/"
+              value: "https://{{ .Values.gateway.airmui.prefixValue }}.{{ .Values.airm.appDomain }}/"
             - name: DATABASE_HOST
               value: "{{ .Values.airm.postgresql.host }}"
             - name: DATABASE_PORT
@@ -130,13 +130,25 @@ spec:
       initContainers:
         - name: wait-for-db
           image: postgres:17-alpine
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: "{{ .Values.airm.postgresql.userSecretName }}"
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: "{{ .Values.airm.postgresql.userSecretName }}"
           command:
             - sh
             - -c
             - |
-              until pg_isready -h "{{ .Values.airm.postgresql.host }}" -p {{ .Values.airm.postgresql.port }} -U postgres; do
-                echo "Waiting for database..."
-                sleep 2
+              until psql -h "{{ .Values.airm.postgresql.host }}" -p {{ .Values.airm.postgresql.port }} \
+                    -U "$DATABASE_USER" -d "{{ .Values.airm.postgresql.database }}" -c "SELECT 1" > /dev/null 2>&1; do
+                echo "Waiting for database user to be available..."
+                sleep 3
               done
               echo "Database is ready!"
         - name: init-migration-scripts

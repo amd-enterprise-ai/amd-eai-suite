@@ -14,8 +14,8 @@ ${CHAT_INPUT_SELECTOR}             [data-testid="chat-input"]
 ${ATTACH_IMAGE_BUTTON_SELECTOR}    [data-testid="attach-image-button"]
 ${SEND_BUTTON_SELECTOR}            [data-testid="send-button"]
 ${DRAG_OVERLAY_SELECTOR}           [data-testid="drag-overlay"]
-${CHAT_TAB_SELECTOR}               [aria-label="chat-tab"]
-${COMPARE_TAB_SELECTOR}            [aria-label="compare-tab"]
+${CHAT_TAB_SELECTOR}               [aria-label="Chat"]
+${COMPARE_TAB_SELECTOR}            [aria-label="Compare"]
 ${MODEL_SELECT_SELECTOR}            [data-testid="model-deployment-select"]
 ${CHAT_MESSAGES_SELECTOR}           [data-testid="chat-messages"]
 ${LISTBOX_SELECTOR}                 [role="listbox"]
@@ -97,7 +97,7 @@ Type chat message
 Get chat mode tabs text
     [Documentation]    Returns the visible text of the chat mode toolbar area.
 
-    ${text}=    Get Text    css=[aria-label="chat-mode-tabs"]
+    ${text}=    Get Text    css=[aria-label="Chat modes"]
     RETURN    ${text}
 
 Get model selector count

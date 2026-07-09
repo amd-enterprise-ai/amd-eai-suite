@@ -25,6 +25,12 @@ vi.mock('@amdenterpriseai/components', () => ({
   StatsWithLineChart: ({ title }: { title: string }) => (
     <div data-testid="stats-chart">{title}</div>
   ),
+  Button: ({ children, onPress, onClick, ...props }: any) => (
+    <button onClick={onPress ?? onClick} {...props}>
+      {children}
+    </button>
+  ),
+  ButtonGroup: ({ children }: any) => <fieldset>{children}</fieldset>,
 }));
 
 const makeDevice = (

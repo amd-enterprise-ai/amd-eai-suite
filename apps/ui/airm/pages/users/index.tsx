@@ -2,7 +2,14 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tab, Tabs, useDisclosure } from '@heroui/react';
+import {
+  AirmDocsPage,
+  airmDocumentationMapping,
+  RelevantDocs,
+  Tab,
+  Tabs,
+} from '@amdenterpriseai/components';
+import { useOverlayState } from '@amdenterpriseai/hooks';
 
 import { GetServerSideProps } from 'next';
 import { getServerSession } from 'next-auth';
@@ -23,11 +30,6 @@ import {
   DOCS_RESOURCE_MANAGER_BASE,
   WithDocumentationLink,
 } from '@amdenterpriseai/utils/app';
-import {
-  RelevantDocs,
-  AirmDocsPage,
-  airmDocumentationMapping,
-} from '@amdenterpriseai/components';
 
 interface Props {
   users: UsersResponse;
@@ -39,7 +41,7 @@ const UsersPage: React.FC<Props> & WithDocumentationLink = ({
   invitedUsers,
 }: Props) => {
   const { t } = useTranslation('users');
-  const { isOpen, onOpen, onOpenChange } = useDisclosure();
+  const { isOpen, onOpen, onOpenChange } = useOverlayState();
   const { isInviteEnabled } = useAccessControl();
   return (
     <div className="inline-flex flex-col w-full h-full max-h-full">
@@ -85,22 +87,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (
 ) => {
   const session = await getServerSession(context.req, context.res, authOptions);
 
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
-
   try {
-    const usersData = await getUsers(session.accessToken);
+    const usersData = await getUsers(session?.accessToken as string);
     const invitedUsersResponse = await getInvitedUsers(
       session?.accessToken as string,
     );

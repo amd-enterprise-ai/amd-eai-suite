@@ -144,7 +144,9 @@ describe('DeleteApiKeyModal', () => {
     });
 
     it('works with different API key names', async () => {
-      const customApiKey = generateMockApiKey({ name: 'Custom API Key Name' });
+      const customApiKey = generateMockApiKey({
+        displayName: 'Custom API Key Name',
+      });
       const props = {
         ...defaultProps,
         apiKey: customApiKey,

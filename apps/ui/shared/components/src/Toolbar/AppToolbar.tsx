@@ -2,14 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  BreadcrumbItem,
-  Breadcrumbs,
-  Button,
-  Link as HeroLink,
-} from '@heroui/react';
 import { IconExternalLink } from '@tabler/icons-react';
 
+import { BreadcrumbItem, Breadcrumbs } from '../Breadcrumbs';
+
+import { Button } from '../Buttons/Button';
+import { Link } from '../Link';
 import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
 
@@ -43,7 +41,7 @@ export const AppBar: React.FC<AppBarProps> = ({
   const { t } = useTranslation();
   const path = pathname.split('/').pop()?.replace(/^_/, '');
   const title = path
-    ? t(`pages.${toCamelCase(path)}.title`)
+    ? (t(`pages.${toCamelCase(path)}.title` as any) as string)
     : t('pages.dashboard.title');
   const localePrefix =
     router.locale && router.locale !== router.defaultLocale
@@ -80,7 +78,7 @@ export const AppBar: React.FC<AppBarProps> = ({
 
         {documentationHref && (
           <Button
-            as={HeroLink}
+            as={Link}
             isExternal
             variant="bordered"
             className="w-max border-1 border-default-200"

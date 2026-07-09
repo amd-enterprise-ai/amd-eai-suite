@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button, Divider, Tab, Tabs } from '@heroui/react';
+import { Button, Divider, Tab, Tabs } from '@amdenterpriseai/components';
 import { useQuery } from '@tanstack/react-query';
 
 import { getServerSession } from 'next-auth';
@@ -211,20 +211,6 @@ export async function getServerSideProps(context: any) {
 
   const session = await getServerSession(context.req, context.res, authOptions);
 
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
-
   try {
     const project = await getProject(
       context.params.id,
@@ -245,7 +231,7 @@ export async function getServerSideProps(context: any) {
       context.params.id,
     );
 
-    const userRoles = session.user?.roles ?? [];
+    const userRoles = session?.user?.roles ?? [];
     const isPlatformAdmin = userRoles.includes(UserRole.PLATFORM_ADMIN);
 
     let secrets: SecretsResponse = { data: [] };

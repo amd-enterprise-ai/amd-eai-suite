@@ -2,5 +2,5 @@
 //
 // SPDX-License-Identifier: MIT
 
-export { CodeBlock } from './CodeBlock';
+export { MarkdownCodeBlock } from './CodeBlock';
 export { MemoizedReactMarkdown } from './MemoizedReactMarkdown';

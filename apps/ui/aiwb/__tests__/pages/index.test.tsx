@@ -10,14 +10,23 @@ import {
 } from '@testing-library/react';
 
 import {
-  fetchNamespaceMetrics,
-  fetchNamespaceStats,
-  fetchNamespaceGPUDeviceUtilization,
-  fetchNamespaceGPUMemoryUtilization,
-} from '@/lib/app/namespaces';
+  fetchProjectWorkloadMetrics,
+  fetchProjectWorkloadStats,
+  fetchProjectGPUDeviceUtilization,
+  fetchProjectGPUMemoryUtilization,
+} from '@/lib/app/projects';
+import {
+  resolveAIMServiceDisplay,
+  type AIMServiceDisplayInfo,
+} from '@/lib/app/aims';
+import {
+  getInferenceModel,
+  listAllInferenceDeployments,
+} from '@/lib/app/inference';
+import { AIMMetric } from '@/types/aims';
+import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import type { GetServerSidePropsContext } from 'next';
-import { getServerSession } from 'next-auth';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 import wrapper from '@/__tests__/ProviderWrapper';
@@ -26,7 +35,6 @@ import type { ComponentProps } from 'react';
 import { Mock, vi } from 'vitest';
 import ProjectDashboardPage, { getServerSideProps } from '@/pages/[project]';
 
-const mockGetServerSession = vi.mocked(getServerSession);
 const mockServerSideTranslations = vi.mocked(serverSideTranslations);
 
 const mockInvalidateQueries = vi.fn();
@@ -47,21 +55,17 @@ vi.mock('@tanstack/react-query', async () => {
   };
 });
 
-vi.mock('next-auth', () => ({
-  getServerSession: vi.fn(),
-}));
-
 vi.mock('next-i18next/serverSideTranslations', () => ({
   serverSideTranslations: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('@/lib/app/namespaces', async (importOriginal) => {
+vi.mock('@/lib/app/projects', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    fetchNamespaceMetrics: vi.fn(),
-    fetchNamespaceStats: vi.fn(),
-    fetchNamespaceGPUDeviceUtilization: vi.fn(),
-    fetchNamespaceGPUMemoryUtilization: vi.fn(),
+    fetchProjectWorkloadMetrics: vi.fn(),
+    fetchProjectWorkloadStats: vi.fn(),
+    fetchProjectGPUDeviceUtilization: vi.fn(),
+    fetchProjectGPUMemoryUtilization: vi.fn(),
   };
 });
 
@@ -72,10 +76,15 @@ vi.mock('@/contexts/ProjectContext', () => ({
   }),
 }));
 
-vi.mock('@/lib/app/aims', () => ({
-  getAimServices: vi.fn().mockResolvedValue([]),
-  getAimClusterModels: vi.fn().mockResolvedValue([]),
-  undeployAim: vi.fn(),
+vi.mock('@/lib/app/aims', async (importOriginal) => ({
+  ...(await importOriginal()),
+  resolveAIMServiceDisplay: vi.fn(),
+}));
+
+vi.mock('@/lib/app/inference', () => ({
+  getInferenceModel: vi.fn(),
+  listAllInferenceDeployments: vi.fn(),
+  deleteInferenceDeployment: vi.fn(),
 }));
 
 const mockPush = vi.fn();
@@ -107,24 +116,35 @@ vi.mock('next-i18next', () => ({
 
 describe('projects page', () => {
   beforeEach(() => {
-    (fetchNamespaceMetrics as Mock).mockResolvedValue({
+    vi.clearAllMocks();
+
+    (fetchProjectWorkloadMetrics as Mock).mockResolvedValue({
       data: [],
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      totalPages: 0,
+      pagination: { page: 1, pageSize: 20, total: 0 },
     });
-    (fetchNamespaceStats as Mock).mockResolvedValue({
+    (fetchProjectWorkloadStats as Mock).mockResolvedValue({
       namespace: 'workbench',
       total: 0,
       statusCounts: [],
     });
-    (fetchNamespaceGPUMemoryUtilization as Mock).mockResolvedValue({
+    (fetchProjectGPUMemoryUtilization as Mock).mockResolvedValue({
       data: [],
     });
-    (fetchNamespaceGPUDeviceUtilization as Mock).mockResolvedValue({
+    (fetchProjectGPUDeviceUtilization as Mock).mockResolvedValue({
       data: [],
     });
+    (listAllInferenceDeployments as Mock).mockResolvedValue([]);
+    (getInferenceModel as Mock).mockRejectedValue(
+      new APIRequestError('not found', 404),
+    );
+    (resolveAIMServiceDisplay as Mock).mockReturnValue({
+      title: '',
+      canonicalName: '',
+      imageVersion: '',
+      name: '',
+      metric: AIMMetric.Default,
+    } satisfies AIMServiceDisplayInfo);
+
     mockInvalidateQueries.mockClear();
     mockResetQueries.mockClear();
   });
@@ -155,38 +175,38 @@ describe('projects page', () => {
     });
   });
 
-  it('should call fetchNamespaceGPUDeviceUtilization on page load', () => {
+  it('should call fetchProjectGPUDeviceUtilization on page load', () => {
     act(() => {
       renderProjectPage();
     });
 
-    expect(fetchNamespaceGPUDeviceUtilization as Mock).toHaveBeenCalled();
+    expect(fetchProjectGPUDeviceUtilization as Mock).toHaveBeenCalled();
   });
 
-  it('should call fetchNamespaceMetrics on page load', async () => {
+  it('should call fetchProjectWorkloadMetrics on page load', async () => {
     act(() => {
       renderProjectPage();
     });
 
     await waitFor(() => {
-      expect(fetchNamespaceMetrics as Mock).toHaveBeenCalled();
+      expect(fetchProjectWorkloadMetrics as Mock).toHaveBeenCalled();
     });
   });
 
-  it('should call fetchNamespaceStats on page load', () => {
+  it('should call fetchProjectWorkloadStats on page load', () => {
     act(() => {
       renderProjectPage();
     });
 
-    expect(fetchNamespaceStats as Mock).toHaveBeenCalled();
+    expect(fetchProjectWorkloadStats as Mock).toHaveBeenCalled();
   });
 
-  it('should call fetchNamespaceGPUMemoryUtilization on page load', () => {
+  it('should call fetchProjectGPUMemoryUtilization on page load', () => {
     act(() => {
       renderProjectPage();
     });
 
-    expect(fetchNamespaceGPUMemoryUtilization as Mock).toHaveBeenCalled();
+    expect(fetchProjectGPUMemoryUtilization as Mock).toHaveBeenCalled();
   });
 
   it('refresh button trigger refetch', async () => {
@@ -194,8 +214,8 @@ describe('projects page', () => {
       renderProjectPage();
     });
 
-    expect(fetchNamespaceGPUMemoryUtilization as Mock).toBeCalledTimes(1);
-    expect(fetchNamespaceGPUDeviceUtilization as Mock).toBeCalledTimes(1);
+    expect(fetchProjectGPUMemoryUtilization as Mock).toBeCalledTimes(1);
+    expect(fetchProjectGPUDeviceUtilization as Mock).toBeCalledTimes(1);
 
     await waitFor(() => {
       expect(screen.getByText('data.refresh')).toBeInTheDocument();
@@ -205,13 +225,13 @@ describe('projects page', () => {
       fireEvent.click(screen.getByText('data.refresh'));
     });
 
-    expect(fetchNamespaceGPUMemoryUtilization as Mock).toBeCalledTimes(2);
-    expect(fetchNamespaceGPUDeviceUtilization as Mock).toBeCalledTimes(2);
+    expect(fetchProjectGPUMemoryUtilization as Mock).toBeCalledTimes(2);
+    expect(fetchProjectGPUDeviceUtilization as Mock).toBeCalledTimes(2);
     expect(mockInvalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['namespace', 'test-project-123', 'workloads'],
+      queryKey: ['project', 'test-project-123', 'workloads'],
     });
     expect(mockResetQueries).toHaveBeenCalledWith({
-      queryKey: ['namespace', 'test-project-123', 'stats'],
+      queryKey: ['project', 'test-project-123', 'stats'],
     });
   });
 
@@ -254,12 +274,7 @@ describe('ProjectDashboardPage getServerSideProps', () => {
     mockServerSideTranslations.mockResolvedValue({} as never);
   });
 
-  it('returns props with breadcrumb when session and translations succeed', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { email: 'test@example.com' },
-      accessToken: 'token',
-    } as never);
-
+  it('returns props with breadcrumb when translations succeed', async () => {
     const result = await getServerSideProps(baseContext);
 
     expect(result).toEqual({
@@ -272,28 +287,9 @@ describe('ProjectDashboardPage getServerSideProps', () => {
         ],
       },
     });
-    expect(mockGetServerSession).toHaveBeenCalledWith(
-      baseContext.req,
-      baseContext.res,
-      expect.any(Object),
-    );
-  });
-
-  it('redirects home when session is missing', async () => {
-    mockGetServerSession.mockResolvedValue(null);
-
-    const result = await getServerSideProps(baseContext);
-
-    expect(result).toEqual({
-      redirect: { destination: '/', permanent: false },
-    });
   });
 
   it('redirects home when translations fail', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { email: 'test@example.com' },
-      accessToken: 'token',
-    } as never);
     mockServerSideTranslations.mockRejectedValue(new Error('i18n failed'));
 
     const result = await getServerSideProps(baseContext);

@@ -5,15 +5,21 @@
 import {
   Accordion,
   AccordionItem,
+  ActionButton,
+  ActionsToolbar,
+  Alert,
+  BarChart,
   Card,
   CardBody,
   CardHeader,
-  Dropdown,
+  ChartTimeSelector,
+  ConfirmationModal,
   DropdownItem,
   DropdownMenu,
+  Dropdown,
   DropdownTrigger,
-  useDisclosure,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 import {
   IconChevronDown,
   IconExternalLink,
@@ -31,7 +37,6 @@ import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useRouter } from 'next/router';
 
 import { useAccessControl } from '@/hooks/useAccessControl';
-import { useSystemToast } from '@amdenterpriseai/hooks';
 
 import {
   deleteCluster as deleteClusterAPI,
@@ -78,17 +83,9 @@ import { ClusterProjectsResponse, Project } from '@/types/projects';
 import { ClusterStats, EditCluster } from '@/components/features/clusters';
 import { ClusterNodesTable } from '@/components/features/clusters/ClusterNodes';
 import { ProjectTable } from '@/components/features/projects';
-import {
-  Alert,
-  BarChart,
-  ConfirmationModal,
-} from '@amdenterpriseai/components';
-import { ChartTimeSelector } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 import ClusterKubeConfig from '@/components/features/clusters/ClusterKubeConfig';
-import { ActionButton } from '@amdenterpriseai/components';
 
 const translationKeySet = 'clusters';
 
@@ -116,13 +113,13 @@ const ClusterPage: React.FC<Props> & WithDocumentationLink = ({
     isOpen: isEditClusterOpen,
     onOpen: onEditClusterOpen,
     onOpenChange: onEditClusterOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isDeleteClusterModalOpen,
     onOpen: onDeleteClusterModalOpen,
     onOpenChange: onDeleteClusterModalOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const { mutate: deleteCluster, isPending: isDeleteClusterPending } =
     useMutation({
@@ -308,7 +305,7 @@ const ClusterPage: React.FC<Props> & WithDocumentationLink = ({
     isOpen: isClusterKubeConfigOpen,
     onOpen: onClusterKubeConfigOpen,
     onOpenChange: onClusterKubeConfigChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const filterConfig = useMemo(
     () => ({
@@ -516,20 +513,6 @@ export async function getServerSideProps(context: any) {
   const { locale } = context;
 
   const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   try {
     const [cluster, clusterNodesResponse, projectsResponse, workloadsStats] =

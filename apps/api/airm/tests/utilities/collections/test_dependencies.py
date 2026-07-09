@@ -4,8 +4,9 @@
 
 import json
 
+import pytest
 from _pytest.logging import LogCaptureFixture
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from api_common.collections import (
     FilterCondition,
@@ -37,10 +38,10 @@ def test_get_pagination_query_params_custom_values():
     assert result.page_size == 25
 
 
-def test_get_pagination_query_params_zero_page():
-    result = get_pagination_query_params(page=0, page_size=10)
-    assert result.page == 0
-    assert result.page_size == 10
+def test_get_pagination_query_params_rejects_zero_page():
+    # PaginationConditions enforces page >= 1 — page=0 is not a valid 1-indexed page.
+    with pytest.raises(ValidationError):
+        get_pagination_query_params(page=0, page_size=10)
 
 
 def test_get_pagination_query_params_none_values():

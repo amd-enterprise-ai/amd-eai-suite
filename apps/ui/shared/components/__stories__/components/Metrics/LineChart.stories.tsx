@@ -4,7 +4,8 @@
 
 import type { Story, StoryDefault } from '@ladle/react';
 import React, { useState, useMemo } from 'react';
-import { Select, SelectItem } from '@heroui/react';
+import { Select, SelectItem } from '@amdenterpriseai/components';
+
 import { IconCpu } from '@tabler/icons-react';
 import { LineChart } from '../../../src/Metrics/LineChart';
 import { DynamicValueLegend } from '../../../src/Metrics/DynamicValueLegend';

@@ -14,21 +14,49 @@ import ProviderWrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
-// Mock the Modal component
-vi.mock('@amdenterpriseai/components', () => ({
-  Modal: ({ children, onClose, title, subTitle, size }: any) => (
-    <div data-testid="modal" data-size={size}>
-      <div data-testid="modal-header">
-        <h2 data-testid="modal-title">{title}</h2>
-        <p data-testid="modal-subtitle">{subTitle}</p>
-        <button data-testid="close-button" onClick={onClose}>
-          Close
-        </button>
+// Mock adapter components (Modal, Accordion) while preserving other exports
+vi.mock('@amdenterpriseai/components', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/components')>();
+  return {
+    ...actual,
+    Modal: ({ children, onClose, title, subTitle, size }: any) => (
+      <div data-testid="modal" data-size={size}>
+        <div data-testid="modal-header">
+          <h2 data-testid="modal-title">{title}</h2>
+          <p data-testid="modal-subtitle">{subTitle}</p>
+          <button data-testid="close-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div data-testid="modal-body">{children}</div>
       </div>
-      <div data-testid="modal-body">{children}</div>
-    </div>
-  ),
-}));
+    ),
+    Accordion: ({ children }: { children: React.ReactNode }) => (
+      <div data-testid="accordion">{children}</div>
+    ),
+    AccordionItem: ({
+      title,
+      children,
+    }: {
+      title: string;
+      children: React.ReactNode;
+    }) => (
+      <div data-testid="accordion-item">
+        <button
+          data-testid={`accordion-toggle-${title.toLowerCase().replace(/\s+/g, '-')}`}
+        >
+          {title}
+        </button>
+        <div
+          data-testid={`accordion-content-${title.toLowerCase().replace(/\s+/g, '-')}`}
+        >
+          {children}
+        </div>
+      </div>
+    ),
+  };
+});
 
 // Mock the MemoizedChatMessage component
 vi.mock('@/components/features/chat/MemoizedChatMessage', () => ({
@@ -43,33 +71,6 @@ vi.mock('@/components/features/chat/MemoizedChatMessage', () => ({
       </div>
     );
   },
-}));
-
-// Mock HeroUI components
-vi.mock('@heroui/react', () => ({
-  Accordion: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="accordion">{children}</div>
-  ),
-  AccordionItem: ({
-    title,
-    children,
-  }: {
-    title: string;
-    children: React.ReactNode;
-  }) => (
-    <div data-testid="accordion-item">
-      <button
-        data-testid={`accordion-toggle-${title.toLowerCase().replace(/\s+/g, '-')}`}
-      >
-        {title}
-      </button>
-      <div
-        data-testid={`accordion-content-${title.toLowerCase().replace(/\s+/g, '-')}`}
-      >
-        {children}
-      </div>
-    </div>
-  ),
 }));
 
 // Mock next-i18next

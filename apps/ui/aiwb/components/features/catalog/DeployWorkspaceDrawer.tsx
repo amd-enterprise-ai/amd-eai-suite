@@ -2,15 +2,21 @@
 //
 // SPDX-License-Identifier: MIT
 import {
-  Divider,
-  Image,
   SelectItem,
-  Spinner,
+  Divider,
+  DrawerForm,
+  FormInput,
+  FormSelect,
+  FormSlider,
+  LinkToast,
   Switch,
   Tooltip,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
+
+import { PageLoader } from '@/components/shared/PageLoader';
 import { IconInfoCircle } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FieldValues } from 'react-hook-form';
 
@@ -27,15 +33,10 @@ import { SecretUseCase } from '@amdenterpriseai/types';
 import { WorkloadStatus } from '@/types/enums/workloads';
 import { Workload } from '@/types/workloads';
 
-import { DrawerForm } from '@amdenterpriseai/components';
-import { FormInput, FormSelect, FormSlider } from '@amdenterpriseai/components';
-
 import DeployingInformer from './DeployingInformer';
-import { LinkToast } from '@amdenterpriseai/components';
 import ResourceAllocationInformer from './ResourceAllocationInformer';
 
 import { useProject } from '@/contexts/ProjectContext';
-import { formatDate } from 'date-fns';
 import { z } from 'zod';
 import { getClusterResources } from '@/lib/app/cluster';
 import { ClusterResources } from '@/types/cluster';
@@ -274,10 +275,7 @@ export const DeployWorkspaceDrawer = ({
       isDisabled={isDeployDisabled}
       hideCloseButton={false}
       defaultValues={{
-        displayName: `${catalogItem?.slug}-${formatDate(
-          new Date(),
-          'yyyyMMdd-HHmmss',
-        )}`,
+        displayName: catalogItem?.displayName ?? catalogItem?.name ?? '',
       }}
       renderFields={(form) => {
         const {
@@ -295,9 +293,11 @@ export const DeployWorkspaceDrawer = ({
         return (
           <>
             {!catalogItemData && (
-              <div className="flex justify-center items-center h-64">
-                <Spinner size="lg" color="primary" />
-              </div>
+              <PageLoader
+                label={t('deployModal.loading')}
+                testId="deploy-drawer-loading"
+                className="h-64"
+              />
             )}
             {!isDeploying && catalogItemData && (
               <div className="flex flex-col gap-4 mt-4">
@@ -308,20 +308,23 @@ export const DeployWorkspaceDrawer = ({
                     </div>
                     <p>{catalogItem?.description}</p>
                   </div>
-                  <Image
-                    alt="workload icon"
-                    height={40}
-                    radius="md"
-                    src={catalogItem?.featuredImage || ''}
-                    width={40}
-                  />
+                  {catalogItem?.featuredImage && (
+                    <Image
+                      alt="workload icon"
+                      className="h-10 w-10 shrink-0 self-start rounded-md object-cover"
+                      height={40}
+                      src={catalogItem.featuredImage}
+                      width={40}
+                      unoptimized
+                    />
+                  )}
                 </div>
                 {/* TODO: Introduce the MD renderer here instead of using a raw string. */}
                 <p className="whitespace-pre-wrap wrap-break-words flex flex-col gap-4">
                   {catalogItem?.longDescription?.replace(/\\n/g, '\n')}
                 </p>
                 <Divider />
-                <div className="text-foreground text-medium uppercase font-bold">
+                <div className="text-foreground text-base uppercase font-bold">
                   {t('deployModal.settings.title')}
                 </div>
                 <FormInput

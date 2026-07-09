@@ -8,8 +8,8 @@ export const mockDatasets = [
   {
     id: '1',
     name: 'dataset-1',
-    description: 'Dataset for evaluation',
-    type: DatasetType.Evaluation,
+    description: 'Dataset for fine-tuning',
+    type: DatasetType.Finetuning,
     createdAt: '2023-01-01T00:00:00Z',
     updatedAt: '2023-01-01T00:00:00Z',
   },

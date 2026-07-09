@@ -14,7 +14,7 @@ import { extractApiPath } from './route-utils';
  * Forwards log streaming requests to the backend and passes through the SSE response.
  *
  * Works for:
- * - /api/namespaces/{namespace}/workloads/{workload_id}/logs/stream
+ * - /api/projects/{project}/workloads/{workload_id}/logs/stream
  */
 async function streamingLogsHandler(req: NextRequest) {
   try {

@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse
 from kubernetes.client.exceptions import ApiException
 from loguru import logger
 
+from api_common.schemas import ErrorResponse
+
 
 def api_exception_handler(request: Request, exc: ApiException) -> JSONResponse:
     """
@@ -32,8 +34,8 @@ def api_exception_handler(request: Request, exc: ApiException) -> JSONResponse:
 
     return JSONResponse(
         status_code=status_code,
-        content={
-            "detail": f"Kubernetes API error: {exc.reason}",
-            "additional_info": body,
-        },
+        content=ErrorResponse(
+            detail=f"Kubernetes API error: {exc.reason}",
+            additional_info=body,
+        ).model_dump(by_alias=True, exclude_none=True),
     )

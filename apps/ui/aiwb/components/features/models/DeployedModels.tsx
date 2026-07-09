@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useDisclosure } from '@heroui/react';
 import {
   IconExternalLink,
   IconEye,
@@ -16,17 +15,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
-import { getModels } from '@/lib/app/models';
+import { listAllProjectFineTunedModels } from '@/lib/app/models';
 import {
   AIM_CANONICAL_NAME_ANNOTATION,
-  AIM_MODEL_NAME_LABEL,
+  AIM_DISPLAY_NAME_ANNOTATION,
   AIM_MODEL_WORKLOAD_ID_LABEL,
+  AIMModel,
   FINE_TUNED_LABEL,
+  NAMESPACE_AIM_MODEL_LABEL,
 } from '@/types/aims';
-import { AIMModelResponse } from '@/types/models';
-import { deleteWorkload, listWorkloads } from '@/lib/app/workloads';
+import { listAllWorkloads } from '@/lib/app/workloads';
 
 import { getFilteredData } from '@amdenterpriseai/utils/app';
 import { getWorkloadStatusVariants } from '@/utils/workloads';
@@ -42,28 +42,34 @@ import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
 import { Model } from '@/types/models';
 import { Workload } from '@/types/workloads';
 
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
 import {
+  ActionsToolbar,
   ChipDisplay,
+  ClientSideDataTable,
+  ConfirmationModal,
   DateDisplay,
   NoDataDisplay,
   StatusDisplay,
 } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
 
 import { useProject } from '@/contexts/ProjectContext';
 import {
-  fetchProfilesForServices,
-  getAimClusterModels,
-  getAimServices,
+  aimParser,
   mapAIMServiceStatusToWorkloadStatus,
   resolveAIMServiceDisplay,
-  undeployAim,
+  resolveBaseModelSource,
 } from '@/lib/app/aims';
-import type { AIMServiceProfile } from '@/lib/app/aims';
-import { ModelProfileSummary } from '@/components/shared/ModelProfileSummary';
-import { AIMService, ParsedAIM } from '@/types/aims';
+import { useProfileSpecsForServices } from '@/hooks/useProfileSpecsForServices';
+import {
+  deleteInferenceDeployment,
+  listAllInferenceDeployments,
+} from '@/lib/app/inference';
+import { useInferenceModelsByName } from '@/hooks/useInferenceModelsByName';
+import {
+  ModelProfileSummary,
+  toProfileSummaryFields,
+} from '@/components/shared/ModelProfileSummary';
+import { AIMService } from '@/types/aims';
 import { SUBMITTER_ANNOTATION_KEY } from '@/components/features/secrets/constants';
 import AIMConnectModal from './AIMConnectModal';
 
@@ -100,7 +106,8 @@ const convertFilterValueMap = (
 };
 
 const DeployedModels: React.FC = ({}) => {
-  const { t } = useTranslation(['workloads', 'models', 'common']);
+  const { t } = useTranslation(['workloads', 'common']);
+  const { t: tModels } = useTranslation('models');
   const { toast } = useSystemToast();
   const router = useRouter();
   const { activeProject, projectPath, projectUrl } = useProject();
@@ -132,10 +139,9 @@ const DeployedModels: React.FC = ({}) => {
     queryFn: async () => {
       if (!activeProject) return [];
 
-      const response = await listWorkloads(activeProject, {
+      return await listAllWorkloads(activeProject, {
         type: [WorkloadType.INFERENCE],
       });
-      return response.data;
     },
     refetchInterval: 30000,
     enabled: !!activeProject,
@@ -148,38 +154,58 @@ const DeployedModels: React.FC = ({}) => {
     refetch: refetchAimServices,
   } = useQuery<AIMService[]>({
     queryKey: ['project', activeProject, 'aim-services'],
-    queryFn: () => getAimServices(activeProject!),
+    queryFn: () => listAllInferenceDeployments(activeProject!),
     refetchInterval: 30000,
     enabled: !!activeProject,
   });
 
-  const { data: aimServiceProfiles = new Map<string, AIMServiceProfile>() } =
-    useQuery({
-      queryKey: [
-        'project',
-        activeProject,
-        'aim-service-profiles',
-        allAimServices.map((s) => s.id),
-      ],
-      queryFn: () => fetchProfilesForServices(allAimServices),
-      enabled: allAimServices.length > 0,
-    });
-
   // Merge AIM Services with Workloads to create an aggregated list for the table
   const allDeployments = useMemo(() => {
     if (!allWorkloads || !allAimServices) return [];
-    const aimWorkloads: Workload[] = allAimServices.map((aim) => ({
-      id: aim.id,
-      displayName: aim.metadata.name,
-      name: aim.metadata.name,
-      type: WorkloadType.INFERENCE,
-      status: mapAIMServiceStatusToWorkloadStatus(aim.status.status),
-      createdAt: aim.metadata.creationTimestamp,
-      createdBy: aim.metadata.annotations[SUBMITTER_ANNOTATION_KEY],
-      updatedAt: aim.metadata.creationTimestamp,
-      aimId: aim.status.resolvedModel?.name,
-    })) as Workload[];
-    return [...allWorkloads, ...aimWorkloads];
+    // Filter out AIM services with null ids — they cannot be de-duplicated
+    // against workloads and would silently collapse into one row under the null key.
+    const aimWorkloads: Workload[] = allAimServices
+      .filter((aim): aim is typeof aim & { id: string } => aim.id !== null)
+      .map((aim) => ({
+        id: aim.id,
+        // Prefer the user-entered deploy name over the K8s resource name.
+        displayName:
+          aim.metadata.annotations?.[AIM_DISPLAY_NAME_ANNOTATION] ??
+          aim.metadata.name,
+        name: aim.metadata.name,
+        type: WorkloadType.INFERENCE,
+        status: mapAIMServiceStatusToWorkloadStatus(aim.status.status),
+        createdAt: aim.metadata.creationTimestamp,
+        createdBy: aim.metadata.annotations[SUBMITTER_ANNOTATION_KEY],
+        updatedAt: aim.metadata.creationTimestamp,
+        aimId: aim.spec.model?.name,
+      }));
+
+    // listWorkloads and AIM services can refer to the same deployment id.
+    // Prefer AIM-derived fields for overlaps to avoid duplicate rows/keys.
+    const deploymentsById = new Map<string, Workload>();
+    allWorkloads.forEach((workload) => {
+      deploymentsById.set(workload.id, workload);
+    });
+
+    aimWorkloads.forEach((aimWorkload) => {
+      const existing = deploymentsById.get(aimWorkload.id);
+      if (existing) {
+        deploymentsById.set(aimWorkload.id, {
+          ...existing,
+          ...aimWorkload,
+          // Spreading aimWorkload above would overwrite the workload row's
+          // resolved name with the AIM name; restore the canonical values.
+          displayName: existing.displayName,
+          name: existing.name,
+        });
+        return;
+      }
+
+      deploymentsById.set(aimWorkload.id, aimWorkload);
+    });
+
+    return Array.from(deploymentsById.values());
   }, [allWorkloads, allAimServices]);
 
   const workloads = useMemo(() => {
@@ -188,45 +214,89 @@ const DeployedModels: React.FC = ({}) => {
     return filteredWorkloads;
   }, [allDeployments, filters]);
 
-  const hasAimWorkloads = useMemo(
-    () => workloads.some((w) => w.aimId),
-    [workloads],
-  );
-
   const hasFinetuningWorkloads = useMemo(
     () => workloads.some((w) => w.type === WorkloadType.FINE_TUNING),
     [workloads],
   );
 
-  const {
-    data: aims = [],
-    isLoading: isAimsLoading,
-    isRefetching: isAimsRefetching,
-    refetch: refetchAims,
-  } = useQuery<ParsedAIM[]>({
-    queryKey: ['project', activeProject, 'aim-catalog'],
-    queryFn: () => getAimClusterModels(activeProject!),
-    enabled: !!activeProject && hasAimWorkloads,
-  });
+  const hasAimWorkloads = workloads.some((w) => w.aimId);
 
+  // Cluster-catalog models are only needed to enrich the display of cluster-scoped AIM
+  // services. Namespace-scoped AIMModel services (fine-tuned and custom-imported) aren't
+  // in that catalog — resolveAIMServiceDisplay already falls back to their annotations,
+  // so we skip those names.
+  const clusterAimNames = useMemo(
+    () =>
+      allAimServices
+        .filter(
+          (s) =>
+            s.metadata.labels?.[FINE_TUNED_LABEL] !== 'true' &&
+            s.metadata.labels?.[NAMESPACE_AIM_MODEL_LABEL] !== 'true',
+        )
+        .map((s) => s.spec.model?.name)
+        .filter((name): name is string => !!name),
+    [allAimServices],
+  );
   const {
-    data: models = [],
+    byName: clusterAimsByName,
+    isLoading: isAimsLoading,
+    isFetching: isAimsFetching,
+  } = useInferenceModelsByName(clusterAimNames);
+  const aims = useMemo(
+    () => Array.from(clusterAimsByName.values()).map((m) => aimParser(m)),
+    [clusterAimsByName],
+  );
+
+  // Raw FT model CRs — kept around so we can derive both the simplified
+  // `Model[]` shape consumed downstream AND each model's `status.aimId` for
+  // the per-aimId profile fetch.
+  const {
+    data: fineTunedModelCrs = [],
     isLoading: isModelsLoading,
     isRefetching: isModelsRefetching,
     refetch: refetchModels,
-  } = useQuery<Model[]>({
-    queryKey: ['project', activeProject, 'custom-models'],
-    queryFn: async () => {
-      const data = await getModels(activeProject!);
-      return data.map((item: AIMModelResponse) => ({
+  } = useQuery<AIMModel[]>({
+    queryKey: ['project', activeProject, 'fine-tuned-models'],
+    queryFn: () => listAllProjectFineTunedModels(activeProject!),
+    enabled: !!activeProject && (hasFinetuningWorkloads || hasAimWorkloads),
+  });
+
+  const models: Model[] = useMemo(
+    () =>
+      fineTunedModelCrs.map((item) => ({
         id: item.metadata.labels?.[AIM_MODEL_WORKLOAD_ID_LABEL],
         name: item.metadata.name,
-        canonicalName: item.spec?.modelSources?.[0]?.modelId || '',
+        canonicalName: resolveBaseModelSource(item)?.modelId || '',
         resourceName: item.metadata.name,
-      }));
-    },
-    enabled: !!activeProject && hasFinetuningWorkloads,
+      })),
+    [fineTunedModelCrs],
+  );
+
+  // Profile lookup map for the row-level summary (metric / gpu / precision).
+  // Wait for both upstream model fetches to settle before deriving aimIds —
+  // otherwise each per-name model landing would change the array and
+  // trigger a superseding profile fetch (waterfall).
+  const isUpstreamLoading = isAimsLoading || isModelsLoading;
+  const aimIds = isUpstreamLoading
+    ? []
+    : [
+        ...Array.from(clusterAimsByName.values()).map((m) => m.status?.aimId),
+        ...fineTunedModelCrs.map((m) => m.status?.aimId),
+      ].filter((id): id is string => !!id);
+  const { specByName: profileSpecByName } = useProfileSpecsForServices({
+    aimIds,
+    project: activeProject,
   });
+
+  // BaseDataTable caches cell renders keyed by row reference (see the
+  // comment in `apps/ui/shared/components/src/DataTable/BaseDataTable.tsx`).
+  // The DISPLAY_NAME renderer closes over `profileSpecByName`, so when the
+  // profile fetch resolves we mint new row references to force the table to
+  // re-invoke the renderer with the now-populated map.
+  const tableRows = useMemo(
+    () => workloads.map((w) => ({ ...w })),
+    [workloads, profileSpecByName],
+  );
 
   useEffect(() => {
     if (workloadsError) {
@@ -238,10 +308,13 @@ const DeployedModels: React.FC = ({}) => {
     }
   }, [workloadsError, toast, t]);
 
-  const { mutate: deleteWorkloadMutated, isPending: isDeletePending } =
+  const { mutate: deleteAimServiceMutated, isPending: isDeletePending } =
     useMutation({
-      mutationFn: (id: string) => deleteWorkload(id, activeProject!),
+      mutationFn: (id: string) => deleteInferenceDeployment(activeProject!, id),
       onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: ['project', activeProject, 'aim-services'],
+        });
         queryClient.invalidateQueries({
           queryKey: ['project', activeProject, 'workloads'],
         });
@@ -254,80 +327,28 @@ const DeployedModels: React.FC = ({}) => {
     });
 
   const {
-    mutate: deleteAimServiceMutated,
-    isPending: isAIMServiceDeletePending,
-  } = useMutation({
-    mutationFn: (id: string) => undeployAim(activeProject!, id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['project', activeProject, 'aim-services'],
-      });
-      toast.success(t('list.actions.delete.notification.success'));
-      onDeleteWorkloadModalClose();
-    },
-    onError: (_) => {
-      toast.error(t('list.actions.delete.notification.error'));
-    },
-  });
-
-  const {
     isOpen: isDeleteWorkloadModalOpen,
     onOpen: onDeleteWorkloadModalOpen,
     onClose: onDeleteWorkloadModalClose,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isConnectModalOpen,
     onOpen: onConnectModalOpen,
     onClose: onConnectModalClose,
-  } = useDisclosure();
+  } = useOverlayState();
 
-  // TODO(EAI-6064): The fine-tuned branch below fakes a ParsedAIM because
-  // AIMConnectModal asks for one but only uses two fields off it
-  // (deployedService + canonicalName). When that ticket lands and the modal
-  // takes (service, canonicalName) directly, delete the fake-ParsedAIM
-  // construction and pass `matchingService` + canonical-name annotation
-  // (`AIM_CANONICAL_NAME_ANNOTATION`) straight through.
-  const aimForConnectModal = useMemo((): ParsedAIM | undefined => {
+  const connectInfo = useMemo(() => {
     if (!workloadForConnect?.aimId || !allAimServices) return undefined;
-    const matchingService = allAimServices.find(
-      (s) => s.id === workloadForConnect.id,
-    );
-
-    // Cluster-scoped deployment: catalog has the parsed AIM
-    const baseAim = aims?.find((a) => a.model === workloadForConnect.aimId);
-    if (baseAim) {
-      return {
-        ...baseAim,
-        deployedService: matchingService ?? baseAim.deployedService,
-      };
-    }
-
-    // Fine-tuned (namespace-scoped) deployment: not in cluster catalog.
-    // Read the canonical name from the AIMService annotation.
-    if (!matchingService) return undefined;
-    const canonicalName =
-      matchingService.metadata.annotations?.[AIM_CANONICAL_NAME_ANNOTATION] ??
-      '';
+    const service = allAimServices.find((s) => s.id === workloadForConnect.id);
+    if (!service) return undefined;
+    const modelName = service.status?.resolvedModel?.name;
     return {
-      model: workloadForConnect.aimId,
-      imageReference: '',
-      annotations: {},
-      description: { short: '', full: '' },
-      title:
-        matchingService.metadata.annotations?.[AIM_MODEL_NAME_LABEL] ??
-        matchingService.metadata.name,
-      imageVersion: '',
-      canonicalName,
-      tags: [],
-      status: matchingService.status.status,
-      workloadStatuses: [],
-      isPreview: false,
-      isHfTokenRequired: false,
-      deployedService: matchingService,
-      deployedServices: [matchingService],
+      serviceId: service.id ?? undefined,
+      endpoints: service.endpoints,
+      modelName,
     };
-  }, [workloadForConnect, aims, allAimServices]);
+  }, [workloadForConnect, allAimServices]);
 
   const columns: TableColumns<WorkloadsTableFields | null> = [
     {
@@ -375,21 +396,23 @@ const DeployedModels: React.FC = ({}) => {
           ? allAimServices.find((service) => service.id === item.id)
           : undefined;
       const profile = aimService
-        ? aimServiceProfiles.get(String(aimService.id))
+        ? toProfileSummaryFields(aimService, profileSpecByName)
         : undefined;
       const profileSummary = (
-        <ModelProfileSummary profile={profile ?? null} t={t} />
+        <ModelProfileSummary profile={profile ?? null} t={tModels} />
       );
 
       if (item.aimId && allAimServices && aims) {
         if (aimService) {
           const displayInfo = resolveAIMServiceDisplay(aimService, aims);
-          // Fine-tuned: show the user-given name (title); cluster catalog: show canonical + version.
-          const isFineTuned =
-            aimService.metadata.labels?.[FINE_TUNED_LABEL] === 'true';
-          const displayName = isFineTuned
-            ? displayInfo.title
-            : `${displayInfo.canonicalName} ${displayInfo.imageVersion ? `(${displayInfo.imageVersion})` : ''}`.trim();
+          const canonicalName =
+            `${displayInfo.canonicalName} ${displayInfo.imageVersion ? `(${displayInfo.imageVersion})` : ''}`.trim();
+          // Prefer the API display name; fall back to canonical + version when
+          // the API only echoes the K8s resource name (displayName === name).
+          const displayName =
+            item.displayName && item.displayName !== item.name
+              ? item.displayName
+              : canonicalName;
           return (
             <div className="flex flex-col gap-1">
               <span>{displayName}</span>
@@ -567,8 +590,10 @@ const DeployedModels: React.FC = ({}) => {
   const handleRefresh = () => {
     refetchWorkloads();
     refetchModels();
-    refetchAims();
     refetchAimServices();
+    // Cluster-catalog models are fetched via per-name useQueries entries; nuking
+    // the shared key invalidates every entry so a refetch picks up changes.
+    queryClient.invalidateQueries({ queryKey: ['inferenceModel'] });
   };
 
   const isDataLoading =
@@ -580,8 +605,8 @@ const DeployedModels: React.FC = ({}) => {
   const isFetching =
     isWorkloadsRefetching ||
     isModelsRefetching ||
-    isAimsRefetching ||
-    isAimServicesRefetching;
+    isAimServicesRefetching ||
+    isAimsFetching;
 
   return (
     <div className="flex flex-col w-full" data-testid="deployed-models">
@@ -593,7 +618,7 @@ const DeployedModels: React.FC = ({}) => {
         updatedTimestamp={dataUpdatedAt}
       />
       <ClientSideDataTable
-        data={workloads}
+        data={tableRows}
         className="flex-1 overflow-y-auto"
         columns={columns}
         rowActions={actions}
@@ -608,9 +633,7 @@ const DeployedModels: React.FC = ({}) => {
       <ConfirmationModal
         isOpen={isDeleteWorkloadModalOpen}
         onConfirm={() =>
-          workloadBeingSelected?.aimId
-            ? deleteAimServiceMutated(workloadBeingSelected?.id || '')
-            : deleteWorkloadMutated(workloadBeingSelected?.id || '')
+          deleteAimServiceMutated(workloadBeingSelected?.id || '')
         }
         description={t(
           'customModels.list.actions.undeploy.confirmation.description',
@@ -622,7 +645,7 @@ const DeployedModels: React.FC = ({}) => {
         title={t('customModels.list.actions.undeploy.confirmation.title', {
           ns: 'models',
         })}
-        loading={isAIMServiceDeletePending || isDeletePending}
+        loading={isDeletePending}
         onClose={onDeleteWorkloadModalClose}
         confirmationButtonColor="danger"
       />
@@ -634,11 +657,11 @@ const DeployedModels: React.FC = ({}) => {
             setWorkloadForConnect(undefined);
           }
         }}
-        aim={aimForConnectModal}
-        onConfirmAction={(aim) => {
-          const serviceId = aim.deployedService?.id;
-          if (serviceId)
-            window.open(projectUrl(`/chat?workload=${serviceId}`), '_blank');
+        serviceId={connectInfo?.serviceId}
+        endpoints={connectInfo?.endpoints}
+        modelName={connectInfo?.modelName}
+        onChatRequested={(serviceId) => {
+          window.open(projectUrl(`/chat?workload=${serviceId}`), '_blank');
           onConnectModalClose();
           setWorkloadForConnect(undefined);
         }}

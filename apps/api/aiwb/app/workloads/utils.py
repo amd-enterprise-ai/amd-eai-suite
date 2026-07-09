@@ -4,7 +4,8 @@
 
 import asyncio
 import time
-from urllib.parse import urljoin
+from typing import TYPE_CHECKING
+from urllib.parse import urljoin, urlparse
 
 import yaml
 from kubernetes.client import ApiException, V1DeploymentStatus, V1JobStatus
@@ -13,7 +14,6 @@ from loguru import logger
 from ..config import CLUSTER_HOST, SUBMITTER_ANNOTATION
 from ..dispatch.kube_client import KubernetesClient, get_dynamic_client
 from ..dispatch.utils import sanitize_label_value
-from ..namespaces.schemas import ResourceType
 from .constants import (
     CHART_ID_LABEL,
     DATASET_ID_LABEL,
@@ -22,7 +22,7 @@ from .constants import (
     DEPLOYMENT_COND_REPLICA_FAILURE,
     DEPLOYMENT_REASON_DEADLINE_EXCEEDED,
     DEPLOYMENT_RESOURCE,
-    DISPLAY_NAME_LABEL,
+    DISPLAY_NAME_ANNOTATION,
     JOB_COND_COMPLETE,
     JOB_COND_FAILED,
     JOB_COND_FAILURE_TARGET,
@@ -34,9 +34,13 @@ from .constants import (
 from .enums import WorkloadStatus
 from .models import Workload
 
+if TYPE_CHECKING:
+    # Imported under TYPE_CHECKING to avoid circular import with schemas.py at runtime.
+    from .schemas import WorkloadResourceType
 
-def get_resource_type(manifest: str) -> ResourceType:
-    """Extract the ResourceType from an AIWB workload manifest.
+
+def get_resource_type(manifest: str) -> "WorkloadResourceType":
+    """Extract the WorkloadResourceType from an AIWB workload manifest.
 
     AIWB chart-based workloads always contain either a Deployment or a Job as the
     primary resource — the Helm chart guarantees this.
@@ -44,13 +48,16 @@ def get_resource_type(manifest: str) -> ResourceType:
     Raises:
         ValueError: If the manifest is empty, malformed, or lacks a Deployment/Job.
     """
+    # Local import to avoid circular dependency with schemas.py at runtime.
+    from .schemas import WorkloadResourceType  # noqa: PLC0415
+
     try:
         for doc in yaml.safe_load_all(manifest):
             if not doc or not isinstance(doc, dict):
                 continue
             kind = doc.get("kind")
             if kind in {DEPLOYMENT_RESOURCE, JOB_RESOURCE}:
-                return ResourceType(kind)
+                return WorkloadResourceType(kind)
     except yaml.YAMLError as e:
         raise ValueError(f"Malformed manifest YAML: {e}") from e
     raise ValueError("Manifest has no Deployment or Job")
@@ -180,7 +187,6 @@ async def apply_manifest(
         if kind in {DEPLOYMENT_RESOURCE, JOB_RESOURCE}:
             labels[CHART_ID_LABEL] = str(workload.chart_id)
             labels[WORKLOAD_TYPE_LABEL] = sanitize_label_value(str(workload.type))
-            labels[DISPLAY_NAME_LABEL] = sanitize_label_value(workload.display_name)
             if workload.dataset_id:
                 labels[DATASET_ID_LABEL] = str(workload.dataset_id)
             if extra_labels:
@@ -191,6 +197,8 @@ async def apply_manifest(
         if "annotations" not in doc["metadata"]:
             doc["metadata"]["annotations"] = {}
         doc["metadata"]["annotations"][SUBMITTER_ANNOTATION] = submitter
+        if kind in {DEPLOYMENT_RESOURCE, JOB_RESOURCE}:
+            doc["metadata"]["annotations"][DISPLAY_NAME_ANNOTATION] = workload.display_name
 
         name = doc["metadata"].get("name", "unknown")
         logger.debug(f"Applying {kind}/{name} with workload-id {workload.id}")
@@ -250,19 +258,16 @@ def get_workload_internal_url(workload_name: str, namespace: str) -> str:
 
 
 def get_workload_host_from_HTTPRoute_manifest(*, manifest: str, cluster_host: str = CLUSTER_HOST) -> str | None:
-    """Extract external host URL from HTTPRoute manifest.
+    """Extract the external URL from an HTTPRoute manifest, or None if undeterminable.
 
-    Args:
-        manifest: YAML manifest string (may contain multiple documents)
-        cluster_host: Base URL of the cluster to prepend to the path (should include http:// or https://)
-
-    Returns:
-        Full URL if HTTPRoute with PathPrefix is found, None otherwise
+    The host is taken from the route's own ``spec.hostnames`` when present, so the
+    advertised URL always matches the host the route is actually served on
+    (workspaces land on ``workspaces.<domain>`` once pinned by ``apply_manifest``;
+    anything on ``workloads.<domain>`` — e.g. inference — keeps that host). A pinned
+    hostname only replaces the host portion of ``cluster_host``; its scheme and port
+    are preserved so non-default ports (e.g. local ``http://localhost:8080``) survive.
+    Routes that declare no hostnames fall back to ``cluster_host`` verbatim.
     """
-    if not cluster_host:
-        logger.warning("Cluster host is not set - external URLs will not be available")
-        return None
-
     try:
         docs = list(yaml.safe_load_all(manifest))
     except yaml.YAMLError as e:
@@ -276,6 +281,21 @@ def get_workload_host_from_HTTPRoute_manifest(*, manifest: str, cluster_host: st
         if doc.get("kind") != "HTTPRoute":
             continue
 
+        # Prefer the route's own pinned hostname; fall back to the configured host.
+        # Swap only the host of cluster_host, keeping its scheme and port so a pinned
+        # hostname stays reachable on non-default ports (e.g. local http://localhost:8080).
+        hostnames = doc.get("spec", {}).get("hostnames") or []
+        if hostnames:
+            parsed = urlparse(cluster_host)
+            scheme = parsed.scheme or "https"
+            netloc = f"{hostnames[0]}:{parsed.port}" if parsed.port else hostnames[0]
+            base_url = f"{scheme}://{netloc}"
+        else:
+            base_url = cluster_host
+        if not base_url:
+            logger.warning("No route hostname and cluster host is not set - external URL unavailable")
+            return None
+
         for rule in doc.get("spec", {}).get("rules", []):
             for match in rule.get("matches", []):
                 path = match.get("path", {})
@@ -283,7 +303,7 @@ def get_workload_host_from_HTTPRoute_manifest(*, manifest: str, cluster_host: st
                 if path.get("type") == "PathPrefix":
                     path_value = path.get("value")
                     if path_value:
-                        return urljoin(cluster_host, path_value)
+                        return urljoin(base_url, path_value)
 
     logger.warning("Could not determine external URL from HTTPRoute manifest: no PathPrefix found")
     return None

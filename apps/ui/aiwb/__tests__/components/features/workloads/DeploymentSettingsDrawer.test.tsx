@@ -7,10 +7,10 @@ import { vi, Mock } from 'vitest';
 
 import { DeploymentSettingsDrawer } from '@/components/features/workloads/DeploymentSettingsDrawer';
 import {
-  updateAimScalingPolicy,
   createAimScalingPolicyConfig,
   DEFAULT_AUTOSCALING,
 } from '@/lib/app/aims';
+import { updateInferenceScaling } from '@/lib/app/inference';
 import wrapper from '@/__tests__/ProviderWrapper';
 
 vi.mock('next-i18next', () => ({
@@ -43,7 +43,6 @@ const mockAutoScalingConfig = {
 };
 
 vi.mock('@/lib/app/aims', () => ({
-  updateAimScalingPolicy: vi.fn(),
   createAimScalingPolicyConfig: vi.fn(() => mockAutoScalingConfig),
   AIM_MAX_REPLICAS: 30,
   DEFAULT_AUTOSCALING: {
@@ -54,6 +53,10 @@ vi.mock('@/lib/app/aims', () => ({
     targetType: 'AverageValue',
     targetValue: 1,
   },
+}));
+
+vi.mock('@/lib/app/inference', () => ({
+  updateInferenceScaling: vi.fn(),
 }));
 
 const mockToast = {
@@ -144,7 +147,7 @@ describe('WorkloadSettingsDrawer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (updateAimScalingPolicy as Mock).mockResolvedValue(undefined);
+    (updateInferenceScaling as Mock).mockResolvedValue(undefined);
   });
 
   describe('Rendering', () => {
@@ -278,7 +281,7 @@ describe('WorkloadSettingsDrawer', () => {
           targetType: DEFAULT_AUTOSCALING.targetType,
           targetValue: DEFAULT_AUTOSCALING.targetValue,
         });
-        expect(updateAimScalingPolicy).toHaveBeenCalledWith(
+        expect(updateInferenceScaling).toHaveBeenCalledWith(
           'test-namespace',
           'test-workload-123',
           {
@@ -306,7 +309,7 @@ describe('WorkloadSettingsDrawer', () => {
       });
 
       // Should not call updateWorkloadScaling without workloadId
-      expect(updateAimScalingPolicy).not.toHaveBeenCalled();
+      expect(updateInferenceScaling).not.toHaveBeenCalled();
     });
 
     it('calls onClose after successful submission', async () => {
@@ -349,27 +352,41 @@ describe('WorkloadSettingsDrawer', () => {
     });
 
     it('handles API error gracefully', async () => {
-      (updateAimScalingPolicy as Mock).mockRejectedValue(
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      (updateInferenceScaling as Mock).mockRejectedValue(
         new Error('API Error'),
       );
 
-      render(
-        <DeploymentSettingsDrawer
-          isOpen={true}
-          onClose={mockOnClose}
-          namespace="test-namespace"
-          id="test-workload-123"
-        />,
-        { wrapper },
-      );
+      try {
+        render(
+          <DeploymentSettingsDrawer
+            isOpen={true}
+            onClose={mockOnClose}
+            namespace="test-namespace"
+            id="test-workload-123"
+          />,
+          { wrapper },
+        );
 
-      const submitButton = screen.getByTestId('submit-button');
-      fireEvent.click(submitButton);
+        const submitButton = screen.getByTestId('submit-button');
+        fireEvent.click(submitButton);
 
-      // Should not call onClose on error
-      await waitFor(() => {
-        expect(mockOnClose).not.toHaveBeenCalled();
-      });
+        await waitFor(() => {
+          expect(mockToast.error).toHaveBeenCalledWith(
+            'notifications.updateError',
+          );
+          expect(mockOnClose).not.toHaveBeenCalled();
+        });
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          'Failed to update workload scaling:',
+          expect.any(Error),
+        );
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
     });
   });
 

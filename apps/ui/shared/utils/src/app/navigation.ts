@@ -17,8 +17,6 @@ import {
 } from '@tabler/icons-react';
 import React from 'react';
 
-import { Session } from 'next-auth';
-
 import { SidebarItem, UserRole } from '@amdenterpriseai/types';
 
 export const airmMenuItems: SidebarItem[] = [
@@ -152,41 +150,4 @@ export const getFirstAccessibleRoute = (
     );
   });
   return accessibleItem?.href;
-};
-
-interface AuthRedirectResult {
-  redirect: {
-    destination: string;
-    permanent: boolean;
-  };
-}
-
-/**
- * Determines the redirect destination based on authentication and roles.
- * - Not logged in: redirects to '/'
- * - Logged in: redirects to first accessible route from items
- * Returns null if no redirect is needed.
- */
-export const getAuthRedirect = (
-  session: Session | null,
-  items: SidebarItem[],
-): AuthRedirectResult | null => {
-  // Not authenticated
-  if (!session?.user?.email || !session?.accessToken) {
-    return {
-      redirect: { destination: '/', permanent: false },
-    };
-  }
-
-  // Authenticated - find first accessible route
-  const userRoles = session.user.roles ?? [];
-  const destination = getFirstAccessibleRoute(items, userRoles);
-
-  if (destination) {
-    return {
-      redirect: { destination, permanent: false },
-    };
-  }
-
-  return null;
 };

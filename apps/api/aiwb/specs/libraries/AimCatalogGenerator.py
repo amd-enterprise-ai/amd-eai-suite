@@ -14,7 +14,7 @@ For each model, it creates a sequence of tests:
 4. Verify metrics are available
 5. Undeploy the AIM
 
-Models are auto-discovered from the cluster's /v1/cluster/aims/models endpoint,
+Models are auto-discovered from the cluster's /v1/inference/models endpoint,
 filtered to only Ready AIMs. An optional plain text name file can limit which
 models are tested (one name per line, matched against model_name).
 """
@@ -263,65 +263,33 @@ class AimCatalogGenerator:
         """
         Get a bearer token for API authentication.
 
-        Tries in order:
-        1. AIWB_API_TOKEN environment variable
-        2. kubectl exec-based OIDC token from kubeconfig
+        Delegates to KubeconfigAuth, which already understands every credential
+        source the rest of the suite uses: silodev user passthrough, in-cluster
+        KEYCLOAK_* env vars, or password grant from the local kubeconfig.
+
+        ``AIWB_API_TOKEN`` still takes precedence as a manual override.
 
         Returns:
-            Token string or None if no auth available
+            Token string or None if no auth available.
         """
-        # Explicit token from environment
         token = os.environ.get("AIWB_API_TOKEN")
         if token:
             logger.debug("Using AIWB_API_TOKEN env var for auth")
             return token
 
-        # Extract token from kubectl OIDC exec-based auth
         try:
-            import json  # noqa: PLC0415
+            from KubeconfigAuth import KubeconfigAuth  # noqa: PLC0415
 
-            # Get the exec-based credential from kubeconfig
-            result = subprocess.run(
-                ["kubectl", "config", "view", "--minify", "-o", "jsonpath={.users[0].user.exec}"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if result.returncode != 0 or not result.stdout.strip():
-                return None
-
-            exec_config = json.loads(result.stdout)
-            command = exec_config.get("command", "")
-            args = exec_config.get("args", [])
-
-            if not command or "oidc-login" not in str(args):
-                return None
-
-            # Run the OIDC login command to get a token
-            token_result = subprocess.run(
-                [command, *args],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if token_result.returncode != 0:
-                logger.debug(f"OIDC token acquisition failed: {token_result.stderr}")
-                return None
-
-            token_data = json.loads(token_result.stdout)
-            token = token_data.get("status", {}).get("token")
-            if token:
-                logger.debug("Acquired OIDC token from kubectl config")
-            return token
+            return KubeconfigAuth().get_authorization_token()
         except Exception as e:
-            logger.debug(f"Could not acquire auth token: {e}")
+            logger.debug(f"Could not acquire auth token via KubeconfigAuth: {e}")
             return None
 
     def _load_models_from_api(self, name_filter=None):
         """
         Discover AIM models from the cluster API.
 
-        Calls GET {base_url}/v1/cluster/aims/models and filters to only Ready AIMs.
+        Calls GET {base_url}/v1/inference/models and filters to only Ready AIMs.
         Authenticates using kubectl OIDC token if available.
 
         Args:
@@ -336,7 +304,7 @@ class AimCatalogGenerator:
         import requests  # noqa: PLC0415
 
         base_url = self._resolve_api_url()
-        url = f"{base_url}/v1/cluster/aims/models"
+        url = f"{base_url}/v1/inference/models"
 
         logger.info(f"Discovering AIMs from cluster API: {url}")
 
@@ -439,7 +407,7 @@ class AimCatalogGenerator:
         so it may contain both top-level convenience fields and nested structures.
 
         Args:
-            aim: Dict from the /v1/cluster/aims/models API response
+            aim: Dict from the /v1/inference/models API response
 
         Returns:
             Dict with keys: model_name, image_name, docker_image, gpu_count, requires_hf_token
@@ -460,7 +428,8 @@ class AimCatalogGenerator:
         # image_name: short name extracted from docker image or resource_name
         image_name = self._extract_image_name(docker_image, resource_name)
 
-        # gpu_count: from recommendedDeployments
+        # gpu_count: from recommendedDeployments on AIMClusterModel.status. The
+        # primary AIMClusterProfile could be a better source once exposed.
         recommended = model_meta.get("recommendedDeployments", model_meta.get("recommended_deployments", []))
         gpu_count = self._extract_gpu_count(recommended)
 
@@ -748,62 +717,59 @@ class AimCatalogGenerator:
                 "No Ready AIMs discovered from cluster API. Ensure the cluster has AIM models with Ready status."
             )
 
-        # Only generate tests for the main suite, not for sub-suites
-        if data.parent is None:
-            logger.info(f"Generating test cases for {len(self.models)} AIM models")
+        logger.info(f"Generating test cases for {len(self.models)} AIM models")
 
-            # Compute max GPU count across all models so the project quota
-            # can be set once to cover the largest model in the catalog.
-            # Quota is a minimum guarantee — other workloads get preempted.
-            max_gpu_count = max((m["gpu_count"] for m in self.models), default=1)
-            logger.info(f"Max GPU count across catalog: {max_gpu_count}")
+        # Compute max GPU count across all models so the project quota
+        # can be set once to cover the largest model in the catalog.
+        # Quota is a minimum guarantee — other workloads get preempted.
+        max_gpu_count = max((m["gpu_count"] for m in self.models), default=1)
+        logger.info(f"Max GPU count across catalog: {max_gpu_count}")
 
-            # Set as suite variable for use in deploy template
-            try:
-                from robot.libraries.BuiltIn import BuiltIn  # noqa: PLC0415
+        # Set as suite variable for use in deploy template
+        try:
+            from robot.libraries.BuiltIn import BuiltIn  # noqa: PLC0415
 
-                BuiltIn().set_suite_variable("${MAX_GPU_COUNT}", max_gpu_count)
-            except Exception:
-                logger.warn("Could not set MAX_GPU_COUNT suite variable")
+            BuiltIn().set_suite_variable("${MAX_GPU_COUNT}", max_gpu_count)
+        except Exception:
+            logger.warn("Could not set MAX_GPU_COUNT suite variable")
 
-            # Generate all test cases
-            self._generate_test_cases(data)
-            logger.info(f"Generated {len(data.tests)} test cases")
+        # Generate all test cases
+        self._generate_test_cases(data)
+        logger.info(f"Generated {len(data.tests)} test cases")
 
-            # Remove the placeholder test (it's no longer needed)
-            for test in list(data.tests):  # Create a copy to iterate safely
-                if "DYNAMIC_TEST_PLACEHOLDER" in [str(tag) for tag in test.tags]:
-                    data.tests.remove(test)
-                    logger.debug("Removed placeholder test")
-                    break
+        # Remove the placeholder test (it's no longer needed)
+        for test in list(data.tests):  # Create a copy to iterate safely
+            if "DYNAMIC_TEST_PLACEHOLDER" in [str(tag) for tag in test.tags]:
+                data.tests.remove(test)
+                logger.debug("Removed placeholder test")
+                break
 
-            # Apply tag filtering from Robot Framework variables
-            include_tags = self._get_variable(data, "INCLUDE_TAGS")
-            exclude_tags = self._get_variable(data, "EXCLUDE_TAGS")
+        # Apply tag filtering from Robot Framework variables
+        include_tags = self._get_variable(data, "INCLUDE_TAGS")
+        exclude_tags = self._get_variable(data, "EXCLUDE_TAGS")
 
-            # Check if tags need filtering (ignore None, ${None}, empty strings)
-            def is_valid_tag_filter(tag_value):
-                """Check if tag value is valid for filtering (not None, ${None}, or empty)."""
-                return tag_value and tag_value not in [None, "None", "${None}", ""]
+        # Check if tags need filtering (ignore None, ${None}, empty strings)
+        def is_valid_tag_filter(tag_value):
+            return tag_value and tag_value not in [None, "None", "${None}", ""]
 
-            has_include = is_valid_tag_filter(include_tags)
-            has_exclude = is_valid_tag_filter(exclude_tags)
+        has_include = is_valid_tag_filter(include_tags)
+        has_exclude = is_valid_tag_filter(exclude_tags)
 
-            if has_include or has_exclude:
-                tests_before = len(data.tests)
+        if has_include or has_exclude:
+            tests_before = len(data.tests)
 
-                if has_include:
-                    logger.info(f"Applying INCLUDE_TAGS filter: {include_tags}")
-                    data.filter(included_tags=include_tags)
+            if has_include:
+                logger.info(f"Applying INCLUDE_TAGS filter: {include_tags}")
+                data.filter(included_tags=include_tags)
 
-                if has_exclude:
-                    logger.info(f"Applying EXCLUDE_TAGS filter: {exclude_tags}")
-                    data.filter(excluded_tags=exclude_tags)
+            if has_exclude:
+                logger.info(f"Applying EXCLUDE_TAGS filter: {exclude_tags}")
+                data.filter(excluded_tags=exclude_tags)
 
-                tests_after = len(data.tests)
-                logger.info(f"Tag filtering: {tests_before} tests -> {tests_after} tests")
-            else:
-                logger.debug("No tag filtering applied (INCLUDE_TAGS and EXCLUDE_TAGS not set)")
+            tests_after = len(data.tests)
+            logger.info(f"Tag filtering: {tests_before} tests -> {tests_after} tests")
+        else:
+            logger.debug("No tag filtering applied (INCLUDE_TAGS and EXCLUDE_TAGS not set)")
 
     def _get_variable(self, suite_data, var_name):
         """

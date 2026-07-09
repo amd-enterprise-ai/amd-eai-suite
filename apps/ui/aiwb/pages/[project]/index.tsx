@@ -5,19 +5,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import type { GetServerSidePropsContext } from 'next/types';
-import { getServerSession } from 'next-auth';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 import {
-  fetchNamespaceGPUDeviceUtilization,
-  fetchNamespaceGPUMemoryUtilization,
-  fetchNamespaceStats,
-} from '@/lib/app/namespaces';
+  fetchProjectGPUDeviceUtilization,
+  fetchProjectGPUMemoryUtilization,
+  fetchProjectWorkloadStats,
+} from '@/lib/app/projects';
 
 import { displayHumanReadableMegaBytes } from '@amdenterpriseai/utils/app';
 import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
-import { authOptions } from '@amdenterpriseai/utils/server';
 
 import { TimeRangePeriod } from '@amdenterpriseai/types';
 import {
@@ -25,23 +23,21 @@ import {
   TimeSeriesAllocationData,
   TimeSeriesResponse,
 } from '@amdenterpriseai/types';
-import type { NamespaceStatsResponse } from '@/types/namespaces';
+import type { WorkloadStatsResponse } from '@/types/projects';
 
 import {
   ProjectWorkloadsStatsCard,
   NamespaceWorkloadsTable,
 } from '@/components/features/projects';
 import {
+  AiwbDocsPage,
+  aiwbDocumentationMapping,
   ChartTimeSelector,
+  RelevantDocs,
   StatsWithLineChart,
 } from '@amdenterpriseai/components';
 
 import { useProject } from '@/contexts/ProjectContext';
-import {
-  RelevantDocs,
-  AiwbDocsPage,
-  aiwbDocumentationMapping,
-} from '@amdenterpriseai/components';
 import {
   DOCS_WORKBENCH_BASE,
   WithDocumentationLink,
@@ -59,7 +55,7 @@ const ProjectDashboardPage: React.FC & WithDocumentationLink = () => {
   const queryClient = useQueryClient();
 
   const namespaceMetricsQueryKeyPrefix = useMemo(
-    () => ['namespace', activeProject, 'metrics'] as readonly string[],
+    () => ['project', activeProject, 'metrics'] as readonly string[],
     [activeProject],
   );
 
@@ -69,9 +65,9 @@ const ProjectDashboardPage: React.FC & WithDocumentationLink = () => {
   const currentTimePeriod = useRef<TimeRangePeriod>(TimeRangePeriod['15M']);
 
   const { data: namespaceStats, isLoading: isNamespaceStatsLoading } =
-    useQuery<NamespaceStatsResponse>({
-      queryKey: ['namespace', activeProject, 'stats'],
-      queryFn: () => fetchNamespaceStats(activeProject as string),
+    useQuery<WorkloadStatsResponse>({
+      queryKey: ['project', activeProject, 'stats'],
+      queryFn: () => fetchProjectWorkloadStats(activeProject as string),
       enabled: !!activeProject,
     });
 
@@ -88,7 +84,7 @@ const ProjectDashboardPage: React.FC & WithDocumentationLink = () => {
       },
     ],
     queryFn: () => {
-      return fetchNamespaceGPUMemoryUtilization(
+      return fetchProjectGPUMemoryUtilization(
         activeProject as string,
         timeRange.start,
         timeRange.end,
@@ -110,7 +106,7 @@ const ProjectDashboardPage: React.FC & WithDocumentationLink = () => {
       },
     ],
     queryFn: () => {
-      return fetchNamespaceGPUDeviceUtilization(
+      return fetchProjectGPUDeviceUtilization(
         activeProject as string,
         timeRange.start,
         timeRange.end,
@@ -162,10 +158,10 @@ const ProjectDashboardPage: React.FC & WithDocumentationLink = () => {
   const handleRefresh = useCallback(() => {
     setTimeRange(getCurrentTimeRange(currentTimePeriod.current));
     queryClient.invalidateQueries({
-      queryKey: ['namespace', activeProject, 'workloads'],
+      queryKey: ['project', activeProject, 'workloads'],
     });
     queryClient.resetQueries({
-      queryKey: ['namespace', activeProject, 'stats'],
+      queryKey: ['project', activeProject, 'stats'],
     });
   }, [queryClient, activeProject]);
 
@@ -244,22 +240,6 @@ export default ProjectDashboardPage;
 export async function getServerSideProps(context: GetServerSidePropsContext) {
   const { locale = 'en', params } = context;
   const project = params?.project as string;
-
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   try {
     const translations = await serverSideTranslations(locale, [

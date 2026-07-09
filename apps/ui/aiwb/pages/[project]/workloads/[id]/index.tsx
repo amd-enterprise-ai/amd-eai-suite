@@ -3,13 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 import {
+  Button,
   Card,
   CardBody,
   CardHeader,
-  Button,
+  ChipDisplay,
+  DateDisplay,
   Input,
+  NoDataDisplay,
   Skeleton,
-} from '@heroui/react';
+  StatusDisplay,
+} from '@amdenterpriseai/components';
 import {
   IconArrowLeft,
   IconExternalLink,
@@ -23,12 +27,12 @@ import {
   IconDatabase,
   IconWorld,
   IconCircleCheck,
+  IconLink,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 
-import { getServerSession } from 'next-auth';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
@@ -36,19 +40,21 @@ import { useSystemToast } from '@amdenterpriseai/hooks';
 
 import {
   getWorkload,
-  deleteWorkload,
+  deleteWorkspace,
   getWorkloadMetrics,
 } from '@/lib/app/workloads';
 import { AIM_MODEL_WORKLOAD_ID_LABEL } from '@/types/aims';
-import { getAimNamespaceModel } from '@/lib/app/aims';
-import { deleteModel } from '@/lib/app/models';
+import {
+  getProjectFineTunedModel,
+  resolveBaseModelSource,
+} from '@/lib/app/aims';
+import { cancelFineTuningJob } from '@/lib/app/models';
 import { getDataset } from '@/lib/app/datasets';
 import { getChart } from '@/lib/app/charts';
 
 import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
 import { getWorkloadStatusVariants } from '@/utils/workloads';
 import { getWorkloadTypeVariants } from '@amdenterpriseai/utils/app';
-import { authOptions } from '@amdenterpriseai/utils/server';
 import {
   DOCS_WORKBENCH_BASE,
   WithDocumentationLink,
@@ -61,14 +67,9 @@ import {
 } from '@amdenterpriseai/types';
 import { WorkloadStatus } from '@/types/enums/workloads';
 
+import AIMConnectModal from '@/components/features/models/AIMConnectModal';
 import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
 import WorkloadLogsModal from '@/components/features/workloads/WorkloadLogsModal';
-import {
-  StatusDisplay,
-  ChipDisplay,
-  DateDisplay,
-  NoDataDisplay,
-} from '@amdenterpriseai/components';
 import { displayMegabytesInGigabytes } from '@amdenterpriseai/utils/app';
 
 import InferenceMetrics from '@/components/features/workloads/InferenceMetrics';
@@ -80,15 +81,17 @@ import LoadingState from '@/components/shared/PageErrorHandler/LoadingState';
 import ErrorMessage from '@/components/shared/PageErrorHandler/ErrorMessage';
 
 const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
-  const { t } = useTranslation(['workloads', 'common']);
+  const { t } = useTranslation(['workloads', 'common', 'models']);
   const { toast } = useSystemToast();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = router.query;
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const { activeProject, projectPath } = useProject();
+  const { activeProject, projectPath, aiGatewayEnabled, aiGatewayUrl } =
+    useProject();
 
   const [timeRange, setTimeRange] = useState<TimeRange>(
     getCurrentTimeRange(TimeRangePeriod['15M']),
@@ -100,7 +103,7 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
     isError: isWorkloadError,
     refetch: refetchWorkload,
   } = useQuery({
-    queryKey: ['workload', id],
+    queryKey: ['workload', activeProject, id],
     queryFn: () => getWorkload(id as string, activeProject!),
     refetchInterval: 30000,
     enabled: !!id && !!activeProject,
@@ -109,6 +112,7 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
   const { data: gpuDeviceUtilization } = useQuery<TimeSeriesResponse>({
     queryKey: [
       'workload',
+      activeProject,
       id,
       'metrics',
       'gpu_device_utilization',
@@ -134,6 +138,7 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
   const { data: gpuMemoryUtilization } = useQuery<TimeSeriesResponse>({
     queryKey: [
       'workload',
+      activeProject,
       id,
       'metrics',
       'gpu_memory_utilization',
@@ -161,7 +166,7 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
 
   const { data: model, isLoading: isLoadingModel } = useQuery({
     queryKey: ['model', activeProject, modelId],
-    queryFn: () => getAimNamespaceModel(modelId!, activeProject!),
+    queryFn: () => getProjectFineTunedModel(modelId!, activeProject!),
     enabled:
       !!modelId &&
       !!activeProject &&
@@ -193,24 +198,61 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
     workload?.type === WorkloadType.INFERENCE &&
     workload.status === WorkloadStatus.RUNNING;
 
-  const canDelete = workload?.status !== WorkloadStatus.DELETED;
-
-  const hasOutputData =
-    workload?.endpoints &&
-    (workload.endpoints.external || workload.endpoints.internal);
+  // The workloads detail page only surfaces rows from the workloads table.
+  // AIM-service-backed inference deployments link to /aims/[id], so an
+  // INFERENCE row here is a raw workload that has no capability-specific
+  // delete endpoint — the inference capability DELETE expects an AIM service
+  // id and would 404 on a workload-table id. MODEL_DOWNLOAD and CUSTOM are
+  // in the same boat. Only FINE_TUNING and WORKSPACE have 1:1 capability
+  // deletes for workload-table rows.
+  const deletableTypes: WorkloadType[] = [
+    WorkloadType.FINE_TUNING,
+    WorkloadType.WORKSPACE,
+  ];
+  const canDelete =
+    workload?.status !== WorkloadStatus.DELETED &&
+    !!workload?.type &&
+    deletableTypes.includes(workload.type);
 
   // For inference workloads, append the API endpoint path
   const isInferenceWorkload = workload?.type === WorkloadType.INFERENCE;
 
+  // When the unified Envoy AI Gateway is enabled and configured, inference goes
+  // through a single endpoint (the model is selected via the OpenAI `model`
+  // field), shown in place of the per-service external host.
+  const gatewayEndpointUrl =
+    isInferenceWorkload && aiGatewayEnabled && aiGatewayUrl
+      ? `${aiGatewayUrl.replace(/\/$/, '')}/v1/chat/completions`
+      : '';
+  const useGateway = !!gatewayEndpointUrl;
+
+  const hasOutputData =
+    useGateway ||
+    (workload?.endpoints &&
+      (workload.endpoints.external || workload.endpoints.internal));
+
   const { mutate: deleteWorkloadMutation } = useMutation({
     mutationFn: (id: string) => {
       if (workload?.type === WorkloadType.FINE_TUNING) {
-        return deleteModel(id, activeProject!);
+        return cancelFineTuningJob(id, activeProject!);
       }
-      return deleteWorkload(id, activeProject!);
+      if (workload?.type === WorkloadType.WORKSPACE) {
+        return deleteWorkspace(activeProject!, id);
+      }
+      // Generic /workloads DELETE was removed in EAI-6313 — deletion is now
+      // capability-specific. INFERENCE rows on this page are raw workloads
+      // (AIM services route to /aims/[id] instead), so the inference
+      // capability endpoint can't delete them. MODEL_DOWNLOAD and CUSTOM
+      // have no capability surface either. Delete is hidden for all three
+      // (see canDelete above); this throw stays as a defensive guard.
+      throw new Error(
+        `No delete capability for workload type ${workload?.type}`,
+      );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workload', id] });
+      queryClient.invalidateQueries({
+        queryKey: ['workload', activeProject, id],
+      });
       queryClient.invalidateQueries({
         queryKey: ['namespace', activeProject, 'workloads'],
       });
@@ -513,14 +555,14 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
                     </div>
                   </div>
 
-                  {model!.spec?.modelSources?.[0]?.modelId && (
+                  {resolveBaseModelSource(model!)?.modelId && (
                     <div className="flex items-center space-x-3">
                       <div>
                         <h5 className="text-sm text-default-700">
                           {t('list.headers.model.canonicalName')}
                         </h5>
                         <p className="font-mono text-sm">
-                          {model!.spec.modelSources[0].modelId}
+                          {resolveBaseModelSource(model!)?.modelId}
                         </p>
                       </div>
                     </div>
@@ -649,20 +691,31 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
         {/* Output Information */}
         {hasOutputData && (
           <Card className="break-inside-avoid mb-6 border-1 border-default-200 shadow-sm">
-            <CardHeader className="py-4 px-6 flex items-center">
+            <CardHeader className="py-4 px-6 flex items-center justify-between">
               <h3 className="text-base font-semibold flex items-center space-x-2">
                 <IconWorld size={16} className="text-default-500" />
                 <span>{t('details.sections.output')}</span>
               </h3>
+              {isInferenceWorkload && (
+                <Button
+                  data-testid="connect-to-model-button"
+                  size="sm"
+                  variant="light"
+                  startContent={<IconLink size={14} />}
+                  onPress={() => setIsConnectModalOpen(true)}
+                >
+                  {t('models:aimCatalog.actions.connect.label')}
+                </Button>
+              )}
             </CardHeader>
             <CardBody className="space-y-3 px-6 pb-6 pt-0">
-              {workload.endpoints?.external && (
+              {useGateway ? (
                 <div className="space-y-2">
                   <h5 className="text-sm text-default-700">
-                    {t('details.fields.externalHost')}
+                    {t('models:aimCatalog.actions.connect.modal.inferenceUrl')}
                   </h5>
                   <Input
-                    value={getEndpointUrl(workload.endpoints.external)}
+                    value={gatewayEndpointUrl}
                     readOnly
                     variant="bordered"
                     classNames={{
@@ -675,12 +728,12 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
                         variant="light"
                         onPress={() =>
                           handleCopyToClipboard(
-                            getEndpointUrl(workload.endpoints?.external || ''),
-                            'externalHost',
+                            gatewayEndpointUrl,
+                            'inferenceUrl',
                           )
                         }
                       >
-                        {copiedField === 'externalHost' ? (
+                        {copiedField === 'inferenceUrl' ? (
                           <IconCircleCheck size={16} className="text-success" />
                         ) : (
                           <IconCopy size={16} />
@@ -689,6 +742,46 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
                     }
                   />
                 </div>
+              ) : (
+                workload.endpoints?.external && (
+                  <div className="space-y-2">
+                    <h5 className="text-sm text-default-700">
+                      {t('details.fields.externalHost')}
+                    </h5>
+                    <Input
+                      value={getEndpointUrl(workload.endpoints.external)}
+                      readOnly
+                      variant="bordered"
+                      classNames={{
+                        input: 'font-mono text-sm',
+                      }}
+                      endContent={
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          onPress={() =>
+                            handleCopyToClipboard(
+                              getEndpointUrl(
+                                workload.endpoints?.external || '',
+                              ),
+                              'externalHost',
+                            )
+                          }
+                        >
+                          {copiedField === 'externalHost' ? (
+                            <IconCircleCheck
+                              size={16}
+                              className="text-success"
+                            />
+                          ) : (
+                            <IconCopy size={16} />
+                          )}
+                        </Button>
+                      }
+                    />
+                  </div>
+                )
               )}
 
               {workload.endpoints?.internal && (
@@ -746,35 +839,32 @@ const WorkloadDetailsPage: React.FC & WithDocumentationLink = () => {
           namespace={activeProject!}
         />
       )}
+
+      {isConnectModalOpen && (
+        <AIMConnectModal
+          isOpen={isConnectModalOpen}
+          onOpenChange={setIsConnectModalOpen}
+          endpoints={workload?.endpoints}
+          serviceId={workload?.id ?? undefined}
+          onChatRequested={(serviceId) => {
+            router.push({
+              pathname: projectPath('/chat'),
+              query: { workload: serviceId },
+            });
+          }}
+        />
+      )}
     </div>
   );
 };
 
 export async function getServerSideProps(context: {
-  req: any;
-  res: any;
   locale: any;
   params: any;
   query: any;
 }) {
-  const { req, res, locale, params, query } = context;
+  const { locale, params, query } = context;
   const project = params?.project as string;
-
-  const session = await getServerSession(req, res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   const translations = await serverSideTranslations(locale, [
     'common',

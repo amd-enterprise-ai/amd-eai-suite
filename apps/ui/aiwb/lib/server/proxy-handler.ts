@@ -83,9 +83,18 @@ async function proxyHandler(req: NextRequest) {
       throw new RouteError(400, 'Invalid path: URL manipulation detected');
     }
 
-    const json = await proxyRequest(req, baseUrl, accessToken as string);
+    const result = await proxyRequest(req, baseUrl, accessToken as string);
 
-    return NextResponse.json(json);
+    if (
+      result &&
+      typeof result === 'object' &&
+      Object.keys(result as object).length === 1 &&
+      (result as { status?: unknown }).status === 204
+    ) {
+      return new NextResponse(null, { status: 204 });
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     return handleError(error);
   }

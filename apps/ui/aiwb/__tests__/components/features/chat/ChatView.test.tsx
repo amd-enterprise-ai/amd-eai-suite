@@ -28,22 +28,6 @@ vi.mock('@/lib/app/chat', () => ({
   streamChatResponse: vi.fn(),
 }));
 
-vi.mock('@/lib/app/models', () => ({
-  getModels: vi.fn(() =>
-    Promise.resolve([
-      {
-        id: '1',
-        name: 'Model 1',
-        canonicalName: 'test-org/test-model-1',
-        createdAt: '',
-        onboardingStatus: 'ready',
-        createdBy: '',
-        modelWeightsPath: '',
-      },
-    ]),
-  ),
-}));
-
 const mockToast = {
   error: vi.fn(),
   success: vi.fn(),
@@ -121,7 +105,6 @@ describe('ChatView Component', () => {
       createdAt: '',
       onboardingStatus: ModelOnboardingStatus.READY,
       createdBy: '',
-      modelWeightsPath: '',
     },
   ];
 
@@ -161,7 +144,7 @@ describe('ChatView Component', () => {
       );
     });
 
-    expect(screen.getByLabelText('chat-input')).toBeInTheDocument();
+    expect(screen.getByLabelText('chatInput.label')).toBeInTheDocument();
   });
 
   it('handles sending a message', async () => {
@@ -209,37 +192,49 @@ describe('ChatView Component', () => {
   });
 
   it('handles error during message sending', async () => {
-    (streamChatResponse as Mock).mockRejectedValue(new Error('Network error'));
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
-    await act(async () => {
-      render(
-        <ProviderWrapper>
-          <ChatView workloads={mockWorkloads} />
-        </ProviderWrapper>,
+    try {
+      (streamChatResponse as Mock).mockRejectedValue(
+        new Error('Network error'),
       );
-    });
 
-    // Select a model first
-    const modelSelect = screen.getByTestId('model-deployment-select');
-    await act(async () => {
-      fireEvent.click(modelSelect);
-    });
+      await act(async () => {
+        render(
+          <ProviderWrapper>
+            <ChatView workloads={mockWorkloads} />
+          </ProviderWrapper>,
+        );
+      });
 
-    const modelOption = screen.getAllByText('Model 1')[0];
-    await act(async () => {
-      fireEvent.click(modelOption);
-    });
+      // Select a model first
+      const modelSelect = screen.getByTestId('model-deployment-select');
+      await act(async () => {
+        fireEvent.click(modelSelect);
+      });
 
-    const input = screen.getByTestId('chat-input');
+      const modelOption = screen.getAllByText('Model 1')[0];
+      await act(async () => {
+        fireEvent.click(modelOption);
+      });
 
-    await act(async () => {
-      fireEvent.change(input, { target: { value: 'Test message' } });
-      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
-    });
+      const input = screen.getByTestId('chat-input');
 
-    await waitFor(() => {
-      expect(mockToast.error).toHaveBeenCalled();
-    });
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'Test message' } });
+        fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+      });
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalled();
+      });
+
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('has clear button available', async () => {
@@ -266,7 +261,7 @@ describe('ChatView Component', () => {
     const { useSearchParams } = await import('next/navigation');
     vi.mocked(useSearchParams).mockReturnValue({
       get: vi.fn((param: string) => (param === 'workload' ? '1' : null)),
-    } as any);
+    } as unknown as ReturnType<typeof useSearchParams>);
 
     await act(async () => {
       render(
@@ -491,11 +486,6 @@ describe('ChatView Component', () => {
       id: '2',
       name: 'mw-test-workload-2',
       displayName: 'Model 2',
-      model: {
-        ...mockModels[0],
-        id: '2',
-        name: 'Model 2',
-      },
     };
 
     await act(async () => {
@@ -586,7 +576,7 @@ describe('ChatView Component', () => {
     });
 
     // Only the embedded input (inside the intro layout) should be present, not the bottom one
-    const inputs = screen.getAllByLabelText('chat-input');
+    const inputs = screen.getAllByLabelText('chatInput.label');
     expect(inputs).toHaveLength(1);
   });
 
@@ -621,6 +611,168 @@ describe('ChatView Component', () => {
 
     // Card variant is not shown on mobile — no card testid
     expect(screen.queryByTestId('card')).not.toBeInTheDocument();
+  });
+
+  it('auto-selects the only deployed model on initial render', async () => {
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={mockWorkloads} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const modelSelect = screen.getByTestId('model-deployment-select');
+    expect(modelSelect).toHaveTextContent('Model 1');
+    expect(screen.getByTestId('chat-input')).not.toBeDisabled();
+  });
+
+  it('does not auto-select when no workloads are deployed', async () => {
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={[]} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const modelSelect = screen.getByTestId('model-deployment-select');
+    expect(modelSelect).not.toHaveTextContent('Model 1');
+    expect(screen.getByTestId('chat-input')).toBeDisabled();
+  });
+
+  it('does not auto-select when multiple deployed models are available', async () => {
+    const secondWorkload: Workload = {
+      ...mockWorkloads[0],
+      id: '2',
+      name: 'mw-test-workload-2',
+      displayName: 'Model 2',
+    };
+
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={[...mockWorkloads, secondWorkload]} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const modelSelect = screen.getByTestId('model-deployment-select');
+    expect(modelSelect).not.toHaveTextContent('Model 1');
+    expect(modelSelect).not.toHaveTextContent('Model 2');
+    expect(screen.getByTestId('chat-input')).toBeDisabled();
+  });
+
+  it('does not auto-select when the parent provides no chattable workloads', async () => {
+    // Non-RUNNING / non-INFERENCE workloads are filtered out by the parent page
+    // before they reach ChatView, so the component sees an empty list.
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={[]} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const modelSelect = screen.getByTestId('model-deployment-select');
+    expect(modelSelect).not.toHaveTextContent('Model 1');
+    expect(screen.getByTestId('chat-input')).toBeDisabled();
+  });
+
+  it('auto-selects the only deployed model for both slots in compare mode', async () => {
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={mockWorkloads} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const compareTab = screen.getByRole('tab', { name: /compare/i });
+    await act(async () => {
+      fireEvent.click(compareTab);
+    });
+
+    const modelSelects = screen.getAllByTestId('model-deployment-select');
+    expect(modelSelects).toHaveLength(2);
+    expect(modelSelects[0]).toHaveTextContent('Model 1');
+    expect(modelSelects[1]).toHaveTextContent('Model 1');
+  });
+
+  it('does not auto-select the second model when multiple deployed models exist', async () => {
+    const secondWorkload: Workload = {
+      ...mockWorkloads[0],
+      id: '2',
+      name: 'mw-test-workload-2',
+      displayName: 'Model 2',
+    };
+
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={[...mockWorkloads, secondWorkload]} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const compareTab = screen.getByRole('tab', { name: /compare/i });
+    await act(async () => {
+      fireEvent.click(compareTab);
+    });
+
+    const modelSelects = screen.getAllByTestId('model-deployment-select');
+    expect(modelSelects).toHaveLength(2);
+    expect(modelSelects[0]).not.toHaveTextContent('Model 1');
+    expect(modelSelects[1]).not.toHaveTextContent('Model 1');
+  });
+
+  it('respects the workload URL parameter over auto-selection', async () => {
+    const secondWorkload: Workload = {
+      ...mockWorkloads[0],
+      id: '2',
+      name: 'mw-test-workload-2',
+      displayName: 'Model 2',
+    };
+    const { useSearchParams } = await import('next/navigation');
+    vi.mocked(useSearchParams).mockReturnValue({
+      get: vi.fn((param: string) => (param === 'workload' ? '2' : null)),
+    } as unknown as ReturnType<typeof useSearchParams>);
+
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={[...mockWorkloads, secondWorkload]} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const modelSelect = screen.getByTestId('model-deployment-select');
+    expect(modelSelect).toHaveTextContent('Model 2');
+  });
+
+  it('respects the workload URL parameter when only one workload exists', async () => {
+    // Regression: when ?workload= points to a workload that isn't in the
+    // ChatView list (e.g. filtered out upstream as non-running) AND there is
+    // exactly one chattable workload, the URL param must still win — the
+    // single-workload auto-select must not override it.
+    const { useSearchParams } = await import('next/navigation');
+    vi.mocked(useSearchParams).mockReturnValue({
+      get: vi.fn((param: string) =>
+        param === 'workload' ? 'unknown-id' : null,
+      ),
+    } as unknown as ReturnType<typeof useSearchParams>);
+
+    await act(async () => {
+      render(
+        <ProviderWrapper>
+          <ChatView workloads={mockWorkloads} />
+        </ProviderWrapper>,
+      );
+    });
+
+    const modelSelect = screen.getByTestId('model-deployment-select');
+    expect(modelSelect).not.toHaveTextContent('Model 1');
+    expect(screen.getByTestId('chat-input')).toBeDisabled();
   });
 
   it('displays loading state correctly', async () => {

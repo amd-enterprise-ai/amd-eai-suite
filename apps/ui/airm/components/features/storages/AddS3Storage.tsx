@@ -1,7 +1,13 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Link, Select, SelectItem } from '@heroui/react';
+import {
+  DrawerForm,
+  FormFieldComponent,
+  Link,
+  Select,
+  SelectItem,
+} from '@amdenterpriseai/components';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
@@ -24,9 +30,6 @@ import {
   CreateStorageRequest,
   Storage,
 } from '@/types/storages';
-
-import { DrawerForm } from '@amdenterpriseai/components';
-import { FormFieldComponent } from '@amdenterpriseai/components';
 
 import { ZodType, z } from 'zod';
 import { fetchSecrets } from '@/services/app';

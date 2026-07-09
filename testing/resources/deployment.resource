@@ -58,9 +58,14 @@ Get Domain From Cluster
     END
 
     TRY
-        # Get domain from the Gateway's HTTPS listener hostname (e.g., *.example.com)
-        ${result}=    Run Process    kubectl    get    gateway    https
-        ...          -n    kgateway-system    -o    jsonpath\={.spec.listeners[0].hostname}    timeout=10s
+        # Get domain from the Gateway's HTTPS listener hostname (e.g., *.example.com).
+        # Search across all namespaces so this works regardless of whether the cluster
+        # uses kgateway-system (kGateway) or envoy-gateway-system (Envoy Gateway).
+        # The jsonpath is stored in a VAR so Robot Framework does not re-parse the
+        # == inside the filter expression as a keyword argument separator.
+        VAR    ${jsonpath}    jsonpath={.items[?(@.metadata.name=="https")].spec.listeners[0].hostname}
+        ${result}=    Run Process    kubectl    get    gateway    -A
+        ...          -o    ${jsonpath}    timeout=10s
 
         IF    ${result.rc} == 0 and "${result.stdout}" != ""
             ${hostname}=    Set Variable    ${result.stdout}

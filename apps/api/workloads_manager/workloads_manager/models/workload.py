@@ -187,7 +187,7 @@ class Workload:
         """Get YAML files at any depth under overlay directories (overrides/* entries in ALLOWED_CHART_PATHS).
 
         Subdirectories are included. Deployability filtering moved to consumers
-        (AIWB cross-references each recipe's aimManifest.aimId against live
+        (AIWB cross-references each recipe's aimManifest.modelId against live
         AIMClusterServiceTemplate resources at request time), so registration
         no longer hides recipes based on directory layout.
         """
@@ -218,24 +218,24 @@ class Workload:
         """Get metadata fields for API submission.
 
         Returns:
-            Dict with metadata fields using API field names (snake_case)
+            Dict with metadata fields using API field names (camelCase)
         """
         if not self.metadata:
             return {}
 
-        # Map metadata fields to API field names
+        # Map metadata fields to API field names (camelCase per API convention)
         metadata_dict = {
             "slug": self.metadata.slug or self.metadata.id,  # Use slug if available, fallback to id
-            "display_name": self.metadata.name,
+            "displayName": self.metadata.name,
             "description": self.metadata.description,
-            "long_description": self.metadata.long_description,
+            "longDescription": self.metadata.long_description,
             "category": self.metadata.category,
             "tags": json.dumps(self.metadata.tags) if self.metadata.tags else None,
-            "featured_image": self.metadata.featured_image,
-            "required_resources": (
+            "featuredImage": self.metadata.featured_image,
+            "requiredResources": (
                 json.dumps(self.metadata.required_resources) if self.metadata.required_resources else None
             ),
-            "external_url": self.metadata.external_url,
+            "externalUrl": self.metadata.external_url,
         }
 
         # Remove None values to avoid overwriting existing data

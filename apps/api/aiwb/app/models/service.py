@@ -2,9 +2,10 @@
 #
 # SPDX-License-Identifier: MIT
 
+import asyncio
 import os
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from kubernetes_asyncio.client import ApiException
 from loguru import logger
@@ -13,26 +14,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_common.exceptions import DeletionConflictException, NotFoundException, ValidationException
 
 from ..aims import gateway as aims_gateway
-from ..aims.crds import AIMModelResource
+from ..aims.crds import AIMModelResource, AIMModelSource
 from ..charts.config import FINETUNING_CHART_NAME, MLFLOW_CHART_NAME
 from ..charts.service import get_chart
 from ..charts.utils import render_helm_template
 from ..cluster.service import get_cluster_gpu_device_info
+from ..custom_models.service import ensure_namespace_aim_base_model
 from ..datasets.repository import select_dataset
 from ..dispatch.kube_client import KubernetesClient
 from ..dispatch.utils import parse_uuid, sanitize_label_value
 from ..minio.client import MinioClient
-from ..minio.config import MINIO_BUCKET
+from ..minio.config import MINIO_BUCKET, MINIO_URL
 from ..overlays.repository import list_overlays
 from ..secrets.service import get_secret_details
 from ..workloads.constants import (
-    CANONICAL_NAME_LABEL,
+    DISPLAY_NAME_ANNOTATION,
     MODEL_ID_LABEL,
     MODEL_NAME_LABEL,
+    MODEL_SOURCE_TYPE_LABEL,
     WORKLOAD_ID_LABEL,
     WORKLOAD_TYPE_LABEL,
 )
-from ..workloads.enums import WorkloadStatus, WorkloadType
+from ..workloads.enums import ModelSourceType, WorkloadStatus, WorkloadType
 from ..workloads.repository import create_workload, get_workloads, update_workload_status
 from ..workloads.schemas import WorkloadResponse
 from ..workloads.utils import apply_manifest
@@ -64,12 +67,19 @@ async def get_finetunable_models(
     """Get models that can be finetuned on the cluster's current AIM and GPU profile.
 
     A recipe is returned only when both:
-    - its `aimManifest.aimId` matches an AIMClusterServiceTemplate present on the cluster
-      (via `spec.aimId` or `status.profile.aimId`), and
+    - its `aimManifest.aimId` matches an AIMClusterProfile present on the cluster
+      (via `spec.aimId`), and
     - its `metadata.compatibleAccelerators` intersect the cluster's GPU device IDs
       (recipes without `compatibleAccelerators` are treated as compatible with all hardware).
+
+    Both sides of the join use `modelId` (the base-weights / artifact identity) rather than
+    `aimId` (the family identity that is shared across packagings like FP8 inference
+    variants). A fine-tuning recipe targets a specific set of weights, so matching on the
+    family would let incompatible packagings appear as finetunable. In current overlays
+    `aimManifest.modelId == aimManifest.aimId`, so this read is behavior-neutral today; it
+    expresses the intended join semantics for when the two diverge.
     """
-    cluster_aim_ids = await _get_cluster_template_aim_ids(kube_client)
+    cluster_aim_ids = await _get_cluster_profile_aim_ids(kube_client)
     if not cluster_aim_ids:
         return []
 
@@ -88,7 +98,8 @@ async def get_finetunable_models(
         if not aim_id or aim_id not in cluster_aim_ids:
             continue
         metadata = overlay_data.get("metadata")
-        compatible_accelerators = metadata.get("compatibleAccelerators") if isinstance(metadata, dict) else None
+        metadata = metadata if isinstance(metadata, dict) else {}
+        compatible_accelerators = metadata.get("compatibleAccelerators")
         if compatible_accelerators is not None and cluster_gpu_ids.isdisjoint(compatible_accelerators):
             continue
         # Resolve display names only for GPUs present in this cluster; deduplicate preserving order
@@ -101,6 +112,7 @@ async def get_finetunable_models(
             if compatible_accelerators
             else []
         )
+        hf_token_required = metadata.get("hfTokenRequired")
         result.append(
             FinetunableModelResponse(
                 canonical_name=overlay.canonical_name,
@@ -108,40 +120,38 @@ async def get_finetunable_models(
                 gpu_count=overlay_data.get("finetuningGpus"),
                 compatible_accelerators=compatible_accelerators or [],
                 compatible_accelerator_names=accelerator_names,
+                hf_token_required=hf_token_required if isinstance(hf_token_required, bool) else None,
             )
         )
 
     return sorted(result, key=lambda m: m.canonical_name)
 
 
-async def _get_cluster_template_aim_ids(kube_client: KubernetesClient) -> set[str]:
-    """Collect aimIds advertised by Ready AIMClusterServiceTemplate resources on the cluster.
+async def _get_cluster_profile_aim_ids(kube_client: KubernetesClient) -> set[str]:
+    """Collect aimIds advertised by Ready AIMClusterProfile resources on the cluster.
 
-    Only templates with `status.status == "Ready"` contribute their aimIds — Pending,
-    Progressing, Degraded, Failed, and NotAvailable templates either lack an aimId yet
-    or describe a profile the cluster cannot currently serve.
-
-    Reads both `spec.aimId` (operator-declared) and `status.profile.aimId`
-    (controller-derived from the profile YAML's top-level `aim_id`); a template
-    contributes its aimId from whichever field is populated.
+    Only profiles with `status.status == "Ready"` contribute their aimIds —
+    Pending, Progressing, Degraded, Failed, and NotAvailable profiles describe
+    a profile the cluster cannot currently serve.
     """
-    templates = await aims_gateway.list_aim_cluster_service_templates(kube_client)
+    profiles = await aims_gateway.list_aim_cluster_profiles_by_aim_ids(kube_client)
     aim_ids: set[str] = set()
-    for template in templates:
-        if template.status.get("status") != "Ready":
+    for profile in profiles:
+        if profile.status.status != "Ready":
             continue
-        if spec_aim_id := template.spec.get("aimId"):
-            aim_ids.add(spec_aim_id)
-        if status_aim_id := (template.status.get("profile") or {}).get("aimId"):
-            aim_ids.add(status_aim_id)
+        if profile.spec.aim_id:
+            aim_ids.add(profile.spec.aim_id)
     return aim_ids
 
 
 async def list_aim_models(
     kube_client: KubernetesClient,
     namespace: str,
+    label_selector: str | None = None,
 ) -> list[AIMModelResource]:
-    return await aims_gateway.list_aim_models(kube_client, namespace)
+    exclude_custom = f"{MODEL_SOURCE_TYPE_LABEL}!={ModelSourceType.CUSTOM}"
+    combined_selector = f"{label_selector},{exclude_custom}" if label_selector else exclude_custom
+    return await aims_gateway.list_aim_models(kube_client, namespace, label_selector=combined_selector)
 
 
 async def _find_job_by_name(
@@ -279,6 +289,25 @@ async def delete_model(
             logger.warning(f"Model weights not found in S3 for model {resource_name} ({source.source_uri}), skipping.")
 
 
+def _resolve_base_model_source(aim_model: AIMModelResource) -> AIMModelSource | None:
+    """Return the AIMModelSource carrying the base model's weights, or None.
+
+    The legacy flat ``spec.modelSources`` is populated for official and
+    fine-tuning-published models. v1alpha2 imported / re-finetuned models instead
+    carry their weights under ``spec.profiles.overrides.modelSources``. Prefer the
+    flat field and fall back to the profiles override so a fine-tuned model can be
+    used as the base for another round of fine-tuning.
+
+    TODO(EAI 2.3): drop the legacy flat ``spec.modelSources`` branch once all
+    models carry weights under ``spec.profiles.overrides.modelSources``.
+    """
+    if aim_model.spec.model_sources:
+        return aim_model.spec.model_sources[0]
+    if aim_model.spec.profiles and aim_model.spec.profiles.overrides.model_sources:
+        return aim_model.spec.profiles.overrides.model_sources[0]
+    return None
+
+
 async def run_finetune_model_workload(
     session: AsyncSession,
     kube_client: KubernetesClient,
@@ -286,7 +315,6 @@ async def run_finetune_model_workload(
     finetuning_data: FinetuneCreate,
     submitter: str,
     namespace: str,
-    display_name: str | None = None,
 ) -> FinetuneJobResponse:
     try:
         model_id = UUID(model_id) if isinstance(model_id, str) else model_id
@@ -302,22 +330,30 @@ async def run_finetune_model_workload(
         )
         hf_token_secret_name = hf_secret.metadata.name
 
-    # Resolve base model: AIMModel CR (UUID) or HuggingFace canonical name (str)
+    is_finetuned_basemodel = isinstance(model_id, UUID)
+    aim_model: AIMModelResource | None = None
+    base_model_source: AIMModelSource | None = None
+
+    # Resolve base model: AIMModel CR (UUID or resource name) or HuggingFace canonical name (str with /)
     base_model_uri: str
-    if isinstance(model_id, UUID):
+    if is_finetuned_basemodel:
         aim_model = await get_aim_model(kube_client, namespace, str(model_id))
-        labels = aim_model.metadata.labels or {}
+
         model_canonical_name = (
-            aim_model.status.image_metadata.model.canonical_name or labels.get(CANONICAL_NAME_LABEL) or str(model_id)
+            aim_model.status.image_metadata.model.canonical_name or aim_model.status.aim_id or str(model_id)
         )
-        sources = aim_model.spec.model_sources
-        if not sources or not sources[0].source_uri:
+        # Weights live under the legacy flat field for official/fine-tuning models, but
+        # imported/re-finetuned v1alpha2 models carry them under
+        # spec.profiles.overrides.modelSources instead. Prefer the flat field and fall
+        # back to the profiles override so a fine-tuned model can itself be re-finetuned.
+        base_model_source = _resolve_base_model_source(aim_model)
+        if base_model_source is None or not base_model_source.source_uri:
             raise ValidationException(
                 f"Base model '{model_id}' has no weights URI. The model must be fully onboarded before finetuning."
             )
-        base_model_uri = sources[0].source_uri
+        base_model_uri = base_model_source.source_uri.removeprefix("s3://")
     else:
-        model_canonical_name = model_id
+        model_canonical_name = str(model_id)
         base_model_uri = f"hf://{model_canonical_name}"
 
     chart = await get_chart(session, chart_name=FINETUNING_CHART_NAME)
@@ -327,12 +363,37 @@ async def run_finetune_model_workload(
     )
     overlay_values = [chart.signature] + [overlay.overlay for overlay in overlays]
 
+    # Extract the aimId needed to resolve the correct AIMClusterModel to use as the
+    # derivation source for the fine-tuned model. The AIMClusterModel name is passed as
+    # modelRef.name in the derivedFrom selector — the aim-engine controller resolves it
+    # via the aim.eai.amd.com/source-model label stamped on profiles. Prefer the recipe
+    # overlay's aimManifest (the authoritative source for string-based / HF models). For
+    # UUID-based re-finetunes the overlay may not carry it, so fall back to the base
+    # AIMModel's status.aim_id.
+    recipe_aim_id: str | None = None
+    for overlay in overlays:
+        if overlay.canonical_name == model_canonical_name:
+            aim_manifest_data = overlay.overlay.get("aimManifest") if isinstance(overlay.overlay, dict) else None
+            if isinstance(aim_manifest_data, dict):
+                recipe_aim_id = aim_manifest_data.get("aimId")
+            break
+    if recipe_aim_id is None and aim_model is not None:
+        recipe_aim_id = aim_model.status.aim_id or None
+    if recipe_aim_id is None:
+        raise ValidationException(
+            "Cannot determine aimId for fine-tuning recipe. The recipe overlay must include "
+            "aimManifest.aimId, or the base AIMModel must have a known aimId in its status."
+        )
+
     dataset = await select_dataset(session, dataset_id=finetuning_data.dataset_id, namespace=namespace)
     if not dataset:
         raise NotFoundException("Dataset not found")
 
     # TODO: enforce model name uniqueness (currently FE-only, no race protection)
-    finetuning_path = get_finetuned_model_weights_path(model_canonical_name, finetuning_data.name, namespace)
+    # Use a UUID as the S3 path segment so display names with spaces or special chars
+    # don't produce invalid or colliding object keys.
+    finetune_job_id = str(uuid4())
+    finetuning_path = get_finetuned_model_weights_path(model_canonical_name, finetune_job_id, namespace)
 
     # Build the finetuning configuration
     finetuning_config: dict[str, dict] = {
@@ -342,14 +403,36 @@ async def run_finetune_model_workload(
         "training_args": {"num_train_epochs": finetuning_data.epochs},
     }
 
-    # Check for MLflow tracking configuration
-    mlflow_workloads = await get_workloads(
-        session=session,
-        namespace=namespace,
-        workload_types=[WorkloadType.WORKSPACE],
-        status_filter=[WorkloadStatus.RUNNING],
-        chart_name=MLFLOW_CHART_NAME,
+    # Fan out MLflow lookup and AIMClusterModel resolution in parallel — both are
+    # independent I/O calls. The AIMClusterModel lookup resolves which model the
+    # fine-tuned AIMModel should derive its serving profiles from. modelRef.name
+    # in the derivedFrom selector must be an AIMClusterModel name (not an
+    # AIMClusterProfile name) — the aim-engine controller resolves it via the
+    # aim.eai.amd.com/source-model label on profiles.
+    async def _fetch_cluster_models() -> list:
+        return await aims_gateway.list_aims(kube_client)
+
+    mlflow_workloads, cluster_models = await asyncio.gather(
+        get_workloads(
+            session=session,
+            namespace=namespace,
+            workload_types=[WorkloadType.WORKSPACE],
+            status_filter=[WorkloadStatus.RUNNING],
+            chart_name=MLFLOW_CHART_NAME,
+        ),
+        _fetch_cluster_models(),
     )
+
+    base_model_name: str | None = None
+    for model in cluster_models:
+        if model.status.status == "Ready" and model.status.aim_id == recipe_aim_id:
+            base_model_name = model.metadata.name
+            break
+    if base_model_name is None:
+        raise ValidationException(
+            f"No Ready AIMClusterModel found for aimId '{recipe_aim_id}'. "
+            "The model must be deployed on the cluster before fine-tuning."
+        )
 
     mlflow_response = WorkloadResponse.model_validate(mlflow_workloads[0]) if mlflow_workloads else None
     if mlflow_response and mlflow_response.endpoints and mlflow_response.endpoints.get("internal"):
@@ -358,7 +441,7 @@ async def run_finetune_model_workload(
             mlflow_uri = f"http://{mlflow_uri}"
         tracking_config = {
             "mlflow_server_uri": mlflow_uri,
-            "experiment_name": finetuning_data.name,
+            "experiment_name": finetuning_data.display_name,
         }
         finetuning_config["training_args"]["report_to"] = ["mlflow"]
         finetuning_config["training_args"]["logging_steps"] = 10
@@ -368,6 +451,7 @@ async def run_finetune_model_workload(
         logger.info(f"No running MLflow workspace found for namespace {namespace} - skipping MLflow tracking")
 
     helm_overrides = {
+        "bucketStorageHost": MINIO_URL,
         "checkpointsRemote": os.path.join(MINIO_BUCKET, finetuning_path),
         "basemodel": base_model_uri,
         "finetuning_config": finetuning_config,
@@ -376,9 +460,11 @@ async def run_finetune_model_workload(
     if hf_token_secret_name:
         helm_overrides["hfTokenSecret"] = {"name": hf_token_secret_name, "key": "token"}
 
+    await ensure_namespace_aim_base_model(kube_client, namespace)
+
     workload = await create_workload(
         session=session,
-        display_name=display_name or "",
+        display_name=finetuning_data.display_name,
         workload_type=WorkloadType.FINE_TUNING,
         chart_id=chart.id,
         namespace=namespace,
@@ -387,19 +473,42 @@ async def run_finetune_model_workload(
         dataset_id=finetuning_data.dataset_id,
     )
 
-    finetuning_labels = {MODEL_NAME_LABEL: sanitize_label_value(finetuning_data.name)}
+    # WORKLOAD_TYPE_LABEL is the contract with fine_tuning.service._is_fine_tuning_model, which
+    # backs GET /v1/projects/{project}/fine-tuning/models. Stamped here so it ends up on both
+    # the AIMModel CR (via aim_manifest["labels"]) and the rest of the workload's resources
+    # (via apply_manifest's extra_labels). Omitting it makes the resulting AIMModel invisible
+    # to the Custom Models page.
+    finetuning_labels = {
+        MODEL_NAME_LABEL: sanitize_label_value(finetuning_data.display_name),
+        WORKLOAD_TYPE_LABEL: WorkloadType.FINE_TUNING.value,
+    }
 
     # Wire up the aimmodel-applier sidecar so it creates the AIMModel CR after training.
     # workload.name becomes the CR name — it's unique and already used as the K8s resource name.
-    # aimId and modelId (ADR 006a template matching) are populated by the workloads_manager chart.
-    helm_overrides["aimManifest"] = {
+    # Sanitize every label at this boundary: the values flow through yaml.dump → Helm template
+    # render → aimmodel-applier kubectl apply, and any non-str (StrEnum, UUID) gets serialized
+    # as a YAML sequence and quoted into an invalid label like "[FINE_TUNING]". This mirrors
+    # apply_manifest's per-label sanitize for the same reason.
+    aim_manifest_labels = {**finetuning_labels, WORKLOAD_ID_LABEL: str(workload.id)}
+    aim_manifest: dict[str, Any] = {
         "enabled": True,
         "modelName": workload.name,
-        "labels": {
-            **finetuning_labels,
-            WORKLOAD_ID_LABEL: str(workload.id),
-        },
+        "labels": {k: sanitize_label_value(str(v)) for k, v in aim_manifest_labels.items()},
+        "annotations": {DISPLAY_NAME_ANNOTATION: finetuning_data.display_name},
     }
+
+    # For UUID-based models, aimId must be carried forward from the AIMModel spec — the overlay
+    # is looked up by canonical name and may not have it. For string-based models, aimId is
+    # already in the model's overlay and Helm merges it in automatically.
+    if is_finetuned_basemodel and aim_model is not None:
+        if aim_model.status.aim_id:
+            aim_manifest["aimId"] = aim_model.status.aim_id
+        if base_model_source is not None:
+            aim_manifest["modelId"] = base_model_source.model_id
+
+    aim_manifest["baseModel"] = {"name": base_model_name, "scope": "Auto"}
+
+    helm_overrides["aimManifest"] = aim_manifest
 
     logger.info(f"Deploying finetuning workload {workload.id} to namespace {namespace}")
 
@@ -425,14 +534,19 @@ async def run_finetune_model_workload(
         logger.info(f"Successfully deployed finetuning workload {workload.id}")
 
     except Exception as e:
-        logger.error(f"Failed to deploy finetuning workload {workload.id}: {e}")
+        if isinstance(e, ValidationException):
+            error_message = f"{e.message}: {e.detail}"
+        else:
+            error_message = str(e)
+
+        logger.error(f"Failed to deploy finetuning workload {workload.id}: {error_message}")
         workload.status = WorkloadStatus.FAILED
         await session.flush()
         raise
 
     return FinetuneJobResponse(
         workload_id=workload.id,
-        model_name=finetuning_data.name,
+        display_name=finetuning_data.display_name,
         base_model=model_canonical_name,
         namespace=namespace,
     )

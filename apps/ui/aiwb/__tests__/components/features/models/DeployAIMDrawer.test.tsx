@@ -14,12 +14,26 @@ import wrapper from '@/__tests__/ProviderWrapper';
 import { fetchProjectSecrets, createProjectSecret } from '@/lib/app/secrets';
 import { Mock } from 'vitest';
 import {
-  AIMClusterServiceTemplate,
+  AIMClusterProfile,
   AIMMetric,
   AIMService,
   AIMStatus,
 } from '@/types/aims';
 import * as aimsLib from '@/lib/app/aims';
+import * as inferenceLib from '@/lib/app/inference';
+import {
+  invalidateQueriesSpy,
+  wrapQueryClientWithInvalidateSpy,
+} from '@/__tests__/testUtils/queryClientSpy';
+
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-query')>();
+  return {
+    ...actual,
+    useQueryClient: () =>
+      wrapQueryClientWithInvalidateSpy(actual.useQueryClient()),
+  };
+});
 
 vi.mock('next-i18next', () => ({
   useTranslation: () => ({
@@ -62,35 +76,36 @@ vi.mock('@/lib/app/secrets', () => ({
   createProjectSecret: vi.fn(),
 }));
 
-// Mock service templates
-const mockServiceTemplates: AIMClusterServiceTemplate[] = [
+// Mock cluster profiles
+const mockServiceProfiles: AIMClusterProfile[] = [
   {
-    metadata: { name: 'template-latency', labels: {} },
+    metadata: { name: 'profile-latency', labels: {} },
     spec: { modelName: 'test-model', metric: AIMMetric.Latency },
     status: { status: 'Ready' },
   },
   {
-    metadata: { name: 'template-throughput', labels: {} },
+    metadata: { name: 'profile-throughput', labels: {} },
     spec: { modelName: 'test-model', metric: AIMMetric.Throughput },
     status: { status: 'Ready' },
   },
 ];
 
 describe('DeployAIMDrawer', () => {
-  let getAimClusterServiceTemplatesSpy: ReturnType<typeof vi.spyOn>;
+  let getAimClusterProfilesSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockToast.success.mockClear();
     mockToast.error.mockClear();
+    invalidateQueriesSpy.mockClear();
     (fetchProjectSecrets as Mock).mockResolvedValue({ data: [] });
     (createProjectSecret as Mock).mockResolvedValue({
       id: 'new-secret-id',
       name: 'test-hf-token',
     });
-    // Default: no service templates (no metrics available)
-    getAimClusterServiceTemplatesSpy = vi
-      .spyOn(aimsLib, 'getAimClusterServiceTemplates')
+    // Default: no profiles (no metrics available)
+    getAimClusterProfilesSpy = vi
+      .spyOn(aimsLib, 'getAimClusterProfiles')
       .mockResolvedValue([]);
   });
 
@@ -183,9 +198,7 @@ describe('DeployAIMDrawer', () => {
   });
 
   it('renders metric dropdown when service templates are available', async () => {
-    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce(
-      mockServiceTemplates,
-    );
+    getAimClusterProfilesSpy.mockResolvedValueOnce(mockServiceProfiles);
 
     const aggregatedAim = mockAggregatedAims[0];
     render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
@@ -207,7 +220,7 @@ describe('DeployAIMDrawer', () => {
 
     // Wait for the query to complete
     await waitFor(() => {
-      expect(getAimClusterServiceTemplatesSpy).toHaveBeenCalled();
+      expect(getAimClusterProfilesSpy).toHaveBeenCalled();
     });
 
     expect(
@@ -224,7 +237,7 @@ describe('DeployAIMDrawer', () => {
     // Wait for the "no templates" error toast to ensure loading has finished
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith(
-        'deployAIMDrawer.notifications.noTemplatesDescription',
+        'deployAIMDrawer.notifications.noProfilesDescription',
       );
     });
 
@@ -242,13 +255,13 @@ describe('DeployAIMDrawer', () => {
     // Error toast should be called
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith(
-        'deployAIMDrawer.notifications.noTemplatesDescription',
+        'deployAIMDrawer.notifications.noProfilesDescription',
       );
     });
   });
 
   it('does not render metric dropdown when all templates are NotAvailable', async () => {
-    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+    getAimClusterProfilesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -267,7 +280,7 @@ describe('DeployAIMDrawer', () => {
     });
 
     await waitFor(() => {
-      expect(getAimClusterServiceTemplatesSpy).toHaveBeenCalled();
+      expect(getAimClusterProfilesSpy).toHaveBeenCalled();
     });
 
     expect(
@@ -276,7 +289,7 @@ describe('DeployAIMDrawer', () => {
   });
 
   it('disables deploy button and shows error toast when all templates are NotAvailable', async () => {
-    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+    getAimClusterProfilesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -297,7 +310,7 @@ describe('DeployAIMDrawer', () => {
     // Error toast should be called
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith(
-        'deployAIMDrawer.notifications.noTemplatesDescription',
+        'deployAIMDrawer.notifications.noProfilesDescription',
       );
     });
 
@@ -307,7 +320,7 @@ describe('DeployAIMDrawer', () => {
   });
 
   it('enables deploy button when ready templates are available', async () => {
-    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+    getAimClusterProfilesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -332,9 +345,59 @@ describe('DeployAIMDrawer', () => {
     expect(mockToast.error).not.toHaveBeenCalled();
   });
 
-  it('passes a single selected image pull secret to deployAim', async () => {
+  it('invalidates the inferenceModel cache after a successful deploy', async () => {
     const deployAimSpy = vi
-      .spyOn(aimsLib, 'deployAim')
+      .spyOn(inferenceLib, 'deployInference')
+      .mockResolvedValue(undefined as unknown as AIMService);
+
+    const base = mockAggregatedAims[0];
+    const parsedNoHf = base.parsedAIMs.map((a) => ({
+      ...a,
+      isHfTokenRequired: false,
+    }));
+    const aggregatedAim = {
+      ...base,
+      parsedAIMs: parsedNoHf,
+      latestAim: parsedNoHf[0],
+      aggregated: { ...base.aggregated, isHfTokenRequired: false },
+    };
+
+    getAimClusterProfilesSpy.mockResolvedValueOnce([
+      {
+        metadata: { name: 'template-latency', labels: {} },
+        spec: { modelName: 'test-model', metric: AIMMetric.Latency },
+        status: { status: 'Ready' },
+      },
+    ]);
+
+    render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
+      wrapper,
+    });
+
+    const deployButton = await screen.findByRole('button', {
+      name: 'deployAIMDrawer.actions.deploy',
+    });
+    await waitFor(() => {
+      expect(deployButton).not.toBeDisabled();
+    });
+
+    fireEvent.click(deployButton);
+
+    await waitFor(() => {
+      expect(deployAimSpy).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+        queryKey: ['inferenceModel'],
+      });
+    });
+
+    deployAimSpy.mockRestore();
+  });
+
+  it('passes a single selected image pull secret to deployInference', async () => {
+    const deployAimSpy = vi
+      .spyOn(inferenceLib, 'deployInference')
       .mockResolvedValue(undefined as unknown as AIMService);
 
     const base = mockAggregatedAims[0];
@@ -363,7 +426,7 @@ describe('DeployAIMDrawer', () => {
       ],
     });
 
-    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+    getAimClusterProfilesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -407,7 +470,7 @@ describe('DeployAIMDrawer', () => {
   });
 
   it('only shows metrics from Ready templates, ignoring NotAvailable ones', async () => {
-    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+    getAimClusterProfilesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -434,7 +497,7 @@ describe('DeployAIMDrawer', () => {
 
   it('renders metric dropdown with single metric option', async () => {
     // Mock single service template
-    getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+    getAimClusterProfilesSpy.mockResolvedValueOnce([
       {
         metadata: { name: 'template-latency', labels: {} },
         spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -456,7 +519,7 @@ describe('DeployAIMDrawer', () => {
 
   describe('unoptimized profile logic', () => {
     it('shows warning Alert when all templates are unoptimized (no profile)', async () => {
-      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+      getAimClusterProfilesSpy.mockResolvedValueOnce([
         {
           metadata: { name: 'template-latency', labels: {} },
           spec: { modelName: 'test-model', metric: AIMMetric.Latency },
@@ -481,14 +544,15 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('shows warning Alert when all templates have profile type other than optimized', async () => {
-      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+      getAimClusterProfilesSpy.mockResolvedValueOnce([
         {
-          metadata: { name: 'template-latency', labels: {} },
-          spec: { modelName: 'test-model', metric: AIMMetric.Latency },
-          status: {
-            status: 'Ready',
-            profile: { metadata: { type: 'preview' } },
+          metadata: { name: 'profile-latency', labels: {} },
+          spec: {
+            modelName: 'test-model',
+            metric: AIMMetric.Latency,
+            type: 'preview',
           },
+          status: { status: 'Ready' },
         },
       ]);
 
@@ -505,22 +569,24 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('does not show warning Alert when at least one template is optimized and no metric selected', async () => {
-      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+      getAimClusterProfilesSpy.mockResolvedValueOnce([
         {
-          metadata: { name: 'template-latency', labels: {} },
-          spec: { modelName: 'test-model', metric: AIMMetric.Latency },
-          status: {
-            status: 'Ready',
-            profile: { metadata: { type: 'optimized' } },
+          metadata: { name: 'profile-latency', labels: {} },
+          spec: {
+            modelName: 'test-model',
+            metric: AIMMetric.Latency,
+            type: 'optimized',
           },
+          status: { status: 'Ready' },
         },
         {
-          metadata: { name: 'template-throughput', labels: {} },
-          spec: { modelName: 'test-model', metric: AIMMetric.Throughput },
-          status: {
-            status: 'Ready',
-            profile: { metadata: { type: 'preview' } },
+          metadata: { name: 'profile-throughput', labels: {} },
+          spec: {
+            modelName: 'test-model',
+            metric: AIMMetric.Throughput,
+            type: 'preview',
           },
+          status: { status: 'Ready' },
         },
       ]);
 
@@ -541,9 +607,7 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('shows Unoptimized profile tag in metric section when all profiles are unoptimized', async () => {
-      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce(
-        mockServiceTemplates,
-      );
+      getAimClusterProfilesSpy.mockResolvedValueOnce(mockServiceProfiles);
 
       const aggregatedAim = mockAggregatedAims[0];
       render(<DeployAIMDrawer isOpen={true} aggregatedAim={aggregatedAim} />, {
@@ -563,14 +627,15 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('only Ready templates are used for metrics (NotAvailable are excluded)', async () => {
-      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+      getAimClusterProfilesSpy.mockResolvedValueOnce([
         {
           metadata: { name: 'latency-ready', labels: {} },
-          spec: { modelName: 'test-model', metric: AIMMetric.Latency },
-          status: {
-            status: 'Ready',
-            profile: { metadata: { type: 'optimized' } },
+          spec: {
+            modelName: 'test-model',
+            metric: AIMMetric.Latency,
+            type: 'optimized',
           },
+          status: { status: 'Ready' },
         },
         {
           metadata: { name: 'throughput-not-available', labels: {} },
@@ -597,24 +662,23 @@ describe('DeployAIMDrawer', () => {
     });
 
     it('templates with undefined spec.metric do not affect metric options', async () => {
-      getAimClusterServiceTemplatesSpy.mockResolvedValueOnce([
+      getAimClusterProfilesSpy.mockResolvedValueOnce([
         {
           metadata: { name: 'no-metric', labels: {} },
           spec: {
             modelName: 'test-model',
-          } as AIMClusterServiceTemplate['spec'],
-          status: {
-            status: 'Ready',
-            profile: { metadata: { type: 'optimized' } },
-          },
+            type: 'optimized',
+          } as AIMClusterProfile['spec'],
+          status: { status: 'Ready' },
         },
         {
           metadata: { name: 'latency-ok', labels: {} },
-          spec: { modelName: 'test-model', metric: AIMMetric.Latency },
-          status: {
-            status: 'Ready',
-            profile: { metadata: { type: 'optimized' } },
+          spec: {
+            modelName: 'test-model',
+            metric: AIMMetric.Latency,
+            type: 'optimized',
           },
+          status: { status: 'Ready' },
         },
       ]);
 

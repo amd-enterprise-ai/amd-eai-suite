@@ -1,0 +1,20 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+# Shared UI workspace root. airm/ and aiwb/ have their own orphan configs.
+# This config covers shared/ packages that aren't under an orphan config.
+
+repos:
+  - repo: local
+    hooks:
+      - id: format-shared
+        name: Format (shared UI packages)
+        entry: pnpm -r --filter './shared/**' run format:fix
+        language: system
+        pass_filenames: false
+      - id: lint-shared
+        name: Lint (shared UI packages)
+        entry: pnpm -r --filter './shared/**' run lint
+        language: system
+        pass_filenames: false

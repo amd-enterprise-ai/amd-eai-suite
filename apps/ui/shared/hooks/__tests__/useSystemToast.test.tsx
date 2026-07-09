@@ -39,7 +39,12 @@ describe('useSystemToast', () => {
     result.current.toast.error(toastContent);
 
     expect(toast.error).toHaveBeenCalledWith(
-      toastContent,
+      expect.objectContaining({
+        props: expect.objectContaining({
+          content: toastContent,
+          copyText: toastContent,
+        }),
+      }),
       expect.objectContaining({
         icon: expect.anything(),
         style: expect.objectContaining({
@@ -50,13 +55,31 @@ describe('useSystemToast', () => {
     );
   });
 
-  it('should call toast.error with string as param', () => {
+  it('should make a string error message copyable', () => {
     const { result } = renderHook(() => useSystemToast());
     const toastContent = 'Error Toast';
 
     result.current.toast.error(toastContent);
 
-    expect(toast.error).toHaveBeenCalledWith(toastContent, expect.anything());
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({ copyText: toastContent }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('should not provide copy text for non-string content', () => {
+    const { result } = renderHook(() => useSystemToast());
+
+    result.current.toast.error(<span>Rich error</span>);
+
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({ copyText: undefined }),
+      }),
+      expect.anything(),
+    );
   });
 
   it('should call toast.error with error message when APIRequestError is provided', () => {
@@ -71,7 +94,12 @@ describe('useSystemToast', () => {
     result.current.toast.error(toastContent, apiError);
 
     expect(toast.error).toHaveBeenCalledWith(
-      'Failed to get resource: Error message from API',
+      expect.objectContaining({
+        props: expect.objectContaining({
+          content: 'Failed to get resource: Error message from API',
+          copyText: 'Failed to get resource: Error message from API',
+        }),
+      }),
       expect.anything(),
     );
   });
@@ -87,7 +115,11 @@ describe('useSystemToast', () => {
     result.current.toast.error(toastContent, apiError);
 
     expect(toast.error).toHaveBeenCalledWith(
-      'Failed to process request: Server error',
+      expect.objectContaining({
+        props: expect.objectContaining({
+          content: 'Failed to process request: Server error',
+        }),
+      }),
       expect.anything(),
     );
   });

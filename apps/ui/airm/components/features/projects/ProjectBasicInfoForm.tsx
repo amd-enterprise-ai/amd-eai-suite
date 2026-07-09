@@ -2,8 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ManagedForm } from '@amdenterpriseai/components';
-import { FormFieldComponent } from '@amdenterpriseai/components';
+import {
+  ManagedForm,
+  FormFieldComponent,
+  Select,
+  SelectItem,
+} from '@amdenterpriseai/components';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 import { getCluster as fetchCluster, updateProject } from '@/services/app';
 import {
@@ -26,7 +30,7 @@ import {
   ProjectWithResourceAllocation,
   UpdateProjectRequest,
 } from '@/types/projects';
-import { Select, SelectItem } from '@heroui/react';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'next-i18next';
 import { useCallback, useMemo } from 'react';

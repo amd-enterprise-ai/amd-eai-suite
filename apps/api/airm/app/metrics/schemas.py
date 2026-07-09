@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from api_common.collections import BasePaginationList
 from api_common.schemas import BaseModel
 
 from ..projects.schemas import ProjectResponse
@@ -106,8 +105,13 @@ class WorkloadWithMetrics(WorkloadResponse):
     created_by: str = Field(description="The user who created the workload", default=None)
 
 
-class WorkloadsWithMetrics(BasePaginationList):
+class WorkloadsWithMetrics(BaseModel):
+    """Flat envelope preserved; migration to nested envelope tracked in EAI-6519."""
+
     data: list[WorkloadWithMetrics]
+    total: int
+    page: int
+    page_size: int
 
 
 class WorkloadGpuDevice(BaseModel):

@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import type { AIMClusterServiceTemplate } from '@/types/aims';
+import type { AIMClusterProfile } from '@/types/aims';
 
-/** Form sentinel: control does not narrow templates for that dimension (automatic selection). */
+/** Form sentinel: control does not narrow profiles for that dimension (automatic selection). */
 export const ADVANCED_PARAM_AUTOMATIC = '__automatic__';
 
 export type FilterProfilesByAdvancedParamsFilters = {
@@ -16,21 +16,23 @@ export type FilterProfilesByAdvancedParamsFilters = {
 };
 
 /**
- * Narrows service templates for the profile dropdown using metric + advanced profile fields.
+ * Narrows profiles for the profile dropdown using metric + advanced profile fields.
  *
  * **Automatic** (`ADVANCED_PARAM_AUTOMATIC`): that control is not used to filter; deploy may
  * choose automatically for that dimension. A field is also treated as automatic when empty.
  *
- * **Order of checks** (template is excluded on first failed check):
- * 1. Metric — if the user selected a metric, `status.profile.metadata.metric` must match.
- * 2. If optimization class, GPU, precision, and GPU count are all automatic → keep any template that passed (1).
- * 3. Otherwise require equality on each non-automatic field vs `metadata`: type (optimization class),
- *    GPU model, precision, GPU count (count compared as string to form value).
+ * **Order of checks** (profile is excluded on first failed check):
+ * 1. Metric — if the user selected a metric, `spec.metric` must match.
+ * 2. If optimization class, accelerator model, precision, and accelerator count are all
+ *    automatic → keep any profile that passed (1).
+ * 3. Otherwise require equality on each non-automatic field vs `spec`: type
+ *    (optimization class), acceleratorModel, precision, acceleratorCount (compared as
+ *    string to form value).
  */
 export function filterProfilesByAdvancedParams(
-  profiles: AIMClusterServiceTemplate[],
+  profiles: AIMClusterProfile[],
   filters: FilterProfilesByAdvancedParamsFilters,
-): AIMClusterServiceTemplate[] {
+): AIMClusterProfile[] {
   const isAutomatic = (v: string | undefined) =>
     !v || v === ADVANCED_PARAM_AUTOMATIC;
   const matchesOrAutomatic = (
@@ -47,20 +49,20 @@ export function filterProfilesByAdvancedParams(
     isAutomatic(precision) &&
     isAutomatic(gpuCount);
 
-  const metricFiltered = profiles.filter((t) => {
+  const metricFiltered = profiles.filter((p) => {
     if (!selectedMetric || selectedMetric === '') return true;
-    return t.status?.profile?.metadata?.metric === selectedMetric;
+    return p.spec?.metric === selectedMetric;
   });
 
   if (allFiltersAutomatic) return metricFiltered;
 
-  return metricFiltered.filter((t) => {
-    const meta = t.status?.profile?.metadata;
+  return metricFiltered.filter((p) => {
+    const spec = p.spec;
     return (
-      matchesOrAutomatic(optimizationClass, meta?.type) &&
-      matchesOrAutomatic(gpuModel, meta?.gpu) &&
-      matchesOrAutomatic(precision, meta?.precision) &&
-      (isAutomatic(gpuCount) || String(meta?.gpuCount) === gpuCount)
+      matchesOrAutomatic(optimizationClass, spec?.type) &&
+      matchesOrAutomatic(gpuModel, spec?.acceleratorModel) &&
+      matchesOrAutomatic(precision, spec?.precision) &&
+      (isAutomatic(gpuCount) || String(spec?.acceleratorCount) === gpuCount)
     );
   });
 }

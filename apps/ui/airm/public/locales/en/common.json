@@ -116,7 +116,8 @@
       "title": "Clear"
     },
     "copy": {
-      "title": "Copy"
+      "title": "Copy",
+      "copied": "Copied"
     },
     "clearFilters": {
       "title": "Clear filters"

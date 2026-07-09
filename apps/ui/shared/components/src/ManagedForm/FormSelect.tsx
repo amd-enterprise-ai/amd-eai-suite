@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectProps } from '@heroui/react';
+import { Select, SelectProps } from '@amdenterpriseai/components';
+
 import { cn } from '@heroui/react';
 import { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 

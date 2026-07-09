@@ -15,7 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_common.exceptions import ConflictException, NotFoundException, UploadFailedException, ValidationException
 from app.datasets.models import DatasetType
 from app.datasets.repository import list_datasets, select_dataset
-from app.datasets.service import create_and_upload_dataset, delete_datasets, download_dataset_file, get_dataset_by_id
+from app.datasets.service import (
+    create_and_upload_dataset,
+    delete_dataset,
+    download_dataset_file,
+    get_dataset_by_id,
+    list_paginated_datasets,
+)
 from app.minio import MinioClient
 from tests import factory
 
@@ -207,46 +213,44 @@ async def test_get_dataset_by_id_not_found(db_session: AsyncSession, test_namesp
 
 
 @pytest.mark.asyncio
-async def test_delete_datasets_success(db_session: AsyncSession, test_namespace: str, test_user: str) -> None:
-    """Test successful deletion of multiple datasets."""
-    # Create test datasets
-    dataset1 = await factory.create_dataset(
+async def test_delete_dataset_success(db_session: AsyncSession, test_namespace: str, test_user: str) -> None:
+    """Test successful deletion of a single dataset."""
+    dataset = await factory.create_dataset(
         db_session, name="Dataset 1", path="dataset-1.jsonl", namespace=test_namespace
-    )
-    dataset2 = await factory.create_dataset(
-        db_session, name="Dataset 2", path="dataset-2.jsonl", namespace=test_namespace
     )
 
     with patch("app.datasets.service.delete_from_s3") as mock_delete_s3:
         mock_client = AsyncMock(spec=MinioClient)
 
-        deleted_ids = await delete_datasets(db_session, [dataset1.id, dataset2.id], test_namespace, mock_client)
+        result = await delete_dataset(db_session, dataset.id, test_namespace, mock_client)
 
-        assert len(deleted_ids) == 2
-        assert dataset1.id in deleted_ids
-        assert dataset2.id in deleted_ids
+        assert result is None
 
-        # Verify S3 deletion was called for both datasets
-        assert mock_delete_s3.call_count == 2
+        # Verify S3 deletion was called once for the dataset
+        assert mock_delete_s3.call_count == 1
 
-        # Verify datasets are deleted from database
+        # Verify dataset is deleted from database
         remaining = await list_datasets(db_session, test_namespace)
         assert len(remaining) == 0
 
 
 @pytest.mark.asyncio
-async def test_delete_datasets_with_wrong_ids(db_session: AsyncSession, test_namespace: str) -> None:
-    """Test deletion with non-existent IDs returns empty list."""
-    wrong_ids = [uuid4(), uuid4()]
+async def test_delete_dataset_not_found(db_session: AsyncSession, test_namespace: str) -> None:
+    """Test deletion of non-existent dataset is idempotent (returns None, no error)."""
+    non_existent_id = uuid4()
 
-    mock_client = AsyncMock(spec=MinioClient)
-    deleted_ids = await delete_datasets(db_session, wrong_ids, test_namespace, mock_client)
+    with patch("app.datasets.service.delete_from_s3") as mock_delete_s3:
+        mock_client = AsyncMock(spec=MinioClient)
 
-    assert deleted_ids == []
+        result = await delete_dataset(db_session, non_existent_id, test_namespace, mock_client)
+
+        assert result is None
+        # S3 deletion should NOT be attempted for non-existent dataset
+        mock_delete_s3.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_delete_datasets_s3_failure_continues(
+async def test_delete_dataset_s3_failure_continues(
     db_session: AsyncSession, test_namespace: str, test_user: str
 ) -> None:
     """Test that S3 deletion failure doesn't prevent database deletion."""
@@ -258,10 +262,10 @@ async def test_delete_datasets_s3_failure_continues(
         mock_delete_s3.side_effect = Exception("S3 deletion failed")
         mock_client = AsyncMock(spec=MinioClient)
 
-        # Deletion should still succeed and return the ID
-        deleted_ids = await delete_datasets(db_session, [dataset.id], test_namespace, mock_client)
+        # Deletion should still succeed (no exception raised)
+        result = await delete_dataset(db_session, dataset.id, test_namespace, mock_client)
 
-        assert dataset.id in deleted_ids
+        assert result is None
 
         # Verify dataset is deleted from database even though S3 deletion failed
         remaining = await list_datasets(db_session, test_namespace)
@@ -269,7 +273,7 @@ async def test_delete_datasets_s3_failure_continues(
 
 
 @pytest.mark.asyncio
-async def test_delete_datasets_namespace_isolation(
+async def test_delete_dataset_namespace_isolation(
     db_session: AsyncSession, test_namespace: str, test_user: str
 ) -> None:
     """Test that datasets can only be deleted from their own namespace."""
@@ -280,14 +284,125 @@ async def test_delete_datasets_namespace_isolation(
         db_session, name="Test Dataset", path="test-dataset.jsonl", namespace=test_namespace
     )
 
-    mock_client = AsyncMock(spec=MinioClient)
+    with patch("app.datasets.service.delete_from_s3") as mock_delete_s3:
+        mock_client = AsyncMock(spec=MinioClient)
 
-    # Try to delete from different namespace
-    deleted_ids = await delete_datasets(db_session, [dataset.id], other_namespace, mock_client)
+        # Try to delete from different namespace - idempotent no-op
+        result = await delete_dataset(db_session, dataset.id, other_namespace, mock_client)
 
-    # Should not delete because namespace doesn't match
-    assert deleted_ids == []
+        assert result is None
+        # S3 deletion should NOT be attempted when dataset is in a different namespace
+        mock_delete_s3.assert_not_called()
 
     # Verify dataset still exists in original namespace
-    result = await select_dataset(db_session, dataset.id, test_namespace)
-    assert result is not None
+    found = await select_dataset(db_session, dataset.id, test_namespace)
+    assert found is not None
+
+
+# ============================================================================
+# list_paginated_datasets
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_list_paginated_datasets_empty(db_session: AsyncSession, test_namespace: str) -> None:
+    """An empty namespace yields an empty page with total=0."""
+    result = await list_paginated_datasets(
+        session=db_session,
+        namespace=test_namespace,
+        type=None,
+        name=None,
+        page=1,
+        page_size=10,
+    )
+
+    assert result.items == []
+    assert result.total == 0
+    assert result.page == 1
+    assert result.page_size == 10
+
+
+@pytest.mark.asyncio
+async def test_list_paginated_datasets_single_page(db_session: AsyncSession, test_namespace: str) -> None:
+    """When the row count is below page_size, all rows are returned on page 1."""
+    for i in range(3):
+        await factory.create_dataset(db_session, name=f"Dataset {i}", path=f"ds-{i}.jsonl", namespace=test_namespace)
+
+    result = await list_paginated_datasets(
+        session=db_session,
+        namespace=test_namespace,
+        type=None,
+        name=None,
+        page=1,
+        page_size=10,
+    )
+
+    assert len(result.items) == 3
+    assert result.total == 3
+    assert result.page == 1
+
+
+@pytest.mark.asyncio
+async def test_list_paginated_datasets_exact_page_boundary(db_session: AsyncSession, test_namespace: str) -> None:
+    """When the row count equals page_size, page 1 is full and page 2 is empty."""
+    for i in range(5):
+        await factory.create_dataset(db_session, name=f"Dataset {i}", path=f"ds-{i}.jsonl", namespace=test_namespace)
+
+    first = await list_paginated_datasets(
+        session=db_session, namespace=test_namespace, type=None, name=None, page=1, page_size=5
+    )
+    second = await list_paginated_datasets(
+        session=db_session, namespace=test_namespace, type=None, name=None, page=2, page_size=5
+    )
+
+    assert len(first.items) == 5
+    assert first.total == 5
+    assert len(second.items) == 0
+    assert second.total == 5
+
+
+@pytest.mark.asyncio
+async def test_list_paginated_datasets_multi_page_slicing(db_session: AsyncSession, test_namespace: str) -> None:
+    """Pages slice the filtered list; total reflects the full set on every page."""
+    for i in range(12):
+        await factory.create_dataset(db_session, name=f"Dataset {i}", path=f"ds-{i}.jsonl", namespace=test_namespace)
+
+    page_one = await list_paginated_datasets(
+        session=db_session, namespace=test_namespace, type=None, name=None, page=1, page_size=5
+    )
+    page_two = await list_paginated_datasets(
+        session=db_session, namespace=test_namespace, type=None, name=None, page=2, page_size=5
+    )
+    page_three = await list_paginated_datasets(
+        session=db_session, namespace=test_namespace, type=None, name=None, page=3, page_size=5
+    )
+
+    assert len(page_one.items) == 5
+    assert len(page_two.items) == 5
+    assert len(page_three.items) == 2
+    assert page_one.total == page_two.total == page_three.total == 12
+
+
+@pytest.mark.asyncio
+async def test_list_paginated_datasets_passes_filters_to_repository(
+    db_session: AsyncSession, test_namespace: str
+) -> None:
+    """`name`/`type` filters are forwarded to the repository unchanged."""
+    with patch("app.datasets.service.repository.list_datasets", autospec=True) as mock_repo:
+        mock_repo.return_value = []
+
+        await list_paginated_datasets(
+            session=db_session,
+            namespace=test_namespace,
+            type=DatasetType.FINETUNING,
+            name="my-dataset",
+            page=1,
+            page_size=10,
+        )
+
+    mock_repo.assert_called_once_with(
+        session=db_session,
+        namespace=test_namespace,
+        type=DatasetType.FINETUNING,
+        name="my-dataset",
+    )

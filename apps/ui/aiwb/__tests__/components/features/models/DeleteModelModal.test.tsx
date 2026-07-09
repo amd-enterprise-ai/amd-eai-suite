@@ -16,7 +16,6 @@ const mockModel: Model = {
   name: 'Test Model',
   resourceName: 'test-model-cr',
   createdAt: '2023-01-02T00:00:00Z',
-  modelWeightsPath: '/dev/null',
   createdBy: 'Test',
   onboardingStatus: ModelOnboardingStatus.READY,
   canonicalName: 'test-org/test-model',

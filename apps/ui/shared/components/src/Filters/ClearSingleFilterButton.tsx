@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button, PressEvent } from '@heroui/react';
+import { PressEvent } from '@heroui/react';
+import { Button } from '../Buttons/Button';
 import { IconX } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 import React from 'react';

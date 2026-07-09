@@ -48,6 +48,7 @@
     "Unknown": "Unknown"
   },
   "deployModal": {
+    "loading": "Loading details…",
     "title": "Deploy workload",
     "settings": {
       "title": "Deployment settings",

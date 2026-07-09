@@ -66,6 +66,16 @@ class MinioClient:
         self.client.put_object(bucket_name, object_name, buffer, length=len(data))
         buffer.close()
 
+    def upload_file(self, bucket_name: str, object_name: str, file_path: str) -> None:
+        """Upload a file from disk, streaming it in parts.
+
+        Unlike ``upload_object`` (which buffers the whole blob in memory),
+        ``fput_object`` streams from the file handle and switches to a multipart
+        upload automatically, so peak memory stays bounded regardless of file
+        size. Used by the weight-import pipeline for multi-GB model shards.
+        """
+        self.client.fput_object(bucket_name, object_name, file_path)
+
     def download_object(self, bucket_name: str, object_name: str) -> bytes:
         return self.client.get_object(bucket_name, object_name).read()
 
@@ -116,9 +126,11 @@ class MinioClient:
             return
 
         delete_objects = [DeleteObject(obj.object_name) for obj in objects]
-        errors = self.client.remove_objects(bucket_name, delete_objects)
+        # Materialize the lazy generator so `if errors` reflects real failures,
+        # not the always-truthy generator object.
+        errors = list(self.client.remove_objects(bucket_name, delete_objects))
         if errors:
-            error_messages = [f"Error deleting {error.object_name}: {error.message}" for error in errors]
+            error_messages = [f"Error deleting {error.name}: {error.message}" for error in errors]
             error_message = ", ".join(error_messages)
             logger.error(f"Errors occurred while deleting objects: {error_message}")
             raise ExternalServiceError(message="Failed to delete some objects", detail=error_message)

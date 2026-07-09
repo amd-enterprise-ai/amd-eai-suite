@@ -2,7 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DropdownTrigger, Tooltip, cn } from '@heroui/react';
+import { Tooltip } from '../../Tooltip';
+import { cn } from '@heroui/react';
+import { DropdownTrigger } from '../../Dropdown/DropdownPrimitive';
 import { IconChevronDown } from '@tabler/icons-react';
 import { ReactNode, useMemo } from 'react';
 import ClearSingleFilterButton from '../ClearSingleFilterButton';

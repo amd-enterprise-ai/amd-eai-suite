@@ -2,13 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tab, Tabs } from '@heroui/react';
+import { DataRefresher, Tab, Tabs } from '@amdenterpriseai/components';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useIsFetching, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'next-i18next';
 
 import { getCurrentTimeRange } from '@amdenterpriseai/utils/app';
-import { DataRefresher } from '@amdenterpriseai/components';
 import {
   DEFAULT_CHART_TIME_PERIODS,
   TimeRangePeriod,

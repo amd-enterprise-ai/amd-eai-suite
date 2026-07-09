@@ -24,8 +24,8 @@ from kubernetes_asyncio.client import V1Namespace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.aims.crds import (
-    AIMClusterModelResource,
-    AIMClusterServiceTemplateResource,
+    AIMModelResource,
+    AIMProfileResource,
     AIMServiceResource,
     AIMServiceSpec,
     AIMServiceStatusFields,
@@ -36,7 +36,7 @@ from app.aims.crds import (
     HTTPRouteRule,
     HTTPRouteSpec,
 )
-from app.aims.enums import AIMClusterModelStatus, AIMServiceStatus, OptimizationMetric
+from app.aims.enums import AIMModelStatus, AIMServiceStatus, OptimizationMetric
 from app.aims.models import AIMService
 from app.aims.schemas import AIMResponse, AIMServiceResponse
 from app.apikeys.models import ApiKey
@@ -45,18 +45,18 @@ from app.charts.schemas import ChartCreate
 from app.config import SUBMITTER_ANNOTATION
 from app.datasets.models import Dataset, DatasetType
 from app.dispatch.crds import K8sMetadata
-from app.namespaces.constants import NAMESPACE_ID_LABEL
-from app.namespaces.crds import Namespace
-from app.namespaces.schemas import (
-    NamespaceStatsCounts,
-    NamespaceWorkloadMetrics,
-    ResourceStatusCount,
-    ResourceType,
-)
 from app.overlays.models import Overlay
+from app.projects.constants import NAMESPACE_ID_LABEL
+from app.projects.crds import Namespace
 from app.workloads.constants import WORKLOAD_ID_LABEL
 from app.workloads.enums import WorkloadStatus, WorkloadType
 from app.workloads.models import Workload
+from app.workloads.schemas import (
+    WorkloadMetrics,
+    WorkloadResourceType,
+    WorkloadStatsCounts,
+    WorkloadStatusCount,
+)
 
 DEFAULT_TEST_MANIFEST = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: test\n"
 
@@ -129,19 +129,19 @@ def make_namespace_crd(
     )
 
 
-def make_namespace_workload_metrics(
+def make_workload_metrics(
     id: UUID | None = None,
     name: str = "test-workload",
     display_name: str = "Test Workload",
     type: WorkloadType = WorkloadType.INFERENCE,
     status: WorkloadStatus = WorkloadStatus.RUNNING,
-    resource_type: ResourceType = ResourceType.DEPLOYMENT,
+    resource_type: WorkloadResourceType = WorkloadResourceType.DEPLOYMENT,
     gpu_count: int | None = 2,
     vram: float | None = 1024.0,
     created_at: datetime | None = None,
     created_by: str = "test@example.com",
-) -> NamespaceWorkloadMetrics:
-    """Create NamespaceWorkloadMetrics for testing.
+) -> WorkloadMetrics:
+    """Create WorkloadMetrics for testing.
 
     Args:
         id: Workload UUID
@@ -156,9 +156,9 @@ def make_namespace_workload_metrics(
         created_by: Creator email
 
     Returns:
-        NamespaceWorkloadMetrics instance
+        WorkloadMetrics instance
     """
-    return NamespaceWorkloadMetrics(
+    return WorkloadMetrics(
         id=id or uuid4(),
         name=name,
         display_name=display_name,
@@ -172,27 +172,27 @@ def make_namespace_workload_metrics(
     )
 
 
-def make_namespace_stats_counts(
-    namespace: str = "test-namespace",
-    status_counts: list[ResourceStatusCount] | None = None,
-) -> NamespaceStatsCounts:
-    """Create NamespaceStatsCounts for testing.
+def make_workload_stats_counts(
+    project: str = "test-namespace",
+    status_counts: list[WorkloadStatusCount] | None = None,
+) -> WorkloadStatsCounts:
+    """Create WorkloadStatsCounts for testing.
 
     Args:
-        namespace: Namespace name
+        project: Project name
         status_counts: List of status counts
 
     Returns:
-        NamespaceStatsCounts instance
+        WorkloadStatsCounts instance
     """
     counts = status_counts or [
-        ResourceStatusCount(status=WorkloadStatus.RUNNING, count=3),
-        ResourceStatusCount(status=WorkloadStatus.PENDING, count=2),
+        WorkloadStatusCount(status=WorkloadStatus.RUNNING, count=3),
+        WorkloadStatusCount(status=WorkloadStatus.PENDING, count=2),
     ]
     total = sum(c.count for c in counts)
 
-    return NamespaceStatsCounts(
-        namespace=namespace,
+    return WorkloadStatsCounts(
+        project=project,
         total=total,
         status_counts=counts,
     )
@@ -233,34 +233,68 @@ def make_aim_cluster_model(
     name: str = "llama3-8b",
     namespace: str = "test-namespace",
     image: str = "docker.io/amd/llama3:8b",
-    status: AIMClusterModelStatus = AIMClusterModelStatus.READY,
+    status: AIMModelStatus = AIMModelStatus.READY,
     canonical_name: str | None = "meta/llama3-8b",
     tags: list[str] | None = None,
     hf_token_required: bool = False,
     as_response: bool = False,
-) -> AIMClusterModelResource | AIMResponse:
-    """Create an AIMClusterModelResource for testing.
+    aim_id: str | None = "meta-llama/llama3-8b",
+    accelerator_type: str | None = None,
+    accelerator_model: str | None = None,
+    accelerator_count: int | None = None,
+    hardware_supported: bool = True,
+) -> AIMModelResource | AIMResponse:
+    """Create an AIMModelResource for testing.
 
     Args:
         as_response: If True, returns AIMResponse (for router tests).
+        aim_id: profile-matching key written to spec.aimId.
+        accelerator_type / accelerator_model / accelerator_count:
+            When any of these is set, populates
+            ``status.discoveredProfiles.byHardware`` with a single group
+            reflecting them. When all three are ``None``, ``discoveredProfiles``
+            is left unset so the "no engine discovery data yet" case is the
+            test default.
+        hardware_supported: Sets the ``supported`` flag on the generated
+            group; only takes effect when a group is created (i.e. when one
+            of the three accelerator fields above is set).
     """
-    data = {
-        "metadata": {"name": name, "namespace": namespace},
-        "spec": {"image": image},
-        "status": {
-            "status": status.value,
-            "imageMetadata": {
-                "model": {
-                    "canonicalName": canonical_name,
-                    "tags": tags if tags is not None else ["chat", "text-generation"],
-                    "hfTokenRequired": hf_token_required,
-                },
+    spec: dict[str, Any] = {"image": image}
+    if aim_id is not None:
+        spec["aimId"] = aim_id
+    # Mirror aim_id into status to simulate the v1alpha2 controller bridge
+    # ("Populated by the v1alpha2 controller from spec.aimId or discovered
+    # metadata"). Production reads must use status.aim_id, so factories that
+    # set only spec would mask call-site bugs against a real cluster.
+    status_data: dict[str, Any] = {
+        "status": status.value,
+        "imageMetadata": {
+            "model": {
+                "canonicalName": canonical_name,
+                "tags": tags if tags is not None else ["chat", "text-generation"],
+                "hfTokenRequired": hf_token_required,
             },
         },
     }
+    if aim_id is not None:
+        status_data["aimId"] = aim_id
+    if accelerator_type is not None or accelerator_model is not None or accelerator_count is not None:
+        group: dict[str, Any] = {"supported": hardware_supported}
+        if accelerator_type is not None:
+            group["acceleratorType"] = accelerator_type
+        if accelerator_model is not None:
+            group["acceleratorModel"] = accelerator_model
+        if accelerator_count is not None:
+            group["acceleratorCount"] = accelerator_count
+        status_data["discoveredProfiles"] = {"byHardware": [group]}
+    data = {
+        "metadata": {"name": name, "namespace": namespace},
+        "spec": spec,
+        "status": status_data,
+    }
     if as_response:
         return AIMResponse.model_validate(data)
-    return AIMClusterModelResource.model_validate(data)
+    return AIMModelResource.model_validate(data)
 
 
 def make_aim_service_k8s(
@@ -277,6 +311,7 @@ def make_aim_service_k8s(
     with_httproute: bool = False,
     as_response: bool = False,
     conditions: list[dict[str, Any]] | None = None,
+    profile_name: str | None = None,
 ) -> AIMServiceResource | AIMServiceResponse:
     """Create an AIMServiceResource (K8s CRD) for testing.
 
@@ -284,6 +319,8 @@ def make_aim_service_k8s(
         with_httproute: If True, creates and attaches an HTTPRoute to the service
         as_response: If True, returns AIMServiceResponse (for router tests).
         conditions: List of condition dicts with "type" and "status" keys.
+        profile_name: When set, emits spec.profile.name; when unset the
+            engine auto-resolves the profile from the model.
     """
     wid = workload_id or uuid4()
     svc_name = name or f"wb-aim-{str(wid)[:8]}"
@@ -301,6 +338,8 @@ def make_aim_service_k8s(
         spec_data["maxReplicas"] = max_replicas
     if auto_scaling is not None:
         spec_data["autoScaling"] = auto_scaling
+    if profile_name:
+        spec_data["profile"] = {"name": profile_name}
 
     resource = AIMServiceResource(
         metadata=K8sMetadata(
@@ -329,19 +368,27 @@ def make_aim_service_k8s(
     return resource
 
 
-def make_aim_cluster_service_template(
+def make_aim_cluster_profile(
     name: str = "llama3-8b-latency",
-    model_name: str = "llama3-8b",
+    aim_id: str = "meta-llama/llama3-8b",
     metric: str = "latency",
-) -> AIMClusterServiceTemplateResource:
-    """Create an AIMClusterServiceTemplateResource for testing."""
-    return AIMClusterServiceTemplateResource.model_validate(
+    accelerator_model: str = "MI300X",
+    accelerator_type: str = "gpu",
+    accelerator_count: int = 1,
+    primary: bool = True,
+) -> AIMProfileResource:
+    """Create an AIMProfileResource for testing."""
+    return AIMProfileResource.model_validate(
         {
-            "metadata": {
-                "name": name,
-                "labels": {"aim.silogen.ai/aim-image": model_name},
+            "metadata": {"name": name},
+            "spec": {
+                "aimId": aim_id,
+                "metric": metric,
+                "acceleratorModel": accelerator_model,
+                "acceleratorType": accelerator_type,
+                "acceleratorCount": accelerator_count,
+                "primary": primary,
             },
-            "spec": {"modelName": model_name, "metric": metric},
             "status": {},
         }
     )
@@ -436,7 +483,7 @@ async def create_api_key(
     session: AsyncSession,
     *,
     id: UUID | None = None,
-    name: str = "test-api-key",
+    display_name: str = "test-api-key",
     namespace: str = "test-namespace",
     truncated_key: str = "aiwb_api_key_••••••••1234",
     cluster_auth_key_id: str | None = None,
@@ -448,7 +495,7 @@ async def create_api_key(
     Args:
         session: Database session
         id: Optional UUID for the API key (auto-generated if not provided)
-        name: Human-readable name for the key
+        display_name: Human-readable name for the key
         namespace: Namespace the key belongs to
         truncated_key: Truncated key for display
         cluster_auth_key_id: Cluster Auth accessor ID. IMPORTANT: This has a unique
@@ -463,8 +510,8 @@ async def create_api_key(
 
     Example:
         # Auto-generate unique cluster_auth_key_id (recommended)
-        key1 = await create_api_key(session, name="Key 1")
-        key2 = await create_api_key(session, name="Key 2")
+        key1 = await create_api_key(session, display_name="Key 1")
+        key2 = await create_api_key(session, display_name="Key 2")
 
         # Or be explicit about unique values
         key1 = await create_api_key(session, cluster_auth_key_id="explicit-id-1")
@@ -477,7 +524,7 @@ async def create_api_key(
 
     api_key = ApiKey(
         id=id or uuid4(),
-        name=name,
+        display_name=display_name,
         namespace=namespace,
         truncated_key=truncated_key,
         cluster_auth_key_id=cluster_auth_key_id,

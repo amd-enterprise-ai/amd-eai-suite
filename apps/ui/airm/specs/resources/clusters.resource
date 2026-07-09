@@ -17,10 +17,6 @@ Resource            pages/cluster_detail_page.resource
 # Precondition keywords (Given steps)
 # =============================================================================
 
-An admin user is logged in to AIRM
-    [Documentation]    Logs in as an admin user to the AIRM UI.
-    Admin user is logged in
-
 The user is on the clusters page
     [Documentation]    Navigates to the clusters list page.
     Navigate to clusters page    ${UI_BASE_URL}
@@ -52,7 +48,7 @@ The user searches for a cluster by name
     END
     VAR    ${search_name}    ${names}[0]
     VAR    ${SEARCH_CLUSTER_NAME}    ${search_name}    scope=TEST
-    Enter search text    ${search_name}
+    Enter cluster search text    ${search_name}
     Wait Until Keyword Succeeds    5s    500ms
     ...    Search results should contain cluster    ${search_name}
 
@@ -170,10 +166,11 @@ Cluster workloads should be listed with status information
     ...                either workload rows or an empty state message.
     ${text}=    Get workloads page text
     # The page should show either workload data headers or the empty state
-    ${has_workload}=    Run Keyword And Return Status    Should Contain    ${text}    workload    ignore_case=True
-    ${has_name}=    Run Keyword And Return Status    Should Contain    ${text}    name    ignore_case=True
-    IF    not ${has_workload} and not ${has_name}
-        Fail    Workloads page does not show expected content: ${text}
+    TRY
+        Should Contain    ${text}    workload    ignore_case=True
+    EXCEPT
+        Should Contain    ${text}    name    ignore_case=True
+        ...    msg=Workloads page does not show expected content: ${text}
     END
 
 The edit cluster drawer should be visible with form fields

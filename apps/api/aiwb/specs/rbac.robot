@@ -1,0 +1,59 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+*** Settings ***
+Documentation       API-level RBAC tests for AIWB endpoints accessed by AIRM team members.
+...                 Verifies that AIWB enforces the team-member access model: a user with the
+...                 team member role assigned to an AIRM project can call AIWB namespace-scoped
+...                 endpoints for that project's namespace.
+...
+...                 The team member session infrastructure lives in the AIRM specs
+...                 (`airm_rbac.resource`, `APICredentials.py`) because team-member roles and
+...                 project membership are AIRM concepts. The AIWB pythonpath includes
+...                 `airm/specs` and `airm/specs/libraries`, so this suite reuses that
+...                 infrastructure without duplication.
+...
+...                 Prerequisites:
+...                 - A team member user exists in Keycloak (derived from admin credentials)
+...                 - Admin user has Platform Administrator role
+Resource            resources/aiwb_rbac.resource
+Resource            resources/airm_projects.resource
+
+Suite Setup         Initialize AIWB RBAC Test Suite
+Suite Teardown      Clean Up All Created Projects
+
+
+*** Keywords ***
+Initialize AIWB RBAC Test Suite
+    [Documentation]    Sets up the AIWB RBAC suite: establishes a team member API session,
+    ...    creates an AIRM project with the team member assigned, and captures the project's
+    ...    namespace for use in AIWB endpoint URLs.
+
+    Skip the suite if team member is not provisioned
+    Create team member API session
+
+    ${member_name}=    Test Name    aiwb-rbac-member-project
+    A Ready Project "${member_name}" With User Access Exists
+    Add team member to project    ${TEST_PROJECT_ID}
+    # The AIRM project name is also the Kubernetes namespace used by AIWB endpoints
+    # such as /projects/{project}/inference. Capture it so cross-service RBAC tests
+    # can build URLs.
+    VAR    ${MEMBER_PROJECT_NAMESPACE}    ${TEST_PROJECT}[name]    scope=SUITE
+
+    Log    AIWB RBAC suite initialized. Member project namespace: ${MEMBER_PROJECT_NAMESPACE}    INFO
+
+
+*** Test Cases ***
+Team member can list AIM services for assigned project via API
+    [Documentation]    Verifies that a team member can list AIM services in their assigned
+    ...    project's namespace through the AIWB API. The empty response is acceptable because
+    ...    the test only verifies access, not deployed services.
+    [Tags]    rbac    access-control    aims    smoke    cross-service
+
+    Given a team member API session exists
+
+    When team member lists AIM services for project namespace "${MEMBER_PROJECT_NAMESPACE}"
+
+    Then response should be successful
+    And response should contain AIM service list

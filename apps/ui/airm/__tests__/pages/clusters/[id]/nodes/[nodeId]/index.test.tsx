@@ -365,30 +365,6 @@ describe('Node detail page getServerSideProps', () => {
     );
   });
 
-  it('redirects to / when session is null', async () => {
-    (getServerSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-
-    const result = await getServerSideProps(context as any);
-
-    expect(result).toEqual({
-      redirect: { destination: '/', permanent: false },
-    });
-    expect(getClusterNode).not.toHaveBeenCalled();
-  });
-
-  it('redirects to / when session has no accessToken', async () => {
-    (getServerSession as ReturnType<typeof vi.fn>).mockResolvedValue({
-      user: { email: 'test@example.com' },
-    });
-
-    const result = await getServerSideProps(context as any);
-
-    expect(result).toEqual({
-      redirect: { destination: '/', permanent: false },
-    });
-    expect(getClusterNode).not.toHaveBeenCalled();
-  });
-
   it('calls getClusterNode with clusterId, nodeId, and accessToken', async () => {
     (getClusterNode as ReturnType<typeof vi.fn>).mockResolvedValue(mockNode);
 

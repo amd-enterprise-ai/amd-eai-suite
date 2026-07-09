@@ -1,0 +1,29 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+orphan: true
+
+repos:
+  - repo: local
+    hooks:
+      - id: ai-gateway-discovery-format-check
+        name: AI Gateway Discovery Go format check
+        entry: .pre-commit-gofmt.sh
+        language: script
+        pass_filenames: false
+        types: [go]
+      - id: ai-gateway-discovery-lint
+        name: AI Gateway Discovery Go lint
+        entry: make lint
+        language: system
+        pass_filenames: false
+        types: [go]
+      - id: ai-gateway-discovery-test
+        name: AI Gateway Discovery Go tests
+        entry: make test
+        language: system
+        pass_filenames: false
+        types: [go]
+        stages: [pre-push]
+        fail_fast: true

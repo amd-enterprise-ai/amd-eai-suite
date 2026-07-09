@@ -10,7 +10,7 @@ from typing import Any
 from uuid import UUID
 
 import yaml
-from kubernetes_asyncio.client import ApiException
+from kubernetes.client import ApiException, V1DeleteOptions
 from loguru import logger
 
 from ..config import SUBMITTER_ANNOTATION
@@ -21,7 +21,7 @@ from .constants import (
     CHART_ID_LABEL,
     DATASET_ID_LABEL,
     DEPLOYMENT_RESOURCE,
-    DISPLAY_NAME_LABEL,
+    DISPLAY_NAME_ANNOTATION,
     JOB_RESOURCE,
     WORKLOAD_ID_LABEL,
     WORKLOAD_RESOURCES,
@@ -110,6 +110,17 @@ def _workload_from_k8s_resource(resource: Any, status: WorkloadStatus, namespace
     Reads workload metadata from resource labels and annotations, which are
     stamped at deploy time by apply_manifest. The returned object is not
     persisted to or managed by any database session.
+
+    Note on ``workload_type`` fallback: when ``WORKLOAD_TYPE_LABEL`` is absent,
+    the resource is assumed to be ``FINE_TUNING``. This is a historical
+    compatibility default — every K8s resource produced by AIWB stamps the
+    label, but pre-EAI-6359 workloads (which were only ever fine-tuning jobs)
+    may lack it. Type-scoped endpoints that gate on ``workload.type`` are
+    therefore weaker than they appear for label-less legacy resources.
+
+    TODO(EAI-6359): drop the FINE_TUNING fallback once all legacy workloads
+    have been backfilled with the label, so missing-label resources surface
+    as a real error rather than being silently classified.
     """
     labels = resource.metadata.labels or {}
     annotations = resource.metadata.annotations or {}
@@ -117,7 +128,7 @@ def _workload_from_k8s_resource(resource: Any, status: WorkloadStatus, namespace
     workload_id = labels.get(WORKLOAD_ID_LABEL)
     chart_id = labels.get(CHART_ID_LABEL)
     dataset_id = labels.get(DATASET_ID_LABEL)
-    display_name = labels.get(DISPLAY_NAME_LABEL, "")
+    display_name = annotations.get(DISPLAY_NAME_ANNOTATION, "")
     workload_type = labels.get(WORKLOAD_TYPE_LABEL, WorkloadType.FINE_TUNING)
     submitter = annotations.get(SUBMITTER_ANNOTATION, "")
 
@@ -191,10 +202,12 @@ async def delete_workload_resources(
 
     for resource in WORKLOAD_RESOURCES:
         try:
+            # Background propagation cascades to dependents (e.g., Kueue Workload owned by Job)
             await asyncio.to_thread(
                 dynamic_client.resources.get(api_version=resource.api_version, kind=resource.kind).delete,
                 namespace=namespace,
                 label_selector=label_selector,
+                body=V1DeleteOptions(propagation_policy="Background"),
             )
             logger.debug(f"Deleted {resource.plural} with label {label_selector} from namespace {namespace}")
         except ApiException as e:

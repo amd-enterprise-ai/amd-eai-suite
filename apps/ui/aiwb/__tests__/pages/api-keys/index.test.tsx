@@ -5,18 +5,11 @@
 import { render, screen } from '@testing-library/react';
 import { GetServerSidePropsContext } from 'next';
 
-import { getServerSession } from 'next-auth';
-
 import ApiKeysPage, {
   getServerSideProps,
 } from '@/pages/[project]/api-keys/index';
 
 import wrapper from '@/__tests__/ProviderWrapper';
-
-// Mock next-auth
-vi.mock('next-auth', () => ({
-  getServerSession: vi.fn(),
-}));
 
 // Mock serverSideTranslations
 vi.mock('next-i18next/serverSideTranslations', () => ({
@@ -52,8 +45,6 @@ vi.mock('@/components/features/api-keys/CreateApiKey', () => ({
   ),
 }));
 
-const mockGetServerSession = vi.mocked(getServerSession);
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -88,116 +79,26 @@ describe('ApiKeysPage', () => {
 describe('getServerSideProps', () => {
   const mockContext = {
     locale: 'en',
-    req: {},
-    res: {},
   } as GetServerSidePropsContext;
 
-  it('returns props with translations when session is valid', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { email: 'test@example.com' },
-      accessToken: 'valid-token',
-    } as any);
-
+  it('returns props with translations', async () => {
     const result = await getServerSideProps(mockContext);
 
     expect(result).toEqual({
       props: {},
     });
-
-    expect(mockGetServerSession).toHaveBeenCalledWith(
-      mockContext.req,
-      mockContext.res,
-      expect.any(Object), // authOptions
-    );
-  });
-
-  it('redirects to home when session is missing', async () => {
-    mockGetServerSession.mockResolvedValue(null);
-
-    const result = await getServerSideProps(mockContext);
-
-    expect(result).toEqual({
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    });
-  });
-
-  it('redirects when user is missing', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: null,
-      accessToken: 'valid-token',
-    } as any);
-
-    const result = await getServerSideProps(mockContext);
-
-    expect(result).toEqual({
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    });
-  });
-
-  it('redirects when user email is missing', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { email: null },
-      accessToken: 'valid-token',
-    } as any);
-
-    const result = await getServerSideProps(mockContext);
-
-    expect(result).toEqual({
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    });
-  });
-
-  it('redirects when access token is missing', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { email: 'test@example.com' },
-      accessToken: null,
-    } as any);
-
-    const result = await getServerSideProps(mockContext);
-
-    expect(result).toEqual({
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    });
   });
 
   it('handles different locales', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { email: 'test@example.com' },
-      accessToken: 'valid-token',
-    } as any);
-
     const contextWithDifferentLocale = {
       ...mockContext,
       locale: 'fr',
     };
 
     await getServerSideProps(contextWithDifferentLocale);
-
-    expect(mockGetServerSession).toHaveBeenCalledWith(
-      contextWithDifferentLocale.req,
-      contextWithDifferentLocale.res,
-      expect.any(Object),
-    );
   });
 
   it('handles missing locale', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { email: 'test@example.com' },
-      accessToken: 'valid-token',
-    } as any);
-
     const contextWithoutLocale = {
       ...mockContext,
       locale: undefined,

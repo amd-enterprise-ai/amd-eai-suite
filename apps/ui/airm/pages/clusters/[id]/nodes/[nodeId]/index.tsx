@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button } from '@heroui/react';
+import type { StatisticsCardProps } from '@amdenterpriseai/components';
+import {
+  Button,
+  HorizontalStatisticsCards,
+  StatusDisplay,
+} from '@amdenterpriseai/components';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { useCallback, useMemo } from 'react';
 import { getServerSession } from 'next-auth';
@@ -31,10 +36,6 @@ import {
   NodeGpuDevicesTable,
   NodeWorkloadsTable,
 } from '@/components/features/clusters';
-
-import { HorizontalStatisticsCards } from '@amdenterpriseai/components';
-import { StatusDisplay } from '@amdenterpriseai/components';
-import type { StatisticsCardProps } from '@amdenterpriseai/components';
 
 interface Props {
   node: ClusterNode;
@@ -168,21 +169,10 @@ export async function getServerSideProps(context: any) {
   const locale = context.locale ?? 'en';
   const session = await getServerSession(context.req, context.res, authOptions);
 
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: { destination: '/', permanent: false },
-    };
-  }
-
   try {
     const clusterId = context.params.id;
     const nodeId = context.params.nodeId;
-    const accessToken = session.accessToken as string;
+    const accessToken = session?.accessToken as string;
 
     const [node, cluster] = await Promise.all([
       getClusterNode(clusterId, nodeId, accessToken),

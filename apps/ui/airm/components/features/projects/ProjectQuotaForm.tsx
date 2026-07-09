@@ -2,13 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ManagedForm } from '@amdenterpriseai/components';
+import { Alert, ManagedForm } from '@amdenterpriseai/components';
 import { QuotaAllocationEditFields } from '@/types/enums/quotas-form-fields';
 import { ProjectQuotaFormData } from '@/types/projects';
 import { UpdateProjectRequest } from '@/types/projects';
 import { convertStringToNumber } from '@amdenterpriseai/utils/app';
 import { useTranslation } from 'next-i18next';
-import { Alert } from '@amdenterpriseai/components';
 import { useCallback, useMemo } from 'react';
 import { z } from 'zod';
 import { AllocationSettings } from '../quotas';

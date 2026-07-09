@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Textarea } from '@heroui/react';
+import { Textarea } from '@amdenterpriseai/components';
 import { cn } from '@heroui/react';
 import { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 

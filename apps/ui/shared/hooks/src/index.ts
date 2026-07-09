@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+export * from './ErrorToast';
 export * from './useBoundaryValidation';
 export * from './useChatWindowScroll';
 export * from './useDebouncedCallback';
@@ -12,4 +13,5 @@ export * from './useOnWindowResize';
 export * from './useSystemToast';
 export * from './useLastQueryUpdated';
 export * from './useIsLoading';
+export * from './useOverlayState';
 export * from './useSystemInfo';

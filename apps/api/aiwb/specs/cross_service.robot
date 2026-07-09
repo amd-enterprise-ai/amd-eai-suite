@@ -5,10 +5,10 @@
 *** Settings ***
 Documentation       Cross-service integration tests for AIRM and AIWB.
 ...                 Verifies that AIWB correctly interacts with AIRM-managed
-...                 projects and namespaces, including access control enforcement.
+...                 projects, including access control enforcement.
 
 Resource            resources/aiwb_common.resource
-Resource            resources/aiwb_namespaces.resource
+Resource            resources/aiwb_projects.resource
 Resource            resources/airm_projects.resource
 Resource            resources/airm_keywords.resource
 
@@ -22,26 +22,26 @@ Both services health checks pass
     Given AIRM service is running
     And AIWB service is running
 
-AIWB lists namespaces including AIRM-managed project
-    [Documentation]    Verify AIWB namespace list includes a project managed by AIRM
-    [Tags]    smoke    cross-service    namespaces
+AIWB lists projects including AIRM-managed project
+    [Documentation]    Verify AIWB project list includes a project managed by AIRM
+    [Tags]    smoke    cross-service    projects
     Given a ready project with user access exists
-    When AIWB namespaces are listed
-    Then AIWB namespace list should contain project namespace
+    When AIWB projects are listed
+    Then AIWB project list should contain current project
 
-AIWB namespace stats available for AIRM-managed project
-    [Documentation]    Verify AIWB can retrieve namespace stats for an AIRM-managed project
-    [Tags]    cross-service    namespaces
+AIWB project workload stats available for AIRM-managed project
+    [Documentation]    Verify AIWB can retrieve project workload stats for an AIRM-managed project
+    [Tags]    cross-service    projects
     Given a ready project with user access exists
-    When AIWB namespace stats are requested
-    Then AIWB namespace stats response should contain namespace
+    When AIWB project workload stats are requested
+    Then AIWB project workload stats response should contain project
 
-AIWB denies access to unauthorized namespace
-    [Documentation]    Verify AIWB enforces access control on namespace operations
-    [Tags]    cross-service    namespaces
+AIWB denies access to unauthorized project
+    [Documentation]    Verify AIWB enforces access control on project operations
+    [Tags]    cross-service    projects
     Given a ready project with user access exists
     And a project without user access exists
-    When AIWB namespaces are listed
-    Then AIWB namespace list should contain project namespace
-    And AIWB namespace list should not contain unauthorized namespace
-    And AIWB namespace stats should be denied for unauthorized namespace
+    When AIWB projects are listed
+    Then AIWB project list should contain current project
+    And AIWB project list should not contain unauthorized project
+    And AIWB project workload stats should be denied for unauthorized project

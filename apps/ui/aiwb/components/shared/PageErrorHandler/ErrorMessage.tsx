@@ -2,14 +2,17 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button } from '@heroui/react';
+import { ActionButton, Button, HeroMessage } from '@amdenterpriseai/components';
 import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
 import { useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
-import { ActionButton, HeroMessage } from '@amdenterpriseai/components';
-import { ErrorCodes, ErrorMessageProps, Intent } from '@amdenterpriseai/types';
+import { ErrorMessageProps, Intent } from '@amdenterpriseai/types';
+import {
+  getErrorTitleTranslationKey,
+  getErrorDescriptionTranslationKey,
+} from '@/lib/app/errorMessages';
 
 export function ErrorMessage({
   message = '',
@@ -32,17 +35,14 @@ export function ErrorMessage({
     setIsErrorExpanded(!isErrorExpanded);
   };
 
-  const isKnownError = Object.values(ErrorCodes).includes(code as ErrorCodes);
+  const titleKey = getErrorTitleTranslationKey(code);
+  const descriptionKey = getErrorDescriptionTranslationKey(code);
 
   return (
     <HeroMessage
       intent={Intent.DANGER}
-      title={isKnownError ? t(`error.${code}.title`) : t(`error.unknown.title`)}
-      description={
-        isKnownError
-          ? t(`error.${code}.description`)
-          : t(`error.unknown.description`)
-      }
+      title={t(titleKey ?? 'error.unknown.title')}
+      description={t(descriptionKey ?? 'error.unknown.description')}
       endContent={
         <>
           {message && (

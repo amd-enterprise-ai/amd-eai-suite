@@ -12,6 +12,7 @@ Library             Collections
 Library             OperatingSystem
 Resource            resources/api/common.resource
 Resource            resources/api/aims.resource
+Resource            resources/api/external_aim.resource
 
 
 *** Variables ***
@@ -60,13 +61,14 @@ Create model
     END
 
 Get model
-    [Documentation]    Retrieve a specific model by ID using namespace-based routing.
-    ...                Pattern: /namespaces/{namespace}/models/{model_id}
+    [Documentation]    Retrieve a specific fine-tuned model by name using the
+    ...                project-scoped fine-tuning capability endpoint:
+    ...                GET /projects/{project}/fine-tuning/models/{model_id}
     ...
     ...                Args:
-    ...                model_id (str): UUID of the model to retrieve
+    ...                model_id (str): AIMModel CR name or workload UUID
     ...                expected_status (str): Expected HTTP status code (default: any)
-    ...                namespace (str): Namespace for the request (required)
+    ...                namespace (str): Project namespace for the request (required)
     ...                project_id: DEPRECATED - kept for backward compatibility but ignored
     ...
     ...                Return:
@@ -83,7 +85,7 @@ Get model
         FAIL                    namespace cannot be None when calling Get model
     END
 
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/aims/models/${model_id}
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=projects/${namespace}/fine-tuning/models/${model_id}
 
     Log                     GET ${endpoint}         DEBUG
     ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
@@ -91,8 +93,9 @@ Get model
     RETURN                  ${response}
 
 Get models
-    [Documentation]    List fine-tuned models using namespace-based routing (K8s-based).
-    ...                Pattern: /namespaces/{namespace}/aims/models
+    [Documentation]    List fine-tuned models in a project via the fine-tuning
+    ...                capability endpoint:
+    ...                GET /projects/{project}/fine-tuning/models
     ...
     ...                Returns AIMModel CRs in the namespace.
     ...
@@ -102,7 +105,7 @@ Get models
     ...                imageMetadata, sourceType).
     ...
     ...                Args:
-    ...                namespace (str): Namespace for the request (required)
+    ...                namespace (str): Project namespace for the request (required)
     ...                expected_status (str): Expected HTTP status code (default: any)
     ...                project_id: DEPRECATED - ignored
     ...
@@ -119,7 +122,7 @@ Get models
         FAIL                    namespace cannot be None when calling Get models
     END
 
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/aims/models
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=projects/${namespace}/fine-tuning/models
 
     Log                     GET ${endpoint}         DEBUG
     ${response}=            Safe Get Request        ${endpoint}             expected_status=${expected_status}
@@ -161,21 +164,22 @@ Modify model
 
 Delete model
     [Documentation]    Delete a specific model using namespace-based routing.
-    ...                Pattern: /namespaces/{namespace}/models/{model_id}
+    ...                Pattern: /namespaces/{namespace}/aims/models/{model_id}
     ...
     ...    Args:
-    ...    model_id (str): UUID of the model to delete
+    ...    model_id (str): AIMModel CR name (not a DB UUID)
     ...    expected_status (str): Expected HTTP status code (default: any)
     ...    namespace (str): Namespace for the request (required)
+    ...    force (bool): When True, cascade-deletes active AIMServices (default: False)
     ...    project_id: DEPRECATED - kept for backward compatibility but ignored
     ...
     ...    Returns:
-    ...    response: API response (empty on success, 204)
+    ...    response: API response (empty on success, 204; 409 when active deployments exist and force=False)
     ...
     ...    Raises:
     ...    HTTPError: If the model is not found or deletion fails
     [Arguments]             ${model_id}             ${namespace}            ${expected_status}=any
-    ...                     ${project_id}=${None}
+    ...                     ${force}=${False}        ${project_id}=${None}
     Create api session    aiwb
 
     # Verify that namespace is not None
@@ -183,10 +187,16 @@ Delete model
         FAIL                    namespace cannot be None when calling Delete model
     END
 
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/aims/models/${model_id}
+    ${endpoint}=            Service API Endpoint    aiwb    endpoint=projects/${namespace}/fine-tuning/models/${model_id}
 
-    Log                     DELETE ${endpoint}      DEBUG
-    ${response}=            Safe Delete Request     ${endpoint}             expected_status=${expected_status}
+    # force=true query param is only set when requested; ${None} means no params sent
+    VAR    ${params}    ${None}
+    IF    $force
+        ${params}=    Create Dictionary    force=true
+    END
+
+    Log                     DELETE ${endpoint} (force=${force})      DEBUG
+    ${response}=            Safe Delete Request     ${endpoint}             expected_status=${expected_status}    params=${params}
     Log                     Delete model response: status=${response.status_code}                   DEBUG
     IF    ${response.status_code} == 204
         Log                     Deleted model ${model_id}       INFO
@@ -198,9 +208,8 @@ Send chat completion request to external endpoint
     ...    Returns the raw response without validation.
     [Arguments]    ${external_host}    ${model_id}    ${api_key}=${None}    ${expected_status}=any
 
-    ${clean_host}=    Evaluate    $external_host.rstrip('/')
-    ${session_name}=    Set variable    aim_external_chat_${model_id}
-    Create Session    ${session_name}    ${clean_host}    verify=${VERIFY_SSL}
+    ${session_name}=    Create AIM external session    ${external_host}
+    ...    session_name=aim_external_chat_${model_id}
 
     ${headers}=    Create dictionary    Content-Type=application/json
     IF    "${api_key}" != "${None}"
@@ -213,7 +222,7 @@ Send chat completion request to external endpoint
     ...    messages=${messages}
     ...    max_tokens=10
 
-    ${response}=    POST On Session    ${session_name}    /v1/chat/completions
+    ${response}=    Post To AIM External Endpoint    ${session_name}    /v1/chat/completions
     ...    json=${request_data}    headers=${headers}    expected_status=${expected_status}
 
     RETURN    ${response}
@@ -223,14 +232,8 @@ List models from external endpoint
     ...    Makes an HTTP GET request to /v1/models to verify compatibility with standard LLM API format
     ...    Validates that the response contains a "data" field with the list of available models
     [Arguments]             ${external_host}        ${workload_id}=${None}    ${api_key}=${None}
-    # Create a temporary session for the external endpoint
-    ${session_name}=        Set Variable If         $workload_id is not None                aim_external_${workload_id}             aim_external_temp
-
-    # Remove any trailing slashes from external_host
-    ${clean_host}=          Evaluate                $external_host.rstrip('/')
-    ${models_url}=          Set Variable            ${clean_host}/v1/models
-
-    Create Session          ${session_name}         ${clean_host}           verify=${VERIFY_SSL}
+    ${identifier}=          Set Variable If         $workload_id is not None        ${workload_id}    temp
+    ${session_name}=        Create AIM external session    ${external_host}    identifier=${identifier}
 
     # Add Authorization header if API key provided
     ${headers}=             Create Dictionary
@@ -239,7 +242,8 @@ List models from external endpoint
         Log                 Using API key authentication for external endpoint    DEBUG
     END
 
-    ${response}=            GET On Session          ${session_name}         /v1/models              expected_status=200     timeout=180    headers=${headers}
+    ${response}=            Get From AIM External Endpoint    ${session_name}    /v1/models
+    ...                     headers=${headers}      expected_status=200     timeout=180
 
     # Verify the response follows standard LLM API format with "data" field containing model list
     ${json}=                Set Variable            ${response.json()}
@@ -249,6 +253,21 @@ List models from external endpoint
     ${models}=              Get From Dictionary     ${json}                 data
     ${model_count}=         Get Length              ${models}
     RETURN                  ${models}
+
+Get models response from external endpoint
+    [Documentation]    GET /v1/models on an external endpoint and return the raw response
+    ...    WITHOUT asserting the status. Lets callers distinguish a 200 listing from an
+    ...    expected auth denial (401/403/404) versus unexpected errors.
+    [Arguments]             ${external_host}        ${workload_id}=${None}    ${api_key}=${None}
+    ${identifier}=          Set Variable If         $workload_id is not None        ${workload_id}    temp
+    ${session_name}=        Create AIM external session    ${external_host}    identifier=${identifier}
+    ${headers}=             Create Dictionary
+    IF    "${api_key}" != "${None}"
+        Set To Dictionary   ${headers}              Authorization=Bearer ${api_key}
+    END
+    ${response}=            Get From AIM External Endpoint    ${session_name}    /v1/models
+    ...                     headers=${headers}      expected_status=any     timeout=180
+    RETURN                  ${response}
 
 Model Supports Chat
     [Documentation]    Checks if a model supports chat interface based on metadata tags.
@@ -277,10 +296,8 @@ Run Chat Inference
     ...                Tests instruction-following capability (chat models should follow instructions).
     [Arguments]    ${external_host}    ${model_id}    ${workload_id}    ${api_key}=${None}
 
-    # Create session for external endpoint
-    ${session_name}=    Set Variable If    $workload_id is not None    aim_external_${workload_id}    aim_external_temp
-    ${clean_host}=    Evaluate    $external_host.rstrip('/')
-    Create Session    ${session_name}    ${clean_host}    verify=${VERIFY_SSL}
+    ${identifier}=    Set Variable If    $workload_id is not None    ${workload_id}    temp
+    ${session_name}=    Create AIM external session    ${external_host}    identifier=${identifier}
 
     ${headers}=    Create Dictionary    Content-Type=application/json
 
@@ -301,7 +318,7 @@ Run Chat Inference
     ...    max_tokens=20
     ...    temperature=0.7
 
-    ${response}=    POST On Session    ${session_name}    /v1/chat/completions
+    ${response}=    Post To AIM External Endpoint    ${session_name}    /v1/chat/completions
     ...    headers=${headers}    json=${body}    expected_status=200    timeout=120
     ${json}=    Set Variable    ${response.json()}
 
@@ -332,10 +349,8 @@ Run Completion Inference
     ...                Uses HTML prompt to avoid language-specific issues.
     [Arguments]    ${external_host}    ${model_id}    ${workload_id}    ${api_key}=${None}
 
-    # Create session for external endpoint
-    ${session_name}=    Set Variable If    $workload_id is not None    aim_external_${workload_id}    aim_external_temp
-    ${clean_host}=    Evaluate    $external_host.rstrip('/')
-    Create Session    ${session_name}    ${clean_host}    verify=${VERIFY_SSL}
+    ${identifier}=    Set Variable If    $workload_id is not None    ${workload_id}    temp
+    ${session_name}=    Create AIM external session    ${external_host}    identifier=${identifier}
 
     ${headers}=    Create Dictionary    Content-Type=application/json
 
@@ -353,7 +368,7 @@ Run Completion Inference
     ...    max_tokens=30
     ...    temperature=0.7
 
-    ${response}=    POST On Session    ${session_name}    /v1/completions
+    ${response}=    Post To AIM External Endpoint    ${session_name}    /v1/completions
     ...    headers=${headers}    json=${body}    expected_status=200    timeout=120
     ${json}=    Set Variable    ${response.json()}
 
@@ -380,9 +395,10 @@ Run Completion Inference
     RETURN    ${text}
 
 Get finetunable models
-    [Documentation]    GET /v1/finetunable — returns GPU-compatible finetunable model objects.
+    [Documentation]    GET /v1/fine-tuning/models — returns GPU-compatible finetunable
+    ...                base model objects from the fine-tuning capability catalog.
     [Arguments]    ${expected_status}=any
     Create api session    aiwb
-    ${endpoint}=    Service API Endpoint    aiwb    endpoint=finetunable
+    ${endpoint}=    Service API Endpoint    aiwb    endpoint=fine-tuning/models
     ${response}=    Safe Get Request    ${endpoint}    expected_status=${expected_status}
     RETURN    ${response}

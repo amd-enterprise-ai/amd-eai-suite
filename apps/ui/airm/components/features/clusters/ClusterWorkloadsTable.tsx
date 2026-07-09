@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useDisclosure } from '@heroui/react';
 import { IconTrash } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
@@ -11,8 +10,11 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'next-i18next';
 import router from 'next/router';
 
-import { useDebouncedCallback } from '@amdenterpriseai/hooks';
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import {
+  useDebouncedCallback,
+  useOverlayState,
+  useSystemToast,
+} from '@amdenterpriseai/hooks';
 
 import { fetchClusterWorkloadsMetrics } from '@/services/app';
 import { getClusterProjects } from '@/services/app';
@@ -49,9 +51,12 @@ import {
 } from '@/types/workloads';
 
 import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
-import { ChipDisplay, StatusDisplay } from '@amdenterpriseai/components';
-import { ServerSideDataTable } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
+import {
+  ActionsToolbar,
+  ChipDisplay,
+  ServerSideDataTable,
+  StatusDisplay,
+} from '@amdenterpriseai/components';
 
 interface Props {
   clusterId: string;
@@ -122,7 +127,7 @@ export const ClusterWorkloadsTable: React.FC<Props> = ({ clusterId }) => {
     isOpen: isDeleteWorkloadModalOpen,
     onOpen: onDeleteWorkloadModalOpen,
     onOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const { mutate: deleteWorkloadMutation } = useMutation({
     mutationFn: deleteWorkload,

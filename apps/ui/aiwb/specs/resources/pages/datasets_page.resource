@@ -15,7 +15,7 @@ ${DATASETS_PATH}                    /datasets
 ${DATASETS_PAGE_TABLE}              css=table
 
 # Row actions
-${ROW_ACTIONS_BUTTON}               button[aria-label="list.actions.label"]
+${ROW_ACTIONS_BUTTON}               button[aria-label="Actions"]
 ${DOWNLOAD_ACTION_ITEM}             text="Download"
 
 # Upload modal elements
@@ -30,6 +30,14 @@ ${UPLOAD_SUCCESS_TOAST}             text="Dataset successfully uploaded"
 ${DOWNLOAD_INDICATOR_PREPARING}     text="Preparing download"
 ${DOWNLOAD_INDICATOR_DONE}          text="Download ready"
 ${DOWNLOAD_INDICATOR_DISMISS}       css=button[aria-label="Dismiss"]
+
+# Pagination elements (HeroUI Pagination component default ARIA).
+# Verified against @heroui/pagination dist/use-pagination.js — defaults are
+# "pagination navigation" for the nav wrapper and "next page button" /
+# "previous page button" for the controls.
+${DATASETS_PAGINATION_NAV}          css=nav[aria-label="pagination navigation"]
+${DATASETS_PAGINATION_NEXT}         css=nav[aria-label="pagination navigation"] button[aria-label="next page button"]
+${DATASETS_FIRST_ROW}               css=table tbody tr:first-of-type
 
 
 *** Keywords ***
@@ -153,3 +161,45 @@ Dataset row should contain metadata
     VAR    ${row}    css=table tbody tr:has-text("${dataset_name}")
     Wait For Elements State    ${row}    visible    timeout=15s
     Get Text    ${row}    contains    ${dataset_type}
+
+Dataset table row count should equal
+    [Documentation]    Verifies the dataset table renders exactly ${expected} data rows.
+    [Arguments]    ${expected}
+
+    VAR    ${rows}    css=table tbody tr
+    Get Element Count    ${rows}    ==    ${expected}
+
+Datasets pagination controls should be visible
+    [Documentation]    Verifies the pagination navigation widget is rendered for the
+    ...                datasets table.
+
+    Wait For Elements State    ${DATASETS_PAGINATION_NAV}    visible    timeout=15s
+
+Get first dataset row text
+    [Documentation]    Returns the textual content of the first data row. Used to
+    ...                detect page changes without coupling to specific dataset names.
+
+    Wait For Elements State    ${DATASETS_FIRST_ROW}    visible    timeout=15s
+    ${text}=    Get Text    ${DATASETS_FIRST_ROW}
+    RETURN    ${text}
+
+Click next page in datasets pagination
+    [Documentation]    Clicks the "next page" control of the datasets pagination widget.
+
+    Wait For Elements State    ${DATASETS_PAGINATION_NEXT}    visible    timeout=10s
+    Click    ${DATASETS_PAGINATION_NEXT}
+
+Wait until first dataset row text changes from
+    [Documentation]    Polls the first dataset row until its text differs from the given
+    ...                baseline, confirming the table content has actually changed (i.e.,
+    ...                pagination navigated to a new page).
+    [Arguments]    ${baseline}
+
+    Wait Until Keyword Succeeds    15s    1s    First dataset row text should differ from    ${baseline}
+
+First dataset row text should differ from
+    [Documentation]    Asserts the current first-row text is not equal to the given baseline.
+    [Arguments]    ${baseline}
+
+    ${current}=    Get Text    ${DATASETS_FIRST_ROW}
+    Should Not Be Equal    ${current}    ${baseline}

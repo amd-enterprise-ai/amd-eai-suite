@@ -1,12 +1,8 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Tooltip,
-} from '@heroui/react';
+import { Tooltip } from '../Tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
 import { IconDotsVertical } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -15,18 +11,18 @@ import { ActionHintsList } from './ActionHintsList';
 import { ActionMenuItem } from './ActionMenuItem';
 import { SectionHeader } from './SectionHeader';
 import { useMenuKeyboardNavigation } from './useMenuKeyboardNavigation';
-import { DropdownItem } from './types';
+import { DropdownActionItem } from './types';
 import { FlattenedDropdownItem, isSectionHeader } from './utils';
 
 interface NestedDropdownProps {
-  actions: DropdownItem[];
+  actions: DropdownActionItem[];
   isDisabled?: boolean;
   children?: React.ReactNode;
 }
 
 // Helper to flatten actions: sections become [header, ...items]
 const flattenActionsForDisplay = (
-  actions: DropdownItem[],
+  actions: DropdownActionItem[],
 ): FlattenedDropdownItem[] => {
   const result: FlattenedDropdownItem[] = [];
   for (const action of actions) {
@@ -51,7 +47,7 @@ const NestedDropdownMenu = ({
   onRequestClose,
   isRootLevel = false,
 }: {
-  actions: DropdownItem[];
+  actions: DropdownActionItem[];
   onClose: () => void;
   onRequestClose?: () => void;
   isRootLevel?: boolean;

@@ -2,7 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Link, SelectItem, Spinner } from '@heroui/react';
+import {
+  SelectItem,
+  FormFileUpload,
+  FormInput,
+  FormSelect,
+  selectiveZodResolver,
+  ModalForm,
+  Link,
+  Spinner,
+} from '@amdenterpriseai/components';
 import { IconExternalLink } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
@@ -12,7 +21,7 @@ import { useTranslation } from 'next-i18next';
 
 import { useSystemToast } from '@amdenterpriseai/hooks';
 
-import { getDatasets, uploadDataset } from '@/lib/app/datasets';
+import { listDatasets, uploadDataset } from '@/lib/app/datasets';
 import { useProject } from '@/contexts/ProjectContext';
 
 import { DATASET_FILESIZE_LIMIT } from '@/lib/app/datasets';
@@ -20,14 +29,6 @@ import { displayBytesInOptimalUnit } from '@amdenterpriseai/utils/app';
 
 import { DatasetType } from '@/types/datasets';
 import { UploadDatasetFormData, UploadDatasetParams } from '@/types/datasets';
-
-import {
-  FormFileUpload,
-  FormInput,
-  FormSelect,
-} from '@amdenterpriseai/components';
-import { selectiveZodResolver } from '@amdenterpriseai/components';
-import { ModalForm } from '@amdenterpriseai/components';
 
 import { debounce } from 'lodash';
 import { ZodType, z } from 'zod';
@@ -90,12 +91,15 @@ export const DatasetUpload = ({ onClose, isOpen, refresh }: Props) => {
     async (name: string, resolve: (result: boolean) => void): Promise<void> => {
       setUniqueCheckInProgress(true);
       try {
+        // Server-side filter: a unique name is one with zero matching rows.
+        // pageSize:1 keeps the request minimal — we only need the total count.
+        const params = { name, pageSize: 1 };
         const datasetsWithName = await queryClient.fetchQuery({
-          queryKey: ['project', activeProject, 'datasets', { name }],
-          queryFn: () => getDatasets(activeProject!, { name }),
+          queryKey: ['project', activeProject, 'datasets', params],
+          queryFn: () => listDatasets(activeProject!, params),
           staleTime: 0,
         });
-        resolve(datasetsWithName.length === 0);
+        resolve(datasetsWithName.pagination.total === 0);
       } catch (error) {
         console.error('Error checking dataset name availability:', error);
         resolve(true);
@@ -131,8 +135,8 @@ export const DatasetUpload = ({ onClose, isOpen, refresh }: Props) => {
           .nonempty({
             message: t('modals.upload.form.datasetName.emptyNameError'),
           })
-          .regex(/^[0-9A-Za-z-_]+$/, {
-            message: t('modals.upload.form.datasetName.invalidCharactersError'),
+          .max(253, {
+            message: t('modals.upload.form.datasetName.nameTooLongError'),
           })
           .refine(async (name) => validateDatasetName(name), {
             message: t('modals.upload.form.datasetName.nonUniqueNameError'),

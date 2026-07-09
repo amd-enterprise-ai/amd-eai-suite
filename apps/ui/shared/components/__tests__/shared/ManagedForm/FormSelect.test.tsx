@@ -2,7 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { SelectItem } from '@heroui/react';
+import {
+  SelectItem,
+  FormSelect,
+  ManagedForm,
+} from '@amdenterpriseai/components';
 import { IconUser } from '@tabler/icons-react';
 import {
   act,
@@ -11,9 +15,6 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-
-import { FormSelect } from '@amdenterpriseai/components';
-import { ManagedForm } from '@amdenterpriseai/components';
 
 import { ZodType, z } from 'zod';
 

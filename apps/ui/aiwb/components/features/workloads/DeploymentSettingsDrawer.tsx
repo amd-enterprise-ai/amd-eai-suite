@@ -13,12 +13,12 @@ import type { UseFormReturn } from 'react-hook-form';
 import { DrawerForm } from '@amdenterpriseai/components';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 import {
-  updateAimScalingPolicy,
   createAimScalingPolicyConfig,
   DEFAULT_AUTOSCALING,
   AIM_MAX_REPLICAS,
 } from '@/lib/app/aims';
 import type { AutoscalingFieldValues } from '@/lib/app/aims';
+import { updateInferenceScaling } from '@/lib/app/inference';
 import { z } from 'zod';
 
 import { AutoscalingFormFields } from '../models/AutoscalingFormFields';
@@ -74,7 +74,7 @@ export const DeploymentSettingsDrawer = ({
           targetValue: data.targetValue,
         }),
       };
-      await updateAimScalingPolicy(namespace, id, payload);
+      await updateInferenceScaling(namespace, id, payload);
       toast.success(t('notifications.updateSuccess'));
       if (onSuccess) onSuccess(data);
       if (onClose) onClose();

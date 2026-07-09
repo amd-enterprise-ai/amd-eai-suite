@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { BaseGPUUsageCard } from './BaseGPUUsageCard';
+import { BaseGPUUsageCard, type GPUUsageCardConfig } from './BaseGPUUsageCard';
 
 import type {
   TimeRangePeriod,
@@ -31,14 +31,14 @@ type Props = DashboardProps | WorkloadProps;
 
 const GPU_DEVICE_CONFIG = {
   metricName: 'gpu_device_utilization',
-  chartColor: 'fuchsia' as const,
+  chartColor: 'fuchsia',
   titleKey: 'dashboard.overview.gpuDeviceUsage.title',
   tooltipKey: 'dashboard.overview.gpuDeviceUsage.description',
   upperLimitUnallocatedKey:
     'dashboard.overview.gpuDeviceUsage.upperLimitUnallocated',
   upperLimitKey: 'dashboard.overview.gpuDeviceUsage.upperLimit',
   dataFormatter: (value: number | null) => Number(value).toFixed(0),
-};
+} as const satisfies GPUUsageCardConfig;
 
 export const GPUDeviceUsageCard: React.FC<Props> = (props) => {
   return <BaseGPUUsageCard {...props} config={GPU_DEVICE_CONFIG} />;

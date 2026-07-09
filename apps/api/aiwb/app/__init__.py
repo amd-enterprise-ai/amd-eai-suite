@@ -22,6 +22,7 @@ except ImportError:
     pass
 
 from fastapi import APIRouter, Depends, FastAPI
+from fastapi_mcp import FastApiMCP
 from kubernetes.client.exceptions import ApiException
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
@@ -59,26 +60,27 @@ from api_common.fastapi import (
 from api_common.health.router import router as health_router
 from api_common.middleware import CamelCaseMiddleware
 
-from .aims.router import router as aims_router
 from .aims.syncer import sync_aim_services
 from .apikeys.router import router as apikeys_router
 from .charts.router import router as charts_router
 from .cluster.router import router as cluster_router
 from .cluster_auth.client import init_cluster_auth_client
 from .cluster_auth.config import CLUSTER_AUTH_ENABLED
+from .common_responses import AUTH_RESPONSES
 from .config import LOG_LEVEL
 from .datasets.router import router as datasets_router
 from .dispatch import poller
 from .dispatch.config import load_k8s_config
 from .dispatch.kube_client import close_dynamic_client, init_kube_client
 from .exceptions import api_exception_handler
+from .fine_tuning.router import router as fine_tuning_router
+from .inference.router import router as inference_router
 from .logs.client import close_loki_client, init_loki_client
 from .metrics.client import init_prometheus_client
 from .minio import init_minio_client
-from .models.router import router as models_router
-from .namespaces.config import DEFAULT_NAMESPACE as DEFAULT_NAMESPACE
-from .namespaces.router import router as namespaces_router
 from .overlays.router import router as overlays_router
+from .projects.config import DEFAULT_NAMESPACE as DEFAULT_NAMESPACE
+from .projects.router import router as projects_router
 from .secrets.router import router as secrets_router
 from .workloads.router import router as workloads_router
 from .workloads.syncer import sync_workloads
@@ -194,23 +196,30 @@ app = FastAPI(
 api_unsecured_router = APIRouter()
 api_unsecured_router.include_router(health_router, prefix="/v1")
 
-api_secured_router = APIRouter(dependencies=[Depends(ensure_user_logged_in)])
-api_secured_router.include_router(namespaces_router, prefix="/v1")
-api_secured_router.include_router(aims_router, prefix="/v1")
+api_secured_router = APIRouter(dependencies=[Depends(ensure_user_logged_in)], responses=AUTH_RESPONSES)
+api_secured_router.include_router(projects_router, prefix="/v1")
+api_secured_router.include_router(inference_router, prefix="/v1")
 api_secured_router.include_router(charts_router, prefix="/v1")
 api_secured_router.include_router(cluster_router, prefix="/v1")
 api_secured_router.include_router(overlays_router, prefix="/v1")
 api_secured_router.include_router(datasets_router, prefix="/v1")
-api_secured_router.include_router(models_router, prefix="/v1")
+api_secured_router.include_router(fine_tuning_router, prefix="/v1")
 api_secured_router.include_router(workloads_router, prefix="/v1")
 api_secured_router.include_router(workspaces_router, prefix="/v1")
 api_secured_router.include_router(secrets_router, prefix="/v1")
 api_secured_router.include_router(apikeys_router, prefix="/v1")
 
-app.add_middleware(CamelCaseMiddleware, exclude_path_suffixes=["/chat"])
+app.add_middleware(CamelCaseMiddleware, exclude_path_suffixes=["/mcp/messages/"])
 
 app.include_router(api_unsecured_router)
 app.include_router(api_secured_router)
+
+# Initialize MCP support AFTER routers are included
+mcp = FastApiMCP(app)
+mcp.mount()
+# Refresh MCP server to ensure all routes are discovered
+mcp.setup_server()
+
 
 # Register exception handlers
 # Note: More specific exception handlers must be registered before generic ones

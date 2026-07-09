@@ -2,16 +2,18 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Chip, ChipProps, cn } from '@heroui/react';
+import { Chip, ChipProps } from '../Chip';
+import { cn } from '@heroui/react';
 import React from 'react';
 
 import { Color } from '@amdenterpriseai/types';
 import { Size } from '@amdenterpriseai/types';
 
 export interface InlineBadgeProps
-  extends Omit<ChipProps, 'size' | 'color' | 'ref'> {
+  extends Omit<ChipProps, 'size' | 'color' | 'ref' | 'children'> {
   size?: Size;
   color?: Color;
+  children?: React.ReactNode;
   showOutline?: boolean;
   isOneChar?: boolean;
   isInvisible?: boolean;
@@ -32,7 +34,7 @@ export const InlineBadge = ({
   className,
   ...rest
 }: InlineBadgeProps): React.JSX.Element => {
-  const startContent =
+  const startContent: React.ReactNode =
     typeof children === 'string' ? (
       <span className={cn('grow text-center', { hidden: hideText })}>
         {isOneChar ? children.slice(0, 1).toUpperCase() : children}

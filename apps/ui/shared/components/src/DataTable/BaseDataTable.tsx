@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { Skeleton } from '@amdenterpriseai/components';
+import { cn } from '@heroui/react';
+import type { Selection } from '../Select/Select';
 import {
-  Selection,
-  Skeleton,
   SortDescriptor,
   Table,
   TableBody,
@@ -12,12 +13,9 @@ import {
   TableColumn,
   TableHeader,
   TableRow,
-  cn,
   getKeyValue,
-} from '@heroui/react';
+} from './TablePrimitive';
 import React, { Key, useCallback, useMemo, useState } from 'react';
-
-import { TFunction } from 'next-i18next';
 
 import {
   ACTIONS_COLUMN,
@@ -44,7 +42,7 @@ interface Props<T, K extends keyof T, C> {
   className?: string;
   defaultSortByField: C;
   defaultSortDirection?: SortDirection;
-  translation: TFunction;
+  translation: (key: string, options?: Record<string, unknown>) => string;
   translationKeyPrefix?: string;
   idKey: keyof T;
   isLoading?: boolean;

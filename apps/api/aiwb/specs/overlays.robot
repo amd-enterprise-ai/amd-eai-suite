@@ -71,11 +71,3 @@ Delete non-existent overlay returns 404
     Given an overlay does not exist
     When delete overlay request is sent
     Then response status should be 404
-
-Batch delete overlays
-    [Documentation]    Verify that multiple overlays can be deleted in a single request
-    [Tags]                  overlays                delete
-
-    Given multiple overlays exist
-    When batch delete overlays request is sent
-    Then response status should be 204

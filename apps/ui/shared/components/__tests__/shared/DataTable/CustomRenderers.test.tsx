@@ -107,12 +107,7 @@ vi.mock('@heroui/react', async () => {
         {children}
       </div>
     ),
-    Tooltip: ({ children, content }: any) => (
-      <div data-testid="mock-tooltip">
-        <div data-testid="tooltip-trigger">{children}</div>
-        <div data-testid="tooltip-content">{content}</div>
-      </div>
-    ),
+
     Popover: ({ children }: any) => (
       <div data-testid="mock-popover">{children}</div>
     ),
@@ -134,6 +129,28 @@ vi.mock('@heroui/react', async () => {
     ),
   };
 });
+vi.mock('@amdenterpriseai/components', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/components')>();
+  return {
+    ...actual,
+    Tooltip: ({ children, content }: any) => (
+      <div data-testid="mock-tooltip">
+        <div data-testid="tooltip-trigger">{children}</div>
+        <div data-testid="tooltip-content">{content}</div>
+      </div>
+    ),
+  };
+});
+
+vi.mock('../../../src/Tooltip', () => ({
+  Tooltip: ({ children, content }: any) => (
+    <div data-testid="mock-tooltip">
+      <div data-testid="tooltip-trigger">{children}</div>
+      <div data-testid="tooltip-content">{content}</div>
+    </div>
+  ),
+}));
 
 describe('DateDisplay', () => {
   it('passes date to DateSince', () => {

@@ -21,9 +21,10 @@ ${HEADERS_MULTIPART}    Content-Type=multipart/form-data
 
 *** Keywords ***
 Datasets endpoint
-    [Documentation]    Return the full datasets endpoint url with namespace
-    [Arguments]             ${namespace}            ${dataset_id}=${None}                           ${action}=${None}
-    ${base_endpoint}=       Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/datasets
+    [Documentation]    Return the datasets endpoint URL for a project.
+    ...    Pattern: /projects/{project}/datasets
+    [Arguments]             ${project}              ${dataset_id}=${None}                           ${action}=${None}
+    ${base_endpoint}=       Service API Endpoint    aiwb    endpoint=projects/${project}/datasets
     IF    $dataset_id is not None and $action is not None
         RETURN                  ${base_endpoint}/${dataset_id}/${action}
     ELSE IF    $dataset_id is not None
@@ -33,35 +34,6 @@ Datasets endpoint
     ELSE
         RETURN                  ${base_endpoint}
     END
-
-Create dataset
-    [Documentation]    DEPRECATED: Use Upload dataset instead.
-    ...    The AIWB API only supports dataset creation via file upload (POST /upload).
-    ...    This keyword is kept for backward compatibility but will fail if used.
-    ...
-    ...    Args:
-    ...    dataset_data (dict): Dataset creation parameters (NOT SUPPORTED)
-    ...    namespace (str): Namespace for the request
-    ...
-    ...    Return:
-    ...    response: API response (will be 404 or 405 - endpoint doesn't exist)
-    ...
-    ...    Raise:
-    ...    HTTPError: Method not supported by AIWB API
-    [Arguments]             ${dataset_data}         ${namespace}            ${expected_status}=any
-    Create api session    aiwb
-
-    ${endpoint}=            Datasets endpoint       namespace=${namespace}
-    Log                     POST ${endpoint} with data: ${dataset_data} - NOTE: This endpoint does not exist in AIWB API!     WARN
-    ${response}=            Safe Post Request         ${endpoint}             json=${dataset_data}    expected_status=${expected_status}
-    Log                     Dataset creation response: status=${response.status_code}               DEBUG
-    IF    ${response.status_code} in [200, 201]
-        ${response_json}=       Set Variable            ${response.json()}
-        ${dataset_id}=      Get From Dictionary     ${response_json}        id
-        ${dataset_name}=    Get From Dictionary     ${response_json}        name
-        Log                     Created dataset ${dataset_id} (${dataset_name})                         INFO
-    END
-    RETURN                  ${response}
 
 Upload dataset
     [Documentation]    Upload a new dataset from a JSONL file.
@@ -93,7 +65,7 @@ Upload dataset
     @{jsonl_file}=          Create List             data.jsonl              ${jsonl_content}
     &{files}=               Create Dictionary       jsonl=${jsonl_file}
 
-    ${endpoint}=            Datasets endpoint       action=upload           namespace=${namespace}
+    ${endpoint}=            Datasets endpoint       project=${namespace}
     ${access_token}=        Authorization token
     &{headers}=             Create Dictionary       Authorization=Bearer ${access_token}
 
@@ -123,7 +95,7 @@ Get dataset
     [Arguments]             ${dataset_id}           ${namespace}            ${expected_status}=any
     Create api session    aiwb
 
-    ${endpoint}=            Datasets endpoint       namespace=${namespace}    dataset_id=${dataset_id}
+    ${endpoint}=            Datasets endpoint       project=${namespace}    dataset_id=${dataset_id}
     Log                     GET ${endpoint}         DEBUG
     ${response}=            Safe Get Request          ${endpoint}             expected_status=${expected_status}
     Log                     Get dataset response: status=${response.status_code}                    DEBUG
@@ -133,7 +105,7 @@ List datasets
     [Documentation]    List datasets with optional filtering.
     ...
     ...    Args:
-    ...    type (str, optional): Filter by DatasetType (e.g., Fine-tuning, Evaluation)
+    ...    type (str, optional): Filter by DatasetType (e.g., Fine-tuning)
     ...    name (str, optional): Filter by dataset name (exact match)
     ...    namespace (str): Namespace for the request
     ...
@@ -150,7 +122,7 @@ List datasets
     IF    "${type}" != "${None}"    Set to dictionary    ${params}    type=${type}
     IF    "${name}" != "${None}"    Set to dictionary    ${params}    name=${name}
 
-    ${endpoint}=            Datasets endpoint       namespace=${namespace}
+    ${endpoint}=            Datasets endpoint       project=${namespace}
     Log                     GET ${endpoint} with params: ${params}          DEBUG
     ${response}=            Safe Get Request          ${endpoint}             params=${params}        expected_status=${expected_status}
     Log                     List datasets response: status=${response.status_code}                  DEBUG
@@ -166,7 +138,7 @@ List datasets with type filter
     [Documentation]    Retrieves datasets filtered by the specified type
     [Arguments]             ${dataset_type}         ${namespace}
     Create api session    aiwb
-    ${endpoint}=            Datasets endpoint       namespace=${namespace}
+    ${endpoint}=            Datasets endpoint       project=${namespace}
 
     ${params}=              Create Dictionary       type=${dataset_type}
     ${response}=            Safe Get Request        ${endpoint}             params=${params}        expected_status=any
@@ -176,7 +148,7 @@ List datasets with name filter
     [Documentation]    Retrieves datasets filtered by the specified name
     [Arguments]             ${name}                 ${namespace}
     Create api session    aiwb
-    ${endpoint}=            Datasets endpoint       namespace=${namespace}
+    ${endpoint}=            Datasets endpoint       project=${namespace}
 
     ${params}=              Create Dictionary       name=${name}
     ${response}=            Safe Get Request        ${endpoint}             params=${params}        expected_status=any
@@ -200,7 +172,7 @@ Modify dataset
     [Arguments]             ${dataset_id}           ${dataset_data}         ${namespace}            ${expected_status}=any
     Create API session    aiwb
 
-    ${endpoint}=            Datasets endpoint       namespace=${namespace}    dataset_id=${dataset_id}
+    ${endpoint}=            Datasets endpoint       project=${namespace}    dataset_id=${dataset_id}
     Log                     PUT ${endpoint} with data: ${dataset_data} - NOTE: This endpoint does not exist in AIWB API!      WARN
     ${response}=            Safe Put Request          ${endpoint}             json=${dataset_data}    expected_status=${expected_status}
     Log                     Modify dataset response: status=${response.status_code}                 DEBUG
@@ -225,38 +197,12 @@ Delete dataset
     [Arguments]             ${dataset_id}           ${namespace}            ${delete_from_storage}=${False}                 ${expected_status}=any
     Create api session    aiwb
 
-    ${endpoint}=            Datasets endpoint       namespace=${namespace}    dataset_id=${dataset_id}
+    ${endpoint}=            Datasets endpoint       project=${namespace}    dataset_id=${dataset_id}
     Log                     DELETE ${endpoint}      DEBUG
     ${response}=            Safe Delete Request       ${endpoint}             expected_status=${expected_status}
     Log                     Delete dataset response: status=${response.status_code}                 DEBUG
     IF    ${response.status_code} == 204
         Log                     Deleted dataset ${dataset_id}   INFO
-    END
-    RETURN                  ${response}
-
-Batch delete datasets
-    [Documentation]    Delete multiple datasets in a batch.
-    ...
-    ...    Args:
-    ...    dataset_ids (list): List of dataset UUIDs to delete
-    ...    namespace (str): Namespace for the request
-    ...
-    ...    Returns:
-    ...    response: API response with status 200 containing list of deleted UUIDs
-    ...
-    ...    Raises:
-    ...    HTTPError: If the request fails or any dataset is not found
-    [Arguments]             ${dataset_ids}          ${namespace}            ${expected_status}=any
-    Create api session    aiwb
-
-    ${endpoint}=            Datasets endpoint       action=delete           namespace=${namespace}
-    ${data}=                Create dictionary       ids=${dataset_ids}
-    Log                     POST ${endpoint} with data: ${data}             DEBUG
-    ${response}=            Safe Post Request         ${endpoint}             json=${data}            expected_status=${expected_status}
-    Log                     Batch delete datasets response: status=${response.status_code}         DEBUG
-    IF    ${response.status_code} == 200
-        ${count}=               Get Length              ${dataset_ids}
-        Log                     Batch deleted ${count} datasets         INFO
     END
     RETURN                  ${response}
 
@@ -273,7 +219,7 @@ Upload oversized dataset
     ...    Returns:
     ...    response: HTTP response from the upload attempt
     [Arguments]             ${name}                 ${namespace}            ${size_mb}=101
-    ${endpoint}=            Datasets endpoint       action=upload           namespace=${namespace}
+    ${endpoint}=            Datasets endpoint       project=${namespace}
     ${access_token}=        Authorization token
     ${response}=            Send oversized dataset upload                   ${endpoint}             ${access_token}         ${name}                 ${size_mb}    verify=${VERIFY_SSL}
     RETURN                  ${response}
@@ -293,7 +239,7 @@ Download dataset
     [Arguments]             ${dataset_id}           ${namespace}            ${expected_status}=any
     Create api session    aiwb
 
-    ${endpoint}=            Datasets endpoint       namespace=${namespace}    dataset_id=${dataset_id}    action=download
+    ${endpoint}=            Datasets endpoint       project=${namespace}    dataset_id=${dataset_id}    action=download
     Log                     GET ${endpoint}         DEBUG
     ${response}=            Safe Get Request          ${endpoint}             expected_status=${expected_status}
     Log                     Download dataset response: status=${response.status_code}               DEBUG

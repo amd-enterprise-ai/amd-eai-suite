@@ -11,7 +11,6 @@ import {
 } from '@testing-library/react';
 
 import { getWorkloadLogs } from '@/lib/app/workloads';
-import { getAimServiceLogs } from '@/lib/app/aims';
 
 import { WorkloadStatus } from '@/types/enums/workloads';
 import { LogLevel } from '@/types/enums/workloads';
@@ -22,9 +21,7 @@ import {
   WorkloadLogPagination,
 } from '@/types/workloads';
 
-import WorkloadLogs, {
-  LogSource,
-} from '@/components/features/workloads/WorkloadLogs';
+import WorkloadLogs from '@/components/features/workloads/WorkloadLogs';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
@@ -50,11 +47,14 @@ vi.mock('@amdenterpriseai/hooks', async (importOriginal) => ({
 
 // Mock the API services
 vi.mock('@/lib/app/workloads', () => ({
-  getWorkloadLogs: vi.fn(),
-}));
-
-vi.mock('@/lib/app/aims', () => ({
-  getAimServiceLogs: vi.fn(),
+  getWorkloadLogs: vi.fn().mockResolvedValue({
+    data: [],
+    pagination: {
+      hasMore: false,
+      pageToken: undefined,
+      totalReturned: 0,
+    },
+  }),
 }));
 
 // Mock lodash throttle
@@ -100,7 +100,6 @@ describe('WorkloadLogs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (getWorkloadLogs as Mock).mockResolvedValue(mockWorkloadLogsResponse);
-    (getAimServiceLogs as Mock).mockResolvedValue(mockWorkloadLogsResponse);
 
     // Reset the streaming hook mock
     vi.mocked(useWorkloadLogsStream).mockReturnValue({
@@ -166,7 +165,10 @@ describe('WorkloadLogs', () => {
 
   it('shows loading state when logs are being fetched', async () => {
     (getWorkloadLogs as Mock).mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 1000)),
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve(mockWorkloadLogsResponse), 1000);
+        }),
     );
 
     render(
@@ -475,28 +477,36 @@ describe('WorkloadLogs', () => {
     const mockError = new Error('API Error');
     (getWorkloadLogs as Mock).mockRejectedValue(mockError);
 
-    await act(async () => {
-      render(
-        <WorkloadLogs
-          workload={mockWorkload}
-          isOpen={true}
-          namespace="workbench"
-        />,
-        {
-          wrapper,
-        },
-      );
-    });
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
 
-    // The component should handle the error gracefully
-    await waitFor(() => {
-      expect(getWorkloadLogs).toHaveBeenCalled();
-    });
+    try {
+      await act(async () => {
+        render(
+          <WorkloadLogs
+            workload={mockWorkload}
+            isOpen={true}
+            namespace="workbench"
+          />,
+          {
+            wrapper,
+          },
+        );
+      });
 
-    // Component should still render without crashing
-    expect(
-      screen.getByText('list.actions.logs.modal.description'),
-    ).toBeInTheDocument();
+      // The component should handle the error gracefully
+      await waitFor(() => {
+        expect(getWorkloadLogs).toHaveBeenCalled();
+      });
+
+      // Component should still render without crashing
+      expect(
+        screen.getByText('list.actions.logs.modal.description'),
+      ).toBeInTheDocument();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('handles streaming errors', async () => {
@@ -884,7 +894,7 @@ describe('WorkloadLogs', () => {
 
       // The streaming hook should be called with log level in params
       expect(useWorkloadLogsStream).toHaveBeenCalledWith({
-        namespace: 'workbench',
+        projectId: 'workbench',
         workloadId: 'workload-1',
       });
     });
@@ -1972,282 +1982,6 @@ describe('WorkloadLogs', () => {
           },
         );
       });
-    });
-  });
-
-  // New tests for LogSource functionality
-  describe('LogSource - AIM Service Logs', () => {
-    beforeEach(() => {
-      (getAimServiceLogs as Mock).mockResolvedValue(mockWorkloadLogsResponse);
-    });
-
-    it('calls getAimServiceLogs when logSource is AIM', async () => {
-      await act(async () => {
-        render(
-          <WorkloadLogs
-            workload={mockWorkload}
-            isOpen={true}
-            logSource={LogSource.AIM}
-            namespace="test-namespace"
-          />,
-          { wrapper },
-        );
-      });
-
-      await waitFor(() => {
-        expect(getAimServiceLogs).toHaveBeenCalledWith(
-          'test-namespace',
-          'workload-1',
-          {
-            direction: 'backward',
-            pageToken: undefined,
-            level: undefined,
-            logType: 'workload',
-          },
-        );
-      });
-
-      expect(getWorkloadLogs).not.toHaveBeenCalled();
-    });
-
-    it('calls getWorkloadLogs when logSource is WORKLOAD', async () => {
-      await act(async () => {
-        render(
-          <WorkloadLogs
-            workload={mockWorkload}
-            isOpen={true}
-            logSource={LogSource.WORKLOAD}
-            namespace="test-namespace"
-          />,
-          { wrapper },
-        );
-      });
-
-      await waitFor(() => {
-        expect(getWorkloadLogs).toHaveBeenCalledWith(
-          'test-namespace',
-          'workload-1',
-          {
-            direction: 'backward',
-            pageToken: undefined,
-            level: undefined,
-            logType: 'workload',
-          },
-        );
-      });
-
-      expect(getAimServiceLogs).not.toHaveBeenCalled();
-    });
-
-    it('calls getWorkloadLogs when logSource is not provided (defaults to WORKLOAD)', async () => {
-      await act(async () => {
-        render(
-          <WorkloadLogs
-            workload={mockWorkload}
-            isOpen={true}
-            namespace="test-namespace"
-          />,
-          {
-            wrapper,
-          },
-        );
-      });
-
-      await waitFor(() => {
-        expect(getWorkloadLogs).toHaveBeenCalled();
-      });
-
-      expect(getAimServiceLogs).not.toHaveBeenCalled();
-    });
-
-    it('hides streaming toggle when logSource is AIM', async () => {
-      await act(async () => {
-        render(
-          <WorkloadLogs
-            workload={mockWorkload}
-            isOpen={true}
-            logSource={LogSource.AIM}
-            namespace="test-namespace"
-          />,
-          { wrapper },
-        );
-      });
-
-      await waitFor(() => {
-        expect(getAimServiceLogs).toHaveBeenCalled();
-      });
-
-      // Streaming toggle should not be present for AIM logs
-      expect(
-        screen.queryByText('list.actions.logs.modal.streaming'),
-      ).not.toBeInTheDocument();
-      expect(screen.queryByRole('switch')).not.toBeInTheDocument();
-    });
-
-    it('shows streaming toggle when logSource is WORKLOAD', async () => {
-      await act(async () => {
-        render(
-          <WorkloadLogs
-            workload={mockWorkload}
-            isOpen={true}
-            logSource={LogSource.WORKLOAD}
-            namespace="test-namespace"
-          />,
-          { wrapper },
-        );
-      });
-
-      await waitFor(() => {
-        expect(getWorkloadLogs).toHaveBeenCalled();
-      });
-
-      // Streaming toggle should be present for workload logs
-      expect(
-        screen.getByText('list.actions.logs.modal.streaming'),
-      ).toBeInTheDocument();
-      expect(screen.getByRole('switch')).toBeInTheDocument();
-    });
-
-    it('displays AIM service logs with correct log level filtering', async () => {
-      await act(async () => {
-        render(
-          <WorkloadLogs
-            workload={mockWorkload}
-            isOpen={true}
-            logSource={LogSource.AIM}
-            namespace="test-namespace"
-          />,
-          { wrapper },
-        );
-      });
-
-      await waitFor(() => {
-        expect(getAimServiceLogs).toHaveBeenCalled();
-      });
-
-      // Change log level filter
-      const logLevelDropdown = screen.getByRole('button', {
-        name: /list\.actions\.logs\.modal\.logLevelFilter\.label/i,
-      });
-
-      await act(async () => {
-        fireEvent.click(logLevelDropdown);
-      });
-
-      const errorOption = screen.getByRole('option', { name: 'ERROR' });
-      await act(async () => {
-        fireEvent.click(errorOption);
-      });
-
-      // Should call getAimServiceLogs with log level filter
-      await waitFor(() => {
-        expect(getAimServiceLogs).toHaveBeenCalledWith(
-          'test-namespace',
-          'workload-1',
-          {
-            direction: 'backward',
-            pageToken: undefined,
-            level: LogLevel.ERROR,
-            logType: 'workload',
-          },
-        );
-      });
-    });
-
-    it('displays AIM service logs with correct log type filtering', async () => {
-      await act(async () => {
-        render(
-          <WorkloadLogs
-            workload={mockWorkload}
-            isOpen={true}
-            logSource={LogSource.AIM}
-            namespace="test-namespace"
-          />,
-          { wrapper },
-        );
-      });
-
-      await waitFor(() => {
-        expect(getAimServiceLogs).toHaveBeenCalled();
-      });
-
-      // Change log type filter
-      const logTypeDropdown = screen.getByRole('button', {
-        name: /list\.actions\.logs\.modal\.logTypeFilter\.workload/i,
-      });
-
-      await act(async () => {
-        fireEvent.click(logTypeDropdown);
-      });
-
-      const eventOption = screen.getByRole('option', {
-        name: /list\.actions\.logs\.modal\.logTypeFilter\.event/i,
-      });
-      await act(async () => {
-        fireEvent.click(eventOption);
-      });
-
-      // Should call getAimServiceLogs with event log type
-      await waitFor(() => {
-        expect(getAimServiceLogs).toHaveBeenCalledWith(
-          'test-namespace',
-          'workload-1',
-          {
-            direction: 'backward',
-            pageToken: undefined,
-            level: undefined,
-            logType: 'event',
-          },
-        );
-      });
-    });
-
-    it('displays logs from AIM service with pagination support', async () => {
-      const responseWithPagination: WorkloadLogResponse = {
-        data: mockLogEntries,
-        pagination: {
-          hasMore: true,
-          pageToken: '2023-01-01T09:59:00Z',
-          totalReturned: 3,
-        },
-      };
-
-      (getAimServiceLogs as Mock).mockResolvedValue(responseWithPagination);
-
-      await act(async () => {
-        render(
-          <WorkloadLogs
-            workload={mockWorkload}
-            isOpen={true}
-            logSource={LogSource.AIM}
-            namespace="test-namespace"
-          />,
-          { wrapper },
-        );
-      });
-
-      // Wait for initial logs to load
-      await waitFor(() => {
-        expect(getAimServiceLogs).toHaveBeenCalledWith(
-          'test-namespace',
-          'workload-1',
-          {
-            direction: 'backward',
-            pageToken: undefined,
-            level: undefined,
-            logType: 'workload',
-          },
-        );
-      });
-
-      // Verify logs are displayed
-      await waitFor(() => {
-        expect(
-          screen.getByText('Application started successfully'),
-        ).toBeInTheDocument();
-      });
-      expect(screen.getByText('Low memory warning')).toBeInTheDocument();
-      expect(screen.getByText('Connection timeout error')).toBeInTheDocument();
     });
   });
 });

@@ -5,13 +5,13 @@
 """Tests for Workspaces router endpoints."""
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from api_common.exceptions import ConflictException
+from api_common.exceptions import ConflictException, NotFoundException
 from app import app  # type: ignore[attr-defined]
 from app.workloads.enums import WorkloadStatus, WorkloadType
 from app.workloads.schemas import WorkloadResponse
@@ -45,12 +45,18 @@ def make_workload_response(
 @override_dependencies(SESSION_OVERRIDES)
 @patch("app.workspaces.router.create_development_workspace", autospec=True)
 def test_create_workspace_vscode(mock_create: MagicMock) -> None:
-    """Test POST /v1/namespaces/{ns}/workspaces/vscode returns 201."""
+    """Test POST /v1/projects/{project}/workspaces with vscode type returns 201."""
     mock_create.return_value = make_workload_response(WorkspaceType.VSCODE)
     with TestClient(app) as client:
         response = client.post(
-            "/v1/namespaces/test-namespace/workspaces/vscode",
-            json={"image": "test-image", "gpus": 1, "memoryPerGpu": 128, "cpuPerGpu": 4},
+            "/v1/projects/test-namespace/workspaces",
+            json={
+                "workspaceType": "vscode",
+                "image": "test-image",
+                "gpus": 1,
+                "memoryPerGpu": 128,
+                "cpuPerGpu": 4,
+            },
         )
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["type"] == WorkloadType.WORKSPACE.value
@@ -59,12 +65,18 @@ def test_create_workspace_vscode(mock_create: MagicMock) -> None:
 @override_dependencies(SESSION_OVERRIDES)
 @patch("app.workspaces.router.create_development_workspace", autospec=True)
 def test_create_workspace_jupyterlab(mock_create: MagicMock) -> None:
-    """Test POST /v1/namespaces/{ns}/workspaces/jupyterlab returns 201."""
+    """Test POST /v1/projects/{project}/workspaces with jupyterlab type returns 201."""
     mock_create.return_value = make_workload_response(WorkspaceType.JUPYTERLAB)
     with TestClient(app) as client:
         response = client.post(
-            "/v1/namespaces/test-namespace/workspaces/jupyterlab",
-            json={"image": "test-image", "gpus": 1, "memoryPerGpu": 128, "cpuPerGpu": 4},
+            "/v1/projects/test-namespace/workspaces",
+            json={
+                "workspaceType": "jupyterlab",
+                "image": "test-image",
+                "gpus": 1,
+                "memoryPerGpu": 128,
+                "cpuPerGpu": 4,
+            },
         )
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -72,12 +84,18 @@ def test_create_workspace_jupyterlab(mock_create: MagicMock) -> None:
 @override_dependencies(SESSION_OVERRIDES)
 @patch("app.workspaces.router.create_development_workspace", autospec=True)
 def test_create_workspace_mlflow(mock_create: MagicMock) -> None:
-    """Test POST /v1/namespaces/{ns}/workspaces/mlflow returns 201."""
+    """Test POST /v1/projects/{project}/workspaces with mlflow type returns 201."""
     mock_create.return_value = make_workload_response(WorkspaceType.MLFLOW)
     with TestClient(app) as client:
         response = client.post(
-            "/v1/namespaces/test-namespace/workspaces/mlflow",
-            json={"image": "test-image", "gpus": 1, "memoryPerGpu": 128, "cpuPerGpu": 4},
+            "/v1/projects/test-namespace/workspaces",
+            json={
+                "workspaceType": "mlflow",
+                "image": "test-image",
+                "gpus": 1,
+                "memoryPerGpu": 128,
+                "cpuPerGpu": 4,
+            },
         )
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -92,8 +110,14 @@ def test_create_workspace_conflict(mock_create: MagicMock) -> None:
     )
     with TestClient(app) as client:
         response = client.post(
-            "/v1/namespaces/test-namespace/workspaces/mlflow",
-            json={"image": "test-image", "gpus": 1, "memoryPerGpu": 32, "cpuPerGpu": 4},
+            "/v1/projects/test-namespace/workspaces",
+            json={
+                "workspaceType": "mlflow",
+                "image": "test-image",
+                "gpus": 1,
+                "memoryPerGpu": 32,
+                "cpuPerGpu": 4,
+            },
         )
     assert response.status_code == status.HTTP_409_CONFLICT
     assert "MLflow workspace already running" in response.json()["detail"]
@@ -106,8 +130,8 @@ def test_create_workspace_with_display_name(mock_create: MagicMock) -> None:
     mock_create.return_value = make_workload_response(WorkspaceType.VSCODE, display_name="My Custom Workspace")
     with TestClient(app) as client:
         response = client.post(
-            "/v1/namespaces/test-namespace/workspaces/vscode?displayName=My%20Custom%20Workspace",
-            json={"gpus": 1, "memoryPerGpu": 64, "cpuPerGpu": 2},
+            "/v1/projects/test-namespace/workspaces?displayName=My%20Custom%20Workspace",
+            json={"workspaceType": "vscode", "gpus": 1, "memoryPerGpu": 64, "cpuPerGpu": 2},
         )
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["displayName"] == "My Custom Workspace"
@@ -122,7 +146,10 @@ def test_create_workspace_minimal_request(mock_create: MagicMock) -> None:
     """Test workspace creation with minimal request (using defaults)."""
     mock_create.return_value = make_workload_response(WorkspaceType.JUPYTERLAB)
     with TestClient(app) as client:
-        response = client.post("/v1/namespaces/test-namespace/workspaces/jupyterlab", json={})
+        response = client.post(
+            "/v1/projects/test-namespace/workspaces",
+            json={"workspaceType": "jupyterlab"},
+        )
     assert response.status_code == status.HTTP_201_CREATED
     mock_create.assert_called_once()
 
@@ -130,12 +157,50 @@ def test_create_workspace_minimal_request(mock_create: MagicMock) -> None:
 @override_dependencies(SESSION_OVERRIDES)
 @patch("app.workspaces.router.create_development_workspace", autospec=True)
 def test_create_workspace_comfyui(mock_create: MagicMock) -> None:
-    """Test POST /v1/namespaces/{ns}/workspaces/comfyui returns 201."""
+    """Test POST /v1/projects/{project}/workspaces with comfyui type returns 201."""
     mock_create.return_value = make_workload_response(WorkspaceType.COMFYUI)
     with TestClient(app) as client:
         response = client.post(
-            "/v1/namespaces/test-namespace/workspaces/comfyui",
-            json={"image": "test-image", "gpus": 2, "memoryPerGpu": 64, "cpuPerGpu": 8},
+            "/v1/projects/test-namespace/workspaces",
+            json={
+                "workspaceType": "comfyui",
+                "image": "test-image",
+                "gpus": 2,
+                "memoryPerGpu": 64,
+                "cpuPerGpu": 8,
+            },
         )
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["type"] == WorkloadType.WORKSPACE.value
+
+
+@override_dependencies(SESSION_OVERRIDES)
+@patch("app.workspaces.router.delete_development_workspace", autospec=True)
+def test_delete_workspace_success(mock_delete: AsyncMock) -> None:
+    """Test DELETE /v1/projects/{project}/workspaces/{id} returns 204 on success."""
+    workload_id = uuid4()
+    mock_delete.return_value = None
+
+    with TestClient(app) as client:
+        response = client.delete(f"/v1/projects/test-namespace/workspaces/{workload_id}")
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert response.content == b""
+    mock_delete.assert_called_once()
+    call_kwargs = mock_delete.call_args.kwargs
+    assert call_kwargs["namespace"] == "test-namespace"
+    assert call_kwargs["workload_id"] == workload_id
+
+
+@override_dependencies(SESSION_OVERRIDES)
+@patch("app.workspaces.router.delete_development_workspace", autospec=True)
+def test_delete_workspace_not_found(mock_delete: AsyncMock) -> None:
+    """Test DELETE returns 404 when the workspace is missing (covers both 'unknown id'
+    and 'id refers to a non-workspace workload' — the service-layer type guard."""
+    workload_id = uuid4()
+    mock_delete.side_effect = NotFoundException(f"Workspace {workload_id} not found")
+
+    with TestClient(app) as client:
+        response = client.delete(f"/v1/projects/test-namespace/workspaces/{workload_id}")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND

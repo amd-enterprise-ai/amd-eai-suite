@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { NoDataDisplay } from '@amdenterpriseai/components';
+import { NoDataDisplay, Tooltip } from '@amdenterpriseai/components';
 import { ProjectSecret } from '@/types/secrets';
 import { Secret } from '@/types/secrets';
-import { Tooltip } from '@heroui/react';
 
 interface Props {
   secret?: Secret;

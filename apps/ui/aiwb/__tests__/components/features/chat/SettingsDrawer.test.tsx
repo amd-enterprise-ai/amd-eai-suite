@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import SettingsDrawer from '@/components/features/chat/SettingsDrawer';
@@ -151,7 +151,9 @@ describe('SettingsDrawer Component', () => {
       expect(
         screen.getByText('modelSettings.temperature.label'),
       ).toBeInTheDocument();
-      expect(screen.getByLabelText('Change temperature')).toBeInTheDocument();
+      expect(
+        screen.getByLabelText('modelSettings.temperature.changeLabel'),
+      ).toBeInTheDocument();
     });
 
     it('calls onSettingsChange when temperature slider is moved', async () => {
@@ -181,7 +183,7 @@ describe('SettingsDrawer Component', () => {
         screen.getByText('modelSettings.frequencyPenalty.label'),
       ).toBeInTheDocument();
       expect(
-        screen.getByLabelText('Change frequency penalty'),
+        screen.getByLabelText('modelSettings.frequencyPenalty.changeLabel'),
       ).toBeInTheDocument();
     });
 
@@ -212,7 +214,7 @@ describe('SettingsDrawer Component', () => {
         screen.getByText('modelSettings.presencePenalty.label'),
       ).toBeInTheDocument();
       expect(
-        screen.getByLabelText('Change presence penalty'),
+        screen.getByLabelText('modelSettings.presencePenalty.changeLabel'),
       ).toBeInTheDocument();
     });
 
@@ -247,21 +249,15 @@ describe('SettingsDrawer Component', () => {
       ).toBeInTheDocument();
     });
 
-    it('calls onSettingsChange when system prompt is changed', async () => {
-      const user = userEvent.setup();
-
+    it('calls onSettingsChange when system prompt is changed', () => {
       render(
         <ProviderWrapper>
           <SettingsDrawer {...defaultProps} />
         </ProviderWrapper>,
       );
-
       const textarea = screen.getByDisplayValue('Test system prompt');
 
-      await act(async () => {
-        await user.clear(textarea);
-        await user.type(textarea, 'New system prompt');
-      });
+      fireEvent.change(textarea, { target: { value: 'New system prompt' } });
 
       expect(defaultProps.onSettingsChange).toHaveBeenCalledWith({
         ...mockInferenceSettings,
@@ -342,12 +338,14 @@ describe('SettingsDrawer Component', () => {
         </ProviderWrapper>,
       );
 
-      expect(screen.getByLabelText('Change temperature')).toBeInTheDocument();
       expect(
-        screen.getByLabelText('Change frequency penalty'),
+        screen.getByLabelText('modelSettings.temperature.changeLabel'),
       ).toBeInTheDocument();
       expect(
-        screen.getByLabelText('Change presence penalty'),
+        screen.getByLabelText('modelSettings.frequencyPenalty.changeLabel'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText('modelSettings.presencePenalty.changeLabel'),
       ).toBeInTheDocument();
       expect(
         screen.getByLabelText('modelSettings.systemPrompt.label'),

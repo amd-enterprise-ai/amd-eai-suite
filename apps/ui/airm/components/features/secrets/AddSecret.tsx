@@ -2,7 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { SelectItem, Textarea } from '@heroui/react';
+import {
+  SelectItem,
+  DrawerForm,
+  FormFieldComponent,
+  FormSelect,
+  Textarea,
+} from '@amdenterpriseai/components';
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
@@ -14,11 +20,6 @@ import { createProjectSecret, createSecret } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
-import {
-  DrawerForm,
-  FormFieldComponent,
-  FormSelect,
-} from '@amdenterpriseai/components';
 import { FormField } from '@amdenterpriseai/types';
 import { AddSecretFormData } from '@/types/secrets';
 import { SecretScope, SecretType } from '@/types/enums/secrets';

@@ -5,49 +5,81 @@
 from textwrap import dedent
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api_common.auth.security import get_user_email
+from api_common.collections import PaginationMetadata
 from api_common.database import get_session
-from api_common.exceptions import NotFoundException
-from api_common.schemas import DeleteBatchRequest, ListResponse
+from api_common.schemas import QueryParam
 
+from ..common_responses import PROJECT_ACCESS_RESPONSES
 from ..minio import MinioClient, get_minio_client
-from ..namespaces.security import ensure_access_to_workbench_namespace
+from ..projects.security import ensure_access_to_project
 from .config import MAX_FILE_SIZE_MB
 from .models import DatasetType
-from .repository import list_datasets
-from .schemas import DatasetResponse
-from .service import create_and_upload_dataset, delete_datasets, download_dataset_file, get_dataset_by_id
+from .schemas import DatasetResponse, DatasetsList, ListDatasetsQuery
+from .service import (
+    create_and_upload_dataset,
+    delete_dataset,
+    download_dataset_file,
+    get_dataset_by_id,
+    list_paginated_datasets,
+)
 
-router = APIRouter(prefix="/namespaces/{namespace}/datasets", tags=["Datasets"])
+router = APIRouter(tags=["Datasets"])
 
 
 @router.post(
-    "/upload",
+    "/projects/{project}/datasets",
     response_model=DatasetResponse,
     status_code=status.HTTP_200_OK,
-    summary="Upload a new training dataset",
+    summary="Upload a dataset to a project",
     description=dedent(f"""
-        Upload JSONL training data for AI/ML workloads. Requires namespace membership
-        and healthy cluster. Automatically organizes files using namespace-based paths
-        and ensures atomic operations (database + S3 storage).
+        Upload a JSONL dataset into the project's storage.
 
-        Maximum file size: {MAX_FILE_SIZE_MB}MB. Supports training, validation, and test
-        dataset types for machine learning pipelines.
+        The request is `multipart/form-data`: send the file in `jsonl` and
+        the metadata (`name`, `description`, `type`) as form fields. The
+        file must be valid JSONL (one JSON object per line). Maximum file
+        size is {MAX_FILE_SIZE_MB} MB; larger files are rejected at the
+        storage backend.
+
+        The dataset is persisted to S3 under a project-scoped object key
+        and a matching DB record is created in a single atomic operation
+        — either both succeed or both are rolled back.
+
+        Requires project access. The dataset is owned by the project and
+        is not visible from other projects.
     """),
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        400: {"description": "File is not valid JSONL or violates schema."},
+        409: {"description": "A dataset with this name already exists in the project."},
+        500: {"description": "S3 upload failed (storage backend error or oversized file)."},
+    },
 )
 async def upload_dataset(
-    name: str = Form(..., description="The name for the dataset"),
-    description: str | None = Form(default=None, description="The description of the dataset"),
-    type: DatasetType = Form(..., description="The type of the dataset"),
+    name: str = Form(
+        ...,
+        description="The name for the dataset (unique within the project).",
+        examples=["imdb-sentiment-v1"],
+    ),
+    description: str | None = Form(
+        default=None,
+        description="Optional free-form description of the dataset's contents.",
+        examples=["IMDB reviews labelled positive/negative; 25k train / 25k test"],
+    ),
+    type: DatasetType = Form(
+        ...,
+        description="The type of the dataset.",
+        examples=["Fine-tuning"],
+    ),
     jsonl: UploadFile = File(..., description="The JSONL file to upload"),
     author: str = Depends(get_user_email),
     session: AsyncSession = Depends(get_session),
     minio_client: MinioClient = Depends(get_minio_client),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
 ) -> DatasetResponse:
     dataset = await create_and_upload_dataset(
         session=session,
@@ -56,116 +88,132 @@ async def upload_dataset(
         type=type,
         file=jsonl,
         author=author,
-        namespace=namespace,
+        namespace=project,
         minio_client=minio_client,
     )
     return DatasetResponse.model_validate(dataset)
 
 
 @router.get(
-    "",
-    response_model=ListResponse[DatasetResponse],
+    "/projects/{project}/datasets",
+    response_model=DatasetsList,
     status_code=status.HTTP_200_OK,
-    summary="List datasets in namespace",
+    summary="List datasets in a project",
     description=dedent("""
-        List training datasets available in a namespace with optional filtering by type or name.
-        Requires namespace membership. Essential for discovering available data for AI/ML
-        workloads and training pipeline setup.
+        List datasets that have been uploaded into the project as a paginated
+        envelope (default page size 10, max 100). Use `?page=` and `?pageSize=`
+        to navigate; the response includes a `pagination` object with `page`,
+        `pageSize`, and `total` alongside `data`.
+
+        Use `?type=` to filter by dataset kind (exact match) and `?name=`
+        to filter by name (exact match). The two filters compose. Pagination
+        is applied after filtering, so `total` reflects the filtered set.
+
+        Requires project access.
     """),
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+    },
 )
 async def get_datasets(
-    type: DatasetType | None = Query(None, description="Filter datasets by type (exact match)"),
-    name: str | None = Query(None, description="Filter datasets by name (exact match)"),
+    query: QueryParam[ListDatasetsQuery],
     session: AsyncSession = Depends(get_session),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
-) -> ListResponse[DatasetResponse]:
-    datasets = await list_datasets(
+    project: str = Depends(ensure_access_to_project),
+) -> DatasetsList:
+    paginated = await list_paginated_datasets(
         session=session,
-        type=type,
-        name=name,
-        namespace=namespace,
+        namespace=project,
+        type=query.type,
+        name=query.name,
+        page=query.page,
+        page_size=query.page_size,
     )
-    return ListResponse(data=[DatasetResponse.model_validate(dataset) for dataset in datasets])
+    return DatasetsList(
+        data=[DatasetResponse.model_validate(dataset) for dataset in paginated.items],
+        pagination=PaginationMetadata(
+            page=paginated.page,
+            page_size=paginated.page_size,
+            total=paginated.total,
+        ),
+    )
 
 
 @router.get(
-    "/{dataset_id}",
+    "/projects/{project}/datasets/{dataset_id}",
     response_model=DatasetResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get dataset details",
+    summary="Get a dataset in a project",
     description=dedent("""
-        Retrieve detailed information about a specific dataset including metadata,
-        type, and S3 location. Requires namespace membership. Used for dataset
-        inspection before training workload submission.
+        Get metadata for a single dataset by id (name, description, type,
+        and S3 path). Does not return the dataset contents — use the
+        download endpoint to fetch the JSONL bytes.
+
+        Requires project access.
     """),
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        404: {"description": "Project or namespace not found, or dataset not found in the project."},
+    },
 )
 async def get_dataset(
     dataset_id: UUID,
     session: AsyncSession = Depends(get_session),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
 ) -> DatasetResponse:
-    dataset = await get_dataset_by_id(session, dataset_id, namespace)
+    dataset = await get_dataset_by_id(session, dataset_id, project)
     return DatasetResponse.model_validate(dataset)
 
 
 @router.get(
-    "/{dataset_id}/download",
+    "/projects/{project}/datasets/{dataset_id}/download",
     status_code=status.HTTP_200_OK,
-    summary="Download dataset file",
+    summary="Download a dataset file",
     description=dedent("""
-        Download JSONL dataset file for local analysis or external processing.
-        Requires namespace membership and healthy cluster status. Returns streaming
-        response for large datasets. Essential for data inspection and offline workflows.
+        Stream the dataset's JSONL contents back from S3 as an
+        `application/jsonl` attachment. The response is streamed (not
+        loaded into memory), so it is safe for datasets larger than the
+        API server's heap.
+
+        Requires project access.
     """),
+    response_description="Streaming JSONL bytes; safe for files larger than memory.",
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        404: {"description": "Project or namespace not found, or dataset not found, or has no uploaded content."},
+    },
 )
 async def download_dataset(
     dataset_id: UUID,
     session: AsyncSession = Depends(get_session),
     minio_client: MinioClient = Depends(get_minio_client),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
 ) -> StreamingResponse:
-    return await download_dataset_file(dataset_id, namespace, session, minio_client)
+    return await download_dataset_file(dataset_id, project, session, minio_client)
 
 
 @router.delete(
-    "/{dataset_id}",
+    "/projects/{project}/datasets/{dataset_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete dataset",
+    summary="Delete a dataset from a project",
     description=dedent("""
-        Remove dataset from namespace including database record and S3 object cleanup.
-        Requires namespace membership and healthy cluster. Irreversible operation -
-        use with caution in production training environments.
+        Permanently delete a dataset from the project.
+
+        Cascades: removes both the DB record and the backing S3 object.
+        The DB delete is the authoritative step; if the subsequent S3
+        delete fails the dataset still disappears from the API and the
+        orphaned object is logged for out-of-band cleanup. Calling delete
+        on a missing dataset is a no-op (idempotent).
+
+        Requires project access.
     """),
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+    },
 )
-async def delete_dataset(
+async def delete_dataset_endpoint(
     dataset_id: UUID,
     session: AsyncSession = Depends(get_session),
     minio_client: MinioClient = Depends(get_minio_client),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
 ) -> None:
-    await delete_datasets(session, [dataset_id], namespace, minio_client)
-
-
-@router.post(
-    "/delete",
-    status_code=status.HTTP_200_OK,
-    summary="Bulk delete datasets",
-    description=dedent("""
-        Atomic bulk deletion of multiple datasets from namespace. Requires namespace
-        membership and healthy cluster. All-or-nothing operation ensures data
-        consistency - fails completely if any dataset ID is invalid.
-    """),
-)
-async def batch_delete_datasets(
-    data: DeleteBatchRequest,
-    session: AsyncSession = Depends(get_session),
-    minio_client: MinioClient = Depends(get_minio_client),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
-) -> list[UUID]:
-    deleted_ids = await delete_datasets(
-        session=session, dataset_ids=data.ids, namespace=namespace, minio_client=minio_client
-    )
-    missing_ids = set(data.ids) - set(deleted_ids)
-    if missing_ids:
-        raise NotFoundException(f"Datasets with IDs {list(missing_ids)} not found in this namespace")
-    return deleted_ids
+    await delete_dataset(session, dataset_id, project, minio_client)

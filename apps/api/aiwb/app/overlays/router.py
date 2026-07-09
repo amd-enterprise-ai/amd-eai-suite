@@ -12,10 +12,10 @@ from sqlalchemy.orm import Session
 
 from api_common.auth.security import get_user_email
 from api_common.database import get_session
-from api_common.exceptions import NotFoundException, ValidationException
-from api_common.schemas import DeleteBatchRequest, ListResponse, QueryParam
+from api_common.exceptions import ValidationException
+from api_common.schemas import ListResponse, QueryParam
 
-from .repository import delete_overlays, list_overlays
+from .repository import list_overlays
 from .schemas import OverlayListQuery, OverlayResponse, OverlayUpdate
 from .service import create_overlay, delete_overlay_by_id_service, get_overlay_by_id, parse_overlay_file, update_overlay
 
@@ -26,12 +26,24 @@ router = APIRouter(tags=["Overlays"])
     "/overlays",
     response_model=OverlayResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create model deployment overlay",
+    summary="Create a chart overlay",
     description=dedent("""
-        Create YAML overlay for customizing AI model deployments on Helm charts.
-        Requires super administrator role. Defines model-specific configurations,
-        resource requirements, and environment variables for standardized deployments.
+        Attach a YAML overlay to an existing chart.
+
+        An overlay layers chart-specific or model-specific value overrides
+        on top of a chart's signature defaults, so the same chart can be
+        reused for different models or runtime profiles without forking
+        the template. The overlay is keyed by `(chartId, canonicalName)`:
+        omitting `canonicalName` creates a generic fallback that matches
+        any model.
+
+        Overlays are global (not project-scoped).
     """),
+    responses={
+        400: {"description": "Invalid YAML overlay file or non-YAML file extension."},
+        404: {"description": "Referenced chart not found."},
+        409: {"description": "An overlay with these parameters already exists for the chart."},
+    },
 )
 async def create_overlay_endpoint(
     chart_id: UUID = Form(alias=to_camel("chart_id"), description="The ID of an existing Chart."),
@@ -44,6 +56,11 @@ async def create_overlay_endpoint(
         description="Optional canonical name to associate the overlay with a model type, for example 'meta-llama/Llama-3.1-8B'.",
         examples=["meta-llama/Llama-3.1-8B"],
     ),
+    display_name: str | None = Form(
+        None,
+        alias=to_camel("display_name"),
+        description="Optional user-visible display name for this overlay.",
+    ),
     session: Session = Depends(get_session),
     creator: str = Depends(get_user_email),
 ) -> OverlayResponse:
@@ -53,6 +70,7 @@ async def create_overlay_endpoint(
         chart_id=chart_id,
         overlay_data=overlay_data,
         canonical_name=canonical_name,
+        display_name=display_name,
         creator=creator,
     )
     return overlay
@@ -61,12 +79,23 @@ async def create_overlay_endpoint(
 @router.put(
     "/overlays/{overlay_id}",
     response_model=OverlayResponse,
-    summary="Update deployment overlay",
+    summary="Update a chart overlay",
     description=dedent("""
-        Modify existing YAML overlay for AI model deployment customization.
-        Requires super administrator role. Updates model-specific configurations
-        and deployment parameters for improved workload management.
+        Update an existing overlay in place.
+
+        Supports partial updates: at least one of `overlayFile`, `chartId`,
+        or `canonicalName` must be supplied — submitting an empty form
+        returns 400. Providing `overlayFile` replaces the parsed overlay
+        body wholesale; `chartId` repoints the overlay at a different
+        chart; `canonicalName` rekeys the `(chartId, canonicalName)`
+        identity used to match the overlay to models.
+
+        Overlays are global (not project-scoped).
     """),
+    responses={
+        400: {"description": "Invalid YAML overlay file, or no updatable fields provided."},
+        404: {"description": "Overlay not found, or referenced chart not found."},
+    },
 )
 async def update_overlay_endpoint(
     overlay_id: UUID,
@@ -80,14 +109,21 @@ async def update_overlay_endpoint(
         description="Optional canonical name to associate the overlay with a model type, for example 'meta-llama/Llama-3.1-8B'.",
         examples=["meta-llama/Llama-3.1-8B"],
     ),
+    display_name: str | None = Form(
+        None,
+        alias=to_camel("display_name"),
+        description="Optional user-visible display name for this overlay.",
+    ),
     session: Session = Depends(get_session),
     updater: str = Depends(get_user_email),
 ) -> OverlayResponse:
     overlay_data = None
     if overlay_file:
         overlay_data = await parse_overlay_file(overlay_file)
-    if not overlay_data and not chart_id and not canonical_name:
-        raise ValidationException("Either 'overlayFile' or 'chartId' or 'canonicalName' must be provided")
+    if not overlay_data and not chart_id and not canonical_name and display_name is None:
+        raise ValidationException(
+            "Either 'overlayFile' or 'chartId' or 'canonicalName' or 'displayName' must be provided"
+        )
 
     update_kwargs: dict[str, Any] = {"updated_by": updater}
     if chart_id is not None:
@@ -96,6 +132,8 @@ async def update_overlay_endpoint(
         update_kwargs["overlay"] = overlay_data
     if canonical_name is not None:
         update_kwargs["canonical_name"] = canonical_name
+    if display_name is not None:
+        update_kwargs["display_name"] = display_name
     overlay_update = OverlayUpdate(**update_kwargs)
 
     overlay = await update_overlay(
@@ -109,11 +147,13 @@ async def update_overlay_endpoint(
 @router.get(
     "/overlays",
     response_model=ListResponse[OverlayResponse],
-    summary="List deployment overlays",
+    summary="List chart overlays",
     description=dedent("""
-        List all available YAML overlays for AI model deployment customization.
-        Used for discovering available model configurations and deployment patterns
-        across different AI model types and use cases.
+        List all overlays in the cluster-wide catalog.
+
+        Filter with `?chartId=` to scope to a single chart, and/or with
+        `?canonicalName=` to scope to overlays matching a specific model.
+        With no filters, all overlays are returned.
     """),
 )
 async def list_overlays_endpoint(
@@ -134,12 +174,14 @@ async def list_overlays_endpoint(
 @router.get(
     "/overlays/{overlay_id}",
     response_model=OverlayResponse,
-    summary="Get deployment overlay details",
+    summary="Get a chart overlay",
     description=dedent("""
-        Retrieve detailed information about a specific YAML overlay including
-        configuration content and associated model metadata. Used for understanding
-        deployment specifications before model workload submission.
+        Retrieve a single overlay by id, including its parsed YAML body and
+        the chart it is attached to.
     """),
+    responses={
+        404: {"description": "Overlay not found."},
+    },
 )
 async def get_overlay_endpoint(
     overlay_id: UUID,
@@ -152,35 +194,21 @@ async def get_overlay_endpoint(
 @router.delete(
     "/overlays/{overlay_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete deployment overlay",
+    summary="Delete a chart overlay",
     description=dedent("""
-        Remove YAML overlay from system permanently. Requires super administrator
-        role. Affects future model deployments that depend on this overlay
-        configuration - use with caution in production environments.
+        Permanently remove an overlay from the catalog. Hard delete; the
+        referenced chart is left untouched. Future deployments that would
+        have matched this overlay fall back to chart defaults (or to a
+        generic overlay if one exists for the chart).
+
+        Overlays are global (not project-scoped).
     """),
+    responses={
+        404: {"description": "Overlay not found."},
+    },
 )
 async def delete_overlay_endpoint(
     overlay_id: UUID,
     session: Session = Depends(get_session),
 ) -> None:
     await delete_overlay_by_id_service(session, overlay_id)
-
-
-@router.post(
-    "/overlays/delete",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Bulk delete deployment overlays",
-    description=dedent("""
-        Atomic bulk deletion of multiple YAML overlays. Requires super administrator
-        role. All-or-nothing operation ensures consistency - fails completely if
-        any overlay ID is invalid or currently in use.
-    """),
-)
-async def batch_delete_overlays(
-    data: DeleteBatchRequest,
-    session: Session = Depends(get_session),
-) -> None:
-    deleted_ids = await delete_overlays(session=session, ids=data.ids)
-    missing_ids = set(data.ids) - set(deleted_ids)
-    if missing_ids:
-        raise NotFoundException(f"Overlays with IDs {list(missing_ids)} not found")

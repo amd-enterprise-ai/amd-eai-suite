@@ -3,20 +3,44 @@
 # SPDX-License-Identifier: MIT
 
 import asyncio
+import re
+from datetime import UTC, datetime
 from uuid import UUID
 
 import httpx
 from loguru import logger
+from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_common.collections import PaginatedResult, paginate_list
 from api_common.exceptions import ExternalServiceError, NotFoundException
 
 from ..aims.constants import CLUSTER_AUTH_GROUP_ANNOTATION
 from ..aims.service import get_aim_service
 from ..cluster_auth.client import ClusterAuthClient
+from ..config import AI_GW_REQUEST_DURATION_METRIC, AI_GW_TOKEN_USAGE_METRIC
 from ..dispatch.kube_client import KubernetesClient
+from ..metrics.constants import PROMETHEUS_NAN_STRING
+from ..metrics.utils import (
+    a_custom_query,
+    a_custom_query_range,
+    get_aggregation_lookback_for_metrics,
+    get_step_for_range_query,
+)
 from .repository import create_api_key, delete_api_key, get_api_key_by_id, get_api_keys_for_namespace
-from .schemas import ApiKeyCreate, ApiKeyDetails, ApiKeyResponse, ApiKeyUpdate, ApiKeyWithFullKey, GroupResponse
+from .schemas import (
+    ApiKeyCreate,
+    ApiKeyDetails,
+    ApiKeyMetricsDataPoint,
+    ApiKeyMetricsResponse,
+    ApiKeyMetricsStats,
+    ApiKeyRequestsTimeseries,
+    ApiKeyResponse,
+    ApiKeyTokensTimeseries,
+    ApiKeyUpdate,
+    ApiKeyWithFullKey,
+    GroupResponse,
+)
 
 
 async def _bind_api_key_to_aim_groups(
@@ -235,7 +259,7 @@ async def create_api_key_with_cluster_auth(
         The created API key with the full key (shown only once)
     """
 
-    logger.info(f"Creating API key '{api_key_in.name}' for namespace {namespace}")
+    logger.info(f"Creating API key '{api_key_in.display_name}' for namespace {namespace}")
 
     cluster_auth_response = await cluster_auth_client.create_api_key(
         ttl=api_key_in.ttl,
@@ -244,6 +268,7 @@ async def create_api_key_with_cluster_auth(
         renewable=api_key_in.renewable,
         explicit_max_ttl=api_key_in.explicit_max_ttl,
         period=api_key_in.period,
+        display_name=f"{namespace}-{api_key_in.display_name}",
     )
 
     full_key = cluster_auth_response["api_key"]
@@ -253,7 +278,7 @@ async def create_api_key_with_cluster_auth(
     try:
         api_key_db = await create_api_key(
             session=session,
-            name=api_key_in.name,
+            display_name=api_key_in.display_name,
             truncated_key=truncated_key,
             cluster_auth_key_id=cluster_auth_key_id,
             namespace=namespace,
@@ -277,7 +302,9 @@ async def create_api_key_with_cluster_auth(
 
     except Exception:
         # DB insert, cluster-auth lookup, or binding failed - revoke the key to prevent orphaning
-        logger.error(f"Failed to create API key '{api_key_in.name}', revoking cluster-auth key {cluster_auth_key_id}")
+        logger.error(
+            f"Failed to create API key '{api_key_in.display_name}', revoking cluster-auth key {cluster_auth_key_id}"
+        )
         try:
             await cluster_auth_client.revoke_api_key(cluster_auth_key_id)
             logger.info(f"Successfully revoked orphaned cluster-auth key {cluster_auth_key_id}")
@@ -287,7 +314,7 @@ async def create_api_key_with_cluster_auth(
 
     return ApiKeyWithFullKey(
         id=api_key_db.id,
-        name=api_key_db.name,
+        display_name=api_key_db.display_name,
         truncated_key=api_key_db.truncated_key,
         namespace=api_key_db.namespace,
         expires_at=cluster_auth_data.get("expire_time"),
@@ -337,12 +364,14 @@ async def update_api_key_bindings_with_cluster_auth(
     # Get current group bindings from cluster-auth
     try:
         cluster_auth_data = await cluster_auth_client.lookup_api_key(api_key.cluster_auth_key_id)
-    except KeyError:
-        logger.warning(f"API key {api_key.cluster_auth_key_id} not found in cluster-auth")
-        await delete_api_key(session, api_key)
-        raise NotFoundException(
-            f"API key with ID {api_key_id} not found - orphaned database record has been cleaned up"
-        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.warning(f"API key {api_key.cluster_auth_key_id} not found in cluster-auth")
+            await delete_api_key(session, api_key)
+            raise NotFoundException(
+                f"API key with ID {api_key_id} not found - orphaned database record has been cleaned up"
+            )
+        raise
 
     current_groups = set(cluster_auth_data.get("groups", []))
 
@@ -373,23 +402,27 @@ async def update_api_key_bindings_with_cluster_auth(
 async def list_api_keys_for_namespace(
     session: AsyncSession,
     namespace: str,
-) -> list[ApiKeyResponse]:
+    page: int = 1,
+    page_size: int = 10,
+) -> PaginatedResult[ApiKeyResponse]:
     """
-    List all API keys for a namespace.
+    List all API keys for a namespace as a paginated result.
 
     Args:
         session: Database session
         namespace: The namespace
+        page: 1-indexed page number
+        page_size: Maximum number of items per page
 
     Returns:
-        List of API keys (without ttl/expires_at - use get_details for those)
+        Paginated API keys (without ttl/expires_at - use get_details for those)
     """
     api_keys = await get_api_keys_for_namespace(session, namespace)
 
-    return [
+    responses = [
         ApiKeyResponse(
             id=key.id,
-            name=key.name,
+            display_name=key.display_name,
             truncated_key=key.truncated_key,
             namespace=key.namespace,
             created_at=key.created_at,
@@ -399,6 +432,8 @@ async def list_api_keys_for_namespace(
         )
         for key in api_keys
     ]
+    # Paginate after building the full list so `total` reflects the full set.
+    return paginate_list(responses, page=page, page_size=page_size)
 
 
 async def get_api_key_details_from_cluster_auth(
@@ -428,18 +463,20 @@ async def get_api_key_details_from_cluster_auth(
 
     try:
         cluster_auth_data = await cluster_auth_client.lookup_api_key(api_key.cluster_auth_key_id)
-    except KeyError:
-        logger.warning(
-            f"API key {api_key.cluster_auth_key_id} not found in cluster-auth, deleting orphaned record from database"
-        )
-        await delete_api_key(session, api_key)
-        raise NotFoundException(
-            f"API key with ID {api_key_id} not found - orphaned database record has been cleaned up"
-        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.warning(
+                f"API key {api_key.cluster_auth_key_id} not found in cluster-auth, deleting orphaned record from database"
+            )
+            await delete_api_key(session, api_key)
+            raise NotFoundException(
+                f"API key with ID {api_key_id} not found - orphaned database record has been cleaned up"
+            )
+        raise
 
     return ApiKeyDetails(
         id=api_key.id,
-        name=api_key.name,
+        display_name=api_key.display_name,
         truncated_key=api_key.truncated_key,
         namespace=api_key.namespace,
         renewable=cluster_auth_data.get("renewable", True),
@@ -481,7 +518,11 @@ async def delete_api_key_from_cluster_auth(
     try:
         await cluster_auth_client.revoke_api_key(api_key.cluster_auth_key_id)
         logger.info(f"Revoked API key {api_key.cluster_auth_key_id} in cluster-auth")
-    except KeyError:
+    except httpx.HTTPStatusError as e:
+        # 404 is tolerated so a missing cluster-auth key cannot block DB cleanup;
+        # other status codes are real failures that must surface to the caller.
+        if e.response.status_code != 404:
+            raise
         logger.warning(
             f"API key {api_key.cluster_auth_key_id} not found in cluster-auth, proceeding with database deletion"
         )
@@ -518,20 +559,63 @@ async def renew_api_key_in_cluster_auth(
         result = await cluster_auth_client.renew_api_key(api_key.cluster_auth_key_id)
         logger.info(f"Renewed API key {api_key.cluster_auth_key_id} in cluster-auth")
         return result
-    except (KeyError, ValueError) as e:
-        logger.error(f"Failed to renew API key {api_key.cluster_auth_key_id}: {e}")
-        raise NotFoundException(f"Failed to renew API key: {e}")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.error(f"Failed to renew API key {api_key.cluster_auth_key_id}: {e}")
+            raise NotFoundException(f"Failed to renew API key: {e}")
+        raise
 
 
-async def bind_api_key_to_group_in_cluster_auth(
+async def list_api_key_group_memberships(
+    session: AsyncSession,
+    namespace: str,
+    api_key_id: UUID,
+    cluster_auth_client: ClusterAuthClient,
+) -> list[str]:
+    """
+    List the cluster-auth groups this API key currently belongs to.
+
+    Args:
+        session: Database session
+        namespace: The namespace
+        api_key_id: The ID of the API key
+        cluster_auth_client: Cluster-auth client instance
+
+    Returns:
+        List of group IDs the API key is a member of
+
+    Raises:
+        NotFoundException: If the API key is not found
+    """
+    api_key = await get_api_key_by_id(session, api_key_id, namespace)
+    if not api_key:
+        raise NotFoundException(f"API key with ID {api_key_id} not found in namespace '{namespace}'")
+
+    try:
+        cluster_auth_data = await cluster_auth_client.lookup_api_key(api_key.cluster_auth_key_id)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.warning(
+                f"API key {api_key.cluster_auth_key_id} not found in cluster-auth, deleting orphaned record from database"
+            )
+            await delete_api_key(session, api_key)
+            raise NotFoundException(
+                f"API key with ID {api_key_id} not found - orphaned database record has been cleaned up"
+            )
+        raise
+
+    return cluster_auth_data.get("groups", [])
+
+
+async def add_api_key_group_membership(
     session: AsyncSession,
     namespace: str,
     api_key_id: UUID,
     group_id: str,
     cluster_auth_client: ClusterAuthClient,
-) -> dict:
+) -> list[str]:
     """
-    Bind an API key to a group in cluster-auth.
+    Add an API key to a cluster-auth group.
 
     Args:
         session: Database session
@@ -541,7 +625,7 @@ async def bind_api_key_to_group_in_cluster_auth(
         cluster_auth_client: Cluster-auth client instance
 
     Returns:
-        dict with updated groups list
+        Updated list of group IDs the API key is a member of
 
     Raises:
         NotFoundException: If the API key or group is not found
@@ -552,22 +636,24 @@ async def bind_api_key_to_group_in_cluster_auth(
 
     try:
         result = await cluster_auth_client.bind_api_key_to_group(api_key.cluster_auth_key_id, group_id)
-        logger.info(f"Bound API key {api_key.cluster_auth_key_id} to group {group_id}")
-        return result
-    except KeyError as e:
-        logger.error(f"Failed to bind API key to group: {e}")
-        raise NotFoundException(f"Failed to bind API key to group: {e}")
+        logger.info(f"Added API key {api_key.cluster_auth_key_id} to group {group_id}")
+        return result["groups"]
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.error(f"Failed to add API key to group: {e}")
+            raise NotFoundException(f"Failed to add API key to group: {e}")
+        raise
 
 
-async def unbind_api_key_from_group_in_cluster_auth(
+async def remove_api_key_group_membership(
     session: AsyncSession,
     namespace: str,
     api_key_id: UUID,
     group_id: str,
     cluster_auth_client: ClusterAuthClient,
-) -> dict:
+) -> list[str]:
     """
-    Unbind an API key from a group in cluster-auth.
+    Remove an API key from a cluster-auth group.
 
     Args:
         session: Database session
@@ -577,7 +663,7 @@ async def unbind_api_key_from_group_in_cluster_auth(
         cluster_auth_client: Cluster-auth client instance
 
     Returns:
-        dict with updated groups list
+        Updated list of group IDs the API key is a member of
 
     Raises:
         NotFoundException: If the API key or group is not found
@@ -588,16 +674,13 @@ async def unbind_api_key_from_group_in_cluster_auth(
 
     try:
         result = await cluster_auth_client.unbind_api_key_from_group(api_key.cluster_auth_key_id, group_id)
-        logger.info(f"Unbound API key {api_key.cluster_auth_key_id} from group {group_id}")
-        return result
+        logger.info(f"Removed API key {api_key.cluster_auth_key_id} from group {group_id}")
+        return result["groups"]
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             logger.error(f"API key or group not found: {e}")
             raise NotFoundException("API key or group not found")
         raise
-    except KeyError as e:
-        logger.error(f"Failed to unbind API key from group: {e}")
-        raise NotFoundException(f"Failed to unbind API key from group: {e}")
 
 
 async def create_group_in_cluster_auth(
@@ -655,6 +738,170 @@ async def delete_group_from_cluster_auth(
             logger.warning(f"Group {group_id} not found in cluster-auth")
             raise NotFoundException(f"Group with ID {group_id} not found")
         raise
-    except KeyError:
-        logger.warning(f"Group {group_id} not found in cluster-auth")
-        raise NotFoundException(f"Group with ID {group_id} not found")
+
+
+def _pivot_to_wide(results: list[dict], services: list[str]) -> dict[str, dict[str, float]]:
+    wide: dict[str, dict[str, float]] = {}
+    for series in results:
+        service = series["metric"].get("aim_service_id", "")
+        if not service:
+            continue
+        for ts, val in series["values"]:
+            iso = datetime.fromtimestamp(float(ts), tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            wide.setdefault(iso, {s: 0.0 for s in services})
+            try:
+                wide[iso][service] = wide[iso].get(service, 0.0) + float(val if val != PROMETHEUS_NAN_STRING else 0)
+            except (ValueError, TypeError):
+                pass
+    return wide
+
+
+def _wide_to_datapoints(wide: dict[str, dict[str, float]], services: list[str]) -> list[ApiKeyMetricsDataPoint]:
+    return [{"date": iso, **{s: wide[iso].get(s, 0.0) for s in services}} for iso in sorted(wide)]
+
+
+async def get_api_key_usage_metrics(
+    session: AsyncSession,
+    namespace: str,
+    api_key_id: UUID,
+    start: datetime,
+    end: datetime,
+    prometheus_client: PrometheusConnect,
+) -> ApiKeyMetricsResponse:
+    api_key = await get_api_key_by_id(session, api_key_id, namespace)
+    if not api_key:
+        raise NotFoundException(f"API key with ID {api_key_id} not found in namespace '{namespace}'")
+
+    # OpenBao prefixes the token display_name with "token-" and sanitizes it
+    # (replaces non-alphanumeric/hyphen chars with hyphens, lowercases).
+    # This is what ends up as the api_key_id label in Prometheus metrics.
+    prom_key_id = "token-" + re.sub(r"[^a-z0-9\-]", "-", f"{namespace}-{api_key.display_name}".lower())
+
+    step = get_step_for_range_query(start, end)
+    lookback = get_aggregation_lookback_for_metrics(step)
+    step_str = f"{int(step)}s"
+    duration_s = f"{int((end - start).total_seconds())}s"
+
+    # pod!="" deduplicates series scraped twice (PodMonitor vs ServiceMonitor)
+    # from the same endpoint — both carry identical counter values.
+    # error_type label is absent on successful requests and "_OTHER" on failures
+    # (follows OTel GenAI semantic conventions).
+    (
+        token_results,
+        request_results,
+        failed_request_results,
+        total_token_stat,
+        total_request_stat,
+        total_failed_stat,
+    ) = await asyncio.gather(
+        a_custom_query_range(
+            prometheus_client,
+            query=f'sum by (aim_service_id, gen_ai_token_type) (increase({AI_GW_TOKEN_USAGE_METRIC}{{api_key_id="{prom_key_id}",pod!=""}}[{lookback}]))',
+            start_time=start,
+            end_time=end,
+            step=step_str,
+        ),
+        a_custom_query_range(
+            prometheus_client,
+            query=f'sum by (aim_service_id) (increase({AI_GW_REQUEST_DURATION_METRIC}{{api_key_id="{prom_key_id}",pod!="",error_type=""}}[{lookback}]))',
+            start_time=start,
+            end_time=end,
+            step=step_str,
+        ),
+        a_custom_query_range(
+            prometheus_client,
+            query=f'sum by (aim_service_id) (increase({AI_GW_REQUEST_DURATION_METRIC}{{api_key_id="{prom_key_id}",pod!="",error_type!=""}}[{lookback}]))',
+            start_time=start,
+            end_time=end,
+            step=step_str,
+        ),
+        a_custom_query(
+            prometheus_client,
+            # Offset subtraction instead of increase() so new counters (no prior scrape at 0)
+            # still produce a non-zero total. OR fallback fires when offset window has no data.
+            query=(
+                f'sum({AI_GW_TOKEN_USAGE_METRIC}{{api_key_id="{prom_key_id}",pod!=""}})'
+                f' - sum({AI_GW_TOKEN_USAGE_METRIC}{{api_key_id="{prom_key_id}",pod!=""}} offset {duration_s})'
+                f' OR sum({AI_GW_TOKEN_USAGE_METRIC}{{api_key_id="{prom_key_id}",pod!=""}})'
+            ),
+        ),
+        a_custom_query(
+            prometheus_client,
+            query=(
+                f'sum({AI_GW_REQUEST_DURATION_METRIC}{{api_key_id="{prom_key_id}",pod!=""}})'
+                f' - sum({AI_GW_REQUEST_DURATION_METRIC}{{api_key_id="{prom_key_id}",pod!=""}} offset {duration_s})'
+                f' OR sum({AI_GW_REQUEST_DURATION_METRIC}{{api_key_id="{prom_key_id}",pod!=""}})'
+            ),
+        ),
+        a_custom_query(
+            prometheus_client,
+            query=(
+                f'sum({AI_GW_REQUEST_DURATION_METRIC}{{api_key_id="{prom_key_id}",pod!="",error_type!=""}})'
+                f' - sum({AI_GW_REQUEST_DURATION_METRIC}{{api_key_id="{prom_key_id}",pod!="",error_type!=""}} offset {duration_s})'
+                f' OR sum({AI_GW_REQUEST_DURATION_METRIC}{{api_key_id="{prom_key_id}",pod!="",error_type!=""}})'
+            ),
+        ),
+    )
+
+    services = sorted(
+        {
+            s["metric"].get("aim_service_id", "")
+            for s in token_results + request_results + failed_request_results
+            if s["metric"].get("aim_service_id")
+        }
+    )
+
+    input_results = [s for s in token_results if s["metric"].get("gen_ai_token_type") == "input"]
+    output_results = [s for s in token_results if s["metric"].get("gen_ai_token_type") == "output"]
+
+    input_wide = _pivot_to_wide(input_results, services)
+    output_wide = _pivot_to_wide(output_results, services)
+    successful_request_wide = _pivot_to_wide(request_results, services)
+    failed_request_wide = _pivot_to_wide(failed_request_results, services)
+
+    total_token_wide = {
+        iso: {s: input_wide.get(iso, {}).get(s, 0.0) + output_wide.get(iso, {}).get(s, 0.0) for s in services}
+        for iso in sorted(set(input_wide) | set(output_wide))
+    }
+
+    all_timestamps = sorted(set(successful_request_wide) | set(failed_request_wide))
+    total_request_wide = {
+        iso: {
+            s: successful_request_wide.get(iso, {}).get(s, 0.0) + failed_request_wide.get(iso, {}).get(s, 0.0)
+            for s in services
+        }
+        for iso in all_timestamps
+    }
+
+    def _extract_stat(result: list[dict]) -> int:
+        if result and result[0].get("value"):
+            try:
+                return max(0, int(float(result[0]["value"][1])))
+            except (ValueError, TypeError, IndexError):
+                pass
+        return 0
+
+    total_tokens = _extract_stat(total_token_stat)
+    total_requests = _extract_stat(total_request_stat)
+    failed_requests = _extract_stat(total_failed_stat)
+
+    return ApiKeyMetricsResponse(
+        stats=ApiKeyMetricsStats(
+            total_requests=total_requests,
+            successful_requests=max(0, total_requests - failed_requests),
+            failed_requests=failed_requests,
+            total_tokens=total_tokens,
+            linked_deployments=len(services),
+        ),
+        services=services,
+        requests_over_time=ApiKeyRequestsTimeseries(
+            total=_wide_to_datapoints(total_request_wide, services),
+            successful=_wide_to_datapoints(successful_request_wide, services),
+            failed=_wide_to_datapoints(failed_request_wide, services),
+        ),
+        tokens_over_time=ApiKeyTokensTimeseries(
+            total=_wide_to_datapoints(total_token_wide, services),
+            input=_wide_to_datapoints(input_wide, services),
+            output=_wide_to_datapoints(output_wide, services),
+        ),
+    )

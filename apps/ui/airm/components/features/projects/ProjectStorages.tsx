@@ -1,7 +1,7 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Tooltip, useDisclosure } from '@heroui/react';
+import { useOverlayState } from '@amdenterpriseai/hooks';
 import React, { useCallback, useMemo, useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -18,7 +18,13 @@ import {
   Storage,
 } from '@/types/storages';
 
-import { ActionsToolbar } from '@amdenterpriseai/components';
+import {
+  ActionsToolbar,
+  Status,
+  StatusError,
+  StatusProps,
+  Tooltip,
+} from '@amdenterpriseai/components';
 
 import { AssignStorageToProject, DeleteStorageModal } from '../storages';
 import AssignStorageButton from '../storages/AssignStorageButton';
@@ -27,8 +33,6 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchProjectStorages } from '@/services/app';
 import { doesProjectStorageDataNeedToBeRefreshed } from '@/utils/storages';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
-import { StatusError } from '@amdenterpriseai/components';
-import { Status, StatusProps } from '@amdenterpriseai/components';
 import { getProjectStatusVariants } from '@/utils/projects-status-variants';
 
 interface Props {
@@ -71,7 +75,7 @@ export const ProjectStorages: React.FC<Props> = ({
   const {
     isOpen: isAssignStorageFormOpen,
     onOpenChange: onAssignStorageFormOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const [targetStorage, setTargetStorage] =
     useState<ProjectStorageWithParentStorage | null>(null);
@@ -79,7 +83,7 @@ export const ProjectStorages: React.FC<Props> = ({
   const {
     isOpen: isDeleteStorageOpen,
     onOpenChange: onDeleteStorageOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const actions = useMemo(() => {
     return [

@@ -1,7 +1,8 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Button, Input } from '@heroui/react';
+import { Input } from '../Input/InputPrimitive';
+import { Button } from '../Buttons/Button';
 import { cn } from '@heroui/react';
 import {
   FieldValues,

@@ -20,7 +20,7 @@ const vitestConfig = defineVitestConfig({
   },
   define: process.env.VITEST ? {} : { global: 'window' },
   test: {
-    testTimeout: 10000, // CI runners are slower than local; default 5s causes flaky timeouts
+    testTimeout: 20000, // Must exceed RTL asyncUtilTimeout (15s, see __tests__/setup.ts): slow CI runners otherwise kill heavy HeroUI/React-Aria tests at the test budget before their waitFor finishes
     setupFiles: ['__tests__/setup.ts'],
     mockReset: true,
     globals: true,

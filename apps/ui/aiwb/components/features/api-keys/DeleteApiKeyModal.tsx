@@ -34,7 +34,7 @@ export default function DeleteApiKeyModal({
     <ConfirmationModal
       confirmationButtonColor="danger"
       description={t('list.actions.delete.confirmation.description', {
-        name: apiKey.name || '',
+        name: apiKey.displayName || '',
       })}
       title={t('list.actions.delete.confirmation.title')}
       isOpen={isOpen}

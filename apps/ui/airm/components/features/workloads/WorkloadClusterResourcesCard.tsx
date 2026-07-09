@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Card, CardBody, CardHeader, Skeleton } from '@heroui/react';
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  Skeleton,
+} from '@amdenterpriseai/components';
 import { IconServer } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 

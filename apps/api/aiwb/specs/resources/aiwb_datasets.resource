@@ -24,26 +24,6 @@ Library             OperatingSystem
 
 *** Keywords ***
 
-Create dataset request is sent
-    [Documentation]    DEPRECATED: Sends request to create a dataset using POST to base endpoint.
-    ...    NOTE: This will fail because AIWB API does not support POST to base /datasets endpoint.
-    ...    Use "Upload dataset request is sent" instead for actual dataset creation.
-    [Arguments]             ${namespace}=${None}
-    IF    $namespace == $None
-        ${namespace}=    Get Project Namespace
-    END
-    ${response}=            Create dataset          ${TEST_DATASET}         expected_status=any     namespace=${namespace}
-    Set Test Variable       ${TEST_RESPONSE}             ${response}
-
-    # Only try to extract ID if we somehow got a success response
-    IF    ${response.status_code} in [200, 201]
-        ${dataset_id}=          Get from dictionary     ${response.json()}      id
-        Set test variable       ${TEST_DATASET_ID}      ${dataset_id}
-        Track Dataset For Cleanup    ${dataset_id}
-    ELSE
-        Log                     Create dataset failed with status ${response.status_code} - endpoint not supported     WARN
-    END
-
 Upload dataset request is sent
     [Documentation]    Sends request to upload a dataset using prepared test data
     [Arguments]             ${namespace}=${None}
@@ -165,12 +145,6 @@ Delete dataset request is sent
     ${response}=            Delete dataset          ${TEST_DATASET_ID}      expected_status=any     namespace=${namespace}
     Set test variable       ${TEST_RESPONSE}             ${response}
 
-Batch delete datasets request is sent
-    [Documentation]    Sends a request to delete multiple datasets using the list stored in ${CREATED_DATASET_IDS}
-    ${namespace}=           Get Project Namespace
-    ${response}=            Batch delete datasets                           ${CREATED_DATASET_IDS}                          namespace=${namespace}                                   expected_status=200
-    Set test variable       ${TEST_RESPONSE}             ${response}
-
 Clean Up Dataset Test Resources
     [Documentation]    Clean up all dataset resources created during tests.
     ...    Resolves namespace from test state and passes it explicitly to API keywords.
@@ -278,7 +252,8 @@ Download request is sent for non-existent dataset
 Oversized dataset upload request is sent
     [Documentation]    Generates and uploads a dataset exceeding the maximum file size limit.
     ...    Uses in-memory JSONL generation to avoid creating large temp files on disk.
-    ${random_suffix}=       Generate random string                          8                       [LETTERS][NUMBERS]
+    # K8s/DB resource names must be lowercase.
+    ${random_suffix}=       Generate random string                          8                       [LOWER][NUMBERS]
     VAR    ${dataset_name}    test-oversized-${random_suffix}
     ${namespace}=           Get Project Namespace
     ${response}=            Upload oversized dataset                        ${dataset_name}         ${namespace}

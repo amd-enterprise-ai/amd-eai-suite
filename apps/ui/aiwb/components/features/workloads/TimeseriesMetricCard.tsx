@@ -16,12 +16,57 @@ import {
 import { getTimeseriesMetric } from '@/lib/app/metrics';
 import { useQuery } from '@tanstack/react-query';
 import { useProject } from '@/contexts/ProjectContext';
+import type { workloadsKeys } from '@/types/react-i18next';
+
+export type MetricLocaleKey =
+  | 'timeToFirstToken'
+  | 'interTokenLatency'
+  | 'endToEndLatency'
+  | 'inferenceRequests'
+  | 'maxRequests'
+  | 'minRequests'
+  | 'avgRequests'
+  | 'totalRequests'
+  | 'totalTokens'
+  | 'kvCacheUsage'
+  | 'gpuConsumption'
+  | 'vram';
+
+export const METRIC_TITLE_KEYS = {
+  timeToFirstToken: 'details.metrics.timeToFirstToken.title',
+  interTokenLatency: 'details.metrics.interTokenLatency.title',
+  endToEndLatency: 'details.metrics.endToEndLatency.title',
+  inferenceRequests: 'details.metrics.inferenceRequests.title',
+  maxRequests: 'details.metrics.maxRequests.title',
+  minRequests: 'details.metrics.minRequests.title',
+  avgRequests: 'details.metrics.avgRequests.title',
+  totalRequests: 'details.metrics.totalRequests.title',
+  totalTokens: 'details.metrics.totalTokens.title',
+  kvCacheUsage: 'details.metrics.kvCacheUsage.title',
+  gpuConsumption: 'details.metrics.gpuConsumption.title',
+  vram: 'details.metrics.vram.title',
+} as const satisfies Record<MetricLocaleKey, workloadsKeys>;
+
+export const METRIC_DESCRIPTION_KEYS = {
+  timeToFirstToken: 'details.metrics.timeToFirstToken.description',
+  interTokenLatency: 'details.metrics.interTokenLatency.description',
+  endToEndLatency: 'details.metrics.endToEndLatency.description',
+  inferenceRequests: 'details.metrics.inferenceRequests.description',
+  maxRequests: 'details.metrics.maxRequests.description',
+  minRequests: 'details.metrics.minRequests.description',
+  avgRequests: 'details.metrics.avgRequests.description',
+  totalRequests: 'details.metrics.totalRequests.description',
+  totalTokens: 'details.metrics.totalTokens.description',
+  kvCacheUsage: 'details.metrics.kvCacheUsage.description',
+  gpuConsumption: 'details.metrics.gpuConsumption.description',
+  vram: 'details.metrics.vram.description',
+} as const satisfies Record<MetricLocaleKey, workloadsKeys>;
 
 export interface TimeseriesMetricConfig {
   /** Backend metric slug (e.g. 'time_to_first_token_seconds') */
   metric: string;
   /** Locale key under details.metrics (e.g. 'timeToFirstToken') */
-  localeKey: string;
+  localeKey: MetricLocaleKey;
   /** Chart line color */
   color: AvailableChartColorsKeys;
   /** Value formatter for the chart tooltip/stat */
@@ -86,8 +131,8 @@ export const TimeseriesMetricCard: React.FC<Props> = ({
 
   return (
     <StatsWithLineChart
-      title={t(`details.metrics.${localeKey}.title`)}
-      tooltip={t(`details.metrics.${localeKey}.description`)}
+      title={t(METRIC_TITLE_KEYS[localeKey])}
+      tooltip={t(METRIC_DESCRIPTION_KEYS[localeKey])}
       data={chartData.values}
       dataFormatter={dataFormatter}
       width={width}

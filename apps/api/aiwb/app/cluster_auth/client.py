@@ -40,6 +40,7 @@ class ClusterAuthClient:
         period: str = "",
         renewable: bool = True,
         explicit_max_ttl: str = "",
+        display_name: str = "",
     ) -> dict:
         """
         Create a new API key with associated entity.
@@ -51,6 +52,7 @@ class ClusterAuthClient:
             period: Renewal period
             renewable: Whether the key can be renewed
             explicit_max_ttl: Maximum TTL
+            display_name: Human-readable name stored on the token (used as api_key_id in metrics)
 
         Returns:
             dict with api_key (prefixed with "amd_aim_api_key_"), key_id, and other metadata
@@ -67,6 +69,8 @@ class ClusterAuthClient:
             "renewable": renewable,
             "explicit_max_ttl": explicit_max_ttl,
         }
+        if display_name:
+            payload["display_name"] = display_name
 
         response = await self.client.post("/apikey/create", json=payload)
         response.raise_for_status()

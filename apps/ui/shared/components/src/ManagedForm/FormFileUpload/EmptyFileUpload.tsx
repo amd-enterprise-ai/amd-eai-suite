@@ -5,11 +5,9 @@
 /**
  * Empty file upload component that shows when no files are selected
  */
-import { Button } from '@heroui/react';
+import { Button } from '../../Buttons/Button';
 import { IconUpload } from '@tabler/icons-react';
 import { memo } from 'react';
-
-import { TFunction } from 'next-i18next';
 
 const EmptyFileUpload = memo(
   ({
@@ -21,7 +19,7 @@ const EmptyFileUpload = memo(
     placeholder?: string;
     multiple: boolean;
     onUpload: () => void;
-    t: TFunction;
+    t: (key: string, options?: Record<string, unknown>) => string;
   }) => (
     <Button
       variant="light"

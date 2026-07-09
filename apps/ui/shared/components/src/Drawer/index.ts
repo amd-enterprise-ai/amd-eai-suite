@@ -2,5 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
+export * from './DrawerPrimitive';
 export * from './DrawerForm';
 export * from './DrawerDisplay';

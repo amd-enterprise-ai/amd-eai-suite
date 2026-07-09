@@ -22,6 +22,7 @@ async def create_overlay(
     chart_id: uuid.UUID,
     overlay_data: dict[str, Any],
     canonical_name: str | None = None,
+    display_name: str | None = None,
     creator: str | None = None,
 ) -> Overlay:
     overlay = await insert_overlay(
@@ -29,6 +30,7 @@ async def create_overlay(
         chart_id=chart_id,
         overlay_data=overlay_data,
         canonical_name=canonical_name,
+        display_name=display_name,
         creator=creator,
     )
     return overlay

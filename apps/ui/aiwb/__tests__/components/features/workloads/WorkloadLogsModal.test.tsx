@@ -5,7 +5,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import WorkloadLogsModal from '@/components/features/workloads/WorkloadLogsModal';
-import { LogSource } from '@/components/features/workloads/WorkloadLogs';
 
 import wrapper from '@/__tests__/ProviderWrapper';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
@@ -237,30 +236,12 @@ describe('WorkloadLogsModal', () => {
     expect(mockOnOpenChange).toHaveBeenCalledTimes(1);
   });
 
-  it('passes logSource prop to WorkloadLogs component', () => {
-    const { container } = render(
-      <WorkloadLogsModal
-        workload={mockWorkload}
-        isOpen={true}
-        onOpenChange={mockOnOpenChange}
-        logSource={LogSource.AIM}
-        namespace="workbench"
-      />,
-      { wrapper },
-    );
-
-    // Verify modal is rendered with WorkloadLogs component
-    expect(screen.getByTestId('workload-logs-component')).toBeInTheDocument();
-    expect(container).toBeInTheDocument();
-  });
-
   it('passes namespace prop to WorkloadLogs component', () => {
     const { container } = render(
       <WorkloadLogsModal
         workload={mockWorkload}
         isOpen={true}
         onOpenChange={mockOnOpenChange}
-        logSource={LogSource.AIM}
         namespace="test-namespace"
       />,
       { wrapper },
@@ -269,24 +250,6 @@ describe('WorkloadLogsModal', () => {
     // Verify modal is rendered with WorkloadLogs component
     expect(screen.getByTestId('workload-logs-component')).toBeInTheDocument();
     expect(container).toBeInTheDocument();
-  });
-
-  it('renders with default logSource when not provided', () => {
-    render(
-      <WorkloadLogsModal
-        workload={mockWorkload}
-        isOpen={true}
-        onOpenChange={mockOnOpenChange}
-        namespace="workbench"
-      />,
-      { wrapper },
-    );
-
-    // Should render successfully without logSource prop
-    expect(screen.getByTestId('workload-logs-component')).toBeInTheDocument();
-    expect(
-      screen.getByText('list.actions.logs.modal.title'),
-    ).toBeInTheDocument();
   });
 
   it('renders modal with large size', () => {

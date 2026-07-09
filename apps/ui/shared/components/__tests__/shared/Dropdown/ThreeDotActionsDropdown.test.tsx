@@ -14,6 +14,17 @@ import { ActionFieldHintType } from '@amdenterpriseai/types';
 
 import { ThreeDotActionsDropdown } from '@amdenterpriseai/components';
 
+vi.mock('next-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => {
+      const translations: Record<string, string> = {
+        'list.actions.label': 'Actions',
+      };
+      return translations[key] ?? key;
+    },
+  }),
+}));
+
 vi.mock('@tabler/icons-react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tabler/icons-react')>();
   return {
@@ -35,6 +46,13 @@ vi.mock('@heroui/react', async () => {
   const actual = await vi.importActual('@heroui/react');
   return {
     ...actual,
+  };
+});
+vi.mock('@amdenterpriseai/components', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/components')>();
+  return {
+    ...actual,
     Tooltip: ({ children, content }: any) => (
       <div data-testid="mock-tooltip">
         {children}
@@ -48,6 +66,15 @@ interface TestItem {
   id: string;
   name: string;
 }
+
+vi.mock('../../../src/Tooltip', () => ({
+  Tooltip: ({ children, content }: any) => (
+    <div data-testid="mock-tooltip">
+      {children}
+      {content && <div data-testid="tooltip-content">{content}</div>}
+    </div>
+  ),
+}));
 
 describe('ThreeDotActionsDropdown', () => {
   const mockItem: TestItem = {
@@ -101,10 +128,7 @@ describe('ThreeDotActionsDropdown', () => {
       render(<ThreeDotActionsDropdown actions={actions} item={mockItem} />);
 
       const button = screen.getByText('action-dot-icon');
-      expect(button.parentElement).toHaveAttribute(
-        'aria-label',
-        'list.actions.label',
-      );
+      expect(button.parentElement).toHaveAttribute('aria-label', 'Actions');
       expect(button.parentElement).toHaveClass('h-auto w-6 min-w-6');
     });
 

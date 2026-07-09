@@ -4,6 +4,7 @@
 
 export type { TableVariant } from './BaseDataTable';
 export { default as BaseDataTable } from './BaseDataTable';
+export * from './TablePrimitive';
 export { default as ClientSidePagination } from './TablePagination';
 export * from './ServerSideDataTable';
 export * from './ClientSideDataTable';

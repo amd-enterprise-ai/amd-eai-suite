@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  Drawer,
+  DrawerPrimitive as Drawer,
   DrawerBody,
   DrawerContent,
   DrawerFooter,
   DrawerHeader,
-} from '@heroui/react';
+} from './DrawerPrimitive';
 
 import { useCallback, useRef } from 'react';
 import {

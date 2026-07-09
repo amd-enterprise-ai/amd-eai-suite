@@ -37,22 +37,23 @@ def test_unicode_characters_preserved():
 
 
 def test_generate_object_key():
-    """Test generating an S3 object key from a dataset name and project name."""
+    """Test generating an S3 object key from a dataset ID and project name."""
     project_name = "Test Project"
 
-    # Expected format is {slugified_project_name}/datasets/{slugified_name}.jsonl
-    result = get_object_key("Test Dataset", project_name)
-    expected = "test-project/datasets/test-dataset.jsonl"
+    # Expected format is {slugified_project_name}/datasets/{dataset_id}.jsonl
+    result = get_object_key("test-dataset-uuid", project_name)
+    expected = "test-project/datasets/test-dataset-uuid.jsonl"
     assert result == expected
 
 
 def test_generate_object_key_with_special_chars():
-    """Test generating an S3 object key with special characters."""
+    """Test generating an S3 object key with special characters in the project name."""
     project_name = "Test Project With Spaces & Symbols!"
 
-    # Expected format is {slugified_project_name}/datasets/{slugified_dataset_name}.jsonl
-    result = get_object_key("Complex! Dataset-Name", project_name)
-    expected = "test-project-with-spaces-symbols/datasets/complex-dataset-name.jsonl"
+    # Expected format is {slugified_project_name}/datasets/{dataset_id}.jsonl
+    # The dataset ID is used as-is; only the project/namespace is slugified
+    result = get_object_key("abc123-uuid", project_name)
+    expected = "test-project-with-spaces-symbols/datasets/abc123-uuid.jsonl"
     assert result == expected
 
 
@@ -95,12 +96,12 @@ def test_upload_flow():
     """Test the integration of functions for the dataset upload flow."""
     project_name = "My Test Project"
 
-    # Step 1: Generate the object key from a user-provided name and project name
-    dataset_name = "My Dataset"
-    object_key = get_object_key(dataset_name, project_name)
+    # Step 1: Generate the object key from a dataset UUID and project name
+    dataset_id = "my-dataset-uuid-1234"
+    object_key = get_object_key(dataset_id, project_name)
 
-    # The path should follow the format: {slugified_project_name}/datasets/{slugified_dataset_name}.jsonl
-    expected_key = "my-test-project/datasets/my-dataset.jsonl"
+    # The path follows the format: {slugified_project_name}/datasets/{dataset_id}.jsonl
+    expected_key = "my-test-project/datasets/my-dataset-uuid-1234.jsonl"
     assert object_key == expected_key
 
 

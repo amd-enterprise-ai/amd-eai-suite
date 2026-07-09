@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectItem, cn } from '@heroui/react';
+import { Select, SelectItem } from '@amdenterpriseai/components';
+import { cn } from '@heroui/react';
 import {
   createRef,
   useCallback,
@@ -202,7 +203,7 @@ export const DataFilter = ({
                 return {
                   ...field.props,
                   key: String(field.key),
-                  label: t(field.label),
+                  label: t(field.label as any) as string,
                   description: String(field.label),
                 };
               })}
@@ -227,7 +228,7 @@ export const DataFilter = ({
                     : [],
                 }));
               }}
-              label={t(filter.label)}
+              label={t(filter.label as any) as string}
             />
           );
         }

@@ -8,8 +8,13 @@ from textwrap import dedent
 
 from prometheus_api_client import PrometheusConnect
 
-from ..namespaces.crds import Namespace
+from ..projects.crds import Namespace
 from .constants import (
+    AIM_SERVICE_ID_METRIC_LABEL,
+    API_KEY_ID_METRIC_LABEL,
+    EXTPROC_REQUEST_DURATION_COUNT_METRIC,
+    EXTPROC_TOKEN_USAGE_METRIC,
+    GEN_AI_TOKEN_TYPE_LABEL,
     GPU_POD_METRIC_LABEL,
     NAMESPACE_METRIC_LABEL,
     VLLM_POD_METRIC_LABEL,
@@ -30,6 +35,11 @@ from .utils import (
 def _pod_selector(pod_name: str | None, label: str = VLLM_POD_METRIC_LABEL) -> str:
     """Returns an additional Prometheus label selector for a specific pod, or empty string."""
     return f', {label}="{pod_name}"' if pod_name else ""
+
+
+def _escape_promql_label_value(value: str) -> str:
+    """Escapes backslashes and double quotes to prevent PromQL label injection."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 async def get_gpu_device_utilization_metric(
@@ -405,3 +415,69 @@ async def get_metric_by_namespace(
             return await get_gpu_device_utilization_for_namespace(namespace, start, end, prometheus_client)
         case NamespaceMetricName.GPU_MEMORY_UTILIZATION:
             return await get_gpu_memory_utilization_for_namespace(namespace, start, end, prometheus_client)
+
+
+async def get_input_tokens_by_api_key(
+    api_key_id: str,
+    start: datetime,
+    end: datetime,
+    prometheus_client: PrometheusConnect,
+    aim_service_id: str | None = None,
+) -> MetricsScalarWithRange:
+    seconds = int((end - start).total_seconds())
+    safe_key = _escape_promql_label_value(api_key_id)
+    service_selector = (
+        f', {AIM_SERVICE_ID_METRIC_LABEL}="{_escape_promql_label_value(aim_service_id)}"' if aim_service_id else ""
+    )
+    query = (
+        f"sum(increase({EXTPROC_TOKEN_USAGE_METRIC}{{"
+        f'{GEN_AI_TOKEN_TYPE_LABEL}="input", {API_KEY_ID_METRIC_LABEL}="{safe_key}"{service_selector}'
+        f"}}[{seconds}s]))"
+    )
+    res = await a_custom_query(client=prometheus_client, query=query)
+    value = convert_prometheus_string_to_float(res[0]["value"][1]) if res else 0
+    return MetricsScalarWithRange(data=max(value, 0), range=DateRange(start=start, end=end))
+
+
+async def get_output_tokens_by_api_key(
+    api_key_id: str,
+    start: datetime,
+    end: datetime,
+    prometheus_client: PrometheusConnect,
+    aim_service_id: str | None = None,
+) -> MetricsScalarWithRange:
+    seconds = int((end - start).total_seconds())
+    safe_key = _escape_promql_label_value(api_key_id)
+    service_selector = (
+        f', {AIM_SERVICE_ID_METRIC_LABEL}="{_escape_promql_label_value(aim_service_id)}"' if aim_service_id else ""
+    )
+    query = (
+        f"sum(increase({EXTPROC_TOKEN_USAGE_METRIC}{{"
+        f'{GEN_AI_TOKEN_TYPE_LABEL}="output", {API_KEY_ID_METRIC_LABEL}="{safe_key}"{service_selector}'
+        f"}}[{seconds}s]))"
+    )
+    res = await a_custom_query(client=prometheus_client, query=query)
+    value = convert_prometheus_string_to_float(res[0]["value"][1]) if res else 0
+    return MetricsScalarWithRange(data=max(value, 0), range=DateRange(start=start, end=end))
+
+
+async def get_requests_by_api_key(
+    api_key_id: str,
+    start: datetime,
+    end: datetime,
+    prometheus_client: PrometheusConnect,
+    aim_service_id: str | None = None,
+) -> MetricsScalarWithRange:
+    seconds = int((end - start).total_seconds())
+    safe_key = _escape_promql_label_value(api_key_id)
+    service_selector = (
+        f', {AIM_SERVICE_ID_METRIC_LABEL}="{_escape_promql_label_value(aim_service_id)}"' if aim_service_id else ""
+    )
+    query = (
+        f"sum(ceil(increase({EXTPROC_REQUEST_DURATION_COUNT_METRIC}{{"
+        f'{API_KEY_ID_METRIC_LABEL}="{safe_key}"{service_selector}'
+        f"}}[{seconds}s])))"
+    )
+    res = await a_custom_query(client=prometheus_client, query=query)
+    value = convert_prometheus_string_to_float(res[0]["value"][1]) if res else 0
+    return MetricsScalarWithRange(data=max(value, 0), range=DateRange(start=start, end=end))

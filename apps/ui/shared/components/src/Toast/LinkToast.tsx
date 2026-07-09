@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Link } from '@heroui/react';
+import { Link } from '../Link';
 import NextLink from 'next/link';
 import { useTranslation } from 'next-i18next';
 

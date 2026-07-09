@@ -70,10 +70,7 @@ def make_dataset_response(
         response = make_dataset_response()
 
         # Create with custom values
-        response = make_dataset_response(
-            name="Custom Dataset",
-            type=DatasetType.EVALUATION,
-        )
+        response = make_dataset_response(name="Custom Dataset")
     """
     return DatasetResponse(
         id=id or uuid4(),

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Switch, SwitchProps } from '@heroui/react';
+import { Switch, SwitchProps } from '@amdenterpriseai/components';
 import { FieldValues, Path, PathValue, UseFormReturn } from 'react-hook-form';
 
 interface Props<T extends FieldValues>

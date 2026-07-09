@@ -24,6 +24,29 @@ import {
 
 setupClipboardMock();
 
+// Mock DebugInfoModal to break the circular dependency:
+// ChatMessage → DebugInfoModal → MemoizedChatMessage → ChatMessage
+// Without this mock, MemoizedChatMessage calls memo(ChatMessage) while ChatMessage is still
+// undefined (not yet exported), producing a "memo: first argument must be a component" warning.
+vi.mock('@/components/features/chat/DebugInfoModal', () => ({
+  DebugInfoModal: () => null,
+}));
+
+// Mock @amdenterpriseai/components to avoid ESM resolution issues with react-markdown in jsdom.
+// react-markdown v10+ is ESM-only and its default export resolves as undefined in the jsdom
+// test environment, causing memo(ReactMarkdown) to warn.
+vi.mock('@amdenterpriseai/components', async () => {
+  const React = await vi.importActual<typeof import('react')>('react');
+  return {
+    MemoizedReactMarkdown: ({ children }: { children?: string }) =>
+      React.createElement('div', null, children),
+    MarkdownCodeBlock: ({ value }: { language: string; value: string }) =>
+      React.createElement('pre', null, value),
+    CodeBlock: ({ children }: { children?: unknown }) =>
+      React.createElement('code', null, children as never),
+  };
+});
+
 // Use fake timers
 vi.useFakeTimers();
 
@@ -43,7 +66,11 @@ describe('ChatMessage Component', () => {
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
+    // Wrap in act so pending timer callbacks (e.g. setTimeout resetting messageCopied state)
+    // are treated as React state updates, suppressing the "not wrapped in act" warning.
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
     vi.useRealTimers();
   });
 
@@ -167,8 +194,8 @@ describe('ChatMessage Component', () => {
 
       // Should show textarea and action buttons
       expect(screen.getByRole('textbox')).toBeInTheDocument();
-      expect(screen.getByText('Save & Submit')).toBeInTheDocument();
-      expect(screen.getByText('Cancel')).toBeInTheDocument();
+      expect(screen.getByText('edit.saveAndSubmit')).toBeInTheDocument();
+      expect(screen.getByText('edit.cancel')).toBeInTheDocument();
     });
 
     it('saves edited message when Save & Submit is clicked', async () => {
@@ -196,7 +223,7 @@ describe('ChatMessage Component', () => {
         });
       });
 
-      const saveButton = screen.getByText('Save & Submit');
+      const saveButton = screen.getByText('edit.saveAndSubmit');
 
       await act(async () => {
         fireEvent.click(saveButton);
@@ -229,7 +256,7 @@ describe('ChatMessage Component', () => {
         fireEvent.change(textarea, { target: { value: 'Changed content' } });
       });
 
-      const cancelButton = screen.getByText('Cancel');
+      const cancelButton = screen.getByText('edit.cancel');
 
       await act(async () => {
         fireEvent.click(cancelButton);
@@ -522,7 +549,7 @@ describe('ChatMessage Component', () => {
         fireEvent.change(textarea, { target: { value: '   ' } }); // Only whitespace
       });
 
-      const saveButton = screen.getByText('Save & Submit');
+      const saveButton = screen.getByText('edit.saveAndSubmit');
       expect(saveButton).toBeDisabled();
     });
 
@@ -553,7 +580,7 @@ describe('ChatMessage Component', () => {
         fireEvent.change(textarea, { target: { value: 'updated caption' } });
       });
 
-      const saveButton = screen.getByText('Save & Submit');
+      const saveButton = screen.getByText('edit.saveAndSubmit');
 
       await act(async () => {
         fireEvent.click(saveButton);
@@ -588,7 +615,7 @@ describe('ChatMessage Component', () => {
         fireEvent.click(editButton!);
       });
 
-      const saveButton = screen.getByText('Save & Submit');
+      const saveButton = screen.getByText('edit.saveAndSubmit');
 
       await act(async () => {
         fireEvent.click(saveButton);

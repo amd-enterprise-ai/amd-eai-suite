@@ -17,3 +17,4 @@ export * from './next-auth';
 export * from './sizes';
 export * from './status-error-popover';
 export * from './step-modal';
+export * from './step-page';

@@ -2,15 +2,21 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Card, CardBody, CardHeader, Tab, Tabs } from '@heroui/react';
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  DynamicValueLegend,
+  LineChart,
+  Tab,
+  Tabs,
+} from '@amdenterpriseai/components';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'next-i18next';
 
 import type { AvailableChartColorsKeys } from '@amdenterpriseai/types';
 import type { TimeRange } from '@amdenterpriseai/types';
-import { DynamicValueLegend } from '@amdenterpriseai/components';
-import { LineChart } from '@amdenterpriseai/components';
 
 import {
   fetchNodePcieBandwidth,

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { SelectItem } from '@heroui/react';
+import { SelectItem, ManagedForm } from '@amdenterpriseai/components';
 import {
   act,
   fireEvent,
@@ -13,7 +13,6 @@ import {
 import { z, ZodType } from 'zod';
 import { vi } from 'vitest';
 
-import { ManagedForm } from '@amdenterpriseai/components';
 import { HuggingFaceTokenSelector } from '@/components/shared/HuggingFaceTokenSelector';
 import { HuggingFaceTokenData } from '@/types/secrets';
 
@@ -31,14 +30,14 @@ const formSchema: ZodType<HuggingFaceTokenData> = z.object({
 });
 
 const mockExistingTokens = [
-  { id: 'token-1', metadata: { name: 'Production Token' } },
-  { id: 'token-2', metadata: { name: 'Development Token' } },
+  { id: 'token-1', displayName: 'Production Token' },
+  { id: 'token-2', displayName: 'Development Token' },
 ];
 
 const renderHuggingFaceTokenSelector = (
   existingTokens: {
     id: string;
-    metadata: { name: string };
+    displayName: string;
   }[] = mockExistingTokens,
   formProps: Partial<
     React.ComponentProps<typeof ManagedForm<HuggingFaceTokenData>>

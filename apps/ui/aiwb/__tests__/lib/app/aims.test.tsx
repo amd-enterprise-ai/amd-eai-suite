@@ -3,14 +3,15 @@
 // SPDX-License-Identifier: MIT
 
 import {
+  buildFilteredCatalog,
   transformToAggregatedAIMs,
   resolveAILabName,
   aimParser,
   resolveAIMServiceDisplay,
-  deployAim,
+  getAIMServiceStatusVariants,
 } from '@/lib/app/aims';
+import { IconCircleCaretRight } from '@tabler/icons-react';
 import {
-  AIMDeployPayload,
   AIMServiceStatus,
   AIMStatus,
   AIMWorkloadStatus,
@@ -19,6 +20,18 @@ import {
   AIMService,
   AIMMetric,
 } from '@/types/aims';
+
+describe('getAIMServiceStatusVariants', () => {
+  const t = (key: string) => key;
+
+  it('maps RUNNING to primary color with play icon', () => {
+    const variants = getAIMServiceStatusVariants(t);
+    const running = variants[AIMServiceStatus.RUNNING];
+    expect(running.color).toBe('primary');
+    expect(running.icon).toBe(IconCircleCaretRight);
+    expect(running.intent).toBeUndefined();
+  });
+});
 
 describe('aims utility functions', () => {
   describe('resolveAILabName', () => {
@@ -80,7 +93,6 @@ describe('aims utility functions', () => {
           cacheModel: false,
           routing: { annotations: {}, enabled: false },
           runtimeConfigName: '',
-          template: {},
         },
         status: {
           status: AIMServiceStatus.RUNNING,
@@ -97,6 +109,7 @@ describe('aims utility functions', () => {
       overrides: Partial<ParsedAIM> = {},
     ): ParsedAIM => ({
       model: 'aim-test-model',
+      aimId: 'org/test-model',
       imageReference: 'img:1.0',
       annotations: {
         'aim.eai.amd.com/source-registry': '',
@@ -195,50 +208,6 @@ describe('aims utility functions', () => {
       );
     });
 
-    it('falls back to resolvedModel.name when spec.model.name is absent', () => {
-      const aimService: AIMService = {
-        id: 'aim-img',
-        metadata: {
-          name: 'qwen3-32b-custom',
-          namespace: 'project1',
-          uid: 'uid-img',
-          labels: {},
-          annotations: {},
-          creationTimestamp: '',
-          ownerReferences: [],
-        },
-        spec: {
-          model: { image: 'amdenterpriseai/aim-qwen-qwen3-32b:0.8.5' },
-          replicas: 1,
-          overrides: {},
-          cacheModel: false,
-          routing: { annotations: {}, enabled: false },
-          runtimeConfigName: '',
-          template: {},
-        },
-        status: {
-          status: AIMServiceStatus.RUNNING,
-          resolvedModel: { name: 'aim-qwen-resolved' },
-        },
-        clusterAuthGroupId: null,
-        endpoints: { internal: '', external: '' },
-      };
-      const parsedAIMs = [
-        createMockParsedAIM({
-          model: 'aim-qwen-resolved',
-          title: 'Qwen3 32B',
-          canonicalName: 'qwen/Qwen3-32B',
-          imageVersion: '0.8.5',
-        }),
-      ];
-
-      const result = resolveAIMServiceDisplay(aimService, parsedAIMs);
-
-      expect(result.name).toBe('aim-qwen-resolved');
-      expect(result.title).toBe('Qwen3 32B');
-      expect(result.canonicalName).toBe('qwen/Qwen3-32B');
-    });
-
     it('falls back to metadata.name when both model.name and resolvedModel are absent', () => {
       const aimService: AIMService = {
         id: 'aim-orphan',
@@ -258,7 +227,6 @@ describe('aims utility functions', () => {
           cacheModel: false,
           routing: { annotations: {}, enabled: false },
           runtimeConfigName: '',
-          template: {},
         },
         status: { status: AIMServiceStatus.PENDING },
         clusterAuthGroupId: null,
@@ -372,7 +340,6 @@ describe('aims utility functions', () => {
           enabled: true,
         },
         runtimeConfigName: 'default',
-        template: {},
       },
       status: {
         status,
@@ -510,6 +477,62 @@ describe('aims utility functions', () => {
       expect(parsed.isHfTokenRequired).toBe(true);
     });
 
+    it('marks AIMs without onboarding annotations as non-custom imports', () => {
+      const aim = createMockAIM();
+      const parsed = aimParser(aim);
+
+      expect(parsed.isCustomImport).toBe(false);
+      expect(parsed.sourceUri).toBeUndefined();
+    });
+
+    it('flags AIMs with the source-uri annotation as custom imports', () => {
+      const aim = createMockAIM({
+        metadata: {
+          name: 'test-aim',
+          namespace: null,
+          uid: 'uid-123',
+          labels: {},
+          annotations: {
+            'aim.eai.amd.com/source-registry': 'docker.io',
+            'aim.eai.amd.com/source-repository': 'amdenterpriseai/test-model',
+            'aim.eai.amd.com/source-tag': '1.0.0',
+            'airm.silogen.ai/source-uri':
+              'https://huggingface.co/meta-llama/Llama-3-8B',
+          },
+          creationTimestamp: '2023-01-01T00:00:00Z',
+          ownerReferences: [],
+        },
+      });
+      const parsed = aimParser(aim);
+
+      expect(parsed.isCustomImport).toBe(true);
+      expect(parsed.sourceUri).toBe(
+        'https://huggingface.co/meta-llama/Llama-3-8B',
+      );
+    });
+
+    it('flags AIMs with only the model-display-name annotation as custom imports', () => {
+      const aim = createMockAIM({
+        metadata: {
+          name: 'test-aim',
+          namespace: null,
+          uid: 'uid-123',
+          labels: {},
+          annotations: {
+            'aim.eai.amd.com/source-registry': 'docker.io',
+            'aim.eai.amd.com/source-repository': 'amdenterpriseai/test-model',
+            'aim.eai.amd.com/source-tag': '1.0.0',
+            'aiwb.apps.eai.amd.com/display-name': 'My imported model',
+          },
+          creationTimestamp: '2023-01-01T00:00:00Z',
+          ownerReferences: [],
+        },
+      });
+      const parsed = aimParser(aim);
+
+      expect(parsed.isCustomImport).toBe(true);
+    });
+
     it('propagates status from AIMClusterModel', () => {
       const aim = createMockAIM({
         status: {
@@ -538,6 +561,41 @@ describe('aims utility functions', () => {
 
       expect(parsed.status).toBe(AIMStatus.READY);
     });
+
+    it('returns empty acceleratorTypes when discoveredProfiles is absent', () => {
+      const aim = createMockAIM();
+      const parsed = aimParser(aim);
+
+      expect(parsed.acceleratorTypes).toEqual([]);
+    });
+
+    it('projects distinct accelerator types from discoveredProfiles.byHardware', () => {
+      const aim = createMockAIM({
+        status: {
+          status: AIMStatus.READY,
+          imageMetadata: {
+            model: {
+              canonicalName: 'test/model',
+              hfTokenRequired: false,
+              source: '',
+              tags: [],
+              title: 'Test',
+              variants: [],
+            },
+          },
+          discoveredProfiles: {
+            byHardware: [
+              { acceleratorType: 'gpu' },
+              { acceleratorType: 'GPU' },
+              { acceleratorType: 'cpu' },
+            ],
+          },
+        },
+      });
+      const parsed = aimParser(aim);
+
+      expect(parsed.acceleratorTypes).toEqual(['cpu', 'gpu']);
+    });
   });
 
   describe('transformToAggregatedAIMs', () => {
@@ -547,6 +605,7 @@ describe('aims utility functions', () => {
       overrides?: Partial<ParsedAIM>,
     ): ParsedAIM => ({
       model: `aim-${version}`,
+      aimId: 'test/model',
       imageReference: `docker.io/${repository}:${version}`,
       annotations: {
         'aim.eai.amd.com/source-registry': 'docker.io',
@@ -700,6 +759,29 @@ describe('aims utility functions', () => {
       expect(result[0].latestAim!.imageVersion).toBe('1.0.0');
     });
 
+    it('unions acceleratorTypes across versions in the same family', () => {
+      const aims = [
+        createMockParsedAIM('amdenterpriseai/model-a', '1.0.0', {
+          acceleratorTypes: ['gpu'],
+        }),
+        createMockParsedAIM('amdenterpriseai/model-a', '2.0.0', {
+          acceleratorTypes: ['cpu', 'gpu'],
+        }),
+      ];
+
+      const result = transformToAggregatedAIMs(aims);
+
+      expect(result[0].aggregated.acceleratorTypes).toEqual(['cpu', 'gpu']);
+    });
+
+    it('returns empty aggregated.acceleratorTypes when no version reports any', () => {
+      const aims = [createMockParsedAIM('amdenterpriseai/model-a', '1.0.0')];
+
+      const result = transformToAggregatedAIMs(aims);
+
+      expect(result[0].aggregated.acceleratorTypes).toEqual([]);
+    });
+
     it('extracts AI Lab name from canonical name', () => {
       const aims = [
         createMockParsedAIM('amdenterpriseai/model-a', '1.0.0', {
@@ -822,51 +904,130 @@ describe('aims utility functions', () => {
     });
   });
 
-  describe('deployAim', () => {
-    it('sends payload as-is (camelCase) to the API', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ id: 'new-service-id' }),
-      });
-      vi.stubGlobal('fetch', mockFetch);
+  describe('buildFilteredCatalog', () => {
+    const createMockParsedAIM = (
+      repository: string,
+      version: string,
+      overrides?: Partial<ParsedAIM>,
+    ): ParsedAIM => ({
+      model: `aim-${version}`,
+      aimId: 'test/model',
+      imageReference: `docker.io/${repository}:${version}`,
+      annotations: {
+        'aim.eai.amd.com/source-registry': 'docker.io',
+        'aim.eai.amd.com/source-repository': repository,
+        'aim.eai.amd.com/source-tag': version,
+      },
+      description: { short: 'Test description', full: 'Full test description' },
+      title: repository.split('/')[1] ?? repository,
+      imageVersion: version,
+      canonicalName: 'test/model',
+      tags: ['test'],
+      status: AIMStatus.READY,
+      workloadStatuses: [AIMWorkloadStatus.NOT_DEPLOYED],
+      isPreview: false,
+      isHfTokenRequired: false,
+      ...overrides,
+    });
 
-      const payload: AIMDeployPayload = {
-        model: 'llama3-8b',
-        hfToken: 'my-hf-secret',
-        imagePullSecrets: ['s1'],
-        allowUnoptimized: true,
-        minReplicas: 2,
-        maxReplicas: 10,
-        autoScaling: {
-          metrics: [
-            {
-              type: 'PodMetric',
-              podmetric: {
-                metric: {
-                  backend: 'opentelemetry',
-                  metricNames: ['vllm:num_requests_waiting'],
-                  query: 'vllm:num_requests_waiting',
-                  operationOverTime: 'avg',
-                },
-                target: { type: 'Value', value: '5' },
-              },
-            },
-          ],
+    it('preserves family support when a filter removes the only Ready version', () => {
+      // The Ready version has no acceleratorTypes (won't match a CPU filter).
+      // The NOT_AVAILABLE version has acceleratorTypes: ['cpu'] (matches CPU filter).
+      // After filtering to CPU-only, the family should still be marked supported.
+      const readyVersion = createMockParsedAIM(
+        'amdenterpriseai/gated-model',
+        '2.0.0',
+        {
+          status: AIMStatus.READY,
+          acceleratorTypes: [],
+          title: 'Gated Model',
         },
-      };
+      );
+      const cpuVersion = createMockParsedAIM(
+        'amdenterpriseai/gated-model',
+        '1.0.0',
+        {
+          status: AIMStatus.NOT_AVAILABLE,
+          acceleratorTypes: ['cpu'],
+          title: 'Gated Model',
+        },
+      );
 
-      await deployAim('test-ns', payload);
+      const allAims = [readyVersion, cpuVersion];
+      const filteredAims = [cpuVersion]; // CPU filter removed the Ready version
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body).toEqual(payload);
-      expect(body.hfToken).toBe('my-hf-secret');
-      expect(body.imagePullSecrets).toEqual(['s1']);
-      expect(body.allowUnoptimized).toBe(true);
-      expect(body.minReplicas).toBe(2);
-      expect(body.maxReplicas).toBe(10);
-      expect(body.autoScaling).toEqual(payload.autoScaling);
+      const result = buildFilteredCatalog(allAims, filteredAims);
 
-      vi.unstubAllGlobals();
+      expect(result).toHaveLength(1);
+      expect(result[0].isSupported).toBe(true);
+    });
+
+    it('places a supported-but-filtered family before an unsupported one', () => {
+      // Family A: READY version excluded by filter, NOT_AVAILABLE version matches.
+      // After filtering, family A appears unsupported in the raw filtered subset,
+      // but buildFilteredCatalog must restore isSupported=true and sort it first.
+      const familyAReady = createMockParsedAIM(
+        'amdenterpriseai/family-a',
+        '2.0.0',
+        {
+          status: AIMStatus.READY,
+          acceleratorTypes: [],
+          title: 'Family A',
+        },
+      );
+      const familyACpu = createMockParsedAIM(
+        'amdenterpriseai/family-a',
+        '1.0.0',
+        {
+          status: AIMStatus.NOT_AVAILABLE,
+          acceleratorTypes: ['cpu'],
+          title: 'Family A',
+        },
+      );
+      // Family B: genuinely unsupported, matches the filter.
+      const familyBCpu = createMockParsedAIM(
+        'amdenterpriseai/family-b',
+        '1.0.0',
+        {
+          status: AIMStatus.NOT_AVAILABLE,
+          acceleratorTypes: ['cpu'],
+          title: 'Family B',
+        },
+      );
+
+      const allAims = [familyAReady, familyACpu, familyBCpu];
+      const filteredAims = [familyACpu, familyBCpu]; // READY version of A excluded
+
+      const result = buildFilteredCatalog(allAims, filteredAims);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].aggregated.title).toBe('Family A');
+      expect(result[0].isSupported).toBe(true);
+      expect(result[1].aggregated.title).toBe('Family B');
+      expect(result[1].isSupported).toBe(false);
+    });
+
+    it('sorts supported families before unsupported', () => {
+      const supported = createMockParsedAIM('amdenterpriseai/zebra', '1.0.0', {
+        status: AIMStatus.READY,
+        title: 'Zebra Model',
+      });
+      const unsupported = createMockParsedAIM(
+        'amdenterpriseai/alpha',
+        '1.0.0',
+        {
+          status: AIMStatus.NOT_AVAILABLE,
+          title: 'Alpha Model',
+        },
+      );
+
+      const aims = [unsupported, supported];
+      const result = buildFilteredCatalog(aims, aims);
+
+      expect(result[0].aggregated.title).toBe('Zebra Model');
+      expect(result[0].isSupported).toBe(true);
+      expect(result[1].aggregated.title).toBe('Alpha Model');
+      expect(result[1].isSupported).toBe(false);
     });
   });
 });

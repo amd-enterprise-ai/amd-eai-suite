@@ -21,27 +21,6 @@ ${TEST_UPDATED_DS_DESC}         ${None}
 
 
 *** Keywords ***
-Valid dataset data is prepared
-    [Documentation]    Prepares a valid set of test data for dataset creation (POST /datasets).
-    ...    Creates data matching DatasetCreate schema.
-    # Ensure we have a project to work with
-    Project exists in system
-
-    ${random_suffix}=       Generate random string                          8                       [LETTERS][NUMBERS]
-    ${dataset_name}=        Set variable            test dataset ${random_suffix}
-    ${dataset_desc}=        Set variable            Description for ${dataset_name}
-    ${dataset_type}=        Set variable            Fine-tuning  # Using exact enum value from DatasetType
-    ${namespace}=           Get Project Namespace
-    ${dataset_data}=        Create dictionary
-    ...                     name=${dataset_name}
-    ...                     description=${dataset_desc}
-    ...                     path=default-bucket/datasets/${namespace}/${dataset_name}
-    ...                     type=${dataset_type}
-    Set test variable       ${TEST_DATASET}    ${dataset_data}
-    Set test variable       ${TEST_DATASET_ID}      ${None}
-
-    Log                     Prepared dataset test data with name: ${dataset_name}
-
 Prepare updated dataset data
     [Documentation]    Generates a unique description for dataset modification tests.
     ...    Note: Dataset names are immutable after creation, so we only update the description.
@@ -54,7 +33,8 @@ Prepare updated dataset data
 Valid dataset upload data is prepared
     [Documentation]    Prepares valid test data for dataset upload tests.
     ...    Sets TEST_DATASET dict with name, description, type keys.
-    ${random_suffix}=       Generate random string                          8                       [LETTERS][NUMBERS]
+    # K8s/DB resource names must be lowercase.
+    ${random_suffix}=       Generate random string                          8                       [LOWER][NUMBERS]
     ${dataset_name}=        Set variable            test-dataset-upload-${random_suffix}
     ${dataset_desc}=        Set variable            Upload test dataset description
     ${dataset_type}=        Set variable            Fine-tuning

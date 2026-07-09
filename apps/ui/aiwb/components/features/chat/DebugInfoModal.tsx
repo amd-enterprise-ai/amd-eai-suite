@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Accordion, AccordionItem } from '@heroui/react';
+import { Accordion, AccordionItem, Modal } from '@amdenterpriseai/components';
 import { IconInfoCircle } from '@tabler/icons-react';
 import React from 'react';
 
@@ -10,8 +10,6 @@ import { useTranslation } from 'next-i18next';
 
 import { DebugInfo } from '@/types/chat';
 import { Message } from '@/types/chat';
-
-import { Modal } from '@amdenterpriseai/components';
 
 import { MemoizedChatMessage } from './MemoizedChatMessage';
 

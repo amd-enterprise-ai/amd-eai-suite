@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Checkbox, Divider } from '@heroui/react';
+import {
+  Checkbox,
+  Divider,
+  SearchInput,
+  UserListEntry,
+} from '@amdenterpriseai/components';
 import { IconUser } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 import { useCallback, useMemo, useState } from 'react';
@@ -10,8 +15,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { InvitedUser } from '@/types/users';
 import { User } from '@/types/users';
 import { UserRole } from '@amdenterpriseai/types';
-
-import { SearchInput, UserListEntry } from '@amdenterpriseai/components';
 
 interface SelectableUser {
   id: string;

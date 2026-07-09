@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { PressEvent, Tooltip } from '@heroui/react';
+import { Tooltip } from '../Tooltip';
+import { PressEvent } from '@heroui/react';
 import { IconRefresh } from '@tabler/icons-react';
 
 import { useTranslation } from 'next-i18next';

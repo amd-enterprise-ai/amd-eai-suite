@@ -13,7 +13,7 @@ from kubernetes_asyncio.client import ApiException
 from api_common.exceptions import ConflictException, NotFoundException, ValidationException
 from api_common.secrets import SecretUseCase
 from app.secrets import service
-from app.secrets.constants import AIRM_USE_CASE_LABEL, USE_CASE_LABEL
+from app.secrets.constants import AIRM_USE_CASE_LABEL, DISPLAY_NAME_ANNOTATION, USE_CASE_LABEL
 from app.secrets.crds import K8sMetadata, KubernetesSecretResource
 from app.secrets.schemas import SecretCreate
 
@@ -174,7 +174,7 @@ async def test_create_secret(
 ) -> None:
     """Test creating a new secret."""
     secret_data = SecretCreate(
-        name="new-secret",
+        display_name="new-secret",
         data={"api_key": "abc123"},
         use_case=SecretUseCase.HUGGING_FACE,
     )
@@ -188,15 +188,74 @@ async def test_create_secret(
         ),
     )
 
-    with patch("app.secrets.service.create_kubernetes_secret", return_value=mock_created_secret):
-        result = await service.create_secret(
-            kube_client=mock_kube_client,
-            namespace=test_namespace,
-            secret_in=secret_data,
-        )
+    with patch("app.secrets.service.list_kubernetes_secrets", return_value=[]):
+        with patch("app.secrets.service.create_kubernetes_secret", return_value=mock_created_secret):
+            result = await service.create_secret(
+                kube_client=mock_kube_client,
+                namespace=test_namespace,
+                secret_in=secret_data,
+            )
 
     assert result.metadata.name == "new-secret"
     assert result.metadata.namespace == test_namespace
+
+
+@pytest.mark.asyncio
+async def test_create_secret_duplicate_display_name_raises_conflict(
+    test_namespace: str,
+    mock_kube_client: AsyncMock,
+) -> None:
+    """Test that creating a secret with a display name already in use raises ConflictException."""
+    secret_data = SecretCreate(
+        display_name="my-secret",
+        data={"key": "value"},
+    )
+
+    existing_secret = KubernetesSecretResource(
+        metadata=K8sMetadata(
+            name="wb-secret-abcd1234",
+            namespace=test_namespace,
+            creation_timestamp="2025-01-01T00:00:00Z",
+            annotations={DISPLAY_NAME_ANNOTATION: "my-secret"},
+        ),
+    )
+
+    with patch("app.secrets.service.list_kubernetes_secrets", return_value=[existing_secret]):
+        with pytest.raises(ConflictException, match="my-secret"):
+            await service.create_secret(
+                kube_client=mock_kube_client,
+                namespace=test_namespace,
+                secret_in=secret_data,
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_secret_duplicate_via_metadata_name_raises_conflict(
+    test_namespace: str,
+    mock_kube_client: AsyncMock,
+) -> None:
+    """Secrets without the display-name annotation surface displayName=metadata.name; the check covers that fallback."""
+    secret_data = SecretCreate(
+        display_name="legacy-secret",
+        data={"key": "value"},
+    )
+
+    # Old secret has no display-name annotation; its displayName surfaces as metadata.name
+    existing_secret = KubernetesSecretResource(
+        metadata=K8sMetadata(
+            name="legacy-secret",
+            namespace=test_namespace,
+            creation_timestamp="2024-01-01T00:00:00Z",
+        ),
+    )
+
+    with patch("app.secrets.service.list_kubernetes_secrets", return_value=[existing_secret]):
+        with pytest.raises(ConflictException, match="legacy-secret"):
+            await service.create_secret(
+                kube_client=mock_kube_client,
+                namespace=test_namespace,
+                secret_in=secret_data,
+            )
 
 
 @pytest.mark.asyncio
@@ -206,20 +265,21 @@ async def test_create_secret_already_exists(
 ) -> None:
     """Test creating a secret that already exists raises ConflictException."""
     secret_data = SecretCreate(
-        name="existing-secret",
+        display_name="existing-secret",
         data={"key": "value"},
     )
 
     # Mock 409 Conflict from K8s
     api_exception = ApiException(status=409)
 
-    with patch("app.secrets.service.create_kubernetes_secret", side_effect=api_exception):
-        with pytest.raises(ConflictException, match="already exists"):
-            await service.create_secret(
-                kube_client=mock_kube_client,
-                namespace=test_namespace,
-                secret_in=secret_data,
-            )
+    with patch("app.secrets.service.list_kubernetes_secrets", return_value=[]):
+        with patch("app.secrets.service.create_kubernetes_secret", side_effect=api_exception):
+            with pytest.raises(ConflictException, match="already exists"):
+                await service.create_secret(
+                    kube_client=mock_kube_client,
+                    namespace=test_namespace,
+                    secret_in=secret_data,
+                )
 
 
 @pytest.mark.asyncio
@@ -230,7 +290,7 @@ async def test_create_secret_image_pull_invalid_json_raises_validation_exception
     """Test creating an image pull secret with non-JSON value raises ValidationException."""
     invalid_value_b64 = base64.b64encode(b"plain text not json").decode("ascii")
     secret_data = SecretCreate(
-        name="image-pull-secret",
+        display_name="image-pull-secret",
         data={".dockerconfigjson": invalid_value_b64},
         use_case=SecretUseCase.IMAGE_PULL_SECRET,
     )
@@ -254,7 +314,7 @@ async def test_create_secret_image_pull_valid_json_succeeds(
     valid_json = b'{"auths":{"https://index.docker.io/v1/":{"username":"u","password":"p"}}}'
     valid_value_b64 = base64.b64encode(valid_json).decode("ascii")
     secret_data = SecretCreate(
-        name="image-pull-secret",
+        display_name="image-pull-secret",
         data={".dockerconfigjson": valid_value_b64},
         use_case=SecretUseCase.IMAGE_PULL_SECRET,
     )
@@ -268,12 +328,13 @@ async def test_create_secret_image_pull_valid_json_succeeds(
         ),
     )
 
-    with patch("app.secrets.service.create_kubernetes_secret", return_value=mock_created_secret):
-        result = await service.create_secret(
-            kube_client=mock_kube_client,
-            namespace=test_namespace,
-            secret_in=secret_data,
-        )
+    with patch("app.secrets.service.list_kubernetes_secrets", return_value=[]):
+        with patch("app.secrets.service.create_kubernetes_secret", return_value=mock_created_secret):
+            result = await service.create_secret(
+                kube_client=mock_kube_client,
+                namespace=test_namespace,
+                secret_in=secret_data,
+            )
 
     assert result.metadata.name == "image-pull-secret"
     assert result.metadata.namespace == test_namespace

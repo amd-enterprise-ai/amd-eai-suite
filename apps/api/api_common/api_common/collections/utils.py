@@ -54,7 +54,7 @@ def sort_list[T](
     return sorted(items, key=get_sort_key, reverse=(sort_order == SortDirection.desc))
 
 
-def paginate_list[T](items: list[T], page: int = 1, page_size: int = 20) -> PaginatedResult[T]:
+def paginate_list[T](items: list[T], page: int = 1, page_size: int = 10) -> PaginatedResult[T]:
     """Paginate a list of items.
 
     Args:

@@ -1,0 +1,41 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+orphan: true
+
+repos:
+  - repo: local
+    hooks:
+      - id: biome-format-aiwb
+        name: Biome format (AIWB UI)
+        entry: pnpm format:fix
+        language: system
+        pass_filenames: false
+      - id: ui-typecheck-aiwb
+        name: UI typecheck (AIWB UI)
+        entry: pnpm typecheck
+        language: system
+        pass_filenames: false
+      - id: ui-lint-aiwb
+        name: UI lint (AIWB UI)
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+      - id: ui-test-coverage-aiwb
+        name: UI test coverage (AIWB UI)
+        entry: pnpm test -- --coverage --bail=1
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        verbose: true
+        fail_fast: true
+      - id: robot-dryrun
+        name: Robot Framework dry-run validation
+        description: Validates keyword names, arguments, imports, and syntax without executing tests
+        entry: bash -c 'cd ../../.. && tooling/robot_dryrun.sh'
+        language: system
+        pass_filenames: false
+        files: ^specs/.*\.(robot|resource|py|txt|csv)$
+        stages: [pre-push]
+        verbose: true

@@ -10,8 +10,8 @@ import ProviderWrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
-// Mock HeroUI components
-vi.mock('@heroui/react', () => ({
+// Mock Card components via adapter
+vi.mock('@amdenterpriseai/components', () => ({
   Card: ({
     children,
     className,

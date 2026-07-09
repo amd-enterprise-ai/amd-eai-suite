@@ -5,17 +5,19 @@
 """Workspaces service tests."""
 
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api_common.exceptions import ConflictException
+from api_common.exceptions import ConflictException, NotFoundException
 from app.workloads.enums import WorkloadStatus, WorkloadType
 from app.workloads.repository import get_workloads
 from app.workspaces.enums import WorkspaceType, workspace_type_chart_name_mapping
 from app.workspaces.schemas import DevelopmentWorkspaceRequest
 from app.workspaces.service import (
     create_development_workspace,
+    delete_development_workspace,
     get_chart_by_workspace_type,
 )
 from app.workspaces.utils import check_workspace_availability_per_namespace
@@ -39,10 +41,17 @@ async def test_get_chart_by_workspace_type_success(db_session: AsyncSession) -> 
 async def test_create_development_workspace_success(db_session: AsyncSession, mock_kube_client: AsyncMock) -> None:
     """Test successful workspace creation with mocked external dependencies."""
     chart_name = workspace_type_chart_name_mapping[WorkspaceType.VSCODE]
-    chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
+    chart = await factory.create_chart(
+        db_session, name=chart_name, display_name="VS Code", chart_type=WorkloadType.WORKSPACE
+    )
 
     request = DevelopmentWorkspaceRequest(
-        image="test/image:latest", gpus=1, memory_per_gpu=8.0, cpu_per_gpu=2.0, image_pull_secrets=["secret"]
+        workspace_type=WorkspaceType.VSCODE,
+        image="test/image:latest",
+        gpus=1,
+        memory_per_gpu=8.0,
+        cpu_per_gpu=2.0,
+        image_pull_secrets=["secret"],
     )
 
     with (
@@ -66,7 +75,7 @@ async def test_create_development_workspace_success(db_session: AsyncSession, mo
         assert result.chart_id == chart.id
         assert result.name is not None
         assert result.name.startswith("wb-")  # New naming convention
-        assert result.display_name is not None
+        assert result.display_name == "VS Code"
 
         mock_apply.assert_called_once()
 
@@ -88,7 +97,7 @@ async def test_create_development_workspace_mlflow_conflict(
         status=WorkloadStatus.RUNNING,
     )
 
-    request = DevelopmentWorkspaceRequest()
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.MLFLOW)
 
     with pytest.raises(ConflictException, match="workspace already running"):
         await create_development_workspace(
@@ -109,7 +118,7 @@ async def test_create_development_workspace_mlflow_success(
     chart_name = workspace_type_chart_name_mapping[WorkspaceType.MLFLOW]
     chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
 
-    request = DevelopmentWorkspaceRequest()
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.MLFLOW)
 
     with (
         patch("app.workspaces.service.render_helm_template", autospec=True) as mock_render,
@@ -221,7 +230,7 @@ async def test_create_development_workspace_vscode_user_conflict(
         submitter="test@example.com",
     )
 
-    request = DevelopmentWorkspaceRequest()
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.VSCODE)
 
     with pytest.raises(ConflictException, match="already have a.*workspace running"):
         await create_development_workspace(
@@ -242,7 +251,9 @@ async def test_create_development_workspace_vscode_success(
     chart_name = workspace_type_chart_name_mapping[WorkspaceType.VSCODE]
     chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
 
-    request = DevelopmentWorkspaceRequest(gpus=2, memory_per_gpu=64.0, cpu_per_gpu=8.0)
+    request = DevelopmentWorkspaceRequest(
+        workspace_type=WorkspaceType.VSCODE, gpus=2, memory_per_gpu=64.0, cpu_per_gpu=8.0
+    )
 
     with (
         patch("app.workspaces.service.render_helm_template", autospec=True) as mock_render,
@@ -270,11 +281,13 @@ async def test_create_development_workspace_vscode_success(
 async def test_create_development_workspace_jupyterlab_success(
     db_session: AsyncSession, mock_kube_client: AsyncMock
 ) -> None:
-    """Test successful JupyterLab workspace creation."""
+    """Test JupyterLab workspace creation uses the chart's display name when set."""
     chart_name = workspace_type_chart_name_mapping[WorkspaceType.JUPYTERLAB]
-    chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
+    chart = await factory.create_chart(
+        db_session, name=chart_name, display_name="JupyterLab", chart_type=WorkloadType.WORKSPACE
+    )
 
-    request = DevelopmentWorkspaceRequest(gpus=1, memory_per_gpu=32.0)
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.JUPYTERLAB, gpus=1, memory_per_gpu=32.0)
 
     with (
         patch("app.workspaces.service.render_helm_template", autospec=True) as mock_render,
@@ -294,6 +307,38 @@ async def test_create_development_workspace_jupyterlab_success(
 
         assert result.id is not None
         assert result.type == WorkloadType.WORKSPACE
+        assert result.display_name == "JupyterLab"
+
+
+@pytest.mark.asyncio
+async def test_create_development_workspace_falls_back_to_generic_name_when_chart_has_no_display_name(
+    db_session: AsyncSession, mock_kube_client: AsyncMock
+) -> None:
+    """Generic name is used when neither an explicit display name nor a chart display name is set."""
+    chart_name = workspace_type_chart_name_mapping[WorkspaceType.JUPYTERLAB]
+    chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
+    # chart.display_name is nullable; clear it to exercise the generic fallback.
+    chart.display_name = None
+    await db_session.flush()
+
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.JUPYTERLAB)
+
+    with (
+        patch("app.workspaces.service.render_helm_template", autospec=True) as mock_render,
+        patch("app.workspaces.service.apply_manifest", autospec=True) as mock_apply,
+    ):
+        mock_render.return_value = "manifest"
+        mock_apply.return_value = None
+
+        result = await create_development_workspace(
+            session=db_session,
+            kube_client=mock_kube_client,
+            submitter="test@example.com",
+            namespace="test-namespace",
+            request=request,
+            workspace_type=WorkspaceType.JUPYTERLAB,
+        )
+
         assert result.display_name == "Jupyterlab Workspace"
 
 
@@ -315,7 +360,7 @@ async def test_create_development_workspace_jupyterlab_user_conflict(
         submitter="test@example.com",
     )
 
-    request = DevelopmentWorkspaceRequest()
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.JUPYTERLAB)
 
     with pytest.raises(ConflictException, match="already have a.*workspace running"):
         await create_development_workspace(
@@ -334,9 +379,13 @@ async def test_create_development_workspace_comfyui_success(
 ) -> None:
     """Test successful ComfyUI workspace creation."""
     chart_name = workspace_type_chart_name_mapping[WorkspaceType.COMFYUI]
-    chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
+    chart = await factory.create_chart(
+        db_session, name=chart_name, display_name="ComfyUI", chart_type=WorkloadType.WORKSPACE
+    )
 
-    request = DevelopmentWorkspaceRequest(gpus=4, memory_per_gpu=128.0, cpu_per_gpu=16.0)
+    request = DevelopmentWorkspaceRequest(
+        workspace_type=WorkspaceType.COMFYUI, gpus=4, memory_per_gpu=128.0, cpu_per_gpu=16.0
+    )
 
     with (
         patch("app.workspaces.service.render_helm_template", autospec=True) as mock_render,
@@ -356,7 +405,7 @@ async def test_create_development_workspace_comfyui_success(
 
         assert result.id is not None
         assert result.type == WorkloadType.WORKSPACE
-        assert result.display_name == "Comfyui Workspace"
+        assert result.display_name == "ComfyUI"
 
 
 @pytest.mark.asyncio
@@ -367,7 +416,7 @@ async def test_create_development_workspace_deployment_failure(
     chart_name = workspace_type_chart_name_mapping[WorkspaceType.VSCODE]
     chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
 
-    request = DevelopmentWorkspaceRequest()
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.VSCODE)
 
     with (
         patch("app.workspaces.service.render_helm_template", autospec=True) as mock_render,
@@ -401,7 +450,7 @@ async def test_create_development_workspace_custom_display_name(
     chart_name = workspace_type_chart_name_mapping[WorkspaceType.VSCODE]
     chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
 
-    request = DevelopmentWorkspaceRequest()
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.VSCODE)
 
     with (
         patch("app.workspaces.service.render_helm_template", autospec=True) as mock_render,
@@ -471,6 +520,7 @@ async def test_create_development_workspace_with_image_pull_secrets(
     chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
 
     request = DevelopmentWorkspaceRequest(
+        workspace_type=WorkspaceType.VSCODE,
         image="private-registry/my-image:latest",
         image_pull_secrets=["docker-registry-secret", "ecr-secret"],
     )
@@ -515,7 +565,7 @@ async def test_create_development_workspace_without_image_pull_secrets(
     chart_name = workspace_type_chart_name_mapping[WorkspaceType.VSCODE]
     chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
 
-    request = DevelopmentWorkspaceRequest(image="public-image:latest")
+    request = DevelopmentWorkspaceRequest(workspace_type=WorkspaceType.VSCODE, image="public-image:latest")
 
     with (
         patch("app.workspaces.service.render_helm_template", autospec=True) as mock_render,
@@ -544,3 +594,69 @@ async def test_create_development_workspace_without_image_pull_secrets(
         # Neither camelCase nor snake_case should be present
         assert "imagePullSecrets" not in overlays_values[0]
         assert "image_pull_secrets" not in overlays_values[0]
+
+
+@pytest.mark.asyncio
+async def test_delete_development_workspace_success(db_session: AsyncSession) -> None:
+    """Workspace deletion delegates to delete_workload_components with namespace and id."""
+    chart_name = workspace_type_chart_name_mapping[WorkspaceType.VSCODE]
+    chart = await factory.create_chart(db_session, name=chart_name, chart_type=WorkloadType.WORKSPACE)
+    workload = await factory.create_workload(
+        db_session,
+        chart=chart,
+        namespace="test-namespace",
+        workload_type=WorkloadType.WORKSPACE,
+        status=WorkloadStatus.RUNNING,
+        include_isolation_data=False,
+    )
+
+    with patch("app.workspaces.service.delete_workload_components", autospec=True) as mock_delete:
+        mock_delete.return_value = None
+
+        await delete_development_workspace(
+            session=db_session,
+            namespace="test-namespace",
+            workload_id=workload.id,
+        )
+
+        mock_delete.assert_called_once_with("test-namespace", workload.id, db_session, workload=workload)
+
+
+@pytest.mark.asyncio
+async def test_delete_development_workspace_rejects_non_workspace(db_session: AsyncSession) -> None:
+    """Non-workspace workloads cannot be deleted via the workspace endpoint."""
+    chart = await factory.create_chart(db_session, name="some-inference-chart", chart_type=WorkloadType.INFERENCE)
+    workload = await factory.create_workload(
+        db_session,
+        chart=chart,
+        namespace="test-namespace",
+        workload_type=WorkloadType.INFERENCE,
+        status=WorkloadStatus.RUNNING,
+        include_isolation_data=False,
+    )
+
+    with patch("app.workspaces.service.delete_workload_components", autospec=True) as mock_delete:
+        with pytest.raises(NotFoundException, match="not found"):
+            await delete_development_workspace(
+                session=db_session,
+                namespace="test-namespace",
+                workload_id=workload.id,
+            )
+
+        mock_delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_development_workspace_missing_workload(db_session: AsyncSession) -> None:
+    """Deleting an unknown workload id raises NotFoundException."""
+    missing_id = uuid4()
+
+    with patch("app.workspaces.service.delete_workload_components", autospec=True) as mock_delete:
+        with pytest.raises(NotFoundException, match="not found"):
+            await delete_development_workspace(
+                session=db_session,
+                namespace="test-namespace",
+                workload_id=missing_id,
+            )
+
+        mock_delete.assert_not_called()

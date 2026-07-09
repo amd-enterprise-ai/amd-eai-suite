@@ -53,10 +53,24 @@ Derive UI URL from kubectl context
     END
 
     # Extract cluster domain: https://k8s.app-dev.silogen.ai:6443 -> app-dev.silogen.ai
-    VAR    ${server}    ${result.stdout}
+    ${server}=    Strip String    ${result.stdout}
+    IF    "${server}" == "${EMPTY}"
+        Fail    kubectl context returned an empty cluster server URL. Set AIRM_UI_URL explicitly or update the current kubeconfig context.
+    END
+
     # Get hostname without protocol and port
-    ${hostname}=    Evaluate    "${server}".split("//")[1].split(":")[0]
+    IF    "//" not in """${server}"""
+        Fail    Invalid kubectl cluster server URL '${server}': expected a full URL containing '//'. Set AIRM_UI_URL explicitly or fix the current kubeconfig context.
+    END
+    ${hostname}=    Evaluate    "${server}".split("//", 1)[1].split(":")[0]
+    IF    "${hostname}" == "${EMPTY}"
+        Fail    Invalid kubectl cluster server URL '${server}': could not extract a hostname. Set AIRM_UI_URL explicitly or fix the current kubeconfig context.
+    END
+
     # Remove first subdomain prefix to get cluster domain
+    IF    "." not in """${hostname}"""
+        Fail    Invalid kubectl cluster hostname '${hostname}' from server '${server}': expected at least one '.' to derive the UI URL. Set AIRM_UI_URL explicitly or fix the current kubeconfig context.
+    END
     ${dot_index}=    Evaluate    "${hostname}".index(".")
     ${domain}=    Evaluate    "${hostname}"[${dot_index}+1:]
 

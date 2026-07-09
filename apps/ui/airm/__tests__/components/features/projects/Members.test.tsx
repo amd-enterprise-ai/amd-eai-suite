@@ -35,7 +35,8 @@ vi.mock('next-i18next', () => ({
 
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
-vi.mock('@amdenterpriseai/hooks', () => ({
+vi.mock('@amdenterpriseai/hooks', async (importOriginal) => ({
+  ...(await importOriginal()),
   useSystemToast: () => {
     const toast = vi.fn() as any;
     toast.success = toastSuccessMock;

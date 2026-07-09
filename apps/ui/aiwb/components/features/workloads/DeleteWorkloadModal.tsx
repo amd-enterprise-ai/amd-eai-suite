@@ -5,7 +5,7 @@
 import { useTranslation } from 'next-i18next';
 
 import { Workload } from '@/types/workloads';
-import type { ResourceMetrics } from '@/types/namespaces';
+import type { ResourceMetrics } from '@/types/projects';
 
 import { ConfirmationModal } from '@amdenterpriseai/components';
 

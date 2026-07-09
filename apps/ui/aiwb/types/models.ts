@@ -2,8 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-import type { AIMServiceCondition } from '@/types/aims';
-
 export enum ModelOnboardingStatus {
   READY = 'ready',
   PENDING = 'pending',
@@ -11,7 +9,7 @@ export enum ModelOnboardingStatus {
 }
 
 export type ModelFinetuneParams = {
-  name: string;
+  displayName: string;
   datasetId: string;
   epochs?: number;
   learningRate?: number;
@@ -26,62 +24,16 @@ export interface Model {
   createdAt?: string;
   onboardingStatus?: ModelOnboardingStatus;
   createdBy?: string;
-  modelWeightsPath?: string | null;
+  /** Source URI of the model weights. */
+  sourceUri?: string | null;
   /** Kubernetes resource name (AIMModel CR name or fine-tuning Job name). */
   resourceName?: string;
   /** WorkloadStatus value for K8s-sourced models (e.g., 'Pending', 'Running', 'Complete'). */
   status?: string;
   /** Workload UUID tracked in AIWB. */
   workloadId?: string;
-}
-
-/** Raw response shape returned by GET /namespaces/{ns}/aims/models. */
-export interface AIMModelResponse {
-  metadata: {
-    name: string;
-    creationTimestamp: string;
-    labels?: Record<string, string>;
-  };
-  spec: {
-    aimId?: string;
-    image: string;
-    modelSources: { modelId: string; sourceUri: string }[];
-    custom?: {
-      versionPolicy?: string;
-    };
-    env?: {
-      name: string;
-      value?: string;
-      valueFrom?: Record<string, unknown>;
-    }[];
-  };
-  status?: {
-    status: string;
-    sourceType?: string;
-    conditions?: AIMServiceCondition[];
-    imageMetadata?: {
-      model?: {
-        canonicalName?: string;
-        descriptionFull?: string;
-        hfTokenRequired?: boolean;
-        source?: string;
-        tags?: string[];
-        title?: string;
-        variants?: string[];
-      };
-      oci?: {
-        created?: string;
-        description?: string;
-        licenses?: string;
-        revision?: string;
-        source?: string;
-        title?: string;
-        vendor?: string;
-        version?: string;
-      };
-      originalLabels?: Record<string, string>;
-    };
-  };
+  /** Whether fine-tuning this model needs a Hugging Face token. */
+  hfTokenRequired?: boolean | null;
 }
 
 export interface ModelRequirements {
@@ -104,6 +56,8 @@ export interface FinetunableModel {
   gpuCount: number | null;
   compatibleAccelerators: string[];
   compatibleAcceleratorNames: string[];
+  /** Whether this recipe targets gated base weights. Null when the overlay does not declare it. */
+  hfTokenRequired?: boolean | null;
 }
 
 export const DEFAULT_SETTINGS: InferenceSettings = {

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { displayHumanReadableMegaBytes } from '@amdenterpriseai/utils/app';
-import { BaseGPUUsageCard } from './BaseGPUUsageCard';
+import { BaseGPUUsageCard, type GPUUsageCardConfig } from './BaseGPUUsageCard';
 
 import type {
   TimeRangePeriod,
@@ -32,7 +32,7 @@ type Props = DashboardProps | WorkloadProps;
 
 const GPU_MEMORY_CONFIG = {
   metricName: 'gpu_memory_utilization',
-  chartColor: 'cyan' as const,
+  chartColor: 'cyan',
   titleKey: 'dashboard.overview.vramDeviceUsage.title',
   tooltipKey: 'dashboard.overview.vramDeviceUsage.description',
   upperLimitUnallocatedKey:
@@ -40,7 +40,7 @@ const GPU_MEMORY_CONFIG = {
   upperLimitKey: 'dashboard.overview.vramDeviceUsage.upperLimit',
   dataFormatter: (value: number | null) =>
     displayHumanReadableMegaBytes(Number(value)),
-};
+} as const satisfies GPUUsageCardConfig;
 
 export const GPUMemoryUsageCard: React.FC<Props> = (props) => {
   return <BaseGPUUsageCard {...props} config={GPU_MEMORY_CONFIG} />;

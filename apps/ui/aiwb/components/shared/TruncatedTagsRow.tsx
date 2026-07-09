@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { Chip, Tooltip } from '@amdenterpriseai/components';
 import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
-import { Chip, Tooltip } from '@heroui/react';
 
 const DEFAULT_MAX_VISIBLE = 3;
 

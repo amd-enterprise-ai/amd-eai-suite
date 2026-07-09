@@ -28,8 +28,11 @@ import {
   NodeWorkloadsMetricsResponse,
 } from '@/types/workloads';
 
-import { ChipDisplay, StatusDisplay } from '@amdenterpriseai/components';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
+import {
+  ChipDisplay,
+  ClientSideDataTable,
+  StatusDisplay,
+} from '@amdenterpriseai/components';
 
 import { WorkloadGpuDevicesDetail } from './WorkloadGpuDevicesDetail';
 

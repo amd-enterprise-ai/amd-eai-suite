@@ -181,6 +181,13 @@ Workload Row Should Exist
     VAR    ${row}    css=${WORKLOAD_ROW_SELECTOR}:has-text("${workload_name}")
     Wait For Elements State    ${row}    visible    timeout=${timeout}
 
+Workload Row Should Not Exist
+    [Documentation]    Verifies no workload row with the given name appears in the dashboard grid.
+    [Arguments]    ${workload_name}    ${timeout}=10s
+
+    VAR    ${row}    css=${WORKLOAD_ROW_SELECTOR}:has-text("${workload_name}")
+    Wait For Elements State    ${row}    hidden    timeout=${timeout}
+
 Get Workload Status Text
     [Documentation]    Returns the status text from the Status column of a workload row.
     [Arguments]    ${workload_name}

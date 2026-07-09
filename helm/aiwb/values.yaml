@@ -19,7 +19,7 @@ standAloneMode: false
 defaultNamespace: "workbench"
 
 # Full URL override for AIRM UI (cross-app navigation).
-# If empty, auto-constructed as https://{kgateway.airm.prefixValue}.{appDomain}.
+# If empty, auto-constructed as https://{gateway.airm.prefixValue}.{appDomain}.
 # Only used when standAloneMode is false.
 airmAppUrl: ""
 
@@ -34,9 +34,9 @@ metadataPrefix:
 # Application domain (base domain for all services)
 appDomain: PUBLIC-IP
 
-# kgateway configuration for HTTPRoute resources
-kgateway:
-  namespace: kgateway-system
+# Gateway configuration for HTTPRoute resources
+gateway:
+  namespace: envoy-gateway-system
   gatewayName: https
   api:
     servicePort: 8080
@@ -59,11 +59,20 @@ kgateway:
   airm:
     prefixValue: airmui
 
+# Deprecated: renamed to gateway.namespace / gateway.gatewayName.
+# If set, these values take precedence for backwards compatibility.
+kgateway:
+  namespace: ""
+  gatewayName: ""
+
 # Backend (API) configuration
 backend:
   # Cluster host for external URLs (e.g., https://workloads.<your-domain>)
   # If not set, defaults to https://workloads.{appDomain}
   clusterHost: ""
+  # Host for interactive workspace external URLs (e.g., https://workspaces.<your-domain>)
+  # If not set, defaults to https://workspaces.{appDomain}
+  workspacesHost: ""
   image:
     repository: amdenterpriseai/aiwb-api
     tag: ""
@@ -147,9 +156,9 @@ keycloak:
   clientId: "354a0fa1-35ac-4a6d-9c4d-d661129c2cd0"
   secretName: "aiwb-ui-keycloak-secret"
 
-# MinIO configuration
+# MinIO (or compatible S3 object storage provider) configuration
 minio:
-  url: "http://minio.minio-tenant-default.svc.cluster.local:80"
+  url: "http://filer-s3.seaweedfs-instance.svc.cluster.local:80"
   bucket: "default-bucket"
   credentialsSecretName: "minio-credentials"
   accessKeyKey: "minio-access-key"
@@ -164,9 +173,28 @@ clusterAuth:
   url: "http://cluster-auth.cluster-auth.svc.cluster.local:8081"
   secretName: "cluster-auth-admin-token"
 
+# AI Gateway feature flag.
+# When enabled, the API key metrics view is shown in the UI (the chart icon
+# action in the API keys table, and the per-key metrics detail page).
+# Set to true on clusters where ai-gateway-discovery is installed.
+aiGateway:
+  enabled: true
+  # Base URL of the unified Envoy AI Gateway inference endpoint. The connect
+  # modal shows inference examples targeting this single endpoint (the model is
+  # selected via the OpenAI `model` field) instead of the per-service external URL.
+  # When left empty it defaults to "https://ai.<appDomain>" (rendered by the
+  # chart), which matches the ai.<domain> hostname the ai-gateway-discovery
+  # controller stamps on its routes — so inference traffic resolves without any
+  # extra config. Set it explicitly only to override that default.
+  url: ""
+
 # Prometheus configuration (for metrics queries)
 prometheus:
   url: "http://lgtm-stack.otel-lgtm-stack.svc.cluster.local:9090"
+  # AI Gateway Prometheus metric names (OTel GenAI semantic conventions by default).
+  # Override if using a different AI gateway or collector that emits different metric names.
+  aiGwTokenUsageMetric: "gen_ai_client_token_usage_sum"
+  aiGwRequestDurationMetric: "gen_ai_server_request_duration_seconds_count"
 
 # AIM Configuration
 # A cluster-scoped AIMClusterRuntimeConfig is always created by this chart.
@@ -178,6 +206,14 @@ aim:
   routing:
     enabled: true
     requestTimeout: "30m"
+    # Hostnames to pin generated inference HTTPRoutes to a single Gateway
+    # listener, preventing them from attaching to every listener on the parent
+    # gateway (which would expose the service on listeners that do not enforce
+    # inference auth). Required on a multi-listener gateway: without a hostname
+    # the AIM operator refuses to create the route (ConfigValid=False /
+    # RouteHostnameRequired). If left empty, the chart defaults to
+    # workloads.<appDomain>.
+    hostnames: []
 
 # PostgreSQL CNPG Configuration
 postgresql:

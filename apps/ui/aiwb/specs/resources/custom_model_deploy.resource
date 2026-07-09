@@ -1,0 +1,177 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+*** Settings ***
+Documentation       BDD keywords for custom model deploy and undeploy scenarios.
+...                 Composes page-level interactions into business-meaningful keywords
+...                 suitable for Given-When-Then test cases.
+...
+...                 Layer: Feature (tests import this, NOT page resources directly)
+
+Resource            common/session.resource
+Resource            pages/models_page.resource
+Resource            pages/chat_page.resource
+Resource            resources/aiwb_custom_models.resource
+
+
+*** Keywords ***
+# =============================================================================
+# Given keywords (preconditions)
+# =============================================================================
+
+A ready custom model exists in the project
+    [Documentation]    Onboards the public test fixture via the API and polls until the
+    ...                onboarding phase reaches Ready — weights are imported and the model
+    ...                is deployable. UI tests that click the Deploy button require this
+    ...                state because the button is disabled while the model is Importing.
+
+    A custom model is onboarded in the project
+    Custom model onboarding status should be "Ready"
+
+A custom model is deployed and running in the project
+    [Documentation]    Onboards the public test fixture, waits for Ready, deploys it as an
+    ...                AIMService via the API, and waits for Running state. Use this as the
+    ...                Given precondition for tests that exercise a live inference endpoint
+    ...                (e.g. chat) rather than tests that only need the Deploy button enabled.
+    ...                GPU quota is set before deploying so Kueue does not suspend the workload.
+    ...                Sets: TEST_CUSTOM_MODEL_NAME, TEST_AIM_ID
+
+    A custom model is onboarded in the project
+    Custom model onboarding status should be "Ready"
+    Project quota is set to    gpu_count=2
+    Custom model is deployed as an AIM service
+    Deployed AIM reaches Running state
+
+User is on the chat page for the custom model deployment
+    [Documentation]    Navigates to the chat page with the running custom model deployment
+    ...                pre-selected, then polls until the chat input is enabled — confirming
+    ...                the inference endpoint is actually serving requests before the test
+    ...                types its first message. The API can report Running before the engine
+    ...                is warm, so this extra wait prevents false failures on the send step.
+
+    Navigate to chat page with workload    ${UI_BASE_URL}    ${TEST_PROJECT}[name]    ${TEST_AIM_ID}
+    Wait Until Keyword Succeeds    2 min    5 sec
+    ...    Custom model chat input should be enabled
+
+Custom model chat input should be enabled
+    [Documentation]    Single-poll helper: asserts the chat textarea is not disabled.
+    ...                Used inside Wait Until Keyword Succeeds to retry until the endpoint warms up.
+
+    ${disabled}=    Get chat input disabled state
+    Should Not Be True    ${disabled}
+    ...    msg=Chat input is still disabled — inference endpoint may still be warming up
+
+User is on the custom models tab
+    [Documentation]    Navigates to the Custom Models tab of the models page.
+    ...                Expects ${UI_BASE_URL} and ${TEST_PROJECT} to be set.
+
+    Navigate to custom models page    ${UI_BASE_URL}    ${TEST_PROJECT}[name]
+
+User is on the deployed models page
+    [Documentation]    Navigates directly to the Deployed Models tab.
+    ...                Expects ${UI_BASE_URL} and ${TEST_PROJECT} to be set.
+
+    Navigate to deployed models page    ${UI_BASE_URL}    ${TEST_PROJECT}[name]
+
+# =============================================================================
+# When keywords (actions)
+# =============================================================================
+
+User opens the deploy drawer from the custom model card
+    [Documentation]    Clicks the Deploy button on the first custom model card to open
+    ...                the deploy drawer. The button becomes enabled once the model reaches
+    ...                Ready state — a precondition must guarantee that before this step.
+
+    Click deploy button on custom model card
+
+User fills the deployment display name "${name}"
+    [Documentation]    Types the given display name into the deploy drawer's name input.
+
+    Wait For Elements State    ${CUSTOM_DEPLOY_DISPLAY_NAME_INPUT}    visible    timeout=10s
+    Fill Text    ${CUSTOM_DEPLOY_DISPLAY_NAME_INPUT}    ${name}
+
+User submits the deployment form
+    [Documentation]    Clicks the Deploy confirm button in the drawer footer to submit the
+    ...                deploy request. Waits for the button to be enabled before clicking.
+
+    Submit custom model deploy drawer
+
+User opens the undeploy action for the deployment with display name "${name}"
+    [Documentation]    Opens the row-actions menu for the deployed model entry with the
+    ...                given display name and selects Undeploy to open the confirmation modal.
+
+    Click undeploy action for deployed model with display name "${name}"
+
+User confirms the undeploy
+    [Documentation]    Clicks the confirm button in the undeploy confirmation modal to
+    ...                proceed with the undeploy.
+
+    Undeploy confirmation modal should be visible
+    Confirm model undeploy in modal
+
+# =============================================================================
+# Then keywords (verification)
+# =============================================================================
+
+The deploy drawer should show deployment settings
+    [Documentation]    Confirms the deploy drawer is open and exposes the display name
+    ...                input and autoscaling toggle, verifying the form rendered correctly.
+
+    Wait for custom model deploy drawer
+    Deploy drawer should show display name input
+    Deploy drawer should show autoscaling toggle
+
+The model deployment success toast should be shown
+    [Documentation]    Confirms the success feedback appears after the deploy form is
+    ...                submitted — the toast text is "Model deployment started".
+
+    Custom model deploy success toast should be shown
+
+A deployed model with display name "${name}" should appear in the list
+    [Documentation]    Confirms a row for the given display name appears in the Deployed
+    ...                Models table. The row is visible as soon as the AIMService CR is
+    ...                created, before the deployment reaches Running state.
+
+    Deployed models table should contain a model with display name "${name}"
+
+The undeploy success toast should be shown
+    [Documentation]    Confirms the "Workload deletion started" toast appears after the undeploy
+    ...                is confirmed. The message signals async initiation, not completion.
+
+    Undeploy success toast should be shown
+
+The deployed model should no longer appear in the list with display name "${name}"
+    [Documentation]    Confirms the row for the given display name is gone from the
+    ...                Deployed Models table after undeploy completes.
+
+    Deployed models table should not contain a model with display name "${name}"
+
+# =============================================================================
+# Teardown helpers
+# =============================================================================
+
+Clean up custom model deployment if present
+    [Documentation]    Idempotent test teardown: scans the project for any AIMService whose
+    ...                spec.model matches the model onboarded in this test and deletes it.
+    ...                Runs after the test body so a mid-test failure cannot leave an
+    ...                AIMService behind when the browser-based undeploy step did not
+    ...                execute. Tolerates every failure — teardown must never mask the
+    ...                actual test result.
+    ${model_name}=    Get Variable Value    ${TEST_CUSTOM_MODEL_NAME}    ${None}
+    IF    $model_name is None    RETURN
+    ${namespace}=    Get Variable Value    ${TEST_PROJECT}    ${None}
+    IF    $namespace is None    RETURN
+    ${ns}=    Get From Dictionary    ${namespace}    name
+    ${response}=    List AIM Services    ${ns}    expected_status=any
+    IF    ${response.status_code} != 200    RETURN
+    ${services}=    Get From Dictionary    ${response.json()}    data    default=@{EMPTY}
+    FOR    ${svc}    IN    @{services}
+        ${spec}=    Get From Dictionary    ${svc}    spec    default=&{EMPTY}
+        ${model_obj}=    Get From Dictionary    ${spec}    model    default=&{EMPTY}
+        ${svc_model}=    Get From Dictionary    ${model_obj}    name    default=${EMPTY}
+        IF    "${svc_model}" == "${model_name}"
+            ${svc_id}=    Get From Dictionary    ${svc}    id
+            Undeploy AIM    ${svc_id}    ${ns}    expected_status=any
+        END
+    END

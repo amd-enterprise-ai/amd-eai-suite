@@ -14,15 +14,17 @@ import { useRouter } from 'next/router';
 import { useLocalStorage } from '@amdenterpriseai/hooks';
 
 import { getAppConfig, AppConfig } from '@/lib/app/app-config';
-import { NamespacesResponse } from '@/types/namespaces';
-import { fetchNamespaces } from '@/lib/app/namespaces';
+import { ProjectsResponse } from '@/types/projects';
+import { fetchProjects } from '@/lib/app/projects';
 
 interface ProjectContextType {
   isStandaloneMode: boolean;
   clusterAuthEnabled: boolean;
+  aiGatewayEnabled: boolean;
+  aiGatewayUrl?: string;
   airmAppUrl?: string;
   activeProject: string | null;
-  projects: NamespacesResponse['data'];
+  projects: ProjectsResponse['data'];
   isLoading: boolean;
   projectError: unknown | null;
   refetchProjects: () => void;
@@ -56,19 +58,26 @@ export const ProjectProvider = ({ children }: ProjectProviderProps) => {
       isStandaloneMode: false,
       defaultNamespace: null,
       clusterAuthEnabled: true,
+      aiGatewayEnabled: true,
     },
   });
 
-  const { isStandaloneMode, defaultNamespace, clusterAuthEnabled } = appConfig;
+  const {
+    isStandaloneMode,
+    defaultNamespace,
+    clusterAuthEnabled = true,
+    aiGatewayEnabled = true,
+    aiGatewayUrl,
+  } = appConfig;
 
-  const { data, isLoading, error, refetch } = useQuery<NamespacesResponse>({
+  const { data, isLoading, error, refetch } = useQuery<ProjectsResponse>({
     queryKey: ['user-projects'],
-    queryFn: fetchNamespaces,
+    queryFn: fetchProjects,
     refetchInterval: 10000,
     enabled: !isStandaloneMode,
   });
 
-  const projects: NamespacesResponse['data'] = useMemo(() => {
+  const projects: ProjectsResponse['data'] = useMemo(() => {
     if (isStandaloneMode && defaultNamespace) {
       return [{ id: defaultNamespace, name: defaultNamespace }];
     }
@@ -118,20 +127,18 @@ export const ProjectProvider = ({ children }: ProjectProviderProps) => {
   const setActiveProject = useCallback(
     (projectId: string): void => {
       if (projectId === activeProject) return;
-
       setLastProject(projectId);
       invalidateProjectQueries();
-
-      const isRootOrNonProjectRoute =
-        router.pathname === '/' || !router.pathname.includes('[project]');
-
-      if (isRootOrNonProjectRoute) {
-        void router.push(`/${projectId}/`);
-      } else {
+      const isProjectListPage =
+        router.pathname.includes('[project]') &&
+        !router.pathname.includes('[id]');
+      if (isProjectListPage) {
         void router.push({
           pathname: router.pathname,
           query: { ...router.query, project: projectId },
         });
+      } else {
+        void router.push(`/${projectId}/`);
       }
     },
     [activeProject, router, setLastProject, invalidateProjectQueries],
@@ -145,6 +152,8 @@ export const ProjectProvider = ({ children }: ProjectProviderProps) => {
     () => ({
       isStandaloneMode,
       clusterAuthEnabled,
+      aiGatewayEnabled,
+      aiGatewayUrl,
       airmAppUrl: appConfig.airmAppUrl,
       activeProject,
       projects,
@@ -158,6 +167,8 @@ export const ProjectProvider = ({ children }: ProjectProviderProps) => {
     [
       isStandaloneMode,
       clusterAuthEnabled,
+      aiGatewayEnabled,
+      aiGatewayUrl,
       appConfig.airmAppUrl,
       activeProject,
       projects,

@@ -28,8 +28,7 @@ vi.mock('@/contexts/ProjectContext', () => ({
   })),
 }));
 
-// Mock HeroUI components
-vi.mock('@heroui/react', () => ({
+vi.mock('@amdenterpriseai/components', () => ({
   Tooltip: ({ children, content, isDisabled }: any) => (
     <div
       data-testid="tooltip"
@@ -44,6 +43,7 @@ vi.mock('@heroui/react', () => ({
     onChange,
     selectedKeys,
     isDisabled,
+    disallowEmptySelection: _disallowEmptySelection,
     size,
     startContent,
     className,
@@ -74,14 +74,19 @@ vi.mock('@heroui/react', () => ({
   ),
 }));
 
-// Mock Tabler icons
-vi.mock('@tabler/icons-react', () => ({
-  IconCheckupList: (props: any) => (
-    <div data-testid="checkup-list-icon" {...props}>
-      Checkup List Icon
-    </div>
-  ),
-}));
+// Mock the ProjectSelect icon while preserving icons imported by shared components.
+vi.mock('@tabler/icons-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tabler/icons-react')>();
+
+  return {
+    ...actual,
+    IconCheckupList: (props: any) => (
+      <div data-testid="checkup-list-icon" {...props}>
+        Checkup List Icon
+      </div>
+    ),
+  };
+});
 
 describe('ProjectSelect', () => {
   beforeEach(() => {

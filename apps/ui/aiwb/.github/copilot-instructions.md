@@ -1,1 +1,1 @@
-../AI_RULES.md
+../../../../.github/copilot-instructions.md

@@ -3,4 +3,4 @@
 // SPDX-License-Identifier: MIT
 
 export { NestedDropdown } from './NestedDropdown';
-export type { DropdownItem, DropdownItemHint } from './types';
+export type { DropdownActionItem, DropdownItemHint } from './types';

@@ -6,39 +6,47 @@ from textwrap import dedent
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Path, status
+from prometheus_api_client import PrometheusConnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.auth.security import get_user_email
+from api_common.collections import PaginationMetadata
 from api_common.database import get_session
 from api_common.exceptions import UnhealthyException
-from api_common.schemas import ListResponse
+from api_common.schemas import ListResponse, QueryParam
 
 from ..cluster_auth import get_cluster_auth_client
 from ..cluster_auth.client import ClusterAuthClient
+from ..common_responses import CLUSTER_AUTH_RESPONSES, PROJECT_ACCESS_RESPONSES
 from ..dispatch.kube_client import KubernetesClient, get_kube_client
-from ..namespaces.security import ensure_access_to_workbench_namespace
+from ..metrics.client import get_prometheus_client
+from ..metrics.schemas import MetricsTimeRange
+from ..projects.security import ensure_access_to_project
 from .schemas import (
+    AddGroupMembershipRequest,
     ApiKeyCreate,
     ApiKeyDetails,
-    ApiKeyResponse,
+    ApiKeyMetricsResponse,
+    ApiKeysList,
     ApiKeyUpdate,
     ApiKeyWithFullKey,
-    BindGroupRequest,
     GroupCreate,
     GroupResponse,
+    ListApiKeysQuery,
     RenewApiKeyResponse,
-    UnbindGroupRequest,
 )
 from .service import (
-    bind_api_key_to_group_in_cluster_auth,
+    add_api_key_group_membership,
     create_api_key_with_cluster_auth,
     create_group_in_cluster_auth,
     delete_api_key_from_cluster_auth,
     delete_group_from_cluster_auth,
     get_api_key_details_from_cluster_auth,
+    get_api_key_usage_metrics,
+    list_api_key_group_memberships,
     list_api_keys_for_namespace,
+    remove_api_key_group_membership,
     renew_api_key_in_cluster_auth,
-    unbind_api_key_from_group_in_cluster_auth,
     update_api_key_bindings_with_cluster_auth,
 )
 
@@ -58,266 +66,394 @@ def require_cluster_auth(
 
 
 @router.get(
-    "/namespaces/{namespace}/api-keys",
+    "/projects/{project}/api-keys",
     operation_id="get_api_keys",
-    summary="List API keys for a namespace",
-    description=dedent("""List all API keys for a namespace.
+    summary="List API keys for a project",
+    description=dedent("""
+        List the API keys that belong to a project as a paginated envelope
+        (default page size 10, max 100). Use `?page=` and `?pageSize=` to
+        navigate; the response includes a `pagination` object with `page`,
+        `pageSize`, and `total` alongside `data`.
 
-    Returns truncated keys for security. Requires namespace access.
-    API keys control access to deployed AIM inference endpoints and other namespace resources."""),
+        Each entry includes a truncated form of the key suitable for display
+        (the full secret value is only ever returned once at creation). Use
+        `GET /projects/{project}/api-keys/{apiKeyId}` to fetch the metadata
+        and group bindings for a single key. All API key operations require
+        cluster-auth to be enabled on the deployment.
+    """),
     status_code=status.HTTP_200_OK,
-    response_model=ListResponse[ApiKeyResponse],
+    response_model=ApiKeysList,
+    responses={**PROJECT_ACCESS_RESPONSES, **CLUSTER_AUTH_RESPONSES},
 )
 async def get_api_keys(
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    query: QueryParam[ListApiKeysQuery],
+    project: str = Depends(ensure_access_to_project),
     session: AsyncSession = Depends(get_session),
-) -> ListResponse[ApiKeyResponse]:
-    """
-    Get all API keys for a namespace.
-
-    The user must have access to the namespace to view its API keys.
-    API keys are returned with truncated values for security.
-    """
-    api_keys = await list_api_keys_for_namespace(session, namespace)
-    return ListResponse(data=api_keys)
+) -> ApiKeysList:
+    paginated = await list_api_keys_for_namespace(session, project, page=query.page, page_size=query.page_size)
+    return ApiKeysList(
+        data=paginated.items,
+        pagination=PaginationMetadata(
+            page=paginated.page,
+            page_size=paginated.page_size,
+            total=paginated.total,
+        ),
+    )
 
 
 @router.post(
-    "/namespaces/{namespace}/api-keys",
+    "/projects/{project}/api-keys",
     operation_id="create_api_key",
-    summary="Create a new API key",
-    description=dedent("""Create a new API key for a namespace.
+    summary="Create an API key",
+    description=dedent("""
+        Create a new API key for the project.
 
-    The full API key is returned only once in the response and cannot be retrieved later.
-    API keys can be bound to specific AIM deployments for scoped access control.
-    Supports configurable TTL, renewability, and usage limits."""),
+        The response includes the full secret value in `fullKey`; this is
+        the only opportunity to read it. Once the response is consumed only
+        the truncated key, metadata, and group bindings are retrievable.
+        Persist the secret on the client side at this point.
+
+        Optional `aimIds` bind the new key to specific deployed AIM
+        inference services via the corresponding cluster-auth groups, so
+        the key can only be used against those endpoints. `ttl`,
+        `renewable`, `numUses`, `explicitMaxTtl`, and `period` map directly
+        onto cluster-auth lease semantics. Cluster-auth must be enabled on
+        the deployment.
+    """),
     status_code=status.HTTP_200_OK,
     response_model=ApiKeyWithFullKey,
+    response_description="Created key with the full secret value; persist it now — only the metadata is retrievable later.",
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        **CLUSTER_AUTH_RESPONSES,
+        409: {"description": "An API key with this name already exists in the project."},
+        502: {"description": "Cluster-auth synchronization failed while creating the key."},
+    },
 )
 async def create_api_key(
     api_key_in: ApiKeyCreate = Body(description="API key creation data"),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
     user: str = Depends(get_user_email),
     session: AsyncSession = Depends(get_session),
     kube_client: KubernetesClient = Depends(get_kube_client),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> ApiKeyWithFullKey:
-    """
-    Create a new API key for a namespace.
-
-    The full API key is returned in the response and should be saved by the client.
-    It cannot be retrieved again later for security reasons.
-    """
-    return await create_api_key_with_cluster_auth(
-        session, kube_client, namespace, api_key_in, user, cluster_auth_client
-    )
+    return await create_api_key_with_cluster_auth(session, kube_client, project, api_key_in, user, cluster_auth_client)
 
 
 @router.get(
-    "/namespaces/{namespace}/api-keys/{api_key_id}",
+    "/projects/{project}/api-keys/{api_key_id}",
     operation_id="get_api_key_details",
     summary="Get API key details",
-    description=dedent("""Get detailed information about an API key.
+    description=dedent("""
+        Get the metadata and current lease state for one API key in the
+        project.
 
-    Includes metadata from Cluster Auth such as group bindings, TTL, expiration, and usage limits.
-    Shows which AIM deployment groups the key can access. Requires namespace access."""),
+        The response merges the DB record (name, namespace, truncated key)
+        with live cluster-auth data: `ttl`, `expiresAt`, `renewable`,
+        `numUses`, and the groups the key is bound to. Use this in place of
+        the list endpoint when you need group bindings or the current
+        expiry. The full secret value is never returned here.
+    """),
     status_code=status.HTTP_200_OK,
     response_model=ApiKeyDetails,
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        **CLUSTER_AUTH_RESPONSES,
+        404: {"description": "Project or namespace not found, or API key not found in the project."},
+    },
 )
 async def get_api_key_details(
     api_key_id: UUID = Path(description="The ID of the API key"),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
     session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> ApiKeyDetails:
-    """
-    Get detailed API key information.
-
-    Includes metadata from both the database and Cluster Auth, such as group bindings.
-    """
-    return await get_api_key_details_from_cluster_auth(session, namespace, api_key_id, cluster_auth_client)
+    return await get_api_key_details_from_cluster_auth(session, project, api_key_id, cluster_auth_client)
 
 
 @router.patch(
-    "/namespaces/{namespace}/api-keys/{api_key_id}",
+    "/projects/{project}/api-keys/{api_key_id}",
     operation_id="update_api_key_bindings",
     summary="Update API key AIM deployment bindings",
-    description=dedent("""Update which AIM deployments this API key can access.
+    description=dedent("""
+        Update the API key's bindings, replacing the set of AIM deployments
+        it is permitted to call.
 
-    Provide a list of AIM IDs to bind the key to specific deployed models.
-    Automatically manages underlying Cluster Auth group bindings.
-    Replaces existing bindings - omit IDs to unbind from those deployments."""),
+        `aimIds` is treated as the complete desired set: AIMs present in
+        the request are bound (the corresponding cluster-auth groups are
+        added), and AIMs that were previously bound but absent from the
+        request are unbound. To revoke all bindings, send an empty list.
+        For fine-grained group control (raw cluster-auth group IDs rather
+        than AIM IDs), use the `/{apiKeyId}/groups` sub-resource instead.
+    """),
     status_code=status.HTTP_200_OK,
     response_model=ApiKeyDetails,
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        **CLUSTER_AUTH_RESPONSES,
+        404: {"description": "Project or namespace not found, or API key not found in the project."},
+        502: {"description": "Cluster-auth group binding update failed."},
+    },
 )
 async def update_api_key_bindings(
     api_key_id: UUID = Path(description="The ID of the API key to update"),
     api_key_update: ApiKeyUpdate = Body(description="API key update data"),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
     session: AsyncSession = Depends(get_session),
     kube_client: KubernetesClient = Depends(get_kube_client),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> ApiKeyDetails:
-    """
-    Update API key bindings to AIM groups.
-
-    Accepts aim_ids and automatically manages the underlying group bindings in Cluster Auth.
-    """
-    api_key = await update_api_key_bindings_with_cluster_auth(
-        session, kube_client, namespace, api_key_id, api_key_update, cluster_auth_client
+    return await update_api_key_bindings_with_cluster_auth(
+        session, kube_client, project, api_key_id, api_key_update, cluster_auth_client
     )
-    return api_key
 
 
 @router.delete(
-    "/namespaces/{namespace}/api-keys/{api_key_id}",
+    "/projects/{project}/api-keys/{api_key_id}",
     operation_id="delete_api_key",
     summary="Delete an API key",
-    description=dedent("""Delete an API key and revoke it in Cluster Auth.
+    description=dedent("""
+        Permanently delete an API key.
 
-    This immediately revokes the key and removes it from all group bindings.
-    The action cannot be undone. Requires namespace access."""),
+        The key is revoked in cluster-auth, removed from every group it was
+        bound to, and the corresponding DB record is deleted. Existing
+        clients holding the secret will receive 401 from inference
+        endpoints on the next request. The operation cannot be undone.
+    """),
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        **CLUSTER_AUTH_RESPONSES,
+        404: {"description": "Project or namespace not found, or API key not found."},
+    },
 )
 async def delete_api_key(
     api_key_id: UUID = Path(description="The ID of the API key to delete"),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
     session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> None:
-    """
-    Delete an API key.
-
-    The key will be revoked in Cluster Auth and removed from the database.
-    """
-    await delete_api_key_from_cluster_auth(session, namespace, api_key_id, cluster_auth_client)
+    await delete_api_key_from_cluster_auth(session, project, api_key_id, cluster_auth_client)
 
 
 @router.post(
-    "/namespaces/{namespace}/api-keys/{api_key_id}/renew",
+    "/projects/{project}/api-keys/{api_key_id}/renew",
     operation_id="renew_api_key",
     summary="Renew an API key's lease",
-    description=dedent("""Renew an API key's lease, extending its validity period.
+    description=dedent("""
+        Extend the lease on an API key so it remains valid past its current
+        expiry.
 
-    Only works for renewable keys.
-    The key must not have exceeded its explicit_max_ttl if configured."""),
+        Only keys created with `renewable=true` can be renewed. The new
+        lease duration is bounded by the key's `explicitMaxTtl` (if set at
+        creation): once a renewal would cross that ceiling, cluster-auth
+        rejects the request and the endpoint returns 404. Periodic keys
+        (created with `period`) renew for a fresh `period` each time and
+        do not accrue toward a max TTL.
+    """),
     status_code=status.HTTP_200_OK,
     response_model=RenewApiKeyResponse,
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        **CLUSTER_AUTH_RESPONSES,
+        404: {
+            "description": "Project or namespace not found, or API key not found, or renewal rejected by cluster-auth (e.g., explicit_max_ttl reached)."
+        },
+    },
 )
 async def renew_api_key(
     api_key_id: UUID = Path(description="The ID of the API key to renew"),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
     session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> RenewApiKeyResponse:
-    """
-    Renew an API key's lease.
-
-    Extends the validity period of the API key if it is renewable.
-    """
-    result = await renew_api_key_in_cluster_auth(session, namespace, api_key_id, cluster_auth_client)
+    result = await renew_api_key_in_cluster_auth(session, project, api_key_id, cluster_auth_client)
     return RenewApiKeyResponse(lease_duration=result["lease_duration"])
 
 
-@router.post(
-    "/namespaces/{namespace}/api-keys/{api_key_id}/bind-group",
-    operation_id="bind_api_key_to_group",
-    summary="Bind an API key to a Cluster Auth group",
-    description=dedent("""Bind an API key to a Cluster Auth group.
+@router.get(
+    "/projects/{project}/api-keys/{api_key_id}/groups",
+    operation_id="list_api_key_groups",
+    summary="List the cluster-auth groups this API key belongs to",
+    description=dedent("""
+        List the raw cluster-auth group IDs the API key is currently a
+        member of.
 
-    Low-level operation for direct group management. Consider using PATCH /namespaces/{namespace}/api-keys/{api_key_id}
-    for AIM-based binding instead. Grants the API key access to resources associated with the group."""),
+        Returns group IDs rather than AIM IDs — use this when you need to
+        inspect or manage memberships at the cluster-auth layer directly.
+        For the higher-level AIM-deployment binding view, prefer the
+        `aimIds` field returned by `GET /projects/{project}/api-keys/{apiKeyId}`.
+        For lifecycle of the group entities themselves (create / delete),
+        see `/api-keys/groups`.
+    """),
     status_code=status.HTTP_200_OK,
+    response_model=ListResponse[str],
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        **CLUSTER_AUTH_RESPONSES,
+        404: {"description": "Project or namespace not found, or API key not found."},
+    },
 )
-async def bind_api_key_to_group(
+async def list_api_key_groups(
     api_key_id: UUID = Path(description="The ID of the API key"),
-    bind_request: BindGroupRequest = Body(description="Group binding request"),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    project: str = Depends(ensure_access_to_project),
     session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
-) -> dict:
-    """
-    Bind an API key to a group.
-
-    This allows the API key to access resources associated with the specified group.
-    """
-    return await bind_api_key_to_group_in_cluster_auth(
-        session, namespace, api_key_id, bind_request.group_id, cluster_auth_client
-    )
+) -> ListResponse[str]:
+    groups = await list_api_key_group_memberships(session, project, api_key_id, cluster_auth_client)
+    return ListResponse(data=groups)
 
 
 @router.post(
-    "/namespaces/{namespace}/api-keys/{api_key_id}/unbind-group",
-    operation_id="unbind_api_key_from_group",
-    summary="Unbind an API key from a Cluster Auth group",
-    description=dedent("""Remove an API key from a Cluster Auth group.
+    "/projects/{project}/api-keys/{api_key_id}/groups",
+    operation_id="add_api_key_to_group",
+    summary="Add this API key to a cluster-auth group",
+    description=dedent("""
+        Add the API key to a single cluster-auth group, granting it access
+        to whatever resources that group permits.
 
-    Low-level operation for direct group management. Consider using PATCH /namespaces/{namespace}/api-keys/{api_key_id}
-    for AIM-based binding instead. Revokes the API key's access to resources associated with the group."""),
-    status_code=status.HTTP_200_OK,
+        This is the low-level counterpart to PATCHing `aimIds` on the key.
+        Use it when you need to bind to a group that does not correspond to
+        an AIM deployment (e.g., a manually managed group), or when
+        composing memberships incrementally. The returned list is the full
+        current set of group memberships after the addition. Group
+        entities are created via `POST /api-keys/groups`.
+    """),
+    status_code=status.HTTP_201_CREATED,
+    response_model=ListResponse[str],
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        **CLUSTER_AUTH_RESPONSES,
+        404: {"description": "Project or namespace not found, or API key or group not found."},
+    },
 )
-async def unbind_api_key_from_group(
+async def add_api_key_to_group(
     api_key_id: UUID = Path(description="The ID of the API key"),
-    unbind_request: UnbindGroupRequest = Body(description="Group unbinding request"),
-    namespace: str = Depends(ensure_access_to_workbench_namespace),
+    add_request: AddGroupMembershipRequest = Body(description="Group membership request"),
+    project: str = Depends(ensure_access_to_project),
     session: AsyncSession = Depends(get_session),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
-) -> dict:
-    """
-    Unbind an API key from a group.
+) -> ListResponse[str]:
+    groups = await add_api_key_group_membership(session, project, api_key_id, add_request.group_id, cluster_auth_client)
+    return ListResponse(data=groups)
 
-    This revokes the API key's access to resources associated with the specified group.
-    """
-    return await unbind_api_key_from_group_in_cluster_auth(
-        session, namespace, api_key_id, unbind_request.group_id, cluster_auth_client
-    )
+
+@router.delete(
+    "/projects/{project}/api-keys/{api_key_id}/groups/{group_id}",
+    operation_id="remove_api_key_from_group",
+    summary="Remove this API key from a cluster-auth group",
+    description=dedent("""
+        Revoke the API key's membership in a single cluster-auth group.
+
+        After removal the key can no longer access resources gated only by
+        that group. Other memberships are untouched. This endpoint operates
+        on the membership relationship; the group entity itself remains
+        and is deleted via `DELETE /api-keys/groups/{groupId}`.
+    """),
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        **PROJECT_ACCESS_RESPONSES,
+        **CLUSTER_AUTH_RESPONSES,
+        404: {
+            "description": "Project or namespace not found, or API key or group not found, or membership did not exist."
+        },
+    },
+)
+async def remove_api_key_from_group(
+    api_key_id: UUID = Path(description="The ID of the API key"),
+    group_id: str = Path(description="The ID of the group to remove the API key from"),
+    project: str = Depends(ensure_access_to_project),
+    session: AsyncSession = Depends(get_session),
+    cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
+) -> None:
+    await remove_api_key_group_membership(session, project, api_key_id, group_id, cluster_auth_client)
 
 
 @router.post(
     "/api-keys/groups",
     operation_id="create_group",
-    summary="Create or update a Cluster Auth group",
-    description=dedent("""Create a new group or update an existing one in Cluster Auth.
+    summary="Create or rename a cluster-auth group",
+    description=dedent("""
+        Create a new cluster-auth group, or rename an existing one.
 
-    Groups control access to resources like AIM deployments. Typically managed automatically
-    when deploying AIMs, but this endpoint allows manual group management for advanced use cases.
+        Provide only `name` to create a new group; cluster-auth allocates
+        the group ID and returns it. Provide both `id` and `name` to update
+        the display name of an existing group in place.
 
-    - To create a new group: provide only the name (ID will be auto-generated)
-    - To update an existing group: provide both name and the ID of the existing group"""),
+        AIM-deployment groups are normally managed automatically when
+        deploying or undeploying AIMs — use this endpoint for advanced or
+        manual cluster-auth group management. To add an API key to an
+        existing group, use
+        `POST /projects/{project}/api-keys/{apiKeyId}/groups` instead.
+    """),
     status_code=status.HTTP_200_OK,
     response_model=GroupResponse,
+    responses={
+        **CLUSTER_AUTH_RESPONSES,
+        404: {"description": "Group ID supplied but not found in cluster-auth."},
+    },
 )
 async def create_group(
     group_in: GroupCreate = Body(description="Group creation data"),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> GroupResponse:
-    """
-    Create a new group or update an existing one in Cluster Auth.
-
-    Groups are used to bind API keys and control access to resources.
-    Leave the ID empty to create a new group with an auto-generated ID.
-    Provide an existing group ID to update that group's name.
-    """
     return await create_group_in_cluster_auth(cluster_auth_client, group_in.name, group_in.id)
 
 
 @router.delete(
     "/api-keys/groups/{group_id}",
     operation_id="delete_group",
-    summary="Delete a Cluster Auth group",
-    description=dedent("""Delete a group from Cluster Auth.
+    summary="Delete a cluster-auth group",
+    description=dedent("""
+        Delete a cluster-auth group entity.
 
-    This unbinds all API keys from the group and removes access to associated resources.
-    AIM deployment groups are typically managed automatically during undeploy operations."""),
+        Every API key that was a member of the group loses that membership
+        as part of the same operation; the keys themselves are not
+        deleted. AIM-deployment groups are normally cleaned up automatically
+        on undeploy — use this endpoint for manual or stranded groups. To
+        remove a single API key from a group without deleting the group,
+        use `DELETE /projects/{project}/api-keys/{apiKeyId}/groups/{groupId}`.
+    """),
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        **CLUSTER_AUTH_RESPONSES,
+        404: {"description": "Group not found."},
+    },
 )
 async def delete_group(
     group_id: str = Path(description="The ID of the group to delete"),
     cluster_auth_client: ClusterAuthClient = Depends(require_cluster_auth),
 ) -> None:
-    """
-    Delete a group from Cluster Auth.
-
-    This will remove the group and unbind all API keys that were associated with it.
-    """
     await delete_group_from_cluster_auth(group_id, cluster_auth_client)
+
+
+@router.get(
+    "/projects/{project}/api-keys/{api_key_id}/metrics",
+    operation_id="get_api_key_metrics",
+    summary="Get usage metrics for an API key",
+    description=dedent("""
+        Get aggregated usage metrics for an API key over a time range.
+
+        Returns token consumption and request counts broken down by AIM service and time bucket.
+        Sourced from AI Gateway ext-proc metrics via Prometheus.
+    """),
+    status_code=status.HTTP_200_OK,
+    response_model=ApiKeyMetricsResponse,
+    responses={**PROJECT_ACCESS_RESPONSES},
+)
+async def get_api_key_metrics_endpoint(
+    api_key_id: UUID = Path(description="The ID of the API key"),
+    time_range: MetricsTimeRange = Depends(),
+    project: str = Depends(ensure_access_to_project),
+    session: AsyncSession = Depends(get_session),
+    prometheus_client: PrometheusConnect = Depends(get_prometheus_client),
+) -> ApiKeyMetricsResponse:
+    return await get_api_key_usage_metrics(
+        session=session,
+        namespace=project,
+        api_key_id=api_key_id,
+        start=time_range.start,
+        end=time_range.end,
+        prometheus_client=prometheus_client,
+    )

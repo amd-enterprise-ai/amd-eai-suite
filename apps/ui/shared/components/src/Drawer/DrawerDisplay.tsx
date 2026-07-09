@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from '@heroui/react';
+import {
+  DrawerPrimitive as Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerHeader,
+} from './DrawerPrimitive';
 
 import { CloseButton } from '../Buttons';
 import { BACKDROP, CLASSES, MOTION_PROPS } from './constants';

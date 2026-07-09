@@ -10,7 +10,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 
-import { getDatasets } from '@/lib/app/datasets';
+import { listDatasets } from '@/lib/app/datasets';
 
 import { DatasetUpload } from '@/components/features/datasets/DatasetUpload';
 
@@ -19,7 +19,7 @@ import { Mock } from 'vitest';
 
 vi.mock('@/lib/app/datasets', async (importOriginal) => ({
   ...(await importOriginal()),
-  getDatasets: vi.fn(),
+  listDatasets: vi.fn(),
   uploadDataset: vi.fn(),
 }));
 
@@ -81,7 +81,10 @@ describe('DatasetUpload', () => {
   });
 
   it('validates dataset name is unique', async () => {
-    (getDatasets as Mock).mockResolvedValue([]);
+    (listDatasets as Mock).mockResolvedValue({
+      data: [],
+      pagination: { page: 1, pageSize: 1, total: 0 },
+    });
 
     await act(async () => {
       render(
@@ -99,8 +102,11 @@ describe('DatasetUpload', () => {
     });
 
     await waitFor(() => {
-      expect(getDatasets).toHaveBeenCalledWith('project1', {
+      // pageSize:1 keeps the uniqueness probe minimal — the total count is
+      // all we need to decide whether the name is already taken.
+      expect(listDatasets).toHaveBeenCalledWith('project1', {
         name: 'unique-name',
+        pageSize: 1,
       });
     });
   });

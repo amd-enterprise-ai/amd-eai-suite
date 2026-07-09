@@ -28,6 +28,10 @@ on a Kubernetes cluster using the Helm charts in this repository.
   - [Tier 2 - Platform Services](#tier-2---platform-services)
   - [Tier 3 - AI/ML Stack (Compute Plane)](#tier-3---aiml-stack-compute-plane)
   - [Optional Dependencies](#optional-dependencies)
+  - [Bringing Your Own Infrastructure](#bringing-your-own-infrastructure)
+  - [Keycloak Realm Setup](#keycloak-realm-setup)
+  - [StorageClass Requirements](#storageclass-requirements)
+  - [Scripted Installation for Standalone AIWB](#scripted-installation-for-standalone-aiwb)
 - [Step 2: Create Secrets](#step-2-create-secrets)
   - [Option A: External Secrets Operator](#option-a-external-secrets-operator)
   - [Option B: Manual Secret Creation](#option-b-manual-secret-creation)
@@ -35,6 +39,7 @@ on a Kubernetes cluster using the Helm charts in this repository.
 - [Step 4: Install Application Charts](#step-4-install-application-charts)
 - [Step 5: Onboard a Cluster](#step-5-onboard-a-cluster)
 - [Verification](#verification)
+- [Local Development Notes](#local-development-notes)
 - [Validation with E2E Tests](#validation-with-e2e-tests)
 
 ---
@@ -100,36 +105,38 @@ application charts. They are organized into tiers based on install order.
 
 These operators and CRD providers must be installed first, as other components depend on them.
 
-| Component                          | Purpose                                                                                                                                                                                                                          | Installation                                                                                                                                                                                                                    |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **cert-manager**                   | TLS certificate management. Used by RabbitMQ for TLS and by the AIRM agent for webhook certificates.                                                                                                                             | [cert-manager docs](https://cert-manager.io/docs/installation/helm/)                                                                                                                                                            |
-| **CloudNative-PG (CNPG) Operator** | Manages PostgreSQL database clusters. AIRM and AIWB each require a PostgreSQL instance.                                                                                                                                          | [CNPG docs](https://cloudnative-pg.io/documentation/current/installation_upgrade/)                                                                                                                                              |
-| **RabbitMQ Cluster Operator**      | Manages RabbitMQ clusters. Used for messaging between the AIRM API and the cluster Agent.                                                                                                                                        | [RabbitMQ Operator docs](https://www.rabbitmq.com/kubernetes/operator/install-operator). Recommended: install via `kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml` |
-| **External Secrets Operator**      | Synchronizes secrets from an external backend (Vault, OpenBao, etc.) into Kubernetes Secrets. Used by all infrastructure charts. Can be skipped if creating secrets manually (see [Option B](#option-b-manual-secret-creation)). | [ESO docs](https://external-secrets.io/latest/introduction/getting-started/)                                                                                                                                                    |
-| **Gateway API CRDs + KGateway**    | Kubernetes-native HTTP routing. All services (AIRM API/UI, AIWB API/UI, Keycloak) are exposed via HTTPRoute resources through a Gateway.                                                                                         | [Gateway API docs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api), [KGateway docs](https://kgateway.dev/docs/)                                                                                                 |
-| **OpenTelemetry Operator**         | Manages OpenTelemetry collectors. AIWB deploys a DaemonSet-based collector on GPU nodes for vLLM inference metrics.                                                                                                              | [OTel Operator docs](https://opentelemetry.io/docs/platforms/kubernetes/operator/)                                                                                                                                              |
+| Component                          | Purpose                                                                                                                                                                                                                          | Substitutable?                                                                  | Installation                                                                                                                                                                                                                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **cert-manager**                   | TLS certificate management. Used by RabbitMQ for TLS and by the AIRM agent for webhook certificates.                                                                                                                             | No                                                                              | [cert-manager docs](https://cert-manager.io/docs/installation/helm/)                                                                                                                                                                                                            |
+| **CloudNative-PG (CNPG) Operator** | Manages PostgreSQL database clusters. AIRM and AIWB each require a PostgreSQL instance.                                                                                                                                          | Yes — see [Bringing Your Own Infrastructure](#bringing-your-own-infrastructure) | [CNPG docs](https://cloudnative-pg.io/documentation/current/installation_upgrade/)                                                                                                                                                                                              |
+| **RabbitMQ Cluster Operator**      | Manages RabbitMQ clusters. Used for messaging between the AIRM API and the cluster Agent. Not required for standalone AIWB.                                                                                                      | No                                                                              | [RabbitMQ Operator docs](https://www.rabbitmq.com/kubernetes/operator/install-operator). Recommended: install via `kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml`                                                 |
+| **External Secrets Operator**      | Synchronizes secrets from an external backend (Vault, OpenBao, etc.) into Kubernetes Secrets. Used by all infrastructure charts. Can be skipped if creating secrets manually (see [Option B](#option-b-manual-secret-creation)). | Yes — manual secrets                                                            | [ESO docs](https://external-secrets.io/latest/introduction/getting-started/)                                                                                                                                                                                                    |
+| **Gateway API CRDs + KGateway**    | Kubernetes-native HTTP routing. All services (AIRM API/UI, AIWB API/UI, Keycloak) are exposed via HTTPRoute resources through a Gateway.                                                                                         | Yes — any Gateway API impl                                                      | [Gateway API docs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api), [KGateway docs](https://kgateway.dev/docs/)                                                                                                                                                 |
+| **OpenTelemetry Operator**         | Manages OpenTelemetry collectors. AIWB deploys a DaemonSet-based collector on GPU nodes for vLLM inference metrics.                                                                                                              | No                                                                              | [OTel Operator docs](https://opentelemetry.io/docs/platforms/kubernetes/operator/)                                                                                                                                                                                              |
+| **KEDA**                           | Event-driven autoscaler. Required by KServe for autoscaling `InferenceService` pods based on metrics.                                                                                                                            | No                                                                              | [KEDA docs](https://keda.sh/docs/latest/deploy/). Optionally add the [Kedify OTEL Scaler](https://kedify.io/scalers/otel) for OpenTelemetry-based scaling triggers.                                                                                                             |
+| **Prometheus Operator CRDs**       | `ServiceMonitor`, `PodMonitor`, and related CRDs required by the LGTM observability stack. Install the CRDs even if you bring your own Prometheus.                                                                               | No                                                                              | Included in the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) chart, or install CRDs standalone from [prometheus-operator releases](https://github.com/prometheus-operator/prometheus-operator/releases). |
 
 ### Tier 2 - Platform Services
 
 These services should be deployed after the operators are running.
 
-| Component                      | Purpose                                                                                                                                                                             | Installation                                                                                                                                                                                                      |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Keycloak**                   | Identity and access management. Provides authentication and authorization for both AIRM and AIWB. Requires an `airm` realm to be configured with the appropriate clients and users. | [Keycloak Operator docs](https://www.keycloak.org/operator/installation)                                                                                                                                          |
-| **MinIO Operator + Tenant**    | S3-compatible object storage. Used by AIWB for dataset and model storage. Not required for standalone AIRM deployments.                                                             | [MinIO Operator docs](https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-operator-helm.html)                                                                                   |
-| **Observability Stack (LGTM)** | Prometheus, Loki, Grafana, Tempo, Mimir. Provides metrics, logs, and traces. Both AIRM and AIWB query Prometheus for GPU and workload metrics.                                      | [Grafana LGTM docs](https://grafana.com/docs/grafana/latest/)                                                                                                                                                     |
-| **cluster-auth**               | Kubernetes RBAC integration service. Used by AIWB for API key management and inference endpoint authentication. Not required for standalone AIRM deployments.                       | Deploy via [Cluster Forge](https://github.com/silogen/cluster-forge), or provide an existing endpoint and configure AIWB with `clusterAuth.url` plus a `cluster-auth-admin-token` Secret in the `aiwb` namespace. |
+| Component                      | Purpose                                                                                                                                                                                                                                                         | Substitutable?                                                                  | Installation                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Keycloak**                   | Identity and access management. AIRM uses the Keycloak Admin API (`python-keycloak`) for user, group, and role management at runtime — a generic OIDC provider is not sufficient. See [Keycloak Realm Setup](#keycloak-realm-setup) for required configuration. | No                                                                              | [Keycloak Operator docs](https://www.keycloak.org/operator/installation)                                                                                                                                                                                                                                                                                                                                                                |
+| **MinIO Operator + Tenant**    | S3-compatible object storage. Used by AIWB for dataset and model storage. Not required for standalone AIRM deployments.                                                                                                                                         | Yes — see [Bringing Your Own Infrastructure](#bringing-your-own-infrastructure) | [MinIO Operator docs](https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-operator-helm.html)                                                                                                                                                                                                                                                                                                         |
+| **Observability Stack (LGTM)** | Prometheus, Loki, Grafana, Tempo, Mimir. Provides metrics, logs, and traces. Both AIRM and AIWB query Prometheus for GPU and workload metrics.                                                                                                                  | Yes — any Prometheus-compatible stack                                           | [Grafana LGTM docs](https://grafana.com/docs/grafana/latest/)                                                                                                                                                                                                                                                                                                                                                                           |
+| **cluster-auth**               | Kubernetes RBAC integration service. Used by AIWB for API key management and inference endpoint authentication. Not required for standalone AIRM deployments.                                                                                                   | Yes — shim available                                                            | Deploy via [Cluster Forge](https://github.com/silogen/cluster-forge), or provide an existing endpoint and configure AIWB with `clusterAuth.url` plus a `cluster-auth-admin-token` Secret in the `aiwb` namespace. For local development or demo environments, [cluster-forge provides an in-memory shim](https://github.com/silogen/cluster-forge/tree/main/sources/cluster-auth) that can stand in for a full cluster-auth deployment. |
 
 ### Tier 3 - AI/ML Stack (Compute Plane)
 
 These components enable GPU workloads and AI model serving on compute clusters.
 
-| Component                       | Purpose                                                                                                                                                                                                                                                                 | Installation                                                                                              |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| **AMD GPU Operator**            | GPU device plugin, drivers, and node feature discovery for AMD GPUs.                                                                                                                                                                                                    | [AMD GPU Operator docs](https://github.com/ROCm/gpu-operator)                                             |
-| **AMD Device Metrics Exporter** | Exports per-GPU metrics (utilization, VRAM, temperature, power, PCIe). AIRM relies on these metrics for all GPU dashboards and workload monitoring. Must be deployed on every GPU node. See the [configuration note](#amd-device-metrics-exporter-configuration) below. | [Device Metrics Exporter docs](https://instinct.docs.amd.com/projects/device-metrics-exporter/en/latest/) |
-| **Kaiwo**                       | AI workload orchestration. Manages job scheduling, queue configuration, and GPU resource allocation. Includes its own dependencies: **Kueue** (job queueing) and **KubeRay** (distributed computing).                                                                   | [Kaiwo docs](https://github.com/silogen/kaiwo)                                                            |
-| **AIM Engine**                  | Operator for `AIMService` CRDs. Handles AI model deployment, discovery (`AIMClusterModel`), and inference routing. Includes **KServe** as a transitive dependency for `InferenceService` management.                                                                    | [AIM Engine docs](https://github.com/amd-enterprise-ai/aim-engine)                                        |
+| Component                       | Purpose                                                                                                                                                                                                                                                                     | Substitutable? | Installation                                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------- |
+| **AMD GPU Operator**            | GPU device plugin, drivers, and node feature discovery for AMD GPUs.                                                                                                                                                                                                        | No             | [AMD GPU Operator docs](https://github.com/ROCm/gpu-operator)                                             |
+| **AMD Device Metrics Exporter** | Exports per-GPU metrics (utilization, VRAM, temperature, power, PCIe). AIRM relies on these metrics for all GPU dashboards and workload monitoring. Must be deployed on every GPU node. See the [configuration note](#amd-device-metrics-exporter-configuration) below.     | No             | [Device Metrics Exporter docs](https://instinct.docs.amd.com/projects/device-metrics-exporter/en/latest/) |
+| **Kaiwo**                       | AI workload orchestration. Manages job scheduling, queue configuration, and GPU resource allocation. Includes its own dependencies: **Kueue** (job queueing) and **KubeRay** (distributed computing).                                                                       | No             | [Kaiwo docs](https://github.com/silogen/kaiwo)                                                            |
+| **AIM Engine**                  | Operator for `AIMService` CRDs. Handles AI model deployment, discovery (`AIMClusterModel`), and inference routing. Includes **KServe** as a transitive dependency for `InferenceService` management. **KServe should be configured for `RawDeployment` mode** (no Knative). | No             | [AIM Engine docs](https://github.com/amd-enterprise-ai/aim-engine)                                        |
 
 #### AMD Device Metrics Exporter Configuration
 
@@ -247,6 +254,102 @@ EOF
 | Component   | When Needed                                                                                                                                                                                                                             | Installation                                                  |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | **Kyverno** | Only when deploying AIWB in standalone mode (`standAloneMode: true`). Provides a `ClusterPolicy` that auto-labels workloads with `workload-id`. Not needed for the default combined AIRM + AIWB deployment where AIRM handles labeling. | [Kyverno docs](https://kyverno.io/docs/installation/methods/) |
+
+### Bringing Your Own Infrastructure
+
+Several components marked **Substitutable** above can be replaced with your own
+managed services or existing infrastructure. This is common in cloud environments
+where managed databases, object storage, and load balancers are preferred.
+
+| Component             | BYO Alternative                                        | What to Change                                                                                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PostgreSQL (CNPG)** | Any PostgreSQL 14+ (RDS, Cloud SQL, self-hosted, etc.) | Skip the CNPG Operator and `*-cnpg` infrastructure charts. Create the `airm` and `aiwb` databases manually, then create the Kubernetes Secrets (`airm-cnpg-user`, `aiwb-cnpg-user`, etc.) pointing at your instance. Set the database host/port via the application chart values. |
+| **MinIO**             | AWS S3, GCS, Azure Blob Storage                        | Skip the MinIO Operator. Create the `minio-credentials` Secret with your cloud storage access keys. Configure the AIWB chart's S3 endpoint and bucket settings via Helm values.                                                                                                   |
+| **Envoy Gateway**     | Any Gateway API implementation                         | Install your preferred Gateway API controller (e.g., Istio, kgateway, NGINX Gateway Fabric). Ensure a `Gateway` resource exists and update the `gateway.namespace` / `gateway.gatewayName` values in both application charts.                                                     |
+| **LGTM Stack**        | Existing Prometheus + Grafana                          | Ensure Prometheus is scraping GPU metrics from the AMD Device Metrics Exporter. Configure the AIRM and AIWB chart values to point at your Prometheus query endpoint.                                                                                                              |
+
+> **Note**: Keycloak is **not** substitutable. AIRM uses the Keycloak Admin API
+> at runtime for user, group, and role management. A generic OIDC provider cannot
+> replace it without re-implementing these admin operations.
+
+### Keycloak Realm Setup
+
+If using Keycloak, the AIRM application requires a realm (default name: `airm`)
+configured with the following resources. You can import a realm JSON or create
+them manually via the Keycloak Admin Console.
+
+**Required Clients:**
+
+| Client Purpose           | Type         | Helm Value / Secret                                                                                                                | Notes                                                                                                                                               |
+| ------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **UI login client**      | Public       | Client ID configured via `airm-api.airm.keycloak.clientId` (default: `k8s`). Client secret in the `airm-keycloak-ui-creds` Secret. | Used by the AIRM and AIWB UIs for user login (OIDC authorization code flow).                                                                        |
+| **Admin service client** | Confidential | Client ID and secret provided via the `airm-keycloak-admin-client` Secret (`client-id`, `client-secret` keys).                     | Used by the AIRM API for server-to-server Keycloak operations. The service account must have `realm-admin` role from the `realm-management` client. |
+
+**Required Realm Roles:**
+
+| Role                     | Purpose                                                   |
+| ------------------------ | --------------------------------------------------------- |
+| `Platform Administrator` | Grants full platform access. Assign to at least one user. |
+
+**Client Mappers (on the UI login client):**
+
+Add protocol mappers so that the OIDC token includes the user's realm roles:
+
+- **Mapper type**: User Realm Role → Token Claim Name: `realm_access.roles`
+- **Mapper type**: User Attribute (email, firstName, lastName) → Token Claims
+
+**Initial User:**
+
+Create at least one user with a verified email, first name, last name, and the
+`Platform Administrator` role assigned. This user will be used during
+[Step 5: Onboard a Cluster](#step-5-onboard-a-cluster).
+
+> **Automated import**: The
+> [cluster-forge](https://github.com/silogen/cluster-forge) repository includes
+> a Keycloak realm JSON template and an init container that imports it
+> automatically. This can be useful as a reference for the required realm structure.
+
+### StorageClass Requirements
+
+The infrastructure charts default to a StorageClass named `default`. If your
+cluster uses a different name, override it during installation. Note that each
+chart uses a different Helm value key:
+
+| Chart           | Override Key                                                             |
+| --------------- | ------------------------------------------------------------------------ |
+| `airm-cnpg`     | `--set storage.storageClass=<NAME> --set walStorage.storageClass=<NAME>` |
+| `aiwb-cnpg`     | `--set storage.storageClass=<NAME> --set walStorage.storageClass=<NAME>` |
+| `airm-rabbitmq` | `--set persistence.storageClassName=<NAME>`                              |
+
+> **cluster-forge note**: The [cluster-forge](https://github.com/silogen/cluster-forge)
+> deployment scripts additionally create `multinode` (ReadWriteMany) and
+> `mlstorage` (high-throughput) StorageClasses for AIWB workspace and dataset
+> PVCs. These are cluster-forge-specific and not required by the Helm charts in
+> this repository — the charts use whatever StorageClass is set in their values.
+> See the [cluster-forge StorageClasses docs](https://github.com/silogen/cluster-forge/tree/main/docs/manual_helm_install/components/storage_classes.md)
+> for details.
+
+> **Tip**: On local development clusters (kind, minikube), you typically only
+> have a single `standard` StorageClass. Override with
+> `--set storage.storageClass=standard` where needed.
+
+### Scripted Installation for Standalone AIWB
+
+For standalone AIWB deployments (without AIRM), the
+[cluster-forge manual install scripts](https://github.com/silogen/cluster-forge/tree/main/docs/manual_helm_install)
+provide an automated `install_base.sh` that installs all dependencies and the
+AIWB chart in a single command. This is useful for quick setup, demos, or as a
+reference for which components and versions are needed.
+
+```bash
+# Example: standalone AIWB using cluster-forge scripts
+git clone https://github.com/silogen/cluster-forge.git
+cd cluster-forge/docs/manual_helm_install/scripts
+bash install_base.sh
+```
+
+See the [cluster-forge manual install README](https://github.com/silogen/cluster-forge/tree/main/docs/manual_helm_install)
+for details on pluggable component flags and customization.
 
 ---
 
@@ -486,10 +589,10 @@ helm install airm ./airm \
 ```
 
 > **Gateway configuration**: The charts create HTTPRoute resources that attach to a
-> Gateway named `https` in the `kgateway-system` namespace by default. If your Gateway
+> Gateway named `https` in the `envoy-gateway-system` namespace by default. If your Gateway
 > uses a different name or namespace, override with
-> `--set airm-api.kgateway.namespace=<NS> --set airm-api.kgateway.gatewayName=<NAME>`
-> (for AIRM) and `--set kgateway.namespace=<NS> --set kgateway.gatewayName=<NAME>`
+> `--set airm-api.gateway.namespace=<NS> --set airm-api.gateway.gatewayName=<NAME>`
+> (for AIRM) and `--set gateway.namespace=<NS> --set gateway.gatewayName=<NAME>`
 > (for AIWB).
 
 ### AIWB (AI Workbench)
@@ -589,6 +692,27 @@ Once all pods are running, the services should be accessible at:
 - **AIWB UI**: `https://aiwbui.<YOUR-DOMAIN>`
 - **AIWB API**: `https://aiwbapi.<YOUR-DOMAIN>`
 - **Keycloak**: `https://kc.<YOUR-DOMAIN>`
+
+---
+
+## Local Development Notes
+
+When running the platform on a local Kubernetes cluster (kind, minikube, Docker
+Desktop), there are several differences from a production environment:
+
+- **No GPU nodes**: Tier 3 components (AMD GPU Operator, Device Metrics Exporter,
+  Kaiwo, AIM Engine) can be skipped. Model deployment and workload features will
+  not be functional, but the AIRM and AIWB APIs and UIs will still be operational.
+- **HTTP instead of HTTPS**: Use `appDomain=localhost` with port-forward to access
+  services directly, or configure your Gateway for HTTP. The cluster-forge scripts
+  support a `DOMAIN=localhost` environment variable for this purpose.
+- **StorageClass**: The infrastructure charts expect a StorageClass named
+  `default` when no override is provided. Local clusters typically use a
+  different name (e.g., `standard` on kind), so override with the appropriate
+  key per chart (see [StorageClass Requirements](#storageclass-requirements)).
+- **Resource constraints**: Reduce resource requests for AIRM/AIWB components if
+  your local machine has limited CPU/memory. Consider scaling down non-essential
+  services (observability, KEDA) to free up resources.
 
 ---
 

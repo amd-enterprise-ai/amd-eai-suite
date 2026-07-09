@@ -15,7 +15,8 @@ vi.mock('next-i18next', () => ({
 }));
 
 // Mock @heroui/react Button
-vi.mock('@heroui/react', () => ({
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@heroui/react')>()),
   Button: ({
     children,
     onPress,

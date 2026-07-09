@@ -37,19 +37,63 @@ beforeEach(() => {
 
 describe('api-keys service', () => {
   describe('fetchProjectApiKeys', () => {
-    it('should fetch API keys successfully', async () => {
+    it('should fetch a single page when total fits in one page', async () => {
       const mockResponse = generateMockApiKeyResponse();
 
-      mockJson.mockResolvedValue(mockResponse);
+      mockJson.mockResolvedValue({
+        ...mockResponse,
+        pagination: { page: 1, pageSize: 100, total: mockResponse.data.length },
+      });
       mockFetch.mockResolvedValue({ ok: true, json: mockJson });
 
       const result = await fetchProjectApiKeys('project-1');
 
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/project-1/api-keys',
+        '/api/projects/project-1/api-keys?pageSize=100&page=1',
       );
-      expect(mockJson).toHaveBeenCalled();
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({ data: mockResponse.data });
+    });
+
+    it('should walk every page when total exceeds one page', async () => {
+      // Backend caps pageSize at 100; with total=250 the loader must issue
+      // requests for page 1, 2, and 3 and concatenate the results.
+      const pageOne = Array.from({ length: 100 }, (_, i) => ({ id: `k-${i}` }));
+      const pageTwo = Array.from({ length: 100 }, (_, i) => ({
+        id: `k-${100 + i}`,
+      }));
+      const pageThree = Array.from({ length: 50 }, (_, i) => ({
+        id: `k-${200 + i}`,
+      }));
+
+      mockFetch.mockImplementation(async (url: string) => {
+        const page = new URL(url, 'http://t').searchParams.get('page');
+        const data =
+          page === '1' ? pageOne : page === '2' ? pageTwo : pageThree;
+        return {
+          ok: true,
+          json: async () => ({
+            data,
+            pagination: { page: Number(page), pageSize: 100, total: 250 },
+          }),
+        };
+      });
+
+      const result = await fetchProjectApiKeys('project-1');
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/projects/project-1/api-keys?pageSize=100&page=1',
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/projects/project-1/api-keys?pageSize=100&page=2',
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/projects/project-1/api-keys?pageSize=100&page=3',
+      );
+      expect(result.data).toHaveLength(250);
+      expect(result.data[0]).toEqual({ id: 'k-0' });
+      expect(result.data[249]).toEqual({ id: 'k-249' });
     });
 
     it('should handle fetch error', async () => {
@@ -59,22 +103,26 @@ describe('api-keys service', () => {
         APIRequestError,
       );
 
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/project-1/api-keys',
+        '/api/projects/project-1/api-keys?pageSize=100&page=1',
       );
     });
 
     it('should handle empty API keys list', async () => {
       mockJson.mockResolvedValue({
-        apiKeys: [],
+        data: [],
+        pagination: { page: 1, pageSize: 100, total: 0 },
       });
       mockFetch.mockResolvedValue({ ok: true, json: mockJson });
 
-      await fetchProjectApiKeys('project-1');
+      const result = await fetchProjectApiKeys('project-1');
 
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/project-1/api-keys',
+        '/api/projects/project-1/api-keys?pageSize=100&page=1',
       );
+      expect(result).toEqual({ data: [] });
     });
   });
 
@@ -85,7 +133,7 @@ describe('api-keys service', () => {
       await deleteApiKey('project-1', 'api-key-1');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/project-1/api-keys/api-key-1',
+        '/api/projects/project-1/api-keys/api-key-1',
         {
           method: 'DELETE',
           headers: {
@@ -103,7 +151,7 @@ describe('api-keys service', () => {
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/project-1/api-keys/api-key-1',
+        '/api/projects/project-1/api-keys/api-key-1',
         {
           method: 'DELETE',
           headers: {
@@ -125,7 +173,7 @@ describe('api-keys service', () => {
       const result = await createApiKey('project-1', createData);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/project-1/api-keys',
+        '/api/projects/project-1/api-keys',
         {
           method: 'POST',
           headers: {
@@ -147,7 +195,7 @@ describe('api-keys service', () => {
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/project-1/api-keys',
+        '/api/projects/project-1/api-keys',
         {
           method: 'POST',
           headers: {
@@ -166,7 +214,7 @@ describe('api-keys service', () => {
       await createApiKey('project-1', createData);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/namespaces/project-1/api-keys',
+        '/api/projects/project-1/api-keys',
         expect.objectContaining({
           body: JSON.stringify(createData),
         }),

@@ -1,20 +1,22 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
+
+import { Tooltip } from '../Tooltip';
+import { Button } from '../Buttons/Button';
 import {
-  Button,
   Dropdown,
   DropdownItem,
   DropdownMenu,
   DropdownTrigger,
-  Tooltip,
-} from '@heroui/react';
+} from './DropdownPrimitive';
 import {
   IconAlertTriangle,
   IconDotsVertical,
   IconInfoCircle,
 } from '@tabler/icons-react';
 import { Key } from 'react';
+import { useTranslation } from 'next-i18next';
 
 import { ActionItem } from '@amdenterpriseai/types';
 import { ActionFieldHintType } from '@amdenterpriseai/types';
@@ -50,6 +52,7 @@ export const ThreeDotActionsDropdown = <T,>({
   item,
   isDisabled,
 }: ThreeDotActionsDropdownProps<T>) => {
+  const { t } = useTranslation('common');
   if (actions.length === 0) {
     return null;
   }
@@ -111,7 +114,7 @@ export const ThreeDotActionsDropdown = <T,>({
             isIconOnly
             size="sm"
             variant="light"
-            aria-label="list.actions.label"
+            aria-label={t('list.actions.label')}
             className="h-auto w-6 min-w-6"
             isDisabled={isDisabled}
           >

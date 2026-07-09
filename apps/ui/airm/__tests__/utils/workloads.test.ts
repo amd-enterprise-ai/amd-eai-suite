@@ -111,9 +111,7 @@ describe('WORKLOAD_STATUS_COLOR_MAP', () => {
     expect(WORKLOAD_STATUS_COLOR_MAP[WorkloadStatus.PENDING]).toBe('gray');
     expect(WORKLOAD_STATUS_COLOR_MAP[WorkloadStatus.RUNNING]).toBe('blue');
     expect(WORKLOAD_STATUS_COLOR_MAP[WorkloadStatus.COMPLETE]).toBe('green');
-    expect(WORKLOAD_STATUS_COLOR_MAP[WorkloadStatus.DELETE_FAILED]).toBe(
-      'amber',
-    );
+    expect(WORKLOAD_STATUS_COLOR_MAP[WorkloadStatus.DELETE_FAILED]).toBe('red');
     expect(WORKLOAD_STATUS_COLOR_MAP[WorkloadStatus.TERMINATED]).toBe('gray');
     expect(WORKLOAD_STATUS_COLOR_MAP[WorkloadStatus.UNKNOWN]).toBe('darkgray');
     expect(WORKLOAD_STATUS_COLOR_MAP[WorkloadStatus.DELETED]).toBe('emerald');

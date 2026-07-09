@@ -2,23 +2,23 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { SelectItem } from '@heroui/react';
+import { SelectItem, FormSelect } from '@amdenterpriseai/components';
 import { IconAlertTriangle, IconCpu } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 import type { UseFormReturn } from 'react-hook-form';
 
-import { FormSelect } from '@amdenterpriseai/components';
-
+import { getMetricTranslationKey } from '@/lib/app/aims';
 import { ADVANCED_PARAM_AUTOMATIC } from '@/lib/app/aims/filterProfilesByAdvancedParams';
 import {
   AIM_PROFILE_TYPE_OPTIMIZED,
-  type AIMClusterServiceTemplate,
+  type AIMClusterProfile,
 } from '@/types/aims';
 
 import { UnoptimizedProfileBadge } from './UnoptimizedProfileBadge';
 
 export interface DeployAIMFormValues {
   model: string;
+  displayName?: string;
   selectedToken?: string;
   tokenName?: string;
   token?: string;
@@ -35,7 +35,7 @@ export interface DeployAIMFormValues {
   gpuModel?: string;
   precision?: string;
   gpuCount?: string;
-  templateName?: string;
+  profileName?: string;
 }
 
 export interface DeployAIMAdvancedProfileFieldsProps {
@@ -45,9 +45,9 @@ export interface DeployAIMAdvancedProfileFieldsProps {
     gpuModels: string[];
     precisions: string[];
     gpuCounts: string[];
-    profiles: AIMClusterServiceTemplate[];
+    profiles: AIMClusterProfile[];
   };
-  filteredProfiles: AIMClusterServiceTemplate[];
+  filteredProfiles: AIMClusterProfile[];
   noProfileMatches: boolean;
 }
 
@@ -168,7 +168,7 @@ export function DeployAIMAdvancedProfileFields({
       </FormSelect>
       <div className="col-span-2">
         <FormSelect
-          name="templateName"
+          name="profileName"
           form={form}
           label={t('deployAIMDrawer.fields.advancedProfileParams.profile')}
           aria-label={t('deployAIMDrawer.fields.advancedProfileParams.profile')}
@@ -183,18 +183,18 @@ export function DeployAIMAdvancedProfileFields({
             >
               {profileAutomaticLabel}
             </SelectItem>
-            {filteredProfiles.map((template) => {
-              const meta = template.status?.profile?.metadata;
-              const isOptimized = meta?.type === AIM_PROFILE_TYPE_OPTIMIZED;
-              const gpu = meta?.gpu ?? '—';
+            {filteredProfiles.map((profile) => {
+              const spec = profile.spec;
+              const isOptimized = spec?.type === AIM_PROFILE_TYPE_OPTIMIZED;
+              const gpu = spec?.acceleratorModel ?? '—';
               const gpuCount =
-                meta?.gpuCount != null
-                  ? `${meta.gpuCount} ${meta.gpuCount === 1 ? 'Accelerator' : 'Accelerators'}`
+                spec?.acceleratorCount != null
+                  ? `${spec.acceleratorCount} ${spec.acceleratorCount === 1 ? 'Accelerator' : 'Accelerators'}`
                   : '—';
-              const metric = meta?.metric
-                ? t(`performanceMetrics.values.${meta.metric}`)
+              const metric = spec?.metric
+                ? t(getMetricTranslationKey(String(spec.metric)))
                 : '—';
-              const precision = meta?.precision ?? '—';
+              const precision = spec?.precision ?? '—';
               const row1 = (
                 <span className="-ml-1 flex items-center gap-2">
                   <IconCpu size={16} className="shrink-0 text-default-400" />
@@ -213,7 +213,7 @@ export function DeployAIMAdvancedProfileFields({
               const textValue = `${gpu} · ${gpuCount} · ${metric} · ${precision}`;
               return (
                 <SelectItem
-                  key={template.metadata.name}
+                  key={profile.metadata.name}
                   textValue={textValue}
                   endContent={
                     !isOptimized ? (
@@ -243,7 +243,7 @@ export function DeployAIMAdvancedProfileFields({
             form.setValue('gpuModel', ADVANCED_PARAM_AUTOMATIC);
             form.setValue('precision', ADVANCED_PARAM_AUTOMATIC);
             form.setValue('gpuCount', ADVANCED_PARAM_AUTOMATIC);
-            form.setValue('templateName', undefined);
+            form.setValue('profileName', undefined);
             form.setValue('metric', '');
           }}
           className="cursor-pointer text-sm font-medium text-primary transition-colors hover:underline"

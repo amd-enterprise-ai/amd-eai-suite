@@ -10,22 +10,22 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { useRouter } from 'next/router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
+import { APIRequestError } from '@amdenterpriseai/utils/app';
 import { useProject } from '@/contexts/ProjectContext';
 import { AIMServiceStatus } from '@/types/aims';
-import type {
-  AIMService,
-  AIMClusterModel,
-  AIMClusterServiceTemplate,
-  ParsedAIM,
-} from '@/types/aims';
+import type { AIMService, AIMClusterModel, ParsedAIM } from '@/types/aims';
+import { aimParser, getAIMServiceStatusVariants } from '@/lib/app/aims';
 import {
-  getAimService,
-  getAimClusterModel,
-  getAimClusterServiceTemplates,
-  getAimServiceHistory,
-  aimParser,
-  getAIMServiceStatusVariants,
-} from '@/lib/app/aims';
+  deleteInferenceDeployment,
+  getInferenceDeployment,
+  getInferenceModel,
+  getInferenceReplicas,
+  listAllInferenceDeployments,
+} from '@/lib/app/inference';
+import { getCustomModel } from '@/lib/app/custom-models';
+import { NAMESPACE_AIM_MODEL_LABEL } from '@/types/aims';
 import { useScalingConvergence } from '@/hooks/useScalingConvergence';
 import AimDetailsPage from '@/pages/[project]/aims/[id]/index';
 import wrapper from '@/__tests__/ProviderWrapper';
@@ -43,14 +43,20 @@ vi.mock('@/contexts/ProjectContext', async (importOriginal) => ({
 
 vi.mock('@/lib/app/aims', async (importOriginal) => ({
   ...(await importOriginal()),
-  getAimService: vi.fn(),
-  getAimClusterModel: vi.fn(),
-  getAimClusterServiceTemplates: vi.fn(),
-  getAimServiceHistory: vi.fn(),
   aimParser: vi.fn(),
-  historicalAimParser: vi.fn(),
-  undeployAim: vi.fn(),
   getAIMServiceStatusVariants: vi.fn(() => ({})),
+}));
+
+vi.mock('@/lib/app/inference', () => ({
+  deleteInferenceDeployment: vi.fn(),
+  getInferenceDeployment: vi.fn(),
+  getInferenceModel: vi.fn(),
+  getInferenceReplicas: vi.fn(),
+  listAllInferenceDeployments: vi.fn(),
+}));
+
+vi.mock('@/lib/app/custom-models', () => ({
+  getCustomModel: vi.fn(),
 }));
 
 vi.mock('@/hooks/useScalingConvergence', () => ({
@@ -93,6 +99,11 @@ vi.mock('@/components/features/workloads/WorkloadLogsModal', () => ({
 vi.mock('@/components/features/workloads/InferenceMetrics', () => ({
   __esModule: true,
   default: vi.fn(() => <div data-testid="inference-metrics" />),
+}));
+
+vi.mock('@/components/features/models/AIMConnectModal', () => ({
+  __esModule: true,
+  default: vi.fn(() => <div data-testid="aim-connect-modal" />),
 }));
 
 vi.mock('@amdenterpriseai/hooks', async (importOriginal) => ({
@@ -152,7 +163,6 @@ const mockAimService: AIMService = {
     cacheModel: false,
     routing: { annotations: {}, enabled: false },
     runtimeConfigName: 'default',
-    template: {},
     minReplicas: 1,
     maxReplicas: 5,
     autoScaling: {
@@ -199,7 +209,7 @@ const mockAimService: AIMService = {
       maxReplicas: 5,
     },
     resolvedModel: { name: 'aim-llama-8b' },
-    resolvedTemplate: { name: 'template-1' },
+    resolvedProfile: { name: 'profile-1' },
   },
   clusterAuthGroupId: 'auth-group-1',
   endpoints: {
@@ -246,6 +256,7 @@ const mockAimClusterModel: AIMClusterModel = {
 
 const mockParsedAim: ParsedAIM = {
   model: 'aim-llama-8b',
+  aimId: 'meta-llama/Llama-3.1-8B-Instruct',
   imageReference: 'ghcr.io/amdenterpriseai/aim-llama-8b:0.7.0',
   annotations: mockAimClusterModel.metadata.annotations,
   description: { short: 'A large language model', full: 'Full description' },
@@ -281,10 +292,10 @@ describe('AimDetailsPage', () => {
       projectUrl: (path: string) =>
         `/test-project${path.startsWith('/') ? path : `/${path}`}`,
     });
-    (getAimService as Mock).mockResolvedValue(mockAimService);
-    (getAimClusterModel as Mock).mockResolvedValue(mockAimClusterModel);
-    (getAimClusterServiceTemplates as Mock).mockResolvedValue([]);
-    (getAimServiceHistory as Mock).mockResolvedValue([]);
+    (getInferenceDeployment as Mock).mockResolvedValue(mockAimService);
+    (getInferenceModel as Mock).mockResolvedValue(mockAimClusterModel);
+    (listAllInferenceDeployments as Mock).mockResolvedValue([]);
+    (getInferenceReplicas as Mock).mockResolvedValue([]);
     (aimParser as Mock).mockReturnValue(mockParsedAim);
     (getAIMServiceStatusVariants as Mock).mockReturnValue({});
     (useScalingConvergence as Mock).mockReturnValue({
@@ -341,6 +352,38 @@ describe('AimDetailsPage', () => {
       });
     });
 
+    it('renders the unified AI gateway inference URL when the gateway is enabled and configured', async () => {
+      (useProject as Mock).mockReturnValue({
+        activeProject: 'test-project',
+        projectPath: (path: string) =>
+          `/test-project${path.startsWith('/') ? path : `/${path}`}`,
+        projectUrl: (path: string) =>
+          `/test-project${path.startsWith('/') ? path : `/${path}`}`,
+        aiGatewayEnabled: true,
+        aiGatewayUrl: 'https://ai.example.com',
+      });
+
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, { wrapper });
+      });
+
+      await waitFor(() => {
+        // The unified inference URL replaces the per-service external host.
+        expect(
+          screen.getByText(
+            'models:aimCatalog.actions.connect.modal.inferenceUrl',
+          ),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByText('details.fields.externalHost'),
+        ).not.toBeInTheDocument();
+        // The per-service internal host stays.
+        expect(
+          screen.getByText('details.fields.internalHost'),
+        ).toBeInTheDocument();
+      });
+    });
+
     it('renders status section with conditions accordion', async () => {
       await act(async () => {
         render(<AimDetailsPage id="aim-service-1" />, { wrapper });
@@ -391,7 +434,7 @@ describe('AimDetailsPage', () => {
 
   describe('Error State', () => {
     it('renders error message when AIM cluster model fails to load', async () => {
-      (getAimClusterModel as Mock).mockRejectedValue(new Error('Not Found'));
+      (getInferenceModel as Mock).mockRejectedValue(new Error('Not Found'));
 
       await act(async () => {
         render(<AimDetailsPage id="aim-service-1" />, { wrapper });
@@ -507,7 +550,9 @@ describe('AimDetailsPage', () => {
         ...mockAimService,
         spec: { ...mockAimService.spec, autoScaling: undefined },
       };
-      (getAimService as Mock).mockResolvedValue(serviceWithoutAutoscaling);
+      (getInferenceDeployment as Mock).mockResolvedValue(
+        serviceWithoutAutoscaling,
+      );
 
       await act(async () => {
         render(<AimDetailsPage id="aim-service-1" />, { wrapper });
@@ -521,13 +566,73 @@ describe('AimDetailsPage', () => {
     });
   });
 
+  describe('Connect to model button', () => {
+    it('renders connect to model button when endpoints exist', async () => {
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('connect-to-model-button'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('opens connect modal when connect to model button is clicked', async () => {
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, { wrapper });
+      });
+
+      const connectButton = await waitFor(() =>
+        screen.getByTestId('connect-to-model-button'),
+      );
+
+      await act(async () => {
+        fireEvent.click(connectButton);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('aim-connect-modal')).toBeInTheDocument();
+      });
+    });
+
+    it('does not render connect to model button when endpoints are missing', async () => {
+      const serviceWithoutEndpoints = {
+        ...mockAimService,
+        endpoints: { internal: '', external: '' },
+      };
+      (getInferenceDeployment as Mock).mockResolvedValue(
+        serviceWithoutEndpoints,
+      );
+      (aimParser as Mock).mockReturnValue({
+        ...mockParsedAim,
+        deployedService: serviceWithoutEndpoints,
+        deployedServices: [serviceWithoutEndpoints],
+      });
+
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('list.actions.logs.label')).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByTestId('connect-to-model-button'),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe('Service without endpoints', () => {
     it('does not render output section when endpoints are missing', async () => {
       const serviceWithoutEndpoints = {
         ...mockAimService,
         endpoints: { internal: '', external: '' },
       };
-      (getAimService as Mock).mockResolvedValue(serviceWithoutEndpoints);
+      (getInferenceDeployment as Mock).mockResolvedValue(
+        serviceWithoutEndpoints,
+      );
       (aimParser as Mock).mockReturnValue({
         ...mockParsedAim,
         deployedService: serviceWithoutEndpoints,
@@ -543,6 +648,170 @@ describe('AimDetailsPage', () => {
           screen.queryByText('details.sections.output'),
         ).not.toBeInTheDocument();
       });
+    });
+  });
+
+  describe('Historical / Deleted AIM', () => {
+    // Wrapper with retry enabled so we can exercise the per-query `retry`
+    // override on the live query. The default ProviderWrapper sets
+    // `retry: false` for all queries, which would mask the override.
+    const RetryEnabledWrapper = ({
+      children,
+    }: {
+      children: React.ReactNode;
+    }) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: 3, retryDelay: 0 } },
+      });
+      return (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      );
+    };
+
+    it('does NOT call listAllInferenceDeployments when live AIM loads successfully', async () => {
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('details.sections.basicInformation'),
+        ).toBeInTheDocument();
+      });
+
+      expect(listAllInferenceDeployments).not.toHaveBeenCalled();
+    });
+
+    it('calls listAllInferenceDeployments when live AIM returns 404', async () => {
+      const historicalService = {
+        ...mockAimService,
+        status: { ...mockAimService.status, status: AIMServiceStatus.DELETED },
+      };
+      (getInferenceDeployment as Mock).mockRejectedValue(
+        new APIRequestError('not found', 404),
+      );
+      (listAllInferenceDeployments as Mock).mockResolvedValue([
+        historicalService,
+      ]);
+      (aimParser as Mock).mockReturnValue({
+        ...mockParsedAim,
+        deployedService: historicalService,
+        deployedServices: [historicalService],
+      });
+
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(listAllInferenceDeployments).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText('details.sections.basicInformation'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('renders error fallback when live AIM returns non-404 error', async () => {
+      (getInferenceDeployment as Mock).mockRejectedValue(
+        new APIRequestError('boom', 500),
+      );
+
+      // Use retry-enabled wrapper with zero delay so the per-query `retry`
+      // override (which retries 3x on non-404 errors) finishes quickly.
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, {
+          wrapper: RetryEnabledWrapper,
+        });
+      });
+
+      await waitFor(
+        () => {
+          expect(
+            screen.getByText('errors.workloadNotFound.title'),
+          ).toBeInTheDocument();
+        },
+        { timeout: 3000 },
+      );
+      expect(listAllInferenceDeployments).not.toHaveBeenCalled();
+    });
+
+    it('does not retry live query on 404', async () => {
+      (getInferenceDeployment as Mock).mockRejectedValue(
+        new APIRequestError('not found', 404),
+      );
+      (listAllInferenceDeployments as Mock).mockResolvedValue([]);
+
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, {
+          wrapper: RetryEnabledWrapper,
+        });
+      });
+
+      // History query fires once the live query 404s; wait on that observable
+      // signal to guarantee the live query reached its terminal state.
+      await waitFor(() => {
+        expect(listAllInferenceDeployments).toHaveBeenCalled();
+      });
+
+      expect(getInferenceDeployment).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Custom (BYOM) model', () => {
+    it('calls getCustomModel instead of getInferenceModel for namespace-scoped AIM services', async () => {
+      const byomService: AIMService = {
+        ...mockAimService,
+        metadata: {
+          ...mockAimService.metadata,
+          labels: { [NAMESPACE_AIM_MODEL_LABEL]: 'true' },
+        },
+        spec: {
+          ...mockAimService.spec,
+          model: { name: 'my-byom-model-cr' },
+        },
+        status: {
+          ...mockAimService.status,
+          resolvedModel: { name: 'my-byom-model-cr', scope: 'Namespace' },
+        },
+      };
+      (getInferenceDeployment as Mock).mockResolvedValue(byomService);
+      (getCustomModel as Mock).mockResolvedValue({
+        metadata: {
+          name: 'my-byom-model-cr',
+          namespace: 'test-project',
+          labels: {},
+          annotations: {
+            'aiwb.apps.eai.amd.com/model-display-name': 'My Custom Model',
+          },
+          creationTimestamp: '2025-01-01T00:00:00Z',
+        },
+        spec: { aimId: null, image: '', modelSources: [], profiles: {} },
+        phase: {
+          state: 'Ready',
+          status: 'Ready',
+          templateReady: true,
+          artifactPhase: null,
+          artifactLastError: null,
+        },
+        status: null,
+        profile: null,
+      });
+
+      await act(async () => {
+        render(<AimDetailsPage id="aim-service-1" />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(getCustomModel).toHaveBeenCalledWith(
+          'test-project',
+          'my-byom-model-cr',
+        );
+      });
+      expect(getInferenceModel).not.toHaveBeenCalled();
     });
   });
 });

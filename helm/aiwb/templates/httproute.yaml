@@ -12,61 +12,61 @@ spec:
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
-      name: {{ .Values.kgateway.gatewayName }}
-      namespace: {{ .Values.kgateway.namespace }}
+      name: {{ coalesce .Values.kgateway.gatewayName .Values.gateway.gatewayName }}
+      namespace: {{ coalesce .Values.kgateway.namespace .Values.gateway.namespace }}
   rules:
     - backendRefs:
         - group: ""
           kind: Service
           name: '{{ .Release.Name }}-api'
-          port: {{ .Values.kgateway.api.servicePort }}
+          port: {{ .Values.gateway.api.servicePort }}
           weight: 1
       matches:
         - headers:
             - name: Host
               type: RegularExpression
-              value: {{ .Values.kgateway.api.prefixValue }}\..*
+              value: {{ .Values.gateway.api.prefixValue }}\..*
           path:
             type: RegularExpression
             value: .*/stream.*
       timeouts:
-        backendRequest: {{ .Values.kgateway.api.timeouts.stream.backendRequest }}
-        request: {{ .Values.kgateway.api.timeouts.stream.request }}
+        backendRequest: {{ .Values.gateway.api.timeouts.stream.backendRequest }}
+        request: {{ .Values.gateway.api.timeouts.stream.request }}
     # Streaming chat endpoints - needs 30m timeout (SDA-3278)
     - backendRefs:
         - group: ""
           kind: Service
           name: '{{ .Release.Name }}-api'
-          port: {{ .Values.kgateway.api.servicePort }}
+          port: {{ .Values.gateway.api.servicePort }}
           weight: 1
       matches:
         - headers:
             - name: Host
               type: RegularExpression
-              value: {{ .Values.kgateway.api.prefixValue }}\..*
+              value: {{ .Values.gateway.api.prefixValue }}\..*
           path:
             type: RegularExpression
             value: .*/chat$
       timeouts:
-        backendRequest: {{ .Values.kgateway.api.timeouts.stream.backendRequest }}
-        request: {{ .Values.kgateway.api.timeouts.stream.request }}
+        backendRequest: {{ .Values.gateway.api.timeouts.stream.backendRequest }}
+        request: {{ .Values.gateway.api.timeouts.stream.request }}
     - backendRefs:
         - group: ""
           kind: Service
           name: '{{ .Release.Name }}-api'
-          port: {{ .Values.kgateway.api.servicePort }}
+          port: {{ .Values.gateway.api.servicePort }}
           weight: 1
       matches:
         - headers:
             - name: Host
               type: RegularExpression
-              value: {{ .Values.kgateway.api.prefixValue }}\..*
+              value: {{ .Values.gateway.api.prefixValue }}\..*
           path:
             type: PathPrefix
             value: /
       timeouts:
-        backendRequest: {{ .Values.kgateway.api.timeouts.nonStream.backendRequest }}
-        request: {{ .Values.kgateway.api.timeouts.nonStream.request }}
+        backendRequest: {{ .Values.gateway.api.timeouts.nonStream.backendRequest }}
+        request: {{ .Values.gateway.api.timeouts.nonStream.request }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -77,60 +77,60 @@ spec:
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
-      name: {{ .Values.kgateway.gatewayName }}
-      namespace: {{ .Values.kgateway.namespace }}
+      name: {{ coalesce .Values.kgateway.gatewayName .Values.gateway.gatewayName }}
+      namespace: {{ coalesce .Values.kgateway.namespace .Values.gateway.namespace }}
   rules:
     # Streaming logs proxied through Next.js UI - needs 30m timeout (SDA-3278)
     - backendRefs:
         - group: ""
           kind: Service
           name: '{{ .Release.Name }}-ui'
-          port: {{ .Values.kgateway.ui.servicePort }}
+          port: {{ .Values.gateway.ui.servicePort }}
           weight: 1
       matches:
         - headers:
             - name: Host
               type: RegularExpression
-              value: {{ .Values.kgateway.ui.prefixValue }}\..*
+              value: {{ .Values.gateway.ui.prefixValue }}\..*
           path:
             type: RegularExpression
             value: .*/api/.*/logs/stream.*
       timeouts:
-        backendRequest: {{ .Values.kgateway.api.timeouts.stream.backendRequest }}
-        request: {{ .Values.kgateway.api.timeouts.stream.request }}
+        backendRequest: {{ .Values.gateway.api.timeouts.stream.backendRequest }}
+        request: {{ .Values.gateway.api.timeouts.stream.request }}
     # Streaming chat proxied through Next.js UI - needs 30m timeout (SDA-3278)
     - backendRefs:
         - group: ""
           kind: Service
           name: '{{ .Release.Name }}-ui'
-          port: {{ .Values.kgateway.ui.servicePort }}
+          port: {{ .Values.gateway.ui.servicePort }}
           weight: 1
       matches:
         - headers:
             - name: Host
               type: RegularExpression
-              value: {{ .Values.kgateway.ui.prefixValue }}\..*
+              value: {{ .Values.gateway.ui.prefixValue }}\..*
           path:
             type: RegularExpression
             value: .*/api/.*/chat$
       timeouts:
-        backendRequest: {{ .Values.kgateway.api.timeouts.stream.backendRequest }}
-        request: {{ .Values.kgateway.api.timeouts.stream.request }}
+        backendRequest: {{ .Values.gateway.api.timeouts.stream.backendRequest }}
+        request: {{ .Values.gateway.api.timeouts.stream.request }}
     # All other UI requests - keep 1m timeout
     - backendRefs:
         - group: ""
           kind: Service
           name: '{{ .Release.Name }}-ui'
-          port: {{ .Values.kgateway.ui.servicePort }}
+          port: {{ .Values.gateway.ui.servicePort }}
           weight: 1
       matches:
         - headers:
             - name: Host
               type: RegularExpression
-              value: {{ .Values.kgateway.ui.prefixValue }}\..*
+              value: {{ .Values.gateway.ui.prefixValue }}\..*
           path:
             type: PathPrefix
             value: /
       timeouts:
-        backendRequest: {{ .Values.kgateway.ui.timeouts.backendRequest }}
-        request: {{ .Values.kgateway.ui.timeouts.request }}
+        backendRequest: {{ .Values.gateway.ui.timeouts.backendRequest }}
+        request: {{ .Values.gateway.ui.timeouts.request }}

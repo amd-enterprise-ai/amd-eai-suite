@@ -1,0 +1,40 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+orphan: true
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.9
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: aiwb-api-test
+        name: AIWB API tests
+        entry: bash -c 'uv run pytest -x'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        verbose: true
+        fail_fast: true
+      - id: robot-dryrun
+        name: Robot Framework dry-run validation
+        description: Validates keyword names, arguments, imports, and syntax without executing tests
+        entry: bash -c 'cd ../../.. && tooling/robot_dryrun.sh'
+        language: system
+        pass_filenames: false
+        files: ^specs/.*\.(robot|resource|py|txt|csv)$
+        stages: [pre-push]
+        verbose: true
+      - id: spectral-aiwb
+        name: AIWB API OpenAPI Spectral
+        description: Lint OpenAPI spec with Spectral
+        entry: bash -c 'cd ../../.. && tooling/spectral/run_spectral.sh apps/api/aiwb'
+        language: system
+        pass_filenames: false
+        stages: [manual]
+        verbose: true

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  CollectionRequestParams,
   PlotPoint,
   TimeRangePeriod,
   TimeSeriesData,
@@ -11,38 +10,30 @@ import {
 } from '@amdenterpriseai/types';
 import { CatalogItem, CatalogItemDeployment } from '@/types/catalog';
 import { WorkloadStatus } from '@/types/enums/workloads';
+import { PaginatedList } from '@/types/pagination';
 import {
   Workload,
   WorkloadLogParams,
   WorkloadLogResponse,
 } from '@/types/workloads';
-import {
-  APIRequestError,
-  buildQueryParams,
-  getErrorMessage,
-} from '@amdenterpriseai/utils/app';
+import { APIRequestError, getErrorMessage } from '@amdenterpriseai/utils/app';
 
-export type WorkloadsResponse = {
-  data: Workload[];
-  total: number;
-  page: number;
-  pageSize: number;
-};
+import { fetchAllPages } from './pagination';
 
-export const listWorkloads = async (
+export type WorkloadsResponse = PaginatedList<Workload>;
+
+export interface WorkloadFilters {
+  type?: WorkloadType[];
+  status?: WorkloadStatus[];
+}
+
+const buildWorkloadsUrl = (
   projectId: string,
-  filters?: {
-    type?: WorkloadType[];
-    status?: WorkloadStatus[];
-  },
-  collectionRequestParams?: CollectionRequestParams<Workload>,
-): Promise<WorkloadsResponse> => {
-  if (!projectId) {
-    throw new APIRequestError('No project selected', 422);
-  }
-
+  page: number,
+  pageSize: number | undefined,
+  filters: WorkloadFilters | undefined,
+): string => {
   const urlParams = new URLSearchParams();
-
   if (filters?.type) {
     filters.type.forEach((t) => {
       urlParams.append('workloadType', t);
@@ -53,17 +44,33 @@ export const listWorkloads = async (
       urlParams.append('statusFilter', s);
     });
   }
-  const paginationParams = collectionRequestParams
-    ? buildQueryParams(
-        collectionRequestParams.page,
-        collectionRequestParams.pageSize,
-        collectionRequestParams.filter,
-        collectionRequestParams.sort,
-      )
-    : '';
+  urlParams.append('page', String(page));
+  // Omit pageSize when not specified so the backend applies its own default
+  // — the FE shouldn't mirror the backend's pagination defaults.
+  if (pageSize !== undefined) {
+    urlParams.append('pageSize', String(pageSize));
+  }
+  return `/api/projects/${projectId}/workloads?${urlParams.toString()}`;
+};
 
+/**
+ * Fetches a single page of workloads for a project.
+ *
+ * Backed by GET /v1/projects/{project}/workloads. Returns the raw paginated
+ * envelope so callers can drive UI pagination. If `pageSize` is omitted
+ * the backend applies its own default.
+ */
+export const listWorkloadsPage = async (
+  projectId: string,
+  page: number = 1,
+  pageSize?: number,
+  filters?: WorkloadFilters,
+): Promise<WorkloadsResponse> => {
+  if (!projectId) {
+    throw new APIRequestError('No project selected', 422);
+  }
   const response = await fetch(
-    `/api/namespaces/${projectId}/workloads?${urlParams.toString()}${paginationParams}`,
+    buildWorkloadsUrl(projectId, page, pageSize, filters),
     {
       method: 'GET',
     },
@@ -80,6 +87,29 @@ export const listWorkloads = async (
   return await response.json();
 };
 
+/**
+ * Lists every workload for a project by walking all pages.
+ *
+ * Thin wrapper around fetchAllPages — see `apps/ui/aiwb/AGENTS.md`
+ * "Paginated list loaders". Intended for callers that need an exhaustive
+ * list (e.g., joining workloads against AIM services or models).
+ *
+ * Errors propagate to the caller so React Query can surface them; see
+ * `listAllInferenceDeployments` / `listAllProjectFineTunedModels` for
+ * the alternative silent-degrade pattern used in join paths.
+ */
+export const listAllWorkloads = async (
+  projectId: string,
+  filters?: WorkloadFilters,
+): Promise<Workload[]> => {
+  if (!projectId) {
+    throw new APIRequestError('No project selected', 422);
+  }
+  return fetchAllPages<Workload>((page, pageSize) =>
+    listWorkloadsPage(projectId, page, pageSize, filters),
+  );
+};
+
 export const getWorkload = async (
   workloadId: string,
   projectId?: string,
@@ -89,7 +119,7 @@ export const getWorkload = async (
   }
 
   const response = await fetch(
-    `/api/namespaces/${projectId}/workloads/${workloadId}`,
+    `/api/projects/${projectId}/workloads/${workloadId}`,
     {
       method: 'GET',
     },
@@ -123,7 +153,7 @@ export const getWorkloadMetrics = async (
   urlParams.append('end', end.toISOString());
 
   const response = await fetch(
-    `/api/namespaces/${projectId}/workloads/${workloadId}/metrics/${metric}?${urlParams.toString()}`,
+    `/api/projects/${projectId}/workloads/${workloadId}/metrics/${metric}?${urlParams.toString()}`,
     {
       method: 'GET',
     },
@@ -141,24 +171,30 @@ export const getWorkloadMetrics = async (
   return json;
 };
 
-export const deleteWorkload = async (id: string, projectId: string) => {
-  const response = await fetch(`/api/namespaces/${projectId}/workloads/${id}`, {
-    method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
+export const deleteWorkspace = async (
+  projectId: string,
+  workloadId: string,
+) => {
+  const response = await fetch(
+    `/api/projects/${projectId}/workspaces/${workloadId}`,
+    {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     },
-  });
+  );
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
     throw new APIRequestError(
-      `Failed to terminate workload: ${errorMessage}`,
+      `Failed to terminate workspace: ${errorMessage}`,
       response.status,
     );
   }
 };
 
 export const getWorkloadLogs = async (
-  namespace: string,
+  projectId: string,
   workloadId: string,
   params: WorkloadLogParams = {},
 ): Promise<WorkloadLogResponse> => {
@@ -188,7 +224,7 @@ export const getWorkloadLogs = async (
   if (params.direction) urlParams.append('direction', params.direction);
   if (params.logType) urlParams.append('logType', params.logType);
   const response = await fetch(
-    `/api/namespaces/${namespace}/workloads/${workloadId}/logs?${urlParams.toString()}`,
+    `/api/projects/${projectId}/workloads/${workloadId}/logs?${urlParams.toString()}`,
     {
       method: 'GET',
     },
@@ -264,7 +300,7 @@ export const getTickGap = (
 };
 
 export const deployWorkspace = async (
-  namespace: string,
+  projectId: string,
   payload: CatalogItemDeployment,
 ): Promise<{
   id: string;
@@ -284,7 +320,7 @@ export const deployWorkspace = async (
     params.set('displayName', displayName);
   }
   const query = params.toString();
-  const url = `/api/namespaces/${namespace}/workspaces/${template}${query ? `?${query}` : ''}`;
+  const url = `/api/projects/${projectId}/workspaces${query ? `?${query}` : ''}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -292,6 +328,7 @@ export const deployWorkspace = async (
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
+      workspaceType: template,
       gpus,
       memoryPerGpu,
       cpuPerGpu,

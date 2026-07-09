@@ -2,7 +2,17 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Accordion, AccordionItem, cn, useDisclosure } from '@heroui/react';
+import { cn } from '@heroui/react';
+import {
+  Accordion,
+  AccordionItem,
+  ActionButton,
+  ActionsToolbar,
+  AirmDocsPage,
+  airmDocumentationMapping,
+  RelevantDocs,
+} from '@amdenterpriseai/components';
+import { useOverlayState } from '@amdenterpriseai/hooks';
 import { IconCircleCheck, IconSearch, IconServer } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
@@ -17,11 +27,7 @@ import { fetchProjects } from '@/services/app';
 import { getClusters } from '@/services/server';
 import { getProjects } from '@/services/server';
 
-import {
-  airmMenuItems,
-  getAuthRedirect,
-  getFilteredData,
-} from '@amdenterpriseai/utils/app';
+import { getFilteredData } from '@amdenterpriseai/utils/app';
 import {
   DOCS_RESOURCE_MANAGER_BASE,
   WithDocumentationLink,
@@ -42,13 +48,6 @@ import {
 
 import CreateProjectModal from '@/components/features/projects/CreateProjectModal';
 import { ProjectTable } from '@/components/features/projects';
-import { ActionsToolbar } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
-import {
-  RelevantDocs,
-  AirmDocsPage,
-  airmDocumentationMapping,
-} from '@amdenterpriseai/components';
 import { doesProjectDataNeedToBeRefreshed } from '@/utils/projects';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
 
@@ -69,7 +68,7 @@ const ProjectsPage: React.FC<Props> & WithDocumentationLink = ({
   projects,
 }: Props) => {
   const { t } = useTranslation('projects');
-  const { isOpen, onOpen, onOpenChange } = useDisclosure();
+  const { isOpen, onOpen, onOpenChange } = useOverlayState();
   const { isAdministrator } = useAccessControl();
 
   const [filters, setFilters] = useState<
@@ -317,24 +316,23 @@ export async function getServerSideProps(context: any) {
 
   const session = await getServerSession(context.req, context.res, authOptions);
 
-  // Redirect unauthenticated users to '/'
-  const authRedirect = getAuthRedirect(session, airmMenuItems);
-  if (authRedirect && !session?.user) {
-    return authRedirect;
+  try {
+    const projects = await getProjects(session?.accessToken as string);
+    const clusters = await getClusters(session?.accessToken as string);
+
+    return {
+      props: {
+        ...(await serverSideTranslations(locale, [
+          'common',
+          'projects',
+          'sharedComponents',
+        ])),
+        clusters: clusters?.data || [],
+        projects: projects?.data || [],
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching data on projects page:', error);
+    return { redirect: { destination: '/', permanent: false } };
   }
-
-  const projects = await getProjects(session?.accessToken as string);
-  const clusters = await getClusters(session?.accessToken as string);
-
-  return {
-    props: {
-      ...(await serverSideTranslations(locale, [
-        'common',
-        'projects',
-        'sharedComponents',
-      ])),
-      clusters: clusters?.data || [],
-      projects: projects?.data || [],
-    },
-  };
 }

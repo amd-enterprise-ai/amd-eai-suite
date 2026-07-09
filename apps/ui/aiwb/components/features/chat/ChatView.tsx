@@ -2,7 +2,14 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button, Tab, Tabs } from '@heroui/react';
+import {
+  AiwbDocsPage,
+  aiwbDocumentationMapping,
+  Button,
+  RelevantDocs,
+  Tab,
+  Tabs,
+} from '@amdenterpriseai/components';
 import { IconEraser, IconSettings } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -32,12 +39,6 @@ import { useProject } from '@/contexts/ProjectContext';
 import { DELAYED_RESPONSE_THRESHOLD_MS } from './constants';
 import { streamChatResponse, type WorkloadDisplayInfo } from '@/lib/app/chat';
 import { formatModelDeploymentSubtitle } from '@/lib/app/modelDeploymentDisplay';
-import { ChatWorkloadType } from '@/types/chat';
-import {
-  RelevantDocs,
-  AiwbDocsPage,
-  aiwbDocumentationMapping,
-} from '@amdenterpriseai/components';
 
 interface ChatViewProps {
   workloads: Workload[];
@@ -68,15 +69,16 @@ export const ChatView = ({
   // and rendering it twice would break the shared textareaRef/stopConversationRef.
   const isLgUp = useMediaQuery('(min-width: 1024px)');
   const { toast } = useSystemToast();
-  const { t } = useTranslation(['chat', 'models']);
+  const { t } = useTranslation('chat');
+  const { t: tModels } = useTranslation('models');
   const workloadDescriptions = useMemo(() => {
     const map: Record<string, string> = {};
     for (const [id, info] of Object.entries(workloadDisplayInfo)) {
-      const line = formatModelDeploymentSubtitle(t, info);
+      const line = formatModelDeploymentSubtitle(tModels, info);
       if (line !== '') map[id] = line;
     }
     return map;
-  }, [workloadDisplayInfo, t]);
+  }, [workloadDisplayInfo, tModels]);
   const { activeProject } = useProject();
   const searchParams = useSearchParams();
   const workloadParam = searchParams?.get('workload');
@@ -109,9 +111,11 @@ export const ChatView = ({
     messages: [],
     streaming: false,
   });
+  const initialSelectedWorkload =
+    !workloadParam && workloads.length === 1 ? workloads[0] : undefined;
   const [firstModelWorkload, setFirstModelWorkload] = useState<
     Workload | undefined
-  >(workloads.length > 0 ? workloads[0] : undefined);
+  >(initialSelectedWorkload);
   const [firstSettings, setFirstSettings] = useState<InferenceSettings>(
     getChatSettings() || DEFAULT_SETTINGS,
   );
@@ -123,7 +127,7 @@ export const ChatView = ({
     });
   const [secondModelWorkload, setSecondModelWorkload] = useState<
     Workload | undefined
-  >(firstModelWorkload);
+  >(initialSelectedWorkload);
   const [secondSettings, setSecondSettings] = useState<InferenceSettings>(
     getChatSettings() || DEFAULT_SETTINGS,
   );
@@ -224,7 +228,6 @@ export const ChatView = ({
       conversation: ChatConversation,
       chatBody: ChatBody,
       workloadId: string,
-      workloadType: ChatWorkloadType,
       conversationSetter: (conversation: ChatConversation) => void,
       conversationRef: 'first' | 'second',
     ) => {
@@ -246,7 +249,6 @@ export const ChatView = ({
       try {
         const { responseStream, context } = await streamChatResponse(
           workloadId,
-          workloadType,
           chatBody,
           activeProject || '',
           stopConversationRef,
@@ -395,9 +397,6 @@ export const ChatView = ({
       firstConversation,
       firstChatBody,
       firstModelWorkload.id,
-      firstModelWorkload.aimId
-        ? ChatWorkloadType.AIMService
-        : ChatWorkloadType.Workload,
       setFirstConversation,
       'first',
     );
@@ -417,9 +416,6 @@ export const ChatView = ({
         secondConversation,
         secondChatBody,
         secondModelWorkload.id,
-        secondModelWorkload.aimId
-          ? ChatWorkloadType.AIMService
-          : ChatWorkloadType.Workload,
         setSecondConversation,
         'second',
       );
@@ -457,14 +453,18 @@ export const ChatView = ({
         <Tabs
           selectedKey={chatMode}
           onSelectionChange={(key) => setChatMode(key as 'chat' | 'compare')}
-          aria-label="chat-mode-tabs"
+          aria-label={t('modes.label')}
           size="md"
         >
-          <Tab key="chat" title={t('modes.chat')} aria-label="chat-tab" />
+          <Tab
+            key="chat"
+            title={t('modes.chat')}
+            aria-label={t('modes.chat')}
+          />
           <Tab
             key="compare"
             title={t('modes.compare')}
-            aria-label="compare-tab"
+            aria-label={t('modes.compare')}
           />
         </Tabs>
         <div className="max-w-full w-full lg:w-auto mt-[-50px] lg:mt-0 lg:ml-auto flex flex-wrap gap-4 items-center">
@@ -480,7 +480,7 @@ export const ChatView = ({
                 (firstConversation.messages.length === 0 &&
                   secondConversation.messages.length === 0)
               }
-              aria-label="clear chat"
+              aria-label={t('actions.clearAll')}
               onPress={clearAll}
             >
               {t('actions.clearAll')}
@@ -493,7 +493,6 @@ export const ChatView = ({
               onModelDeploymentChange={onFirstModelWorkloadChange}
               selectedModelId={firstModelWorkload?.id}
               label={t('actions.selectModel') ?? ''}
-              showOnlyRunningWorkloads={true}
               workloadDescriptions={workloadDescriptions}
             />
             <Button
@@ -502,7 +501,7 @@ export const ChatView = ({
               size="md"
               disabled={!firstModelWorkload}
               onPress={() => setFirstSettingsDrawerOpen(true)}
-              aria-label="Show Settings"
+              aria-label={t('modelSettings.showSettings')}
             >
               <IconSettings
                 size="16"
@@ -534,7 +533,6 @@ export const ChatView = ({
                 onModelDeploymentChange={onSecondModelWorkloadChange}
                 selectedModelId={secondModelWorkload?.id}
                 label={t('actions.selectModel') ?? ''}
-                showOnlyRunningWorkloads={true}
                 workloadDescriptions={workloadDescriptions}
               />
               <Button
@@ -543,7 +541,7 @@ export const ChatView = ({
                 size="md"
                 disabled={!secondModelWorkload}
                 onPress={() => setSecondSettingsDrawerOpen(true)}
-                aria-label="Show Settings"
+                aria-label={t('modelSettings.showSettings')}
               >
                 <IconSettings
                   size="16"
@@ -596,7 +594,7 @@ export const ChatView = ({
                     }
                     allowRegenerate={false}
                     embedded
-                    aria-label="chat-input"
+                    aria-label={t('chatInput.label')}
                   />
                 </div>
               </div>
@@ -667,7 +665,7 @@ export const ChatView = ({
               (chatMode === 'compare' && !secondModelWorkload)
             }
             allowRegenerate={false}
-            aria-label="chat-input"
+            aria-label={t('chatInput.label')}
           />
         )}
         {firstConversation.messages.length === 0 && (

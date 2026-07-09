@@ -5,6 +5,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AIMCard } from '@/components/features/models/AIMCard';
+import { AggregatedAIM, AIMWorkloadStatus } from '@/types/aims';
 import {
   mockAggregatedAims,
   mockAggregatedAimWithMultipleDeployments,
@@ -42,6 +43,10 @@ vi.mock('next-i18next', () => ({
       const translations: Record<string, string> = {
         'aimCatalog.card.gated': 'Gated',
         'aimCatalog.card.actionsMenu': 'Actions menu',
+        'aimCatalog.card.menuTrigger': 'Menu',
+        'aimCatalog.card.hasDeployments': 'Has deployments',
+        'aimCatalog.card.hasDeploymentsTooltip':
+          'This model has active deployments',
         'aimCatalog.status.deploying': 'Deploying',
         'models:status.pending': 'Pending',
         'models:status.starting': 'Starting',
@@ -79,24 +84,27 @@ vi.mock('next-i18next', () => ({
 }));
 
 vi.mock('@/components/shared/ModelIcons', () => ({
-  ModelIcon: ({ iconName, width, height }: any) => (
-    <div
-      data-testid={`model-icon-${iconName || 'default'}`}
-      style={{ width: `${width}px`, height: `${height}px` }}
-    >
-      {iconName || 'default'} icon
-    </div>
+  ModelIcon: ({ iconName }: { iconName?: string }) => (
+    <div data-testid={`model-icon-${iconName || 'default'}`} />
   ),
 }));
 
 vi.mock('@amdenterpriseai/components', async (importOriginal) => ({
   ...(await importOriginal()),
-  ActionButton: ({ children, onPress, icon, isDisabled, ...props }: any) => (
+  ActionButton: ({
+    children,
+    onPress,
+    icon,
+    isDisabled,
+    className,
+    'aria-label': ariaLabel,
+  }: any) => (
     <button
-      {...props}
       onClick={() => onPress?.()}
       disabled={isDisabled}
       data-testid="action-button"
+      className={className}
+      aria-label={ariaLabel}
     >
       {children}
       {icon}
@@ -179,7 +187,7 @@ describe('AIMCard', () => {
       ).toBeInTheDocument();
     });
 
-    it('displays model icon with canonical name', () => {
+    it('renders the model icon', () => {
       const aggregatedAim = mockAggregatedAims[0];
       render(
         <AIMCard
@@ -194,7 +202,7 @@ describe('AIMCard', () => {
 
       expect(
         screen.getByTestId(
-          `model-icon-${aggregatedAim.parsedAIMs[0].canonicalName}`,
+          `model-icon-${aggregatedAim.aggregated.canonicalName}`,
         ),
       ).toBeInTheDocument();
     });
@@ -287,6 +295,54 @@ describe('AIMCard', () => {
 
       expect(screen.queryByText('Gated')).not.toBeInTheDocument();
     });
+
+    it('displays accelerator types in metadata line', () => {
+      const aggregatedAim: AggregatedAIM = {
+        ...mockAggregatedAims[0],
+        aggregated: {
+          ...mockAggregatedAims[0].aggregated,
+          acceleratorTypes: ['cpu', 'gpu'],
+        },
+      };
+      render(
+        <AIMCard
+          aggregatedAim={aggregatedAim}
+          onDeploy={onDeploy}
+          onOpenDetails={onOpenDetails}
+          onChatWithModel={onChatWithModel}
+          onConnectToModel={onConnectToModel}
+          onUndeploy={onUndeploy}
+        />,
+      );
+
+      expect(
+        screen.getByTestId('aim-card-accelerator-types'),
+      ).toHaveTextContent('CPU, GPU');
+    });
+
+    it('hides accelerator label when no types are known', () => {
+      const aggregatedAim: AggregatedAIM = {
+        ...mockAggregatedAims[0],
+        aggregated: {
+          ...mockAggregatedAims[0].aggregated,
+          acceleratorTypes: [],
+        },
+      };
+      render(
+        <AIMCard
+          aggregatedAim={aggregatedAim}
+          onDeploy={onDeploy}
+          onOpenDetails={onOpenDetails}
+          onChatWithModel={onChatWithModel}
+          onConnectToModel={onConnectToModel}
+          onUndeploy={onUndeploy}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId('aim-card-accelerator-types'),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('Deployment status badges', () => {
@@ -351,6 +407,73 @@ describe('AIMCard', () => {
       );
 
       expect(screen.queryByText('Starting')).not.toBeInTheDocument();
+    });
+
+    it('shows has deployments chip when model has deployed instances', () => {
+      const aggregatedAim = mockAggregatedAims[0]; // DEPLOYED: 1
+      render(
+        <AIMCard
+          aggregatedAim={aggregatedAim}
+          onDeploy={onDeploy}
+          onOpenDetails={onOpenDetails}
+          onChatWithModel={onChatWithModel}
+          onConnectToModel={onConnectToModel}
+          onUndeploy={onUndeploy}
+        />,
+      );
+
+      expect(
+        screen.getByTestId('aim-card-has-deployments'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Has deployments')).toBeInTheDocument();
+    });
+
+    it('does not show has deployments chip when no active deployments', () => {
+      const aggregatedAim = mockAggregatedAims[1]; // DEPLOYED: 0, DEGRADED: 0
+      render(
+        <AIMCard
+          aggregatedAim={aggregatedAim}
+          onDeploy={onDeploy}
+          onOpenDetails={onOpenDetails}
+          onChatWithModel={onChatWithModel}
+          onConnectToModel={onConnectToModel}
+          onUndeploy={onUndeploy}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId('aim-card-has-deployments'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows has deployments chip and enables actions menu when only degraded instances exist', () => {
+      const aggregatedAim: AggregatedAIM = {
+        ...mockAggregatedAims[0],
+        aggregated: { ...mockAggregatedAims[0].aggregated },
+        deploymentCounts: {
+          ...mockAggregatedAims[0].deploymentCounts,
+          [AIMWorkloadStatus.DEPLOYED]: 0,
+          [AIMWorkloadStatus.DEGRADED]: 1,
+        },
+      };
+      render(
+        <AIMCard
+          aggregatedAim={aggregatedAim}
+          onDeploy={onDeploy}
+          onOpenDetails={onOpenDetails}
+          onChatWithModel={onChatWithModel}
+          onConnectToModel={onConnectToModel}
+          onUndeploy={onUndeploy}
+        />,
+      );
+
+      expect(
+        screen.getByTestId('aim-card-has-deployments'),
+      ).toBeInTheDocument();
+      const actionsButton = screen.getByRole('button', {
+        name: /actions menu/i,
+      });
+      expect(actionsButton).not.toBeDisabled();
     });
   });
 

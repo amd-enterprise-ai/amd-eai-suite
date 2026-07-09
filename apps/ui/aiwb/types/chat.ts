@@ -12,7 +12,7 @@ export interface TextContent {
 
 export interface ImageUrlContent {
   type: 'image_url';
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+  // biome-ignore lint/style/useNamingConvention: OpenAI API snake_case field
   image_url: {
     url: string;
   };
@@ -30,17 +30,16 @@ export type Role = 'assistant' | 'user' | 'system' | 'function';
 // Type definition for the chat request body
 // This type must be compatible with both our API and OpenAI's API
 // OpenAI-compatible endpoints follow snake_case convention
-// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface ChatBody {
   model?: string;
   messages: Message[];
   stream: boolean;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+  // biome-ignore lint/style/useNamingConvention: OpenAI API snake_case field
   stream_options: Record<string, any>;
   temperature: number;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+  // biome-ignore lint/style/useNamingConvention: OpenAI API snake_case field
   frequency_penalty?: number;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+  // biome-ignore lint/style/useNamingConvention: OpenAI API snake_case field
   presence_penalty?: number;
 }
 
@@ -70,11 +69,11 @@ export interface ChatConversation {
 }
 
 export interface TokenUsage {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+  // biome-ignore lint/style/useNamingConvention: OpenAI API snake_case field
   prompt_tokens: number;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+  // biome-ignore lint/style/useNamingConvention: OpenAI API snake_case field
   total_tokens: number;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+  // biome-ignore lint/style/useNamingConvention: OpenAI API snake_case field
   completion_tokens: number;
 }
 
@@ -99,8 +98,3 @@ export type ChattableResponse = {
   aimServices: AIMService[];
   workloads: Workload[];
 };
-
-export enum ChatWorkloadType {
-  AIMService = 'aimservice',
-  Workload = 'workload',
-}

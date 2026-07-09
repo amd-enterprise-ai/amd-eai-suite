@@ -12,6 +12,7 @@ from api_common.collections import (
     FilterCondition,
     FilterOperator,
     PaginationConditions,
+    PaginationMetadata,
     SortCondition,
     SortDirection,
 )
@@ -29,15 +30,25 @@ class Test_Pagination_Schemas:
         assert pc2.page == 2
         assert pc2.page_size == 25
 
+    def test_pagination_metadata_basic(self):
+        pm = PaginationMetadata(page=2, page_size=25, total=100)
+        assert pm.page == 2
+        assert pm.page_size == 25
+        assert pm.total == 100
+
     def test_base_pagination_list_required_fields(self):
         with pytest.raises(ValidationError):
-            BasePaginationList()  # missing required fields
+            BasePaginationList()  # missing required pagination field
 
-        bpl = BasePaginationList(page=1, page_size=10, total=100)
-        assert bpl.page == 1
-        assert bpl.page_size == 10
-        assert bpl.total == 100
-        assert bpl.total_pages == 10
+        bpl = BasePaginationList(pagination=PaginationMetadata(page=1, page_size=10, total=100))
+        assert bpl.pagination.page == 1
+        assert bpl.pagination.page_size == 10
+        assert bpl.pagination.total == 100
+
+    def test_base_pagination_list_camelcase_aliases(self):
+        bpl = BasePaginationList(pagination=PaginationMetadata(page=1, page_size=10, total=100))
+        dumped = bpl.model_dump(by_alias=True)
+        assert dumped == {"pagination": {"page": 1, "pageSize": 10, "total": 100}}
 
 
 class Test_Sort_Schemas:

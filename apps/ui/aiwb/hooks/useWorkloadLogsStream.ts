@@ -8,7 +8,7 @@ import { LogEntry } from '@/types/workloads';
 import { WorkloadLogParams } from '@/types/workloads';
 
 export interface UseWorkloadLogsStreamOptions {
-  namespace: string;
+  projectId: string;
   workloadId: string;
 }
 
@@ -26,7 +26,7 @@ export interface UseWorkloadLogsStreamReturn {
  * Build SSE stream URL with query parameters
  */
 const buildStreamUrl = (
-  namespace: string,
+  projectId: string,
   workloadId: string,
   params: WorkloadLogParams = {},
 ): string => {
@@ -36,11 +36,11 @@ const buildStreamUrl = (
   if (params.logType) urlParams.append('logType', params.logType);
 
   const queryString = urlParams.toString();
-  return `/api/namespaces/${namespace}/workloads/${workloadId}/logs/stream${queryString ? `?${queryString}` : ''}`;
+  return `/api/projects/${projectId}/workloads/${workloadId}/logs/stream${queryString ? `?${queryString}` : ''}`;
 };
 
 export const useWorkloadLogsStream = ({
-  namespace,
+  projectId,
   workloadId,
 }: UseWorkloadLogsStreamOptions): UseWorkloadLogsStreamReturn => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -52,7 +52,6 @@ export const useWorkloadLogsStream = ({
 
   const stopStreaming = useCallback(() => {
     if (eventSourceRef.current) {
-      console.debug('[SSE] Stopping stream');
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
@@ -70,8 +69,7 @@ export const useWorkloadLogsStream = ({
         eventSourceRef.current = null;
       }
 
-      const url = buildStreamUrl(namespace, workloadId, params);
-      console.debug('[SSE] Connecting to:', url);
+      const url = buildStreamUrl(projectId, workloadId, params);
 
       setIsStreaming(true);
       setIsLoading(true);
@@ -81,7 +79,6 @@ export const useWorkloadLogsStream = ({
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
-        console.debug('[SSE] Connection opened');
         setIsLoading(false);
         setError(null);
       };
@@ -90,7 +87,6 @@ export const useWorkloadLogsStream = ({
         try {
           // Handle special markers
           if (event.data === '[DONE]') {
-            console.debug('[SSE] Received [DONE] marker, closing connection');
             stopStreaming();
             return;
           } else if (event.data === '[HEARTBEAT]') {
@@ -111,14 +107,13 @@ export const useWorkloadLogsStream = ({
         setError('Log streaming connection error. Please try again later.');
       };
     },
-    [workloadId, stopStreaming],
+    [projectId, workloadId, stopStreaming],
   );
 
   const startStreaming = useCallback(
     (params: WorkloadLogParams = {}) => {
       // Prevent starting if already connected
       if (isStreaming && eventSourceRef.current) {
-        console.debug('[SSE] Already connected, ignoring start request');
         return;
       }
 

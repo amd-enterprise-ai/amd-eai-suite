@@ -11,7 +11,7 @@ from api_common.secrets import SecretUseCase
 
 from ..config import SUBMITTER_ANNOTATION
 from ..dispatch.kube_client import KubernetesClient
-from .constants import USE_CASE_LABEL
+from .constants import DISPLAY_NAME_ANNOTATION, USE_CASE_LABEL
 from .crds import KubernetesSecretResource
 
 
@@ -102,6 +102,7 @@ async def create_kubernetes_secret(
     kube_client: KubernetesClient,
     namespace: str,
     name: str,
+    display_name: str,
     data: dict[str, str],
     use_case: SecretUseCase | None = None,
     submitter: str | None = None,
@@ -111,7 +112,8 @@ async def create_kubernetes_secret(
     Args:
         kube_client: Kubernetes client
         namespace: Namespace to create the secret in
-        name: Name of the secret
+        name: Auto-generated K8s resource name
+        display_name: User-visible display name stored as annotation
         data: Secret data as key-value pairs (base64-encoded values expected from UI)
         use_case: Optional use case classification
         submitter: Optional user identifier (e.g. email) who submitted the secret
@@ -126,7 +128,7 @@ async def create_kubernetes_secret(
     labels = {}
     if use_case:
         labels[USE_CASE_LABEL] = use_case.value
-    annotations = {}
+    annotations: dict[str, str] = {DISPLAY_NAME_ANNOTATION: display_name}
     if submitter:
         annotations[SUBMITTER_ANNOTATION] = submitter
 

@@ -11,9 +11,11 @@ import { fetchClusterKubeConfig } from '@/services/app';
 import { Cluster } from '@/types/clusters';
 import { ClusterKubeConfig as ClusterKubeConfigType } from '@/types/clusters';
 
-import { DrawerDisplay } from '@amdenterpriseai/components';
-
-import { Snippet, Spinner } from '@heroui/react';
+import {
+  CopySnippet,
+  DrawerDisplay,
+  Spinner,
+} from '@amdenterpriseai/components';
 
 interface Props {
   isOpen: boolean;
@@ -51,7 +53,7 @@ export const ClusterKubeConfig: React.FC<Props> = ({
           </div>
         )}
         {!!data && (
-          <Snippet
+          <CopySnippet
             symbol=""
             classNames={{
               base: 'mt-8 w-full',
@@ -59,7 +61,7 @@ export const ClusterKubeConfig: React.FC<Props> = ({
             }}
           >
             <span>{data?.kubeConfig}</span>
-          </Snippet>
+          </CopySnippet>
         )}
       </div>
     </DrawerDisplay>

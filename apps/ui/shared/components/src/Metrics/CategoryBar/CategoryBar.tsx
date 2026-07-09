@@ -5,7 +5,8 @@
 'use client';
 
 // Tremor CategoryBar [v0.0.3]
-import { Tooltip, cn } from '@heroui/react';
+import { Tooltip } from '../../Tooltip';
+import { cn } from '@heroui/react';
 import React from 'react';
 
 import {

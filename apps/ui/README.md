@@ -218,4 +218,4 @@ pnpm build
 
 ## License
 
-See [LICENSE](../../LICENSE) in the repository root.
+See [LICENSE.TXT](../../LICENSE.TXT) in the repository root.

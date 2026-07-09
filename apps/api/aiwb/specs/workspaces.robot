@@ -17,7 +17,7 @@ Test Teardown       Clean Up Workspace Test Resources
 *** Test Cases ***
 Deploy JupyterLab workspace without GPU
     [Documentation]    Verify that a JupyterLab workspace can be deployed via AIWB API without GPU
-    ...    Tests: POST /workspaces/jupyterlab → workspace creation with Pending status (CPU-only)
+    ...    Tests: POST /workspaces (workspaceType=jupyterlab) → workspace creation with Pending status (CPU-only)
     [Tags]    workspace    jupyterlab    smoke
 
     Given a ready project with user access exists
@@ -30,7 +30,7 @@ Deploy JupyterLab workspace without GPU
 
 Deploy JupyterLab workspace with GPU
     [Documentation]    Verify that a JupyterLab workspace can be deployed via AIWB API with GPU
-    ...    Tests: POST /workspaces/jupyterlab → workspace creation with Pending status (1 GPU)
+    ...    Tests: POST /workspaces (workspaceType=jupyterlab) → workspace creation with Pending status (1 GPU)
     [Tags]    workspace    jupyterlab    gpu
 
     Given a ready project with user access exists
@@ -87,7 +87,7 @@ JupyterLab workspace has access URL
 
 Delete JupyterLab workspace
     [Documentation]    Verify that JupyterLab workspace can be deleted
-    ...    Tests: DELETE /workloads/{id} → workspace deletion (204 response)
+    ...    Tests: DELETE /workspaces/{id} → workspace deletion (204 response)
     ...    Note: Complete removal from API may take several minutes due to Helm/K8s cleanup
     [Tags]    workspace    jupyterlab    deletion    gpu
 
@@ -103,7 +103,7 @@ Delete JupyterLab workspace
 
 Deploy MLflow workspace
     [Documentation]    Verify that MLflow workspace can be deployed (CPU-only)
-    ...    Tests: POST /workspaces/mlflow → MLflow creation
+    ...    Tests: POST /workspaces (workspaceType=mlflow) → MLflow creation
     ...    Note: MLflow typically doesn't require GPU
     [Tags]    workspace    mlflow
 
@@ -215,7 +215,7 @@ JupyterLab workspace without MinIO credentials stays pending
 
 Deploy VSCode workspace without GPU
     [Documentation]    Verify that a VSCode workspace can be deployed via AIWB API without GPU
-    ...    Tests: POST /workspaces/vscode → workspace creation with Pending status (CPU-only)
+    ...    Tests: POST /workspaces (workspaceType=vscode) → workspace creation with Pending status (CPU-only)
     [Tags]    workspace    vscode    smoke
 
     Given a ready project with user access exists
@@ -228,7 +228,7 @@ Deploy VSCode workspace without GPU
 
 Deploy VSCode workspace with GPU
     [Documentation]    Verify that a VSCode workspace can be deployed via AIWB API with GPU
-    ...    Tests: POST /workspaces/vscode → workspace creation with Pending status (1 GPU)
+    ...    Tests: POST /workspaces (workspaceType=vscode) → workspace creation with Pending status (1 GPU)
     [Tags]    workspace    vscode    gpu
 
     Given a ready project with user access exists
@@ -270,7 +270,7 @@ VSCode workspace has access URL
 
 Delete VSCode workspace
     [Documentation]    Verify that VSCode workspace can be deleted
-    ...    Tests: DELETE /workloads/{id} → workspace deletion
+    ...    Tests: DELETE /workspaces/{id} → workspace deletion
     [Tags]    workspace    vscode    deletion    gpu
 
     Given a ready project with user access exists
@@ -296,7 +296,7 @@ Only one VSCode workspace per user per project
 
 Deploy ComfyUI workspace without GPU
     [Documentation]    Verify that a ComfyUI workspace can be deployed via AIWB API without GPU
-    ...    Tests: POST /workspaces/comfyui → workspace creation with Pending status (CPU-only)
+    ...    Tests: POST /workspaces (workspaceType=comfyui) → workspace creation with Pending status (CPU-only)
     [Tags]    workspace    comfyui    smoke
 
     Given a ready project with user access exists
@@ -309,7 +309,7 @@ Deploy ComfyUI workspace without GPU
 
 Deploy ComfyUI workspace with GPU
     [Documentation]    Verify that a ComfyUI workspace can be deployed via AIWB API with GPU
-    ...    Tests: POST /workspaces/comfyui → workspace creation with Pending status (1 GPU)
+    ...    Tests: POST /workspaces (workspaceType=comfyui) → workspace creation with Pending status (1 GPU)
     [Tags]    workspace    comfyui    gpu
 
     Given a ready project with user access exists
@@ -328,7 +328,7 @@ ComfyUI workspace transitions to Running
 
     Given a ready project with user access exists
     And secret "minio-credentials-fetcher" is assigned to project
-    And ComfyUI workspace is deployed    gpus=0
+    And ComfyUI workspace is deployed    gpus=1
     And workspace status should be "Pending"
 
     When workspace transitions to "Running"
@@ -351,7 +351,7 @@ ComfyUI workspace has access URL
 
 Delete ComfyUI workspace
     [Documentation]    Verify that ComfyUI workspace can be deleted
-    ...    Tests: DELETE /workloads/{id} → workspace deletion
+    ...    Tests: DELETE /workspaces/{id} → workspace deletion
     [Tags]    workspace    comfyui    deletion    gpu
 
     Given a ready project with user access exists
@@ -374,3 +374,15 @@ Only one ComfyUI workspace per user per project
     When attempting to deploy second ComfyUI workspace
 
     Then workspace creation should fail with conflict
+
+Deleting a missing workload via the workspace endpoint returns 404
+    [Documentation]    Verify that the workspace-scoped delete endpoint returns 404 for a
+    ...    workload id that does not exist. The service-level type-guard is covered by
+    ...    test_delete_development_workspace_rejects_non_workspace.
+    [Tags]    workspace    delete    negative
+
+    Given a ready project with user access exists
+
+    When deleting workspace by missing workload id is attempted    00000000-0000-0000-0000-000000000000
+
+    Then workspace deletion should report workspace not found

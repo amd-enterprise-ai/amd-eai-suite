@@ -76,6 +76,7 @@
       "label": "Delete",
       "success": "Selected datasets successfully deleted.",
       "error": "Failed to delete selected datasets. Please try again.",
+      "partialError": "{{count}} dataset(s) could not be deleted. Please try again.",
       "confirm": {
         "title": "Are you sure?",
         "description": "This action cannot be undone. Are you sure you want to delete selected dataset?"
@@ -100,6 +101,7 @@
           "label": "Dataset name",
           "placeholder": "Provide a name for the dataset",
           "emptyNameError": "Dataset name can't be empty",
+          "nameTooLongError": "Dataset name must be 253 characters or fewer",
           "nonUniqueNameError": "Another dataset with the same name already exists",
           "invalidCharactersError": "Dataset name can only contain letters, numbers, underscores, periods, and dashes"
         },
@@ -125,7 +127,6 @@
     "label": "Dataset"
   },
   "types": {
-    "Evaluation": "Evaluation",
     "Fine-tuning": "Fine-tuning",
     "unknown": "Unknown"
   }

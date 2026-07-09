@@ -2,12 +2,20 @@
 //
 // SPDX-License-Identifier: MIT
 import {
-  Dropdown,
+  ActionButton,
+  Alert,
+  ChartTimeSelector,
+  ConfirmationModal,
   DropdownItem,
   DropdownMenu,
+  Dropdown,
   DropdownTrigger,
-  useDisclosure,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
+import {
+  useLastQueryUpdated,
+  useOverlayState,
+  useSystemToast,
+} from '@amdenterpriseai/hooks';
 import {
   IconChevronDown,
   IconExternalLink,
@@ -28,7 +36,6 @@ import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useRouter } from 'next/router';
 
 import { useAccessControl } from '@/hooks/useAccessControl';
-import { useSystemToast } from '@amdenterpriseai/hooks';
 import {
   deleteProject as deleteProjectAPI,
   fetchProjectAverageGPUIdleTime,
@@ -68,13 +75,6 @@ import {
   ProjectWorkloadsTable,
   QuotaUtilizationCard,
 } from '@/components/features/projects';
-import {
-  ActionButton,
-  Alert,
-  ConfirmationModal,
-} from '@amdenterpriseai/components';
-import { ChartTimeSelector } from '@amdenterpriseai/components';
-import { useLastQueryUpdated } from '@amdenterpriseai/hooks';
 
 const PROJECT_DASHBOARD_METRICS_QUERY_PREFIX = ['project', 'metrics'] as const;
 
@@ -104,7 +104,7 @@ const ProjectDashboardPage: React.FC<Props> & WithDocumentationLink = ({
     isOpen: isDeleteModalOpen,
     onOpen: onDeleteModalOpen,
     onOpenChange: onDeleteModalOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
   const { mutate: deleteProject, isPending: isDeletePending } = useMutation({
     mutationFn: deleteProjectAPI,
     onSuccess: () => {
@@ -424,20 +424,6 @@ export async function getServerSideProps(context: any) {
   const { locale } = context;
 
   const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   try {
     const project = await getProject(

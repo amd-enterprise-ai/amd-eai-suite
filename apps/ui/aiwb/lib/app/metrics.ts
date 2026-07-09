@@ -22,9 +22,8 @@ export const getTimeseriesMetric = async (
   urlParams.append('end', end.toISOString());
   if (podName) urlParams.append('podName', podName);
 
-  const metricPath = `aims/services/${workloadId}/metrics/${metric}`;
   const response = await fetch(
-    `/api/namespaces/${namespace}/${metricPath}?${urlParams.toString()}`,
+    `/api/projects/${namespace}/inference/${workloadId}/metrics/${metric}?${urlParams.toString()}`,
   );
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
@@ -45,9 +44,8 @@ export const getScalarMetric = async (
   urlParams.append('end', end.toISOString());
   if (podName) urlParams.append('podName', podName);
 
-  const metricPath = `aims/services/${workloadId}/metrics/${metric}`;
   const response = await fetch(
-    `/api/namespaces/${namespace}/${metricPath}?${urlParams.toString()}`,
+    `/api/projects/${namespace}/inference/${workloadId}/metrics/${metric}?${urlParams.toString()}`,
   );
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);

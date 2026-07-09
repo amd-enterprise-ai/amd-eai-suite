@@ -448,37 +448,6 @@ describe('secrets page', async () => {
       vi.resetModules();
     });
 
-    it('redirects to home if session is missing', async () => {
-      vi.mock('next-auth', () => ({
-        getServerSession: vi.fn().mockResolvedValue(null),
-      }));
-      const result = await getServerSideProps({
-        req: {},
-        res: {},
-        locale: 'en',
-      });
-      expect(result).toEqual({
-        redirect: {
-          destination: '/',
-          permanent: false,
-        },
-      });
-    });
-
-    it('redirects to home if session user is missing', async () => {
-      const result = await getServerSideProps({
-        req: {},
-        res: {},
-        locale: 'en',
-      });
-      expect(result).toEqual({
-        redirect: {
-          destination: '/',
-          permanent: false,
-        },
-      });
-    });
-
     it('returns props with secrets and projects when session is valid', async () => {
       (getServerSession as any).mockResolvedValue({
         user: { email: 'test@test.com' },

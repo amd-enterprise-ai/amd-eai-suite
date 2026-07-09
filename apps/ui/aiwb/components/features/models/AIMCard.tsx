@@ -4,26 +4,30 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import {
+  ActionButton,
+  Alert,
+  ButtonGroup,
   Card,
   CardFooter,
   CardHeader,
   Divider,
+  DropdownActionItem,
   Link,
+  NestedDropdown,
+  Status,
   Tooltip,
-  ButtonGroup,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
 
 import { useTranslation } from 'next-i18next';
-import { ActionButton, Alert } from '@amdenterpriseai/components';
 import { ModelIcon } from '@/components/shared/ModelIcons';
 import { TruncatedTagsRow } from '@/components/shared/TruncatedTagsRow';
-import { NestedDropdown, DropdownItem } from '@amdenterpriseai/components';
 import {
   IconAlertTriangle,
+  IconCheck,
   IconChevronDown,
   IconLock,
 } from '@tabler/icons-react';
-import { AggregatedAIM, AIMMetric } from '@/types/aims';
+import { AggregatedAIM } from '@/types/aims';
 import { Intent } from '@amdenterpriseai/types';
 import {
   AIMService,
@@ -31,7 +35,7 @@ import {
   AIMWorkloadStatus,
   ParsedAIM,
 } from '@/types/aims';
-import { Status } from '@amdenterpriseai/components';
+import { getMetricTranslationKey } from '@/lib/app/aims';
 
 interface Props {
   aggregatedAim: AggregatedAIM;
@@ -137,17 +141,19 @@ export const AIMCard = ({
   };
 
   const cardActions = useMemo(() => {
-    const actions: DropdownItem[] = [];
+    const actions: DropdownActionItem[] = [];
 
     if (allDeployments.length > 0) {
-      const deploymentActions: DropdownItem[] = [];
+      const deploymentActions: DropdownActionItem[] = [];
 
       allDeployments.forEach(({ service, imageVersion, parsedAim }) => {
         const serviceId = service.id as string;
-        const metricKey =
-          (service.spec.overrides?.metric as string | undefined) ||
-          AIMMetric.Default;
-        const metricLabel = t(`performanceMetrics.values.${metricKey}`);
+        const rawMetric = service.spec.overrides?.metric;
+        const metricLabel = t(
+          getMetricTranslationKey(
+            typeof rawMetric === 'string' ? rawMetric : null,
+          ),
+        );
         const deploymentInfo = [imageVersion, metricLabel]
           .filter(Boolean)
           .join(' • ');
@@ -155,7 +161,7 @@ export const AIMCard = ({
         const isRunning = service.status.status === AIMServiceStatus.RUNNING;
 
         // Create nested actions for each deployment
-        const nestedActions: DropdownItem[] = [
+        const nestedActions: DropdownActionItem[] = [
           {
             key: `open-details-${serviceId}`,
             label: t('aimCatalog.actions.workloadDetails.label'),
@@ -232,13 +238,25 @@ export const AIMCard = ({
     t,
   ]);
 
+  const acceleratorLabel = useMemo(
+    () =>
+      (aggregatedAim.aggregated.acceleratorTypes ?? [])
+        .map((type) => ({ cpu: 'CPU', gpu: 'GPU' })[type])
+        .filter(Boolean)
+        .join(', '),
+    [aggregatedAim.aggregated.acceleratorTypes],
+  );
+
   const isSupported = aggregatedAim.isSupported;
   const hasPending =
     aggregatedAim.deploymentCounts[AIMWorkloadStatus.PENDING] > 0;
   const hasStarting =
     aggregatedAim.deploymentCounts[AIMWorkloadStatus.STARTING] > 0;
-  const hasDeployed =
+  const hasDeployedInstances =
     aggregatedAim.deploymentCounts[AIMWorkloadStatus.DEPLOYED] > 0;
+  const hasActiveDeployments =
+    hasDeployedInstances ||
+    aggregatedAim.deploymentCounts[AIMWorkloadStatus.DEGRADED] > 0;
 
   return (
     <Card
@@ -306,7 +324,7 @@ export const AIMCard = ({
                   height={48}
                 />
               </div>
-              <div className="ml-auto">
+              <div className="ml-auto flex flex-row gap-1 items-start">
                 {hasPending && (
                   <Status
                     label={t('models:status.pending')}
@@ -323,6 +341,21 @@ export const AIMCard = ({
                     isTextColored
                   />
                 )}
+                {hasActiveDeployments && (
+                  <Tooltip content={t('aimCatalog.card.hasDeploymentsTooltip')}>
+                    <span data-testid="aim-card-has-deployments">
+                      <Status
+                        label={t('aimCatalog.card.hasDeployments')}
+                        intent={
+                          hasDeployedInstances ? Intent.SUCCESS : Intent.WARNING
+                        }
+                        icon={IconCheck}
+                        size="sm"
+                        isTextColored
+                      />
+                    </span>
+                  </Tooltip>
+                )}
               </div>
             </div>
             <div className="text-md font-semibold leading-tight w-full">
@@ -336,6 +369,14 @@ export const AIMCard = ({
                   count: aggregatedAim.parsedAIMs.length,
                 })}
               </span>
+              {acceleratorLabel && (
+                <>
+                  <span>&bull;</span>
+                  <span data-testid="aim-card-accelerator-types">
+                    {acceleratorLabel}
+                  </span>
+                </>
+              )}
               {aggregatedAim.aggregated.isHfTokenRequired && (
                 <>
                   <span>&bull;</span>
@@ -343,8 +384,9 @@ export const AIMCard = ({
                     content={t('aimCatalog.tooltips.hfTokenRequired')}
                     delay={300}
                   >
-                    <span className="inline-flex flex-row gap-1 items-center cursor-help">
-                      <IconLock size={12} /> {t('aimCatalog.card.gated')}
+                    <span className="cursor-help underline decoration-dotted flex items-center gap-0.5">
+                      <IconLock size={12} />
+                      {t('aimCatalog.card.gated')}
                     </span>
                   </Tooltip>
                 </>
@@ -414,8 +456,10 @@ export const AIMCard = ({
                     color="primary"
                     size="sm"
                     aria-label={t('aimCatalog.card.actionsMenu')}
+                    isDisabled={
+                      !hasPending && !hasStarting && !hasActiveDeployments
+                    }
                     icon={<IconChevronDown size={16} />}
-                    isDisabled={!hasPending && !hasStarting && !hasDeployed}
                   />
                 </NestedDropdown>
               ) : (
@@ -424,8 +468,8 @@ export const AIMCard = ({
                   color="primary"
                   size="sm"
                   aria-label={t('aimCatalog.card.actionsMenu')}
-                  icon={<IconChevronDown size={16} />}
                   isDisabled
+                  icon={<IconChevronDown size={16} />}
                 />
               )}
             </ButtonGroup>

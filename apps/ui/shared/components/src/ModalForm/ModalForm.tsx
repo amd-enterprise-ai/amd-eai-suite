@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-} from '@heroui/react';
+  ModalPrimitive,
+  ModalPrimitiveBody,
+  ModalPrimitiveContent,
+  ModalPrimitiveFooter,
+  ModalPrimitiveHeader,
+} from '../Modal/ModalPrimitive';
 import { useCallback, useRef } from 'react';
 import {
   DefaultValues,
@@ -89,7 +89,7 @@ export const ModalForm = <T extends FieldValues>({
   );
 
   return (
-    <Modal
+    <ModalPrimitive
       isOpen={isOpen}
       onOpenChange={onOpenChange}
       classNames={{
@@ -108,9 +108,9 @@ export const ModalForm = <T extends FieldValues>({
       hideCloseButton={isActioning}
       isDismissable={!isActioning}
     >
-      <ModalContent>
-        <ModalHeader>{title}</ModalHeader>
-        <ModalBody className="w-full">
+      <ModalPrimitiveContent>
+        <ModalPrimitiveHeader>{title}</ModalPrimitiveHeader>
+        <ModalPrimitiveBody className="w-full">
           <ManagedForm<T>
             isActioning={isActioning}
             onFormSuccess={handleFormSuccess}
@@ -121,8 +121,8 @@ export const ModalForm = <T extends FieldValues>({
             defaultValues={defaultValues}
             formRef={formRef}
           />
-        </ModalBody>
-        <ModalFooter>
+        </ModalPrimitiveBody>
+        <ModalPrimitiveFooter>
           <ActionButton
             secondary
             data-testid="modal-cancel"
@@ -142,9 +142,9 @@ export const ModalForm = <T extends FieldValues>({
           >
             {confirmText}
           </ActionButton>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+        </ModalPrimitiveFooter>
+      </ModalPrimitiveContent>
+    </ModalPrimitive>
   );
 };
 

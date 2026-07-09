@@ -4,6 +4,7 @@
 
 import { SecretUseCase } from '@amdenterpriseai/types';
 import { CreateSecretRequest } from '@/types/secrets';
+import { isValidK8sDnsSubdomain } from '@/lib/app/k8s-names';
 import { z } from 'zod';
 
 export const createHuggingFaceSecretRequest = (
@@ -11,7 +12,7 @@ export const createHuggingFaceSecretRequest = (
   token: string,
 ): CreateSecretRequest => {
   return {
-    name,
+    displayName: name,
     useCase: SecretUseCase.HUGGING_FACE,
     data: {
       token: Buffer.from(token, 'utf-8').toString('base64'),
@@ -69,7 +70,7 @@ export const validateHuggingFaceTokenFields = (
     token?: string;
   },
   ctx: z.RefinementCtx,
-  t: (key: string) => string,
+  t: (key: string, options?: Record<string, unknown>) => string,
 ): void => {
   const hasTokenName = data.tokenName && data.tokenName.trim() !== '';
   const hasToken = data.token && data.token.trim() !== '';
@@ -92,9 +93,7 @@ export const validateHuggingFaceTokenFields = (
       path: ['tokenName'],
     });
   } else if (hasTokenName) {
-    // Validate token name pattern
-    const tokenNamePattern = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;
-    if (!tokenNamePattern.test(data.tokenName!.trim())) {
+    if (!isValidK8sDnsSubdomain(data.tokenName!)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: t('huggingFaceTokenDrawer.validation.invalidSecretName'),

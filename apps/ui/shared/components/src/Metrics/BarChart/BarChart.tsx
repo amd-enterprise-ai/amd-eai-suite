@@ -29,6 +29,7 @@ import {
 import type { AxisDomain } from 'recharts/types/util/types';
 
 import { format } from 'date-fns/format';
+import { isValid } from 'date-fns/isValid';
 import {
   Bar,
   CartesianGrid,
@@ -549,6 +550,7 @@ interface BarChartProps extends React.HTMLAttributes<HTMLDivElement> {
   legendPosition?: 'left' | 'center' | 'right';
   tooltipCallback?: (tooltipCallbackContent: TooltipProps) => void;
   customTooltip?: React.ComponentType<TooltipProps>;
+  maxBarSize?: number;
   isLoading?: boolean;
   loadingText?: string;
   showTooltipOnNull?: boolean;
@@ -591,6 +593,7 @@ const BarChart = React.forwardRef<HTMLDivElement, BarChartProps>(
       loadingText = 'Loading...',
       showTooltipOnNull = false,
       activeLegendProp,
+      maxBarSize,
       ...other
     } = props;
     const CustomTooltip = customTooltip;
@@ -619,9 +622,7 @@ const BarChart = React.forwardRef<HTMLDivElement, BarChartProps>(
     }, [_data, index]);
 
     const firstOfDayIndices = getFirstTimestampsOfDayIndices(
-      data.map((item) => {
-        return new Date(item[index]);
-      }),
+      data.map((item) => new Date(item[index])),
     );
 
     const ticks = isOver1d
@@ -731,9 +732,9 @@ const BarChart = React.forwardRef<HTMLDivElement, BarChartProps>(
               tickLine={false}
               axisLine={false}
               tickFormatter={(time) => {
-                return isOver1d
-                  ? format(time, 'MMM dd')
-                  : format(time, 'HH:mm');
+                const d = new Date(time);
+                if (!isValid(d)) return '';
+                return isOver1d ? format(d, 'MMM dd') : format(d, 'HH:mm');
               }}
               minTickGap={tickGap}
               {...(layout !== 'vertical'
@@ -850,18 +851,23 @@ const BarChart = React.forwardRef<HTMLDivElement, BarChartProps>(
                     );
                   }
 
+                  const labelDate = new Date(label);
+                  const formattedLabel = isValid(labelDate)
+                    ? format(labelDate, 'yyyy-MM-dd HH:mm')
+                    : String(label);
+
                   return showTooltip && !isLoading && active ? (
                     CustomTooltip ? (
                       <CustomTooltip
                         active={active}
                         payload={cleanPayload}
-                        label={format(new Date(label), 'yyyy-MM-dd HH:mm')}
+                        label={formattedLabel}
                       />
                     ) : (
                       <ChartTooltip
                         active={active}
                         payload={cleanPayload}
-                        label={format(new Date(label), 'yyyy-MM-dd HH:mm')}
+                        label={formattedLabel}
                         valueFormatter={valueFormatter}
                       />
                     )
@@ -906,6 +912,7 @@ const BarChart = React.forwardRef<HTMLDivElement, BarChartProps>(
                 dataKey={category}
                 stackId={stacked ? 'stack' : undefined}
                 isAnimationActive={false}
+                maxBarSize={maxBarSize}
                 fill=""
                 fillOpacity={0.8}
                 shape={(props: any) =>

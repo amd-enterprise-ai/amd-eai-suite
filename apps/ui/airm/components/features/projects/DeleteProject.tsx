@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useDisclosure } from '@heroui/react';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import React, { useCallback } from 'react';
@@ -10,7 +9,7 @@ import React, { useCallback } from 'react';
 import { useTranslation } from 'next-i18next';
 import router from 'next/router';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import { deleteProject as deleteProjectAPI } from '@/services/app';
 
@@ -18,8 +17,7 @@ import { APIRequestError } from '@amdenterpriseai/utils/app';
 
 import { Project } from '@/types/projects';
 
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
+import { ActionButton, ConfirmationModal } from '@amdenterpriseai/components';
 
 const translationSet = 'projects';
 
@@ -31,7 +29,7 @@ export const DeleteProject: React.FC<Props> = ({ project }) => {
   const { t } = useTranslation(translationSet);
   const { toast } = useSystemToast();
   const queryClient = useQueryClient();
-  const { isOpen, onOpen, onOpenChange } = useDisclosure();
+  const { isOpen, onOpen, onOpenChange } = useOverlayState();
   const { mutate: deleteProject, isPending } = useMutation({
     mutationFn: deleteProjectAPI,
     onSuccess: () => {

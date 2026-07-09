@@ -2,13 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 
 import { StepModalHandle, StepModalStep } from '@amdenterpriseai/types';
@@ -143,7 +137,7 @@ describe('StepModal', () => {
 
   it('calls onStepChange when step changes', async () => {
     const ref = createRef<StepModalHandle>();
-    const steps: StepModalStep[] = [
+    const testSteps: StepModalStep[] = [
       {
         label: 'Step 1',
         content: <div>Step 1 Content</div>,
@@ -160,17 +154,29 @@ describe('StepModal', () => {
     ];
 
     await act(() => {
-      renderComponent({ steps });
+      render(
+        <StepModal
+          ref={ref}
+          initialStep={0}
+          steps={testSteps}
+          isOpen={true}
+          onOpenChange={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
     });
 
-    await fireEvent.click(screen.getByLabelText('Next 1'));
-    expect(steps[0].onStepChange).toHaveBeenCalledWith(1);
-    await ref?.current?.incrementStep();
+    fireEvent.click(screen.getByLabelText('Next 1'));
+    expect(testSteps[0].onStepChange).toHaveBeenCalledWith(1);
 
-    waitFor(() => {
-      fireEvent.click(screen.getByLabelText('Next 2'));
-      expect(steps[1].onStepChange).toHaveBeenCalledWith(1);
+    // handleNext returns early when onStepChange is set, so manually advance
+    await act(async () => {
+      ref.current?.incrementStep();
     });
+
+    const nextButton = await screen.findByLabelText('Next 2');
+    fireEvent.click(nextButton);
+    expect(testSteps[1].onStepChange).toHaveBeenCalledWith(2);
   });
 
   it('hides the previous button if hidePrev is true', async () => {

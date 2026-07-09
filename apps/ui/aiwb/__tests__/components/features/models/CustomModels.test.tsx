@@ -1,290 +1,148 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
+
 import {
   act,
   fireEvent,
   render,
   screen,
   waitFor,
-  within,
 } from '@testing-library/react';
+import { describe, expect, it, vi, Mock } from 'vitest';
 
-import { mockModels } from '@/__mocks__/services/app/models.data';
-import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
-import { getFinetunableModels, getModels } from '@/lib/app/models';
-import { listWorkloads } from '@/lib/app/workloads';
-import { getAimServices } from '@/lib/app/aims';
-
-import { FinetunableModel } from '@/types/models';
-import { WorkloadStatus } from '@/types/enums/workloads';
 import CustomModels from '@/components/features/models/CustomModels';
-
+import { AggregatedAIM, AIMWorkloadStatus } from '@/types/aims';
+import { OnboardPhase } from '@/types/custom-models';
 import wrapper from '@/__tests__/ProviderWrapper';
-import { Mock, vi } from 'vitest';
 
-// Assuming Workload type exists here
-
-// Mock the API services
-vi.mock('@/lib/app/models', async (importOriginal) => ({
-  ...(await importOriginal()),
-  finetuneModel: vi.fn(),
-  deleteModel: vi.fn(),
-  getModels: vi.fn(),
-  getFinetunableModels: vi.fn(),
-}));
-
-vi.mock('@/lib/app/workloads', async (importOriginal) => ({
-  ...(await importOriginal()),
-  listWorkloads: vi.fn(),
-}));
-
-vi.mock('@/lib/app/aims', async (importOriginal) => ({
-  ...(await importOriginal()),
-  getAimServices: vi.fn().mockResolvedValue([]),
-}));
-
-// Mock useSystemToast for testing
-vi.mock('@amdenterpriseai/hooks', async (importOriginal) => ({
-  ...(await importOriginal()),
-  useSystemToast: () => ({
-    toast: {
-      success: vi.fn(),
-      error: vi.fn(),
-    },
+const mockPush = vi.fn();
+vi.mock('next/router', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    pathname: '/[project]/models/[tab]',
+    query: { project: 'test-project', tab: 'custom-models' },
+    asPath: '/test-project/models/custom-models',
   }),
 }));
 
-vi.mock('next/router', () => ({
-  useRouter: vi.fn(),
+const customModelsApiMocks = vi.hoisted(() => ({
+  listCustomModels: vi.fn(),
+  deleteCustomModel: vi.fn(),
 }));
 
-// Mock Tabler icons
-vi.mock('@tabler/icons-react', async (importOriginal) => {
-  const original = (await importOriginal()) ?? {};
+vi.mock('@/lib/app/custom-models', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/app/custom-models')>();
   return {
-    ...original,
-    IconDotsVertical: ({ className }: any) => (
-      <span className={className}>action-dot-icon</span>
-    ),
+    ...actual,
+    listCustomModels: customModelsApiMocks.listCustomModels,
+    deleteCustomModel: customModelsApiMocks.deleteCustomModel,
   };
 });
 
-describe('Custom Models', () => {
-  const mockFinetunableModels: FinetunableModel[] = [
-    {
-      canonicalName: 'org/model-1',
-      gpuCount: 0,
-      compatibleAccelerators: [],
-      compatibleAcceleratorNames: [],
-    },
-    {
-      canonicalName: 'org/model-6',
-      gpuCount: 0,
-      compatibleAccelerators: [],
-      compatibleAcceleratorNames: [],
-    },
-  ];
+vi.mock('@/contexts/ProjectContext', () => ({
+  useProject: () => ({
+    activeProject: 'test-project',
+    projectPath: (path: string) => `/test-project${path}`,
+  }),
+}));
 
+const mockToastSuccess = vi.fn();
+const mockToastError = vi.fn();
+vi.mock('@amdenterpriseai/hooks', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useSystemToast: () => ({
+    toast: { success: mockToastSuccess, error: mockToastError, info: vi.fn() },
+  }),
+}));
+
+// Keep deploy drawer as a stub so this test stays focused on card-grid behavior.
+vi.mock('@/components/features/models/DeployCustomAIMDrawer', () => ({
+  DeployCustomAIMDrawer: () => (
+    <div data-testid="deploy-custom-aim-drawer-stub" />
+  ),
+}));
+vi.mock('@/components/features/models/CustomModelCard', () => ({
+  CustomModelCard: ({
+    aggregatedAim,
+    onDelete,
+  }: {
+    aggregatedAim: AggregatedAIM;
+    onDelete: (aim: AggregatedAIM) => void;
+  }) => (
+    <div data-testid={`custom-model-card-${aggregatedAim.repository}`}>
+      <span>{aggregatedAim.aggregated.title}</span>
+      <button data-testid="custom-model-card-actions" />
+      <button onClick={() => onDelete(aggregatedAim)}>
+        customModels.card.actions.delete.label
+      </button>
+    </div>
+  ),
+}));
+
+const zeroCounts = Object.fromEntries(
+  Object.values(AIMWorkloadStatus).map((s) => [s, 0]),
+) as Record<AIMWorkloadStatus, number>;
+
+function buildAggregatedAIM(
+  overrides: Partial<AggregatedAIM> & {
+    aggregatedOverrides?: Partial<AggregatedAIM['aggregated']>;
+    onboardPhase?: OnboardPhase;
+  } = {},
+): AggregatedAIM {
+  const { aggregatedOverrides, onboardPhase = 'Ready', ...rest } = overrides;
+  const title = aggregatedOverrides?.title ?? 'Test';
+  const canonicalName = aggregatedOverrides?.canonicalName ?? 'org/test';
+
+  const parsedAIM = {
+    model: 'aim-test',
+    aimId: 'org/test',
+    imageReference: 'docker.io/test:1.0.0',
+    annotations: {},
+    description: { short: 'desc', full: 'full' },
+    title,
+    imageVersion: '1.0.0',
+    canonicalName,
+    tags: [],
+    status: 'Ready',
+    workloadStatuses: [],
+    isPreview: false,
+    isHfTokenRequired: false,
+    isCustomImport: true,
+    sourceUri: undefined,
+  };
+
+  return {
+    repository: 'aim-test',
+    parsedAIMs: [parsedAIM],
+    latestAim: parsedAIM,
+    isSupported: true,
+    deploymentCounts: zeroCounts,
+    aggregated: {
+      title,
+      aiLabName: 'org',
+      canonicalName,
+      latestImageVersion: '1.0.0',
+      isHfTokenRequired: false,
+      isCustomImport: true,
+      tags: [],
+      description: { short: 'desc', full: 'full' },
+      onboardPhase,
+      ...aggregatedOverrides,
+    },
+    ...rest,
+  };
+}
+
+describe('CustomModels (card grid)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (getModels as Mock).mockResolvedValue(mockModels);
-    (getFinetunableModels as Mock).mockResolvedValue(mockFinetunableModels);
-    (listWorkloads as Mock).mockResolvedValue({
-      data: mockWorkloads,
-      total: mockWorkloads.length,
-      page: 1,
-      pageSize: 10,
-    });
   });
 
-  it('renders custom models component', async () => {
-    await act(async () => {
-      render(<CustomModels />, { wrapper });
-    });
-
-    // Wait for the models to load
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalled();
-    });
-
-    // Deleted and Unknown workloads should be excluded from the query
-    expect(listWorkloads).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        status: expect.not.arrayContaining([
-          WorkloadStatus.DELETED,
-          WorkloadStatus.UNKNOWN,
-        ]),
-      }),
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('model-1')).toBeInTheDocument();
-      expect(screen.getByText('model-2')).toBeInTheDocument();
-      expect(screen.getByText('model-3')).toBeInTheDocument();
-    });
-  });
-
-  it('filters models by search query', async () => {
-    await act(async () => {
-      render(<CustomModels />, { wrapper });
-    });
-
-    // Wait for the models to load
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalled();
-    });
-
-    const searchInput = screen.getByPlaceholderText(
-      'customModels.list.filters.search.placeholder',
-    );
-    fireEvent.change(searchInput, { target: { value: 'model-1' } });
-
-    // Wait for debounced search to trigger
-    await waitFor(() => {
-      expect(screen.queryByText('model-1')).toBeInTheDocument();
-      expect(screen.queryByText('model-2')).not.toBeInTheDocument();
-      expect(screen.queryByText('model-3')).not.toBeInTheDocument();
-    });
-  });
-
-  it('clears filters', async () => {
-    await act(async () => {
-      render(<CustomModels />, { wrapper });
-    });
-
-    // Wait for the models to load
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalled();
-    });
-
-    // All models should be visible since type filtering is removed
-    expect(screen.queryByText('model-1')).toBeInTheDocument();
-    expect(screen.queryByText('model-2')).toBeInTheDocument();
-    expect(screen.queryByText('model-3')).toBeInTheDocument();
-
-    // Click clear filters button
-    const clearButton = screen.getByText('actions.clearFilters.title');
-    await act(async () => {
-      fireEvent.click(clearButton);
-    });
-
-    // After clearing filters, all models should be visible again including model-3
-    await waitFor(() => {
-      expect(screen.queryByText('model-3')).toBeInTheDocument();
-      expect(screen.queryByText('model-1')).toBeInTheDocument();
-      expect(screen.queryByText('model-2')).toBeInTheDocument();
-    });
-  });
-
-  it('opens finetune model modal', async () => {
-    await act(async () => {
-      render(<CustomModels />, { wrapper });
-    });
-
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalled();
-    });
-
-    const createNewButton = screen.getByText(
-      'customModels.list.actions.finetune.title',
-    );
-    fireEvent.click(createNewButton);
-
-    await waitFor(() => {
-      expect(getFinetunableModels).toHaveBeenCalled();
-    });
-  });
-
-  it('opens deploy model modal from row action', async () => {
-    await act(async () => {
-      render(<CustomModels />, { wrapper });
-    });
-
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalled();
-    });
-  });
-
-  it('opens model details modal from row action', async () => {
-    await act(async () => {
-      render(<CustomModels />, { wrapper });
-    });
-
-    // Wait for the models to load
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalled();
-    });
-
-    expect(getModels).toHaveBeenCalled();
-  });
-
-  it('refreshes the models list', async () => {
-    await act(async () => {
-      render(<CustomModels />, { wrapper });
-    });
-
-    // Wait for initial models load
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalledTimes(1);
-    });
-
-    const refreshButton = screen.getByRole('button', { name: /refresh/i });
-
-    fireEvent.click(refreshButton);
-
-    await waitFor(() => {
-      // getModels should be called again on refresh
-      expect(getModels).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it('allows deleting a model', async () => {
-    await act(async () => {
-      render(<CustomModels />, { wrapper });
-    });
-
-    await waitFor(() => {
-      expect(getModels).toHaveBeenCalled();
-      expect(screen.getByText('model-1')).toBeInTheDocument();
-    });
-
-    const actionButtons = await screen.findAllByText('action-dot-icon');
-    await act(async () => {
-      fireEvent.click(actionButtons[0]);
-    });
-
-    const deleteOption = await screen.findByTestId('delete');
-    expect(deleteOption).toBeInTheDocument();
-  });
-
-  it('shows AIM deployment count in workloads column', async () => {
-    (getAimServices as Mock).mockResolvedValue([
-      {
-        id: 'aim-svc-1',
-        metadata: {
-          name: 'svc-1',
-          creationTimestamp: '2026-01-01T00:00:00Z',
-          annotations: {},
-        },
-        status: {
-          status: 'Running',
-          resolvedModel: { name: 'wb-finetune-cr-1' },
-        },
-      },
-      {
-        id: 'aim-svc-2',
-        metadata: {
-          name: 'svc-2',
-          creationTimestamp: '2026-01-01T00:00:00Z',
-          annotations: {},
-        },
-        status: {
-          status: 'Running',
-          resolvedModel: { name: 'wb-finetune-cr-1' },
-        },
-      },
+  it('renders custom model cards returned by listCustomModels', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([
+      buildAggregatedAIM({ aggregatedOverrides: { title: 'Imported model' } }),
     ]);
 
     await act(async () => {
@@ -292,67 +150,245 @@ describe('Custom Models', () => {
     });
 
     await waitFor(() => {
-      expect(getAimServices).toHaveBeenCalled();
+      expect(screen.getByText('Imported model')).toBeInTheDocument();
     });
-
-    // model-1's resourceName is 'wb-finetune-cr-1', matching both AIM services
-    const model1Row = (await screen.findByText('model-1')).closest('tr');
-    expect(model1Row).not.toBeNull();
-    expect(within(model1Row!).getByText('2')).toBeInTheDocument();
   });
 
-  it('does not show deploy action when model status is not complete', async () => {
+  it('shows the empty state when listCustomModels returns an empty list', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([]);
+
     await act(async () => {
       render(<CustomModels />, { wrapper });
     });
 
-    // Wait for initial models load
     await waitFor(() => {
-      expect(getModels).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('custom-models-empty')).toBeInTheDocument();
     });
+    expect(
+      screen.getByText('customModels.list.description'),
+    ).toBeInTheDocument();
+  });
 
-    // Find the row for model-2 which has Pending status
-    const model2Row = await screen.findByText('model-2');
-    expect(model2Row).toBeInTheDocument();
+  it('shows the filtered-empty state when search hides all results', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([
+      buildAggregatedAIM({
+        aggregatedOverrides: {
+          title: 'Imported model',
+          canonicalName: 'sony/virtue-7b',
+        },
+      }),
+    ]);
 
-    // Find the table row containing model-2
-    const tableRow = model2Row.closest('tr');
-    expect(tableRow).not.toBeNull();
-
-    // Find the context menu button within that specific row
-    const actionButton = tableRow
-      ? await within(tableRow).findByText('action-dot-icon')
-      : null;
-    expect(actionButton).not.toBeNull();
-
-    // Click the action button for model-2
     await act(async () => {
-      if (actionButton) fireEvent.click(actionButton);
+      render(<CustomModels />, { wrapper });
     });
 
-    // Check that the Deploy option is not present since model-2 has Pending status
-    const deployOption = screen.queryByTestId('deploy');
-    expect(deployOption).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Imported model')).toBeInTheDocument();
+    });
 
-    // Also test with model-4 which has Failed status
-    const model4Row = await screen.findByText('model-4');
-    expect(model4Row).toBeInTheDocument();
+    const searchInput = screen.getByPlaceholderText(
+      'customModels.list.filters.search.placeholder',
+    );
+    fireEvent.change(searchInput, { target: { value: 'no-such-model' } });
 
-    const tableRow4 = model4Row.closest('tr');
-    expect(tableRow4).not.toBeNull();
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('custom-models-empty-filtered'),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('custom-models-empty')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('customModels.list.empty.filtered.title'),
+    ).toBeInTheDocument();
+  });
 
-    const actionButton4 = tableRow4
-      ? await within(tableRow4).findByText('action-dot-icon')
-      : null;
-    expect(actionButton4).not.toBeNull();
+  it('matches search against the AIM CR name (repository), not only the display title', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([
+      buildAggregatedAIM({
+        repository: 'cr-abc-unique',
+        aggregatedOverrides: {
+          title: 'Friendly display name',
+          canonicalName: 'org/repo',
+        },
+      }),
+    ]);
 
-    // Click the action button for model-4
     await act(async () => {
-      if (actionButton4) fireEvent.click(actionButton4);
+      render(<CustomModels />, { wrapper });
     });
 
-    // Check that the Deploy option is not present for model-4 with Failed status
-    const deployOption4 = screen.queryByTestId('deploy');
-    expect(deployOption4).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Friendly display name')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText(
+      'customModels.list.filters.search.placeholder',
+    );
+    fireEvent.change(searchInput, { target: { value: 'cr-abc-unique' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Friendly display name')).toBeInTheDocument();
+    });
+  });
+
+  it('navigates to the import wizard when the Import model button is clicked', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([]);
+
+    await act(async () => {
+      render(<CustomModels />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('custom-models-import-model'),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('custom-models-import-model'));
+
+    expect(mockPush).toHaveBeenCalledWith(
+      '/test-project/models/custom-models/onboard',
+    );
+  });
+
+  it('shows only importing models when "Onboarding" status filter is selected', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([
+      buildAggregatedAIM({
+        repository: 'importing-model',
+        onboardPhase: 'Importing',
+        aggregatedOverrides: { title: 'Importing Model' },
+      }),
+      buildAggregatedAIM({
+        repository: 'ready-model',
+        onboardPhase: 'Ready',
+        aggregatedOverrides: { title: 'Ready Model' },
+      }),
+    ]);
+
+    await act(async () => {
+      render(<CustomModels />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Importing Model')).toBeInTheDocument();
+      expect(screen.getByText('Ready Model')).toBeInTheDocument();
+    });
+
+    const statusDropdown = screen.getByText(
+      'customModels.list.filters.status.label',
+    );
+    fireEvent.click(statusDropdown);
+    fireEvent.click(screen.getByText('customModels.card.status.onboarding'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Importing Model')).toBeInTheDocument();
+      expect(screen.queryByText('Ready Model')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows only ready models when "Ready" status filter is selected', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([
+      buildAggregatedAIM({
+        repository: 'importing-model',
+        onboardPhase: 'Importing',
+        aggregatedOverrides: { title: 'Importing Model' },
+      }),
+      buildAggregatedAIM({
+        repository: 'ready-model',
+        onboardPhase: 'Ready',
+        aggregatedOverrides: { title: 'Ready Model' },
+      }),
+    ]);
+
+    await act(async () => {
+      render(<CustomModels />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Ready Model')).toBeInTheDocument();
+    });
+
+    const statusDropdown = screen.getByText(
+      'customModels.list.filters.status.label',
+    );
+    fireEvent.click(statusDropdown);
+    fireEvent.click(screen.getByText('customModels.card.status.ready'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ready Model')).toBeInTheDocument();
+      expect(screen.queryByText('Importing Model')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows only failed models when "Failed" status filter is selected', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([
+      buildAggregatedAIM({
+        repository: 'failed-model',
+        onboardPhase: 'Failed',
+        aggregatedOverrides: { title: 'Failed Model' },
+      }),
+      buildAggregatedAIM({
+        repository: 'importing-model',
+        onboardPhase: 'Importing',
+        aggregatedOverrides: { title: 'Importing Model' },
+      }),
+    ]);
+
+    await act(async () => {
+      render(<CustomModels />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed Model')).toBeInTheDocument();
+      expect(screen.getByText('Importing Model')).toBeInTheDocument();
+    });
+
+    const statusDropdown = screen.getByText(
+      'customModels.list.filters.status.label',
+    );
+    fireEvent.click(statusDropdown);
+    fireEvent.click(screen.getByText('customModels.card.status.failed'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed Model')).toBeInTheDocument();
+      expect(screen.queryByText('Importing Model')).not.toBeInTheDocument();
+    });
+  });
+
+  it('opens delete confirmation and calls deleteCustomModel with CR name on confirm', async () => {
+    (customModelsApiMocks.listCustomModels as Mock).mockResolvedValue([
+      buildAggregatedAIM({
+        repository: 'my-cr-name',
+        aggregatedOverrides: { title: 'My display' },
+      }),
+    ]);
+    (customModelsApiMocks.deleteCustomModel as Mock).mockResolvedValue(
+      undefined,
+    );
+
+    await act(async () => {
+      render(<CustomModels />, { wrapper });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('My display')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('custom-model-card-actions'));
+    fireEvent.click(screen.getByText('customModels.card.actions.delete.label'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('confirm-button'));
+
+    await waitFor(() => {
+      expect(customModelsApiMocks.deleteCustomModel).toHaveBeenCalledWith(
+        'test-project',
+        'my-cr-name',
+      );
+    });
   });
 });

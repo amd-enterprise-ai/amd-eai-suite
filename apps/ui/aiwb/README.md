@@ -34,6 +34,15 @@ The app has various settings and features that can be set or toggled using envir
 >
 > Next.js bakes `NEXT_PUBLIC_*` variables into the bundle during the build phase, making them static and unable to change at runtime. For dynamic configuration needs, runtime-fetched environment variables are required. See [Next.js Environment Variables documentation](https://nextjs.org/docs/app/guides/environment-variables#bundling-environment-variables-for-the-browser) for more details.
 
+## API route layout
+
+Next.js API routes under `app/api/` fall into two namespaces:
+
+- **`app/api/...`** — backend-mirror routes. Folder structure mirrors backend API paths (e.g., `app/api/namespaces/[namespace]/...`, `app/api/projects/[project]/...`). Most are thin proxies via `@/lib/server/proxy-handler`.
+- **`app/api/ui/...`** — UI-only routes whose logic belongs to the UI, not the backend API. Example: the AIM chat bypass at `app/api/ui/projects/[project]/inference/[id]/chat/` fetches the AIM through the backend then POSTs directly to the AIM's in-cluster URL. Use this namespace when the route needs its own handler logic (auth caching, multi-upstream fan-out, browser-only concerns) rather than being a thin proxy.
+
+See `AGENTS.md` for full route-handler conventions.
+
 ## Running locally
 
 You will need all the values specified in the [environment variables section](#environment-variables) - If you are running the AIWB API locally, you can use the pre-populated values for all environment variables.

@@ -8,16 +8,16 @@ from uuid import uuid4
 import pytest
 from kubernetes.client import ApiException
 
-from app.namespaces.schemas import ResourceType
 from app.workloads.constants import (
     CHART_ID_LABEL,
     DATASET_ID_LABEL,
-    DISPLAY_NAME_LABEL,
+    DISPLAY_NAME_ANNOTATION,
     WORKLOAD_ID_LABEL,
     WORKLOAD_TYPE_LABEL,
 )
 from app.workloads.enums import WorkloadStatus, WorkloadType
 from app.workloads.models import Workload
+from app.workloads.schemas import WorkloadResourceType
 from app.workloads.utils import (
     apply_manifest,
     derive_deployment_status,
@@ -525,7 +525,8 @@ spec:
     assert CHART_ID_LABEL in body["metadata"]["labels"]
     assert body["metadata"]["labels"][CHART_ID_LABEL] == str(workload.chart_id)
     assert WORKLOAD_TYPE_LABEL in body["metadata"]["labels"]
-    assert DISPLAY_NAME_LABEL in body["metadata"]["labels"]
+    assert DISPLAY_NAME_ANNOTATION in body["metadata"]["annotations"]
+    assert body["metadata"]["annotations"][DISPLAY_NAME_ANNOTATION] == workload.display_name
 
 
 @pytest.mark.asyncio
@@ -999,20 +1000,53 @@ def test_derive_job_status(
     [
         pytest.param(
             "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: test\n",
-            ResourceType.DEPLOYMENT,
+            WorkloadResourceType.DEPLOYMENT,
             id="deployment",
         ),
         pytest.param(
             "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: test\n",
-            ResourceType.JOB,
+            WorkloadResourceType.JOB,
             id="job",
         ),
         pytest.param(
             "apiVersion: v1\nkind: Service\nmetadata:\n  name: svc\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: test\n",
-            ResourceType.DEPLOYMENT,
+            WorkloadResourceType.DEPLOYMENT,
             id="multi_doc_with_deployment",
         ),
     ],
 )
-def test_get_resource_type(manifest: str, expected: ResourceType) -> None:
+def test_get_resource_type(manifest: str, expected: WorkloadResourceType) -> None:
     assert get_resource_type(manifest) == expected
+
+
+def test_external_url_uses_route_own_hostname() -> None:
+    """External URL is built from the route's own spec.hostnames when present."""
+    manifest = (
+        "apiVersion: gateway.networking.k8s.io/v1\nkind: HTTPRoute\nmetadata:\n  name: r\n"
+        "spec:\n  hostnames:\n    - workspaces.example.com\n"
+        "  rules:\n    - matches:\n        - path:\n            type: PathPrefix\n            value: /workbench/u/w\n"
+    )
+    # cluster_host is the workloads host; the route's own hostname must win.
+    url = get_workload_host_from_HTTPRoute_manifest(manifest=manifest, cluster_host="https://workloads.example.com")
+    assert url == "https://workspaces.example.com/workbench/u/w"
+
+
+def test_external_url_pinned_hostname_keeps_cluster_host_scheme_and_port() -> None:
+    """A pinned hostname keeps cluster_host's scheme and port (e.g. local http://...:8080)."""
+    manifest = (
+        "apiVersion: gateway.networking.k8s.io/v1\nkind: HTTPRoute\nmetadata:\n  name: r\n"
+        "spec:\n  hostnames:\n    - workspaces.example.com\n"
+        "  rules:\n    - matches:\n        - path:\n            type: PathPrefix\n            value: /workbench/u/w\n"
+    )
+    url = get_workload_host_from_HTTPRoute_manifest(manifest=manifest, cluster_host="http://localhost:8080")
+    assert url == "http://workspaces.example.com:8080/workbench/u/w"
+
+
+def test_external_url_falls_back_to_cluster_host_without_hostnames() -> None:
+    """Routes with no hostnames fall back to cluster_host (workloads), preserving old behaviour."""
+    manifest = (
+        "apiVersion: gateway.networking.k8s.io/v1\nkind: HTTPRoute\nmetadata:\n  name: r\n"
+        "spec:\n  rules:\n    - matches:\n        - path:\n            type: PathPrefix\n            value: /demo/abc/v1\n"
+    )
+    url = get_workload_host_from_HTTPRoute_manifest(manifest=manifest, cluster_host="https://workloads.example.com")
+    assert url == "https://workloads.example.com/demo/abc/v1"

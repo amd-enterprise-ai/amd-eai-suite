@@ -85,15 +85,15 @@ def test_clean_s3_path():
 
 
 def test_get_object_key():
-    """Test the get_object_key function that uses project name."""
-    assert get_object_key("Test Dataset", "Project A") == "project-a/datasets/test-dataset.jsonl"
+    """Test the get_object_key function that uses project name (namespace) and dataset ID."""
+    # Dataset ID is used as-is; only the namespace/project is slugified
+    assert get_object_key("test-dataset-uuid", "Project A") == "project-a/datasets/test-dataset-uuid.jsonl"
     assert (
-        get_object_key("Complex Name with Spaces!", "Complex Project Name")
-        == "complex-project-name/datasets/complex-name-with-spaces.jsonl"
+        get_object_key("complex-uuid-123", "Complex Project Name")
+        == "complex-project-name/datasets/complex-uuid-123.jsonl"
     )
     assert (
-        get_object_key("Dataset with !@#$%^&*()", "Project with !@#$%^&*()")
-        == "project-with/datasets/dataset-with.jsonl"
+        get_object_key("dataset-uuid-456", "Project with !@#$%^&*()") == "project-with/datasets/dataset-uuid-456.jsonl"
     )
 
 

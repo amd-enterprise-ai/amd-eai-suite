@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Input, Slider } from '@heroui/react';
+import { Slider } from '@amdenterpriseai/components';
+import { Input } from '../Input/InputPrimitive';
 import { forwardRef, useCallback, useRef, useState } from 'react';
 
 interface Props {

@@ -1,7 +1,17 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Divider, Selection, SelectItem, Tooltip } from '@heroui/react';
+import {
+  Selection,
+  SelectItem,
+  Divider,
+  Alert,
+  DrawerForm,
+  FormInput,
+  FormSelect,
+  FormSwitch,
+  Tooltip,
+} from '@amdenterpriseai/components';
 import { IconEye, IconEyeOff, IconInfoCircle } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,30 +23,28 @@ import { DEFAULT_AUTOSCALING } from '@/lib/app/aims';
 
 import { useTranslation } from 'next-i18next';
 
-import {
-  Alert,
-  DrawerForm,
-  FormSelect,
-  FormSwitch,
-} from '@amdenterpriseai/components';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 
-import { validateHuggingFaceTokenFields } from '@/lib/app/huggingface-secret';
+import {
+  createHuggingFaceSecretRequest,
+  validateHuggingFaceTokenFields,
+} from '@/lib/app/huggingface-secret';
 
 import { SecretUseCase } from '@amdenterpriseai/types';
 
 import {
   createAimScalingPolicyConfig,
-  deployAim,
-  getAimClusterServiceTemplates,
+  getAimClusterProfiles,
+  getMetricTranslationKey,
 } from '@/lib/app/aims';
+import { deployInference } from '@/lib/app/inference';
 import {
   ADVANCED_PARAM_AUTOMATIC,
   filterProfilesByAdvancedParams,
 } from '@/lib/app/aims/filterProfilesByAdvancedParams';
 import {
   AIM_PROFILE_TYPE_OPTIMIZED,
-  AIMClusterServiceTemplate,
+  AIMClusterProfile,
   AIMDeployPayload,
   AIMStatus,
   AggregatedAIM,
@@ -57,22 +65,22 @@ import {
 import { UnoptimizedProfileBadge } from './UnoptimizedProfileBadge';
 import { HuggingFaceTokenSelector } from '@/components/shared/HuggingFaceTokenSelector';
 
-function getReadyTemplatesFrom(
-  templates: AIMClusterServiceTemplate[],
-): AIMClusterServiceTemplate[] {
-  return (templates ?? []).filter((t) => t.status?.status === 'Ready');
+function getReadyProfilesFrom(
+  profiles: AIMClusterProfile[],
+): AIMClusterProfile[] {
+  return (profiles ?? []).filter((p) => p.status?.status === 'Ready');
 }
 
 function getMetricsStatusMap(
-  readyTemplates: AIMClusterServiceTemplate[],
+  readyProfiles: AIMClusterProfile[],
 ): Record<string, boolean> {
   const result: Record<string, boolean> = {};
-  for (const template of readyTemplates) {
-    const metric = template.spec?.metric;
-    if (metric === undefined) continue;
-    const isOptimized =
-      template.status?.profile?.metadata?.type === AIM_PROFILE_TYPE_OPTIMIZED;
-    result[metric] = result[metric] || isOptimized;
+  for (const profile of readyProfiles) {
+    const metric = profile.spec?.metric;
+    if (metric === undefined || metric === null) continue;
+    const metricKey = String(metric);
+    const isOptimized = profile.spec?.type === AIM_PROFILE_TYPE_OPTIMIZED;
+    result[metricKey] = result[metricKey] || isOptimized;
   }
   return result;
 }
@@ -146,19 +154,21 @@ export const DeployAIMDrawer = ({
     enabled: isOpen,
   });
 
-  // Fetch service templates for the AIM to get optimization metrics
+  // Fetch profiles for the AIM to get optimization metrics
   const {
-    data: serviceTemplates,
-    isLoading: templatesLoading,
-    isError: templatesError,
-    error: templatesErrorObj,
-  } = useQuery<AIMClusterServiceTemplate[]>({
-    queryKey: ['aim-templates', selectedAim.model],
-    queryFn: () => getAimClusterServiceTemplates(selectedAim.model),
-    enabled: isOpen && !!selectedAim.model,
+    data: serviceProfiles,
+    isLoading: profilesLoading,
+    isError: profilesError,
+    error: profilesErrorObj,
+  } = useQuery<AIMClusterProfile[]>({
+    queryKey: ['aim-profiles', selectedAim.aimId],
+    queryFn: () => getAimClusterProfiles(selectedAim.aimId ?? ''),
+    enabled: isOpen && !!selectedAim.aimId,
     retry: (failureCount, error) => {
-      // For 404 errors (no templates available), don't retry - the resource definitively doesn't exist.
-      // For other errors (network issues, server errors), retry 3 times for resilience.
+      // The profiles endpoint returns 200 + empty data when no profiles match,
+      // so a 404 here means the proxy/route is misconfigured (or upstream is
+      // unreachable) — retrying won't recover. Other failures (network blips,
+      // 5xx) get the standard 3 retries.
       if (error instanceof APIRequestError && error.statusCode === 404) {
         return false;
       }
@@ -166,11 +176,11 @@ export const DeployAIMDrawer = ({
     },
   });
 
-  const readyTemplates = useMemo(
-    () => getReadyTemplatesFrom(serviceTemplates ?? []),
-    [serviceTemplates],
+  const readyProfiles = useMemo(
+    () => getReadyProfilesFrom(serviceProfiles ?? []),
+    [serviceProfiles],
   );
-  const metricsStatusMap = getMetricsStatusMap(readyTemplates);
+  const metricsStatusMap = getMetricsStatusMap(readyProfiles);
   const metricsWithStatus = Object.entries(metricsStatusMap).map(
     ([metric, isOptimized]) => ({ metric, isOptimized }),
   );
@@ -183,55 +193,64 @@ export const DeployAIMDrawer = ({
     const gpuModels = new Set<string>();
     const precisions = new Set<string>();
     const gpuCounts = new Set<string>();
-    for (const t of readyTemplates) {
-      const meta = t.status?.profile?.metadata;
-      if (meta?.type) optimizationClasses.add(meta.type);
-      if (meta?.gpu) gpuModels.add(meta.gpu);
-      if (meta?.precision) precisions.add(meta.precision);
-      if (meta?.gpuCount != null) gpuCounts.add(String(meta.gpuCount));
+    for (const p of readyProfiles) {
+      const spec = p.spec;
+      if (spec?.type) optimizationClasses.add(spec.type);
+      if (spec?.acceleratorModel) gpuModels.add(spec.acceleratorModel);
+      if (spec?.precision) precisions.add(spec.precision);
+      if (spec?.acceleratorCount != null)
+        gpuCounts.add(String(spec.acceleratorCount));
     }
     return {
       optimizationClasses: Array.from(optimizationClasses).sort(),
       gpuModels: Array.from(gpuModels).sort(),
       precisions: Array.from(precisions).sort(),
       gpuCounts: Array.from(gpuCounts).sort((a, b) => Number(a) - Number(b)),
-      profiles: readyTemplates,
+      profiles: readyProfiles,
     };
-  }, [readyTemplates]);
+  }, [readyProfiles]);
 
-  const hasShownNoTemplatesToast = useRef(false);
+  const hasShownNoProfilesToast = useRef(false);
   const lastResourceName = useRef<string | null>(null);
 
   // Reset toast shown flag when drawer closes or selected AIM changes
   useEffect(() => {
     if (!isOpen || selectedAim.model !== lastResourceName.current) {
-      hasShownNoTemplatesToast.current = false;
+      hasShownNoProfilesToast.current = false;
       lastResourceName.current = selectedAim.model;
     }
   }, [isOpen, selectedAim.model]);
 
-  // Show toast when drawer opens and no templates are available (successful fetch with 0 templates or 404)
+  // Show toast when drawer opens and no profiles are available (successful fetch with 0 profiles or 404).
+  // Mirror the profiles-query `enabled` guard so a disabled query (no aimId) is not
+  // mistaken for a settled "zero results" fetch.
   useEffect(() => {
-    if (!isOpen || templatesLoading || hasShownNoTemplatesToast.current) {
+    if (
+      !isOpen ||
+      !selectedAim.aimId ||
+      profilesLoading ||
+      hasShownNoProfilesToast.current
+    ) {
       return;
     }
 
     const is404 =
-      templatesErrorObj instanceof APIRequestError &&
-      templatesErrorObj.statusCode === 404;
-    const isSuccessWithNoTemplates =
-      !templatesError && readyTemplates.length === 0;
+      profilesErrorObj instanceof APIRequestError &&
+      profilesErrorObj.statusCode === 404;
+    const isSuccessWithNoProfiles =
+      !profilesError && readyProfiles.length === 0;
 
-    if (is404 || isSuccessWithNoTemplates) {
-      toast.error(t('deployAIMDrawer.notifications.noTemplatesDescription'));
-      hasShownNoTemplatesToast.current = true;
+    if (is404 || isSuccessWithNoProfiles) {
+      toast.error(t('deployAIMDrawer.notifications.noProfilesDescription'));
+      hasShownNoProfilesToast.current = true;
     }
   }, [
     isOpen,
-    templatesLoading,
-    templatesError,
-    templatesErrorObj,
-    readyTemplates.length,
+    selectedAim.aimId,
+    profilesLoading,
+    profilesError,
+    profilesErrorObj,
+    readyProfiles.length,
     toast,
     t,
   ]);
@@ -255,7 +274,7 @@ export const DeployAIMDrawer = ({
 
       toast.success(
         t('huggingFaceTokenDrawer.notifications.secretCreated', {
-          name: variables.name,
+          name: variables.displayName,
         }),
       );
     },
@@ -273,6 +292,9 @@ export const DeployAIMDrawer = ({
       z
         .object({
           model: z.string().min(1, 'Version is required'),
+          displayName: z
+            .union([z.literal(''), z.string().min(2).max(253)])
+            .optional(),
           selectedToken: z.string().optional(),
           tokenName: z.string().optional(),
           token: z.string().optional(),
@@ -292,7 +314,7 @@ export const DeployAIMDrawer = ({
           gpuModel: z.string().optional(),
           precision: z.string().optional(),
           gpuCount: z.string().optional(),
-          templateName: z.string().optional(),
+          profileName: z.string().optional(),
         })
         // Hugging Face token validation
         .superRefine((data, ctx) => {
@@ -330,8 +352,8 @@ export const DeployAIMDrawer = ({
 
           const payload: AIMDeployPayload = {
             model: data.model,
+            displayName: data.displayName || undefined,
             replicas: 1,
-            allowUnoptimized: true,
           };
 
           if (hfTokenName) payload.hfToken = hfTokenName;
@@ -346,8 +368,8 @@ export const DeployAIMDrawer = ({
             const count = Number(data.gpuCount);
             if (!Number.isNaN(count) && count >= 1) payload.gpuCount = count;
           }
-          if (isExplicit(data.templateName))
-            payload.templateName = data.templateName;
+          if (isExplicit(data.profileName))
+            payload.profileName = data.profileName;
 
           // Add autoscaling configuration if enabled
           if (data.autoscalingEnabled) {
@@ -371,7 +393,11 @@ export const DeployAIMDrawer = ({
             });
           }
 
-          await deployAim(namespace, payload);
+          await deployInference(namespace, payload);
+          // Per-name cluster-catalog cache (['inferenceModel', name]) is stale
+          // immediately after deploy — invalidate so re-opening the drawer or
+          // the deployed-models list reflects the new service.
+          queryClient.invalidateQueries({ queryKey: ['inferenceModel'] });
           if (onClose) onClose();
           toast.success(t('deployAIMDrawer.notifications.success'));
           if (onDeploying) onDeploying();
@@ -415,16 +441,8 @@ export const DeployAIMDrawer = ({
       const isNewToken = tokenName && token;
 
       if (isNewToken) {
-        const secretRequest = {
-          name: tokenName,
-          data: {
-            token: Buffer.from(token, 'utf-8').toString('base64'),
-          },
-          useCase: SecretUseCase.HUGGING_FACE,
-        };
-
         const createdSecret = await createSecretMutation.mutateAsync(
-          secretRequest as any,
+          createHuggingFaceSecretRequest(tokenName, token),
         );
 
         if (!createdSecret || !createdSecret.metadata?.name) {
@@ -451,19 +469,25 @@ export const DeployAIMDrawer = ({
       onDeploying,
       t,
       toast,
+      queryClient,
       createSecretMutation,
       huggingFaceTokens,
     ],
   );
 
   const is404 =
-    templatesErrorObj instanceof APIRequestError &&
-    templatesErrorObj.statusCode === 404;
-  const hasNoReadyTemplates =
-    !templatesLoading && !templatesError && readyTemplates.length === 0;
+    profilesErrorObj instanceof APIRequestError &&
+    profilesErrorObj.statusCode === 404;
+  // Gate on `selectedAim.aimId` so the form isn't falsely locked while the
+  // profiles query is disabled (matches the query's `enabled` predicate).
+  const hasNoReadyProfiles =
+    !!selectedAim.aimId &&
+    !profilesLoading &&
+    !profilesError &&
+    readyProfiles.length === 0;
 
   const isDeployDisabled =
-    isDeploying || templatesLoading || hasNoReadyTemplates || is404;
+    isDeploying || profilesLoading || hasNoReadyProfiles || is404;
 
   return (
     <DrawerForm<DeployAIMFormValues>
@@ -482,6 +506,7 @@ export const DeployAIMDrawer = ({
       hideCloseButton={false}
       defaultValues={{
         model: defaultAim.model,
+        displayName: '',
         selectedToken: '',
         tokenName: '',
         token: '',
@@ -492,7 +517,7 @@ export const DeployAIMDrawer = ({
         gpuModel: ADVANCED_PARAM_AUTOMATIC,
         precision: ADVANCED_PARAM_AUTOMATIC,
         gpuCount: ADVANCED_PARAM_AUTOMATIC,
-        templateName: undefined,
+        profileName: undefined,
         ...DEFAULT_AUTOSCALING,
       }}
       renderFields={(form) => {
@@ -521,7 +546,7 @@ export const DeployAIMDrawer = ({
           },
         );
         const noProfileMatches =
-          !templatesLoading && filteredProfiles.length === 0;
+          !profilesLoading && filteredProfiles.length === 0;
         // If no metric selected, AIMService will pick the best, otherwise check it from map.
         const selectedMetricOptimized =
           !selectedMetric ||
@@ -557,9 +582,15 @@ export const DeployAIMDrawer = ({
               </div>
             )}
             <Divider />
-            <div className="text-foreground text-medium uppercase font-bold">
+            <div className="text-foreground text-base uppercase font-bold">
               {t('deployAIMDrawer.fields.title')}
             </div>
+            <FormInput<DeployAIMFormValues>
+              name="displayName"
+              form={form}
+              label={t('deployAIMDrawer.fields.displayName.title')}
+              placeholder={t('deployAIMDrawer.fields.displayName.placeholder')}
+            />
             <FormSelect
               label={t('deployAIMDrawer.fields.version.title')}
               name="model"
@@ -594,7 +625,7 @@ export const DeployAIMDrawer = ({
             {selectedAim.isHfTokenRequired && (
               <>
                 <div className="flex items-center gap-1">
-                  <h3 className="text-small text-foreground">
+                  <h3 className="text-sm text-foreground">
                     {t('deployAIMDrawer.fields.huggingFaceToken.title')}
                   </h3>
                   <Tooltip
@@ -623,7 +654,7 @@ export const DeployAIMDrawer = ({
               </>
             )}
             <div className="flex items-center gap-1">
-              <h3 className="text-small text-foreground">
+              <h3 className="text-sm text-foreground">
                 {t('deployAIMDrawer.fields.imagePullSecrets.title')}
               </h3>
               <Tooltip
@@ -666,7 +697,7 @@ export const DeployAIMDrawer = ({
             {metricsWithStatus.length > 0 && (
               <>
                 <div className="flex items-center gap-1">
-                  <h3 className="text-medium font-medium text-foreground">
+                  <h3 className="text-base font-medium text-foreground">
                     {t('deployAIMDrawer.fields.metric.title')}
                   </h3>
                   <Tooltip
@@ -715,7 +746,7 @@ export const DeployAIMDrawer = ({
                         ) : undefined
                       }
                     >
-                      {t(`performanceMetrics.values.${metric}`)}
+                      {t(getMetricTranslationKey(metric))}
                     </SelectItem>
                   ))}
                 </FormSelect>
@@ -757,7 +788,7 @@ export const DeployAIMDrawer = ({
             <div className="flex flex-col gap-4">
               {/* Autoscaling Header */}
               <div className="flex items-center gap-1">
-                <h3 className="text-medium font-medium text-foreground">
+                <h3 className="text-base font-medium text-foreground">
                   {t('deployAIMDrawer.fields.autoscaling.title')}
                 </h3>
               </div>
@@ -771,10 +802,7 @@ export const DeployAIMDrawer = ({
                 >
                   {t('deployAIMDrawer.fields.autoscaling.enable')}
                 </FormSwitch>
-                <p
-                  role="note"
-                  className="text-small text-default-500 ml-[58px]"
-                >
+                <p role="note" className="text-sm text-default-500 ml-[58px]">
                   {t('helper', { ns: 'autoscaling' })}
                 </p>
               </div>

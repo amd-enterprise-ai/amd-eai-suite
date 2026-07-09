@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ActionButton } from '@amdenterpriseai/components';
+import { ActionButton, Card, CardBody } from '@amdenterpriseai/components';
 import { useSystemInfo } from '@amdenterpriseai/hooks';
 import { createMailtoLink } from '@amdenterpriseai/utils/app';
-import { Card, CardBody } from '@heroui/react';
 import { IconSend } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 import React from 'react';

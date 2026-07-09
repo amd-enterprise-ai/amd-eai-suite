@@ -3,19 +3,25 @@
 // SPDX-License-Identifier: MIT
 
 import { SecretResponseData, CreateSecretRequest } from '@/types/secrets';
+import { PaginatedList } from '@/types/pagination';
 import { APIRequestError, getErrorMessage } from '@amdenterpriseai/utils/app';
 
-export const fetchProjectSecrets = async (
-  namespace: string,
+import { fetchAllPages } from './pagination';
+
+const fetchSecretsPage = async (
+  projectId: string,
+  page: number,
+  pageSize: number,
   useCase?: string,
-): Promise<{ data: SecretResponseData[] }> => {
-  if (!namespace) {
-    throw new APIRequestError('Namespace is required', 400);
+): Promise<PaginatedList<SecretResponseData>> => {
+  const params = new URLSearchParams({
+    pageSize: String(pageSize),
+    page: String(page),
+  });
+  if (useCase) {
+    params.set('useCase', useCase);
   }
-
-  const params = useCase ? `?${new URLSearchParams({ useCase })}` : '';
-  const response = await fetch(`/api/namespaces/${namespace}/secrets${params}`);
-
+  const response = await fetch(`/api/projects/${projectId}/secrets?${params}`);
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
     throw new APIRequestError(
@@ -26,12 +32,30 @@ export const fetchProjectSecrets = async (
   return response.json();
 };
 
+export const fetchProjectSecrets = async (
+  projectId: string,
+  useCase?: string,
+): Promise<{ data: SecretResponseData[] }> => {
+  if (!projectId) {
+    throw new APIRequestError('Project ID is required', 400);
+  }
+
+  // Walks every page via the shared fetchAllPages utility (bounded
+  // concurrency, throttled). A follow-up ticket will migrate the secrets
+  // table to server-side pagination so this loader can be retired in
+  // favour of a paginated table.
+  const data = await fetchAllPages<SecretResponseData>((page, pageSize) =>
+    fetchSecretsPage(projectId, page, pageSize, useCase),
+  );
+  return { data };
+};
+
 export const deleteProjectSecret = async (
-  namespace: string,
+  projectId: string,
   secretId: string,
 ) => {
   const response = await fetch(
-    `/api/namespaces/${namespace}/secrets/${secretId}`,
+    `/api/projects/${projectId}/secrets/${secretId}`,
     {
       method: 'DELETE',
     },
@@ -47,10 +71,10 @@ export const deleteProjectSecret = async (
 };
 
 export const createProjectSecret = async (
-  namespace: string,
+  projectId: string,
   request: CreateSecretRequest,
 ): Promise<SecretResponseData> => {
-  const response = await fetch(`/api/namespaces/${namespace}/secrets`, {
+  const response = await fetch(`/api/projects/${projectId}/secrets`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

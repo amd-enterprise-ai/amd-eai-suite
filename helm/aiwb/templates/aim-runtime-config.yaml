@@ -24,7 +24,16 @@ spec:
     gatewayRef:
       group: gateway.networking.k8s.io
       kind: Gateway
-      name: {{ .Values.kgateway.gatewayName }}
-      namespace: {{ .Values.kgateway.namespace }}
+      name: {{ coalesce .Values.kgateway.gatewayName .Values.gateway.gatewayName }}
+      namespace: {{ coalesce .Values.kgateway.namespace .Values.gateway.namespace }}
+    # Pin routes to a single listener hostname so they don't attach to every
+    # listener on the gateway (which would expose the service on listeners that
+    # do not enforce inference auth). Defaults to the workloads host
+    # (workloads.<appDomain>) when aim.routing.hostnames is unset.
+    hostnames:
+      {{- $hostnames := .Values.aim.routing.hostnames | default (list (printf "workloads.%s" .Values.appDomain)) }}
+      {{- range $hostnames }}
+      - {{ . | quote }}
+      {{- end }}
     pathTemplate: "{.metadata.namespace}/{.metadata.labels['{{ .Values.metadataPrefix.eaiApps }}/workload-id']}"
     requestTimeout: {{ .Values.aim.routing.requestTimeout }}

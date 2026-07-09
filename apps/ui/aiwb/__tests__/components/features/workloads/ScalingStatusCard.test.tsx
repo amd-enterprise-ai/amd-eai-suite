@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { vi } from 'vitest';
 
@@ -25,6 +26,27 @@ vi.mock('@amdenterpriseai/hooks', () => ({
 }));
 
 vi.mock('@amdenterpriseai/components', () => ({
+  Card: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => <div {...props}>{children}</div>,
+  CardHeader: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => <div {...props}>{children}</div>,
+  CardBody: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => <div {...props}>{children}</div>,
   ClientSideDataTable: ({ data }: { data: { name: string }[] }) => (
     <div data-testid="replicas-table">
       {data.map((r) => (
@@ -37,11 +59,20 @@ vi.mock('@amdenterpriseai/components', () => ({
   DateDisplay: ({ date }: { date: string }) => <span>{date}</span>,
   NoDataDisplay: () => <span data-testid="no-data">—</span>,
   StatusDisplay: ({ type }: { type: string }) => <span>{type}</span>,
+  Button: ({ children, onPress, onClick, ...props }: any) => (
+    <button onClick={onPress ?? onClick} {...props}>
+      {children}
+    </button>
+  ),
+  ButtonGroup: ({ children }: any) => <fieldset>{children}</fieldset>,
+}));
+
+vi.mock('@/lib/app/inference', () => ({
+  updateInferenceScaling: vi.fn(),
 }));
 
 vi.mock('@/lib/app/aims', () => ({
   updateWorkloadScaling: vi.fn(),
-  updateAimScalingPolicy: vi.fn(),
   AIM_MAX_REPLICAS: 30,
   SCALING_METRIC_KEYS: [
     { key: 'vllm:num_requests_running', translationKey: 'runningRequests' },
@@ -109,7 +140,6 @@ describe('ScalingStatusCard', () => {
       enabled: false,
     },
     runtimeConfigName: 'default',
-    template: {},
     minReplicas: 1,
     maxReplicas: 5,
     autoScaling: {
@@ -145,7 +175,6 @@ describe('ScalingStatusCard', () => {
       enabled: false,
     },
     runtimeConfigName: 'default',
-    template: {},
     minReplicas: 1,
     maxReplicas: 1,
   };

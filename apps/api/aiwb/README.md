@@ -111,7 +111,7 @@ Create a `.env` file (copy from `.env.example`). Key configurations include:
 - **Cluster Auth**: Optional integration for AIM access control and API key management
   - `CLUSTER_AUTH_ENABLED`: `true` or `false` (default: `true`)
   - When `true` (default): A cluster-auth group is created for each AIM deployment and stamped as the `cluster-auth/allowed-group` annotation on the `AIMService` resource. The cluster-auth proxy uses this annotation to enforce that only API keys bound to the matching group can call the AIM's external endpoint. Requires `CLUSTER_AUTH_URL` and `CLUSTER_AUTH_ADMIN_TOKEN` to be set.
-  - When `false`: AIMs are deployed without access restrictions — any client can reach AIM inference endpoints. API key endpoints (`/namespaces/{ns}/api-keys`) return **503 Service Unavailable**.
+  - When `false`: AIMs are deployed without access restrictions — any client can reach AIM inference endpoints. API key endpoints (`/projects/{project}/api-keys`) return **503 Service Unavailable**.
 
 See `.env.example` for complete configuration options.
 

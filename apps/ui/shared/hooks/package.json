@@ -22,6 +22,7 @@
     "@amdenterpriseai/utils": "workspace:*"
   },
   "peerDependencies": {
+    "@heroui/react": "*",
     "next-i18next": "*"
   },
   "devDependencies": {

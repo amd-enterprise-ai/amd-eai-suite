@@ -22,8 +22,51 @@ echo "========================================"
 echo "Running Robot Framework tests with arguments: $*"
 echo ""
 
-# Configure kubectl with OIDC credentials if available (for in-cluster E2E runs)
-if [ -n "${KEYCLOAK_SERVER_URL:-}" ] && [ -n "${KEYCLOAK_CLIENT_SECRET:-}" ]; then
+# Configure kubectl with OIDC credentials. Two modes:
+#
+#   1. USER_PASSTHROUGH_ENABLED=true — silodev (--user-passthrough) shipped an
+#      offline OIDC refresh_token via a per-job Secret. We point kubectl at
+#      our exec-credential plugin (silodev-credential-plugin.py) which
+#      exchanges the refresh_token for fresh id_tokens. The pod authenticates
+#      as the human who invoked the test; no password ever lands here.
+#
+#   2. KEYCLOAK_SERVER_URL set (legacy in-cluster CI path) — fall back to the
+#      pre-staged e2e-user service account via password grant.
+#
+if [ "${USER_PASSTHROUGH_ENABLED:-false}" = "true" ] && \
+   [ -n "${OIDC_ISSUER_URL:-}" ] && \
+   [ -n "${OIDC_USERNAME:-}" ] && \
+   [ -n "${OIDC_CLIENT_ID:-}" ]; then
+    echo "Configuring kubectl for user passthrough as ${OIDC_USERNAME}..."
+
+    # Export so both kubectl's exec plugin (via --exec-env below) and the Python
+    # auth library (KubeconfigAuth._get_credentials_from_passthrough, which reads
+    # the process environment) resolve the same refresh-token path.
+    export SILODEV_OIDC_REFRESH_TOKEN_FILE="${SILODEV_OIDC_REFRESH_TOKEN_FILE:-/silodev-oidc/refresh_token}"
+
+    kubectl config set-cluster in-cluster \
+        --server=https://kubernetes.default.svc \
+        --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+    kubectl config set-credentials e2e-user \
+        --exec-command=/code/testing/silodev-credential-plugin.py \
+        --exec-api-version=client.authentication.k8s.io/v1 \
+        --exec-interactive-mode=Never \
+        --exec-env=SILODEV_OIDC_REFRESH_TOKEN_FILE="${SILODEV_OIDC_REFRESH_TOKEN_FILE}" \
+        --exec-env=SILODEV_OIDC_ISSUER_URL="${OIDC_ISSUER_URL}" \
+        --exec-env=SILODEV_OIDC_CLIENT_ID="${OIDC_CLIENT_ID}" \
+        --exec-env=SILODEV_OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-}" \
+        --exec-env=SILODEV_OIDC_SKIP_TLS_VERIFY="${OIDC_SKIP_TLS_VERIFY:-false}"
+
+    kubectl config set-context e2e-context --cluster=in-cluster --user=e2e-user
+    kubectl config use-context e2e-context
+
+    # Tests still read $E2E_USERNAME — surface the passthrough identity there.
+    export E2E_USERNAME="${OIDC_USERNAME}"
+
+    echo "kubectl configured to authenticate as ${OIDC_USERNAME} (user passthrough)"
+    echo ""
+elif [ -n "${KEYCLOAK_SERVER_URL:-}" ] && [ -n "${KEYCLOAK_CLIENT_SECRET:-}" ]; then
     echo "Configuring kubectl with OIDC credentials..."
     # Use public URL for OIDC issuer (must match Keycloak's advertised issuer)
     OIDC_ISSUER_URL="${KEYCLOAK_PUBLIC_URL:-${KEYCLOAK_SERVER_URL}}/realms/${KEYCLOAK_REALM}"
@@ -165,14 +208,17 @@ echo ""
 echo "Creating test status file..."
 echo "$TEST_STATUS" > "$RESULTS_DIR/test_status"
 
-# Keep the container alive for result retrieval (5 minutes max)
+# Keep the container alive until the pod is deleted, so artifacts can be
+# retrieved at any time with:  silodev services e2e reconnect <pod-name>
 echo "Container ready for result retrieval."
 echo "Robot Framework artifacts (output.xml, log.html, report.html) are available."
-echo "Container will remain alive for 5 minutes to allow result retrieval..."
+echo "Container will remain alive until the pod is deleted."
 echo ""
 
-# Wait for 5 minutes before exiting
-sleep 300
+# Wait for result retrieval. Defaults to indefinite (pod deleted explicitly).
+# Set WAIT_TIMEOUT (seconds) to bound the wait — useful for CI runners that
+# copy results and then let the container self-terminate.
+sleep "${WAIT_TIMEOUT:-infinity}"
 
 echo "========================================"
 echo "Exiting with status code: $TEST_STATUS"

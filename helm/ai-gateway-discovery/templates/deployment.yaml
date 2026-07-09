@@ -1,0 +1,91 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Release.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-sa
+      {{- with .Values.controller.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.controller.podSecurityContext | nindent 8 }}
+      containers:
+        - name: controller
+          image: "{{ .Values.controller.image.repository }}:{{ .Values.controller.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.controller.securityContext | nindent 12 }}
+          env:
+            - name: MANAGED_LABEL_NAME
+              value: {{ .Values.controller.labels.managedBy.name | quote }}
+            - name: MANAGED_LABEL_VALUE
+              value: {{ .Values.controller.labels.managedBy.value | quote }}
+            - name: MODEL_NAME_ANNOTATION
+              value: {{ .Values.controller.annotations.modelName | quote }}
+            - name: GATEWAY_NAME
+              value: {{ .Values.controller.gateway.name | quote }}
+            - name: GATEWAY_NAMESPACE
+              value: {{ .Values.controller.gateway.namespace | quote }}
+            - name: AI_ROUTE_HOSTNAME
+              value: {{ .Values.controller.gateway.routeHostname | quote }}
+            - name: REQUEST_TIMEOUT
+              value: {{ .Values.controller.gateway.timeouts.request | quote }}
+            - name: BACKEND_REQUEST_TIMEOUT
+              value: {{ .Values.controller.gateway.timeouts.backendRequest | quote }}
+            - name: TARGET_NAMESPACE
+              value: {{ .Values.controller.targetNamespace | quote }}
+            - name: HEALTH_PORT
+              value: {{ .Values.controller.healthPort | quote }}
+            - name: EPP_IMAGE
+              value: "{{ .Values.controller.epp.image.repository }}:{{ .Values.controller.epp.image.tag }}"
+            - name: EPP_SERVICE_PORT
+              value: {{ .Values.controller.epp.port | quote }}
+            - name: INFERENCE_POOL_PORT
+              value: {{ .Values.controller.inferencePool.targetPort | quote }}
+            - name: ALLOWED_GROUP_ANNOTATION
+              value: {{ .Values.controller.annotations.allowedGroup | quote }}
+            - name: CLUSTER_AUTH_SERVICE
+              value: {{ .Values.controller.clusterAuth.service | quote }}
+            - name: CLUSTER_AUTH_NAMESPACE
+              value: {{ .Values.controller.clusterAuth.namespace | quote }}
+            - name: CLUSTER_AUTH_PORT
+              value: {{ .Values.controller.clusterAuth.port | quote }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.controller.healthPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.controller.resources | nindent 12 }}

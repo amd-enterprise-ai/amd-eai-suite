@@ -2,5 +2,5 @@
 //
 // SPDX-License-Identifier: MIT
 
-export { InputWrapper } from './InputWrapper';
+export * from './InputPrimitive';
 export { PasswordInput } from './PasswordInput';

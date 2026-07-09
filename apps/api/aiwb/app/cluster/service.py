@@ -4,9 +4,9 @@
 
 """Cluster resources service for AIWB API."""
 
-from kubernetes_asyncio.client import V1Node
 from loguru import logger
 
+from ..custom_models.constants import DEFAULT_AIM_DEPLOYMENT_IMAGE_REF
 from ..dispatch.kube_client import KubernetesClient
 from .constants import (
     AMD_GPU_DEVICE_ID_LABEL,
@@ -15,7 +15,20 @@ from .constants import (
     AMD_GPU_PRODUCT_NAME_LABEL_BETA,
     AMD_GPU_RESOURCE,
 )
-from .schemas import AvailableResources, ClusterResourcesData, ClusterResourcesResponse
+from .schemas import (
+    AimImageFamily,
+    AvailableResources,
+    ClusterAccelerator,
+    ClusterResourcesData,
+    ClusterResourcesResponse,
+)
+from .utils import (
+    get_amd_gpu_allocatable_from_node,
+    is_node_ready,
+    node_device_id_and_product_name,
+    parse_container_image_repository_and_tag,
+    preferred_accelerator_product_name,
+)
 
 
 def parse_cpu_value(cpu_str: str) -> int:
@@ -93,16 +106,6 @@ def get_gpu_count_from_node(node: dict) -> int:
     return 0
 
 
-def _is_node_ready(node: V1Node) -> bool:
-    """Return True if the node has a Ready=True condition."""
-    if not (hasattr(node, "status") and node.status and hasattr(node.status, "conditions")):
-        return False
-    for condition in node.status.conditions or []:
-        if condition.type == "Ready" and condition.status == "True":
-            return True
-    return False
-
-
 async def get_cluster_resources(kube_client: KubernetesClient) -> ClusterResourcesResponse:
     """Get available cluster resources by querying Kubernetes API.
 
@@ -127,7 +130,7 @@ async def get_cluster_resources(kube_client: KubernetesClient) -> ClusterResourc
         ready_node_count = 0
 
         for node in nodes:
-            if not _is_node_ready(node):
+            if not is_node_ready(node):
                 continue
 
             ready_node_count += 1
@@ -175,8 +178,8 @@ async def get_cluster_resources(kube_client: KubernetesClient) -> ClusterResourc
             )
         )
 
-    except Exception as e:
-        logger.error(f"Failed to get cluster resources: {e}")
+    except Exception:
+        logger.exception("Failed to get cluster resources")
         raise
 
 
@@ -193,7 +196,7 @@ async def get_cluster_gpu_device_info(kube_client: KubernetesClient) -> dict[str
 
         device_info: dict[str, str] = {}
         for node in nodes:
-            if not _is_node_ready(node):
+            if not is_node_ready(node):
                 continue
 
             if hasattr(node, "metadata") and node.metadata:
@@ -205,8 +208,45 @@ async def get_cluster_gpu_device_info(kube_client: KubernetesClient) -> dict[str
 
         return device_info
 
-    except Exception as e:
-        logger.error(f"Failed to get cluster GPU device info: {e}")
+    except Exception:
+        logger.exception("Failed to get cluster GPU device info")
+        raise
+
+
+async def get_cluster_accelerators(kube_client: KubernetesClient) -> list[ClusterAccelerator]:
+    """List accelerator products on the cluster with allocatable GPU counts per device id."""
+    try:
+        nodes_response = await kube_client.core_v1.list_node()
+        nodes = nodes_response.items if hasattr(nodes_response, "items") else []
+
+        aggregates: dict[str, tuple[str, int]] = {}
+        for node in nodes:
+            if not is_node_ready(node):
+                continue
+            identity = node_device_id_and_product_name(node)
+            if identity is None:
+                continue
+            device_id, product_name = identity
+            node_dict = node.to_dict() if hasattr(node, "to_dict") else {}
+            gpu_count = get_amd_gpu_allocatable_from_node(node_dict)
+            if device_id in aggregates:
+                existing_name, existing_count = aggregates[device_id]
+                name = preferred_accelerator_product_name(device_id, existing_name, product_name)
+                aggregates[device_id] = (name, existing_count + gpu_count)
+            else:
+                aggregates[device_id] = (product_name, gpu_count)
+
+        return [
+            ClusterAccelerator(
+                device_id=device_id,
+                product_name=product_name,
+                allocatable_count=count,
+            )
+            for device_id, (product_name, count) in sorted(aggregates.items(), key=lambda item: item[0])
+        ]
+
+    except Exception:
+        logger.exception("Failed to get cluster accelerators")
         raise
 
 
@@ -220,7 +260,7 @@ async def get_cluster_gpu_device_ids(kube_client: KubernetesClient) -> set[str]:
 
         device_ids: set[str] = set()
         for node in nodes:
-            if not _is_node_ready(node):
+            if not is_node_ready(node):
                 continue
 
             if hasattr(node, "metadata") and node.metadata:
@@ -231,6 +271,32 @@ async def get_cluster_gpu_device_ids(kube_client: KubernetesClient) -> set[str]:
 
         return device_ids
 
-    except Exception as e:
-        logger.error(f"Failed to get cluster GPU device IDs: {e}")
+    except Exception:
+        logger.exception("Failed to get cluster GPU device IDs")
         raise
+
+
+# Config-driven catalog (EAI-6466). Only list families/repos the workbench already
+# uses in this repo — not UI mockups. Additional aim-engine base images (e.g.
+# hardware-specific variants) must be added here once aim-engine documents or
+# publishes them; this endpoint does not discover images from a registry.
+
+
+def get_aim_image_families() -> list[AimImageFamily]:
+    """Return supported aim-engine image families and tags for runtime profile selection."""
+    repository, tag = parse_container_image_repository_and_tag(DEFAULT_AIM_DEPLOYMENT_IMAGE_REF)
+    families = (
+        AimImageFamily(
+            family_id="automatic",
+            display_name="Automatic",
+            repository=None,
+            tags=[],
+        ),
+        AimImageFamily(
+            family_id="aim-base",
+            display_name="aim-base",
+            repository=repository,
+            tags=[tag],
+        ),
+    )
+    return [family.model_copy(deep=True) for family in families]

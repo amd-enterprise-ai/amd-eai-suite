@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button } from '@heroui/react';
+import { Button } from '../Buttons/Button';
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 

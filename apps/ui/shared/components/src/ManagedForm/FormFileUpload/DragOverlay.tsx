@@ -9,8 +9,6 @@ import { cn } from '@heroui/react';
 import { IconFile, IconX } from '@tabler/icons-react';
 import { memo } from 'react';
 
-import { TFunction } from 'next-i18next';
-
 const DragOverlay = memo(
   ({
     canDrop,
@@ -19,7 +17,7 @@ const DragOverlay = memo(
   }: {
     canDrop: boolean;
     multiple: boolean;
-    t: TFunction;
+    t: (key: string, options?: Record<string, unknown>) => string;
   }) => (
     <div
       className={cn(

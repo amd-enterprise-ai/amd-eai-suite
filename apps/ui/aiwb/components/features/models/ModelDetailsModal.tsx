@@ -2,18 +2,17 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button, Chip } from '@heroui/react';
+import { Button, Chip, Modal } from '@amdenterpriseai/components';
 
 import { useTranslation } from 'next-i18next';
 
-import { AIMModelResponse } from '@/types/models';
-import { AIM_MODEL_NAME_LABEL, AIMStatus } from '@/types/aims';
+import { AIM_MODEL_NAME_LABEL, AIMModel, AIMStatus } from '@/types/aims';
+import { resolveBaseModelSource } from '@/lib/app/aims';
 
-import { Modal } from '@amdenterpriseai/components';
 import AIMConditionsList from '@/components/shared/AIMConditionsList';
 
 interface Props {
-  model: AIMModelResponse | undefined;
+  model: AIMModel | undefined;
   onOpenChange: (isOpen: boolean) => void;
   isOpen: boolean;
 }
@@ -25,7 +24,9 @@ const ModelDetailsModal = ({ model, isOpen, onOpenChange }: Props) => {
 
   const name =
     model?.metadata.labels?.[AIM_MODEL_NAME_LABEL] || model?.metadata.name;
-  const canonicalName = model?.spec?.modelSources?.[0]?.modelId;
+  const canonicalName = model
+    ? resolveBaseModelSource(model)?.modelId
+    : undefined;
   const conditions = model?.status?.conditions ?? [];
 
   return (

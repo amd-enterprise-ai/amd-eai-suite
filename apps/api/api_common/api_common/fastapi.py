@@ -28,6 +28,7 @@ from .exceptions import (
     UploadFailedException,
     ValidationException,
 )
+from .schemas import ErrorResponse
 
 
 def not_found_exception_handler(request: Request, exc: NotFoundException) -> JSONResponse:
@@ -38,10 +39,9 @@ def not_found_exception_handler(request: Request, exc: NotFoundException) -> JSO
     logger.debug(f"Resource not found in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.NOT_FOUND,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -53,10 +53,9 @@ def conflict_exception_handler(request: Request, exc: ConflictException) -> JSON
     logger.debug(f"Conflict in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.CONFLICT,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -68,10 +67,10 @@ def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONRespon
     logger.debug(f"IntegrityError in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.CONFLICT,
-        content={
-            "detail": "The requested operation failed due to constraints on the data.",
-            "additional_info": str(exc.orig) if exc.orig else "No additional information available.",
-        },
+        content=ErrorResponse(
+            detail="The requested operation failed due to constraints on the data.",
+            additional_info=str(exc.orig) if exc.orig else "No additional information available.",
+        ).model_dump(by_alias=True, exclude_none=True),
     )
 
 
@@ -83,10 +82,9 @@ def validation_exception_handler(request: Request, exc: ValidationException) -> 
     logger.debug(f"Validation error in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.BAD_REQUEST,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -98,10 +96,9 @@ def forbidden_exception_handler(request: Request, exc: ForbiddenException) -> JS
     logger.debug(f"Access forbidden in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.FORBIDDEN,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -113,10 +110,9 @@ def unhealthy_exception_handler(request: Request, exc: UnhealthyException) -> JS
     logger.warning(f"Resource unhealthy in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.SERVICE_UNAVAILABLE,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -128,10 +124,9 @@ def precondition_not_met_exception_handler(request: Request, exc: PreconditionNo
     logger.debug(f"Resource not ready in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.PRECONDITION_REQUIRED,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -143,10 +138,9 @@ def external_service_error_handler(request: Request, exc: ExternalServiceError) 
     logger.error(f"External service error in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.BAD_GATEWAY,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -194,10 +188,9 @@ def inconsistent_state_exception_handler(request: Request, exc: InconsistentStat
     logger.error(f"Inconsistent state in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -209,10 +202,9 @@ def upload_failed_exception_handler(request: Request, exc: UploadFailedException
     logger.error(f"Upload failed in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 
@@ -225,10 +217,9 @@ def base_api_exception_handler(request: Request, exc: BaseApiException) -> JSONR
     logger.error(f"Application exception in request {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,  # Default status code
-        content={
-            "detail": exc.message,
-            **({"additional_info": exc.detail} if exc.detail else {}),
-        },
+        content=ErrorResponse(detail=exc.message, additional_info=exc.detail).model_dump(
+            by_alias=True, exclude_none=True
+        ),
     )
 
 

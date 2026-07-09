@@ -6,8 +6,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { act } from 'react';
 import React from 'react';
 
-import { ParsedAIM } from '@/types/aims';
-
 import AIMConnectModal from '@/components/features/models/AIMConnectModal';
 import { mockAims } from '@/__mocks__/services/app/aims.data';
 
@@ -21,23 +19,78 @@ vi.mock('next-i18next', () => ({
   }),
 }));
 
+// Mock useProject — the modal reads the AI gateway flag/URL from context.
+// Default: gateway enabled but no URL configured, so behaviour matches the
+// per-service (external/internal) endpoints. Individual tests override this.
+const mockProject = {
+  aiGatewayEnabled: true,
+  aiGatewayUrl: undefined as string | undefined,
+};
+vi.mock('@/contexts/ProjectContext', () => ({
+  useProject: () => mockProject,
+}));
+
 // Mock heroui components
-vi.mock('@heroui/react', () => ({
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@heroui/react')>()),
   Button: ({ children, onPress, color, ...props }: any) => (
     <button onClick={onPress} data-color={color} {...props}>
       {children}
     </button>
   ),
+}));
+
+// Mock ActionButton component
+vi.mock('@amdenterpriseai/components', async (importOriginal) => ({
+  ...(await importOriginal()),
   Input: ({ value, readOnly, label, ...props }: any) => (
     <div>
       {label && <label>{label}</label>}
       <input value={value} readOnly={readOnly} {...props} />
     </div>
   ),
-  Snippet: ({ children, copyIcon, classNames, ...props }: any) => (
+  CopySnippet: ({
+    children,
+    value,
+    copyIcon,
+    classNames,
+    symbol,
+    'data-testid': _dataTestId,
+    ...props
+  }: any) => (
     <div data-testid="code-snippet" {...props}>
-      {children}
+      {children ?? value}
       {copyIcon}
+    </div>
+  ),
+  ActionButton: ({
+    children,
+    onPress,
+    primary,
+    secondary,
+    isDisabled,
+    ...props
+  }: any) => (
+    <button
+      onClick={onPress}
+      data-primary={primary}
+      data-secondary={secondary}
+      disabled={isDisabled}
+      {...props}
+    >
+      {children}
+    </button>
+  ),
+  Modal: ({ children, title, footer, onClose, size }: any) => (
+    <div data-testid="modal" data-size={size}>
+      <div data-testid="modal-header">
+        <h2>{title}</h2>
+        <button onClick={onClose} data-testid="modal-close">
+          ×
+        </button>
+      </div>
+      <div data-testid="modal-content">{children}</div>
+      <div data-testid="modal-footer">{footer}</div>
     </div>
   ),
   Switch: ({ children, isSelected, onValueChange, ...props }: any) => (
@@ -52,12 +105,11 @@ vi.mock('@heroui/react', () => ({
     </label>
   ),
   Tabs: ({ children, selectedKey, onSelectionChange, ...props }: any) => {
-    // Clone children and pass onSelectionChange to Tab components
     const clonedChildren = React.Children.map(children, (child) => {
       if (React.isValidElement(child)) {
         return React.cloneElement(child as any, {
           onSelectionChange,
-          tabKey: (child as any).key, // Pass the key as a prop
+          tabKey: (child as any).key,
         });
       }
       return child;
@@ -80,33 +132,6 @@ vi.mock('@heroui/react', () => ({
   ),
 }));
 
-// Mock ActionButton component
-vi.mock('@amdenterpriseai/components', async (importOriginal) => ({
-  ...(await importOriginal()),
-  ActionButton: ({ children, onPress, primary, secondary, ...props }: any) => (
-    <button
-      onClick={onPress}
-      data-primary={primary}
-      data-secondary={secondary}
-      {...props}
-    >
-      {children}
-    </button>
-  ),
-  Modal: ({ children, title, footer, onClose, size }: any) => (
-    <div data-testid="modal" data-size={size}>
-      <div data-testid="modal-header">
-        <h2>{title}</h2>
-        <button onClick={onClose} data-testid="modal-close">
-          ×
-        </button>
-      </div>
-      <div data-testid="modal-content">{children}</div>
-      <div data-testid="modal-footer">{footer}</div>
-    </div>
-  ),
-}));
-
 // Mock Tabler icon
 vi.mock('@tabler/icons-react', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -117,21 +142,29 @@ vi.mock('@tabler/icons-react', async (importOriginal) => ({
 
 describe('AIMConnectModal', () => {
   const mockOnOpenChange = vi.fn();
-  const mockOnConfirmAction = vi.fn();
+  const mockOnChatRequested = vi.fn();
 
-  // Use the first aim from mockAims that has a deployed service
-  const mockAimWithService = mockAims[0]; // Llama 2 7B with RUNNING service
-  const mockAimWithoutService = mockAims[1]; // Stable Diffusion XL without service
+  // Use the deployed service from the first aim (Llama 2 7B with RUNNING service)
+  const mockService = mockAims[0].deployedService!;
+  const mockCanonicalName = mockAims[0].canonicalName;
+  // The served model name (status.aimId) differs from the display canonicalName —
+  // this is the value vLLM actually registers the model under, so the OpenAI
+  // `model` field in every snippet must carry it.
+  const mockServedModelName = mockAims[0].aimId!;
 
   const defaultProps = {
     onOpenChange: mockOnOpenChange,
-    onConfirmAction: mockOnConfirmAction,
+    onChatRequested: mockOnChatRequested,
     isOpen: true,
-    aim: mockAimWithService,
+    serviceId: mockService.id ?? undefined,
+    endpoints: mockService.endpoints,
+    modelName: mockServedModelName,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProject.aiGatewayEnabled = true;
+    mockProject.aiGatewayUrl = undefined;
   });
 
   describe('Rendering', () => {
@@ -157,19 +190,15 @@ describe('AIMConnectModal', () => {
     });
 
     it('renders both external and internal URLs when service has both', () => {
-      const aimWithBothUrls = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: 'http://test-host.example.com',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithBothUrls} />);
+          }}
+        />,
+      );
 
       expect(
         screen.getByText('actions.connect.modal.externalUrl'),
@@ -194,19 +223,15 @@ describe('AIMConnectModal', () => {
 
   describe('URL Generation', () => {
     it('generates correct external URL', () => {
-      const aimWithExternalHost = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: 'http://test-host.example.com',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithExternalHost} />);
+          }}
+        />,
+      );
 
       const snippets = screen.getAllByTestId('code-snippet');
       const externalUrlSnippet = snippets.find((snippet) =>
@@ -218,19 +243,15 @@ describe('AIMConnectModal', () => {
     });
 
     it('generates correct internal URL from mock data', () => {
-      // Create aim with specific internal endpoint
-      const aimWithInternalHost = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             internal: 'http://test-internal.example.com',
             external: '',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithInternalHost} />);
+          }}
+        />,
+      );
 
       const snippets = screen.getAllByTestId('code-snippet');
       const internalUrlSnippet = snippets.find((snippet) =>
@@ -240,31 +261,19 @@ describe('AIMConnectModal', () => {
       );
       expect(internalUrlSnippet).toBeInTheDocument();
     });
-
-    it('handles aim without deployed service', () => {
-      render(<AIMConnectModal {...defaultProps} aim={mockAimWithoutService} />);
-
-      // Should render at least one snippet (internal URL is always shown)
-      const snippets = screen.getAllByTestId('code-snippet');
-      expect(snippets.length).toBeGreaterThan(0);
-    });
   });
 
   describe('Code Example', () => {
     it('generates correct curl code snippet', () => {
-      const aimWithHosts = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: 'http://test-host.example.com',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+          }}
+        />,
+      );
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       // The code example snippet is the one with curl command
@@ -282,14 +291,17 @@ describe('AIMConnectModal', () => {
         'Authorization: Bearer UPDATE_YOUR_API_KEY_HERE',
       );
       expect(codeSnippet).toHaveTextContent(
-        `"model": "${mockAimWithService.canonicalName}"`,
+        `"model": "${mockServedModelName}"`,
       );
       expect(codeSnippet).toHaveTextContent('"content": "Hello"');
       expect(codeSnippet).toHaveTextContent('"role": "user"');
       expect(codeSnippet).toHaveTextContent('"stream": false');
     });
 
-    it('includes aim canonical name in code snippet', () => {
+    it('puts the served model id (not the canonical name) in the snippet model field', () => {
+      // Guard: the fixture must keep these distinct, otherwise this test passes
+      // trivially against the buggy old code that emitted canonicalName.
+      expect(mockServedModelName).not.toBe(mockCanonicalName);
       render(<AIMConnectModal {...defaultProps} />);
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
@@ -297,18 +309,16 @@ describe('AIMConnectModal', () => {
       const codeSnippet = codeSnippets.find((snippet) =>
         snippet.textContent?.includes('curl -X POST'),
       );
-      expect(codeSnippet).toHaveTextContent(mockAimWithService.canonicalName);
+      expect(codeSnippet).toHaveTextContent(
+        `"model": "${mockServedModelName}"`,
+      );
+      expect(codeSnippet).not.toHaveTextContent(
+        `"model": "${mockCanonicalName}"`,
+      );
     });
 
-    it('handles missing aim canonical name', () => {
-      const aimWithoutCanonicalName: ParsedAIM = {
-        ...mockAimWithService,
-        canonicalName: '' as any,
-      };
-
-      render(
-        <AIMConnectModal {...defaultProps} aim={aimWithoutCanonicalName} />,
-      );
+    it('leaves the model field empty when no served id is provided (no display-name fallback)', () => {
+      render(<AIMConnectModal {...defaultProps} modelName="" />);
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       // The code example snippet is the one with curl command
@@ -316,6 +326,10 @@ describe('AIMConnectModal', () => {
         snippet.textContent?.includes('curl -X POST'),
       );
       expect(codeSnippet).toHaveTextContent('"model": ""');
+      // The display name must NOT be used as a fallback — it silently 404s.
+      expect(codeSnippet).not.toHaveTextContent(
+        `"model": "${mockCanonicalName}"`,
+      );
     });
   });
 
@@ -332,7 +346,7 @@ describe('AIMConnectModal', () => {
       expect(mockOnOpenChange).toHaveBeenCalledWith(false);
     });
 
-    it('calls onConfirmAction and onOpenChange when confirm button is clicked', async () => {
+    it('calls onChatRequested with service id and onOpenChange when confirm button is clicked', async () => {
       render(<AIMConnectModal {...defaultProps} />);
 
       const confirmButton = screen.getByText('actions.connect.modal.openChat');
@@ -341,7 +355,9 @@ describe('AIMConnectModal', () => {
         fireEvent.click(confirmButton);
       });
 
-      expect(mockOnConfirmAction).toHaveBeenCalledWith(mockAimWithService);
+      expect(mockOnChatRequested).toHaveBeenCalledWith(
+        mockService.id ?? undefined,
+      );
       expect(mockOnOpenChange).toHaveBeenCalledWith(false);
     });
 
@@ -357,52 +373,44 @@ describe('AIMConnectModal', () => {
       expect(mockOnOpenChange).toHaveBeenCalledWith(false);
     });
 
-    it('does not call onConfirmAction when aim is undefined', async () => {
-      render(<AIMConnectModal {...defaultProps} aim={undefined} />);
-
-      const confirmButton = screen.getByText('actions.connect.modal.openChat');
-
-      await act(async () => {
-        fireEvent.click(confirmButton);
-      });
-
-      expect(mockOnConfirmAction).not.toHaveBeenCalled();
-      expect(mockOnOpenChange).not.toHaveBeenCalled();
-    });
-
-    it('does not call onConfirmAction when onConfirmAction is undefined', async () => {
+    it('does not call onChatRequested when service is undefined', async () => {
       render(
         <AIMConnectModal
           {...defaultProps}
-          onConfirmAction={undefined as any}
+          serviceId={undefined}
+          endpoints={undefined}
         />,
       );
 
       const confirmButton = screen.getByText('actions.connect.modal.openChat');
+      expect(confirmButton).toBeDisabled();
 
-      await act(async () => {
-        fireEvent.click(confirmButton);
-      });
+      expect(mockOnChatRequested).not.toHaveBeenCalled();
+      expect(mockOnOpenChange).not.toHaveBeenCalled();
+    });
 
+    it('does not call onChatRequested when service id is undefined', async () => {
+      render(<AIMConnectModal {...defaultProps} serviceId={undefined} />);
+
+      const confirmButton = screen.getByText('actions.connect.modal.openChat');
+      expect(confirmButton).toBeDisabled();
+
+      expect(mockOnChatRequested).not.toHaveBeenCalled();
       expect(mockOnOpenChange).not.toHaveBeenCalled();
     });
   });
 
   describe('Accessibility', () => {
     it('sets correct aria-labels on snippet fields', () => {
-      const aimWithHosts = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: 'http://test-host.example.com',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+          }}
+        />,
+      );
 
       const snippets = screen.getAllByTestId('code-snippet');
 
@@ -433,8 +441,14 @@ describe('AIMConnectModal', () => {
   });
 
   describe('Edge Cases', () => {
-    it('handles aim without deployed service', () => {
-      render(<AIMConnectModal {...defaultProps} aim={mockAimWithoutService} />);
+    it('handles undefined service', () => {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          serviceId={undefined}
+          endpoints={undefined}
+        />,
+      );
 
       // Should still render the modal
       expect(screen.getByTestId('modal')).toBeInTheDocument();
@@ -442,12 +456,6 @@ describe('AIMConnectModal', () => {
       // Should still render snippets
       const snippets = screen.getAllByTestId('code-snippet');
       expect(snippets.length).toBeGreaterThan(0);
-    });
-
-    it('handles undefined aim', () => {
-      render(<AIMConnectModal {...defaultProps} aim={undefined} />);
-
-      expect(screen.getByTestId('modal')).toBeInTheDocument();
     });
   });
 
@@ -488,19 +496,15 @@ describe('AIMConnectModal', () => {
     });
 
     it('displays curl code example by default', () => {
-      const aimWithHosts = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: 'http://test-host.example.com',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+          }}
+        />,
+      );
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       const codeSnippet = codeSnippets.find((snippet) =>
@@ -512,20 +516,20 @@ describe('AIMConnectModal', () => {
       );
     });
 
-    it('displays python code example when selected', () => {
-      const aimWithHosts = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+    it('displays python code example when python tab is selected', async () => {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: 'http://test-host.example.com',
-          },
-        },
-      };
+          }}
+        />,
+      );
 
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('tab-python'));
+      });
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       const codeSnippet = codeSnippets.find(
@@ -533,24 +537,23 @@ describe('AIMConnectModal', () => {
           snippet.getAttribute('aria-label') ===
           'actions.connect.modal.codeExample',
       );
-
-      expect(codeSnippet).toBeDefined();
+      expect(codeSnippet).toHaveTextContent('import requests');
     });
 
-    it('displays javascript code example when selected', () => {
-      const aimWithHosts = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+    it('displays javascript code example when javascript tab is selected', async () => {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: 'http://test-host.example.com',
-          },
-        },
-      };
+          }}
+        />,
+      );
 
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('tab-javascript'));
+      });
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       const codeSnippet = codeSnippets.find(
@@ -558,37 +561,21 @@ describe('AIMConnectModal', () => {
           snippet.getAttribute('aria-label') ===
           'actions.connect.modal.codeExample',
       );
-      expect(codeSnippet).toBeDefined();
+      expect(codeSnippet).toHaveTextContent('fetch(url,');
     });
   });
 
   describe('URL Toggle Switch', () => {
-    const aimWithExternalUrl = {
-      ...mockAimWithService,
-      deployedService: {
-        ...mockAimWithService.deployedService!,
-        endpoints: {
-          external: 'https://api.example.com/test-namespace/service-1',
-          internal:
-            'http://llama-2-7b-service.test-namespace.svc.cluster.local',
-        },
-      },
-    };
-
-    const aimWithoutExternalUrl = {
-      ...mockAimWithService,
-      deployedService: {
-        ...mockAimWithService.deployedService!,
-        endpoints: {
-          external: undefined,
-          internal:
-            'http://llama-2-7b-service.test-namespace.svc.cluster.local',
-        },
-      },
-    };
-
     it('renders the internal URL switch when external URL exists', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithExternalUrl} />);
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
+            external: 'https://api.example.com',
+            internal: 'http://test-host.example.com',
+          }}
+        />,
+      );
 
       const switchElement = screen.getByTestId('switch');
       expect(switchElement).toBeInTheDocument();
@@ -598,32 +585,44 @@ describe('AIMConnectModal', () => {
     });
 
     it('hides the internal URL switch when there is no external URL', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithoutExternalUrl} />);
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
+            external: undefined,
+            internal: 'http://internal.example.com',
+          }}
+        />,
+      );
 
       expect(screen.queryByTestId('switch')).not.toBeInTheDocument();
     });
 
     it('switch is unchecked by default (external URL)', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithExternalUrl} />);
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
+            external: 'https://api.example.com',
+            internal: 'http://test-host.example.com',
+          }}
+        />,
+      );
 
       const switchInput = screen.getByTestId('switch-input');
       expect(switchInput).not.toBeChecked();
     });
 
     it('toggles between external and internal URL in code snippet', async () => {
-      const aimWithHosts = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: 'http://test-host.example.com',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+          }}
+        />,
+      );
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       const codeSnippet = codeSnippets.find((snippet) =>
@@ -648,20 +647,15 @@ describe('AIMConnectModal', () => {
   });
 
   describe('Code Examples Content', () => {
-    const aimWithHosts = {
-      ...mockAimWithService,
-      deployedService: {
-        ...mockAimWithService.deployedService!,
-        clusterAuthGroupId: 'test-group-id',
-        endpoints: {
-          external: 'https://api.example.com',
-          internal: 'http://test-host.example.com',
-        },
+    const serviceWithHostsProps = {
+      endpoints: {
+        external: 'https://api.example.com',
+        internal: 'http://test-host.example.com',
       },
     };
 
     it('curl example contains correct structure', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+      render(<AIMConnectModal {...defaultProps} {...serviceWithHostsProps} />);
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       const codeSnippet = codeSnippets.find((snippet) =>
@@ -677,7 +671,7 @@ describe('AIMConnectModal', () => {
     });
 
     it('includes UPDATE_YOUR_API_KEY_HERE placeholder in all examples', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+      render(<AIMConnectModal {...defaultProps} {...serviceWithHostsProps} />);
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       const codeSnippet = codeSnippets.find((snippet) =>
@@ -686,18 +680,18 @@ describe('AIMConnectModal', () => {
       expect(codeSnippet).toHaveTextContent('UPDATE_YOUR_API_KEY_HERE');
     });
 
-    it('includes model canonical name in code examples', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+    it('includes the served model id in code examples', () => {
+      render(<AIMConnectModal {...defaultProps} {...serviceWithHostsProps} />);
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       const codeSnippet = codeSnippets.find((snippet) =>
         snippet.textContent?.includes('curl'),
       );
-      expect(codeSnippet).toHaveTextContent(aimWithHosts.canonicalName);
+      expect(codeSnippet).toHaveTextContent(mockServedModelName);
     });
 
     it('includes Hello message in all examples', () => {
-      render(<AIMConnectModal {...defaultProps} aim={aimWithHosts} />);
+      render(<AIMConnectModal {...defaultProps} {...serviceWithHostsProps} />);
 
       const codeSnippets = screen.getAllByTestId('code-snippet');
       const codeSnippet = codeSnippets.find((snippet) =>
@@ -709,19 +703,15 @@ describe('AIMConnectModal', () => {
 
   describe('URL Format', () => {
     it('displays external endpoint URL', () => {
-      const aimWithExternalHost = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          clusterAuthGroupId: 'test-group-id',
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: 'https://api.example.com',
             internal: '',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithExternalHost} />);
+          }}
+        />,
+      );
 
       const snippets = screen.getAllByTestId('code-snippet');
       const urlSnippet = snippets.find((snippet) =>
@@ -733,18 +723,15 @@ describe('AIMConnectModal', () => {
     });
 
     it('displays internal endpoint URL', () => {
-      const aimWithInternalHost = {
-        ...mockAimWithService,
-        deployedService: {
-          ...mockAimWithService.deployedService!,
-          endpoints: {
+      render(
+        <AIMConnectModal
+          {...defaultProps}
+          endpoints={{
             external: '',
             internal: 'http://internal.example.com',
-          },
-        },
-      };
-
-      render(<AIMConnectModal {...defaultProps} aim={aimWithInternalHost} />);
+          }}
+        />,
+      );
 
       const snippets = screen.getAllByTestId('code-snippet');
       const urlSnippet = snippets.find((snippet) =>
@@ -753,6 +740,147 @@ describe('AIMConnectModal', () => {
         ),
       );
       expect(urlSnippet).toBeInTheDocument();
+    });
+  });
+
+  describe('Unified AI Gateway', () => {
+    const endpoints = {
+      external: 'https://api.example.com',
+      internal: 'http://test-internal.example.com',
+    };
+
+    it('uses the gateway URL for the primary endpoint when enabled and configured', () => {
+      mockProject.aiGatewayEnabled = true;
+      mockProject.aiGatewayUrl = 'https://ai.example.com';
+
+      render(<AIMConnectModal {...defaultProps} endpoints={endpoints} />);
+
+      const snippets = screen.getAllByTestId('code-snippet');
+      // Primary URL + code examples target the unified gateway endpoint.
+      const gatewaySnippet = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'https://ai.example.com/v1/chat/completions',
+        ),
+      );
+      expect(gatewaySnippet).toBeInTheDocument();
+
+      // The per-service external URL must not be used as the primary endpoint.
+      const perServiceExternal = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'https://api.example.com/v1/chat/completions',
+        ),
+      );
+      expect(perServiceExternal).toBeUndefined();
+
+      // The primary URL is labelled as the unified inference endpoint.
+      expect(
+        screen.getByText('actions.connect.modal.inferenceUrl'),
+      ).toBeInTheDocument();
+    });
+
+    it('trims a trailing slash from the configured gateway URL', () => {
+      mockProject.aiGatewayEnabled = true;
+      mockProject.aiGatewayUrl = 'https://ai.example.com/';
+
+      render(<AIMConnectModal {...defaultProps} endpoints={endpoints} />);
+
+      const snippets = screen.getAllByTestId('code-snippet');
+      const gatewaySnippet = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'https://ai.example.com/v1/chat/completions',
+        ),
+      );
+      expect(gatewaySnippet).toBeInTheDocument();
+      const doubleSlash = snippets.find((snippet) =>
+        snippet.textContent?.includes('https://ai.example.com//v1'),
+      );
+      expect(doubleSlash).toBeUndefined();
+    });
+
+    it('keeps the per-service internal URL alongside the gateway endpoint', () => {
+      mockProject.aiGatewayEnabled = true;
+      mockProject.aiGatewayUrl = 'https://ai.example.com';
+
+      render(<AIMConnectModal {...defaultProps} endpoints={endpoints} />);
+
+      const snippets = screen.getAllByTestId('code-snippet');
+      const internalSnippet = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'http://test-internal.example.com/v1/chat/completions',
+        ),
+      );
+      expect(internalSnippet).toBeInTheDocument();
+    });
+
+    it('falls back to the per-service external URL when the gateway URL is not configured', () => {
+      mockProject.aiGatewayEnabled = true;
+      mockProject.aiGatewayUrl = undefined;
+
+      render(<AIMConnectModal {...defaultProps} endpoints={endpoints} />);
+
+      const snippets = screen.getAllByTestId('code-snippet');
+      const perServiceExternal = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'https://api.example.com/v1/chat/completions',
+        ),
+      );
+      expect(perServiceExternal).toBeInTheDocument();
+      expect(
+        screen.getByText('actions.connect.modal.externalUrl'),
+      ).toBeInTheDocument();
+    });
+
+    it('does not use the gateway URL when the flag is disabled', () => {
+      mockProject.aiGatewayEnabled = false;
+      mockProject.aiGatewayUrl = 'https://ai.example.com';
+
+      render(<AIMConnectModal {...defaultProps} endpoints={endpoints} />);
+
+      const snippets = screen.getAllByTestId('code-snippet');
+      const gatewaySnippet = snippets.find((snippet) =>
+        snippet.textContent?.includes('https://ai.example.com'),
+      );
+      expect(gatewaySnippet).toBeUndefined();
+      const perServiceExternal = snippets.find((snippet) =>
+        snippet.textContent?.includes(
+          'https://api.example.com/v1/chat/completions',
+        ),
+      );
+      expect(perServiceExternal).toBeInTheDocument();
+    });
+
+    it('includes x-ai-eg-backend and x-ai-eg-model routing headers in the gateway examples', () => {
+      mockProject.aiGatewayEnabled = true;
+      mockProject.aiGatewayUrl = 'https://ai.example.com';
+
+      render(<AIMConnectModal {...defaultProps} endpoints={endpoints} />);
+
+      const codeSnippet = screen
+        .getAllByTestId('code-snippet')
+        .find((snippet) => snippet.textContent?.includes('curl -X POST'));
+      // Precise backend routing requires both routing headers (deployment UUID +
+      // model name) so the gateway reaches this exact deployment.
+      expect(codeSnippet).toHaveTextContent(
+        `x-ai-eg-backend: ${mockService.id}`,
+      );
+      expect(codeSnippet).toHaveTextContent(
+        `x-ai-eg-model: ${mockServedModelName}`,
+      );
+    });
+
+    it('omits the routing headers when not routing through the gateway', () => {
+      // Gateway flag on but no URL configured → per-service external URL, where
+      // the x-ai-eg-* routing headers do not apply.
+      mockProject.aiGatewayEnabled = true;
+      mockProject.aiGatewayUrl = undefined;
+
+      render(<AIMConnectModal {...defaultProps} endpoints={endpoints} />);
+
+      const codeSnippet = screen
+        .getAllByTestId('code-snippet')
+        .find((snippet) => snippet.textContent?.includes('curl -X POST'));
+      expect(codeSnippet).not.toHaveTextContent('x-ai-eg-backend');
+      expect(codeSnippet).not.toHaveTextContent('x-ai-eg-model');
     });
   });
 });

@@ -28,11 +28,15 @@ import { UserFormData } from '@/types/users';
 import { UserWithProjects } from '@/types/users';
 
 import { DeleteUser, Projects, UserRoles } from '@/components/features/user';
-import { FormFieldComponent } from '@amdenterpriseai/components';
-import { ManagedForm } from '@amdenterpriseai/components';
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  FormFieldComponent,
+  ManagedForm,
+} from '@amdenterpriseai/components';
 
 import { ZodType, z } from 'zod';
-import { Card, CardBody, CardHeader } from '@heroui/react';
 
 const translationKeySet = 'users';
 
@@ -199,20 +203,6 @@ export const getServerSideProps = async (context: any) => {
   const { locale } = context;
 
   const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   try {
     const userResponse = await getUser(

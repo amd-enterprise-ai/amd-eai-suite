@@ -15,7 +15,7 @@ Documentation       Test scenarios for API key management functionality with AIM
 ...                 - AIMS model redeployment impacts on key bindings
 ...
 ...                 Architecture Note:
-...                 API keys are managed through AIWB's namespace-based API endpoints.
+...                 API keys are managed through AIWB's project-based API endpoints.
 ...                 Authentication is enforced at the API gateway level.
 ...                 Tests interact only with the AIWB API.
 ...
@@ -61,6 +61,16 @@ Api key with expiration
     When api key is created with ttl of 3600s
     Then api key should be created with expiration time
 
+User can browse api keys page by page
+    [Documentation]    API keys are served in pages rather than as one flat list,
+    ...                so a consumer can navigate without loading every key.
+    [Tags]    api-keys    list    pagination
+
+    Given a ready project with user access exists
+    And user is authenticated
+    When api keys are listed for the project
+    Then the result is returned page by page
+
 Revoke api key
     [Documentation]    Verify that an API key can be revoked
     ...
@@ -105,6 +115,22 @@ Assign api key to deployed AIMS model
     And AIMS model access works with api key
     And key-model mapping should be visible in management interface
 
+Manage api key group memberships
+    [Documentation]    Verify the api-key /groups sub-resource: list, add, remove.
+    [Tags]    api-keys    groups    management    gpu
+
+    Given a ready project with user access exists
+    And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
+    And an AIM model is running
+    And user is authenticated
+    And api key exists for user
+    When the api-key's group memberships are listed
+    Then the api-key has no group memberships
+    When the api-key is added to the AIM's auth group
+    Then the api-key has that group in its memberships
+    When the api-key is removed from the AIM's auth group
+    Then the api-key has no group memberships
+
 Access AIMS model with valid api key
     [Documentation]    Verify that an AIMS model can be accessed with a valid API key
     ...
@@ -127,38 +153,42 @@ Access AIMS model with invalid api key
     [Documentation]    Verify that AIMS model access fails with invalid API key
     ...
     ...    Authentication is enforced at the API gateway level.
-    ...    Expected response: 403 Forbidden (authentication required)
+    ...    The gateway returns 404 for any unknown credential (invalid or never-existent)
+    ...    to avoid leaking key existence; 401/403 may also be observed from other
+    ...    enforcement layers.
     ...
     ...    Steps:
     ...    1. Deploy AIMS model with API key assigned
-    ...    2. Make request with INVALID API key
-    ...    3. Verify request fails with 401/403 (authentication failure)
+    ...    2. Prove model is reachable with a valid key (guards against spurious 404)
+    ...    3. Make request with INVALID API key
+    ...    4. Verify request fails with 401/403/404 (access denied)
     [Tags]    api-keys    access    aims    negative    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
     And an AIM model is running with api key
+    And AIMS model access works with api key
     When request is made to AIMS model with invalid api key
-    Then request should fail with 401 unauthorized
+    Then request should be rejected as unauthorized
     And response error message should indicate authentication failure
 
 Access AIMS model without api key
     [Documentation]    Verify that AIMS model access fails without API key when required
     ...
     ...    Authentication is enforced at the API gateway level.
-    ...    Expected response: 403 Forbidden (authentication required)
+    ...    The request is rejected because no credential is supplied.
     ...
     ...    Steps:
     ...    1. Deploy AIMS model with API key assigned
     ...    2. Make request to AIMS model without any API key
-    ...    3. Verify request fails with 401/403 (authentication failure)
+    ...    3. Verify the request is rejected as unauthorized
     [Tags]    api-keys    access    aims    negative    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
     And an AIM model is running with api key
     When request is made to AIMS model without api key
-    Then request should fail with 401 unauthorized
+    Then request should be rejected as unauthorized
     And error message should indicate missing api key
 
 Assign multiple keys to single AIMS model
@@ -208,9 +238,11 @@ Access AIMS model with revoked api key
     ...    This tests the access enforcement side of revocation.
     ...    The key is created, assigned, verified working, then revoked.
     ...    After revocation, the same key value should be rejected.
-    ...    Waits 60 seconds for revocation to propagate through the auth cache.
-    ...    Skipped: Gateway auth cache does not propagate key revocation (SDA-3395).
-    [Tags]    api-keys    access    aims    negative    revoke    skip
+    ...    Polls up to 120 seconds for revocation to propagate through the auth cache.
+    ...    The gateway returns 404 for unknown credentials (revoked or never-existed keys)
+    ...    to avoid leaking whether a key ever existed. 401/403 may still be observed
+    ...    depending on which enforcement layer rejects the request.
+    [Tags]    api-keys    access    aims    negative    revoke    gpu
 
     Given a ready project with user access exists
     And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
@@ -218,7 +250,6 @@ Access AIMS model with revoked api key
     And AIMS model access works with api key
     When api key is revoked
     Then revocation should succeed
-    And 60 seconds pass for revocation to propagate
     And AIMS model should reject the revoked api key
 
 # Phase 3 — Destructive (undeploy/redeploy/delete)
@@ -317,5 +348,35 @@ Remove AIMS model with active key mapping
     Then api key should show no active mappings
     And key status should indicate resource removed
     And api key should remain valid for other uses
+
+# Phase 6 — Multi-AIM regression (two AIMs deployed simultaneously)
+
+Inference is authorized per model when two AIMs share the workloads host
+    [Documentation]    Regression test for the cluster-auth hostname-only route-selection
+    ...    bug (Bug A): when two or more AIMs share the workloads.<domain> hostname,
+    ...    cluster-auth previously resolved the HTTPRoute by hostname alone and applied
+    ...    the wrong model's allowed-group. The result was that a key valid for model A
+    ...    could be falsely denied on A (because auth looked up model B's group), while
+    ...    cross-model enforcement was also broken.
+    ...
+    ...    This test exercises BOTH halves with two distinct AIMs in the same project:
+    ...      1. Key-A → AIM-A external endpoint → 200 (catches the false-denial).
+    ...      2. Key-A → AIM-B external endpoint → 401/403/404 (cross-model enforcement).
+    ...
+    ...    The test deliberately deploys a second AIM so that both AIMs are live on
+    ...    the workloads.* hostname simultaneously — the bug only manifests when
+    ...    cluster-auth has two HTTPRoute candidates for the same hostname.
+    [Tags]    api-keys    inference    negative    positive    gpu
+
+    Given a ready project with user access exists
+    And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
+    And user is authenticated
+    And an AIM model is running
+    And a second AIM model is running
+    And an api key authorized only for model A is created
+    When a request is made to model A with key A
+    Then model A should accept the request
+    When a request is made to model B with key A
+    Then model B should reject the request
 
 # Rate limiting is not currently exposed through the API

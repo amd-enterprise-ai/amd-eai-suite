@@ -55,7 +55,7 @@ async def get_api_key_by_id(
 
 async def create_api_key(
     session: AsyncSession,
-    name: str,
+    display_name: str,
     truncated_key: str,
     cluster_auth_key_id: str,
     namespace: str,
@@ -66,7 +66,7 @@ async def create_api_key(
 
     Args:
         session: Database session
-        name: User-friendly name for the API key
+        display_name: User-friendly display name for the API key
         truncated_key: Truncated key for display
         cluster_auth_key_id: Cluster Auth accessor/key_id
         namespace: The namespace name
@@ -76,14 +76,14 @@ async def create_api_key(
         The created API key
 
     Raises:
-        ConflictException: If an API key with the same name already exists in the namespace
+        ConflictException: If an API key with the same display name already exists in the namespace
 
     Note:
         ttl, expires_at, renewable, and num_uses are not stored in the database.
         They are fetched from Cluster Auth on demand as it is the source of truth for key validity.
     """
     new_api_key = ApiKey(
-        name=name,
+        display_name=display_name,
         truncated_key=truncated_key,
         cluster_auth_key_id=cluster_auth_key_id,
         namespace=namespace,
@@ -97,8 +97,10 @@ async def create_api_key(
         return new_api_key
     except IntegrityError as e:
         error_message = str(e)
-        if "uq_api_keys_name_namespace" in error_message or "name" in error_message.lower():
-            raise ConflictException(f"An API key with the name '{name}' already exists in the namespace '{namespace}'")
+        if "uq_api_keys_display_name_namespace" in error_message or "display_name" in error_message.lower():
+            raise ConflictException(
+                f"An API key with the display name '{display_name}' already exists in the namespace '{namespace}'"
+            )
         raise e
 
 

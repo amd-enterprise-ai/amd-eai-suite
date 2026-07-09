@@ -7,15 +7,14 @@
  * Used in both deployment drawer and workload settings drawer.
  */
 
-import { SelectItem } from '@heroui/react';
-import { useTranslation } from 'next-i18next';
-import type { UseFormReturn } from 'react-hook-form';
-
 import {
+  SelectItem,
   FormNumberInput,
   FormRangeSlider,
   FormSelect,
 } from '@amdenterpriseai/components';
+import { useTranslation } from 'next-i18next';
+import type { UseFormReturn } from 'react-hook-form';
 
 import {
   AIM_MAX_REPLICAS,

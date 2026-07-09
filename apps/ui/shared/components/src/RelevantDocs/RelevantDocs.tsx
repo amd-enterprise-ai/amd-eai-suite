@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Accordion, AccordionItem } from '@heroui/react';
-import type { Selection } from '@heroui/react';
+import { Accordion, AccordionItem } from '../Accordion/Accordion';
+import type { Selection } from '../Select/Select';
 import { useTranslation } from 'next-i18next';
 import { useLocalStorage } from '@amdenterpriseai/hooks';
 

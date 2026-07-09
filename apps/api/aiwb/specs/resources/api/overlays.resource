@@ -141,21 +141,3 @@ Delete overlay
         Log                     Deleted overlay ${overlay_id}                   INFO
     END
     RETURN                  ${response}
-
-Batch delete overlays request
-    [Documentation]    Delete multiple overlays in a single request.
-    ...
-    ...    Args:
-    ...    ids (list): List of overlay UUIDs to delete
-    ...
-    ...    Returns:
-    ...    response: API response (empty on success)
-    [Arguments]             ${ids}                  ${expected_status}=any
-    Create API Session      aiwb
-    ${endpoint}=            Service API Endpoint    aiwb    endpoint=overlays/delete
-    &{body}=                Create Dictionary       ids=${ids}
-
-    Log                     POST ${endpoint} with ids: ${ids}               DEBUG
-    ${response}=            Safe Post Request       ${endpoint}             json=${body}            expected_status=${expected_status}
-    Log                     Batch delete response: status=${response.status_code}                   DEBUG
-    RETURN                  ${response}

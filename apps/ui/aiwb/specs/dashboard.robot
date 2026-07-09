@@ -16,6 +16,7 @@ Documentation       Frontend E2E tests for the AIWB project dashboard page.
 # UI resources (feature layer + browser setup)
 Resource            resources/common/browser_setup.resource
 Resource            resources/dashboard.resource
+Resource            resources/workloads.resource
 
 # API resources (infrastructure preconditions, resolved via pythonpath)
 Resource            resources/airm_projects.resource
@@ -81,5 +82,23 @@ Switching projects updates dashboard content
     And user is on the dashboard page
     When user switches to project "${first_project}"
     Then dashboard should reflect project "${first_project}"
+    And dashboard should display the overview section
+    And dashboard should display the workloads section
+
+Switching projects while on workload details page redirects to dashboard
+    [Documentation]    Verify that switching to a different project while viewing a workload's
+    ...                details page redirects the user to the new project's dashboard instead
+    ...                of showing an error page.
+    [Tags]    ui    dashboard    workloads    projects    navigation
+
+    ${first_project}=    Test Name    testing
+    ${second_project}=    Test Name    testing-2
+    Given a ready project "${first_project}" with user access exists
+    And a ready project "${second_project}" with user access exists
+    And user is logged in
+    And project "${first_project}" is selected
+    And user is on workload details page for project "${first_project}"
+    When user switches to project "${second_project}"
+    Then dashboard should reflect project "${second_project}"
     And dashboard should display the overview section
     And dashboard should display the workloads section

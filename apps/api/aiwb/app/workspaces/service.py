@@ -2,10 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+from uuid import UUID
+
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api_common.exceptions import ConflictException
+from api_common.exceptions import ConflictException, NotFoundException
 
 from ..charts.models import Chart
 from ..charts.service import get_chart
@@ -13,7 +15,8 @@ from ..charts.utils import render_helm_template
 from ..dispatch.kube_client import KubernetesClient
 from ..workloads.enums import WorkloadStatus, WorkloadType
 from ..workloads.models import Workload
-from ..workloads.repository import create_workload
+from ..workloads.repository import create_workload, get_workload_by_id
+from ..workloads.service import delete_workload_components
 from ..workloads.utils import apply_manifest, sanitize_user_id
 from .enums import (
     WORKSPACE_USAGE_SCOPE_MAPPING,
@@ -22,7 +25,7 @@ from .enums import (
     workspace_type_chart_name_mapping,
 )
 from .schemas import DevelopmentWorkspaceRequest
-from .utils import check_workspace_availability_per_namespace
+from .utils import check_workspace_availability_per_namespace, pin_workspace_route_hostname
 
 
 async def get_chart_by_workspace_type(session: AsyncSession, workspace_type: WorkspaceType) -> Chart:
@@ -68,13 +71,14 @@ async def create_development_workspace(
     # Helm values must use keys matching the chart's values.yaml, which is a mix of
     # camelCase (imagePullSecrets) and snake_case (memory_per_gpu, cpu_per_gpu).
     # Dump with Python field names (snake_case) and remap the ones Helm expects as camelCase.
-    user_inputs = request.model_dump(exclude_unset=True, exclude_none=True)
+    # workspace_type is routing metadata (chart selection), not a Helm value — exclude it.
+    user_inputs = request.model_dump(exclude_unset=True, exclude_none=True, exclude={"workspace_type"})
     if "image_pull_secrets" in user_inputs:
         user_inputs["imagePullSecrets"] = user_inputs.pop("image_pull_secrets")
 
     workload = await create_workload(
         session=session,
-        display_name=display_name or f"{workspace_type.value.title()} Workspace",
+        display_name=display_name or chart.display_name or f"{workspace_type.value.title()} Workspace",
         workload_type=WorkloadType.WORKSPACE,
         chart_id=chart.id,
         namespace=namespace,
@@ -107,6 +111,10 @@ async def create_development_workspace(
             namespace=namespace,
             overlays_values=[helm_values],
         )
+        # Pin the workspace route to the dedicated workspaces.<domain> host before
+        # applying (and before storing workload.manifest, so the persisted copy and
+        # the live route agree) — see pin_workspace_route_hostname.
+        manifest = pin_workspace_route_hostname(manifest)
 
         await apply_manifest(kube_client, manifest, workload, namespace, submitter)
         workload.manifest = manifest
@@ -121,3 +129,19 @@ async def create_development_workspace(
         raise
 
     return workload
+
+
+async def delete_development_workspace(
+    session: AsyncSession,
+    namespace: str,
+    workload_id: UUID,
+) -> None:
+    workload = await get_workload_by_id(session=session, workload_id=workload_id, namespace=namespace)
+    if not workload or workload.type != WorkloadType.WORKSPACE:
+        # 404 not 422 because the endpoint is type-scoped to workspaces
+        raise NotFoundException(f"Workspace {workload_id} not found")
+
+    # TODO(EAI-6314): verify PVC cleanup — workspace charts may declare PVCs not in
+    # WORKLOAD_RESOURCES, so label-selector deletion can leave them stranded.
+    # EAI-6314 owns the broader workload delete propagation fix.
+    await delete_workload_components(namespace, workload_id, session, workload=workload)

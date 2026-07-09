@@ -5,18 +5,16 @@
 import { useTranslation } from 'next-i18next';
 
 import { Workload } from '@/types/workloads';
-import type { ResourceMetrics } from '@/types/namespaces';
+import type { ResourceMetrics } from '@/types/projects';
 
 import { Modal } from '@amdenterpriseai/components';
-import WorkloadLogs, { LogSource } from './WorkloadLogs';
+import WorkloadLogs from './WorkloadLogs';
 
 interface Props {
   workload: Workload | ResourceMetrics | undefined;
   onOpenChange: (isOpen: boolean) => void;
   isOpen: boolean;
-  /** Log source type - defaults to 'workload' */
-  logSource?: LogSource;
-  /** Namespace - required when logSource is 'aim' */
+  /** Project (namespace) the workload belongs to */
   namespace: string;
 }
 
@@ -24,7 +22,6 @@ const WorkloadLogsModal = ({
   workload,
   isOpen,
   onOpenChange,
-  logSource,
   namespace,
 }: Props) => {
   const { t } = useTranslation('workloads');
@@ -43,12 +40,7 @@ const WorkloadLogsModal = ({
       title={t('list.actions.logs.modal.title')}
       size="5xl"
     >
-      <WorkloadLogs
-        workload={workload}
-        isOpen={isOpen}
-        logSource={logSource}
-        namespace={namespace}
-      />
+      <WorkloadLogs workload={workload} isOpen={isOpen} namespace={namespace} />
     </Modal>
   );
 };

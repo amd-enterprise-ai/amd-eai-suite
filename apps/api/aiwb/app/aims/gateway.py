@@ -4,11 +4,14 @@
 
 """Gateway for accessing AIMClusterModel resources from Kubernetes."""
 
+import asyncio
 from typing import Any
 from uuid import UUID
 
 from kubernetes_asyncio.client import ApiException
 from loguru import logger
+
+from api_common.exceptions import ConflictException, ExternalServiceError
 
 from ..dispatch.kube_client import KubernetesClient
 from ..dispatch.utils import get_resource_version
@@ -16,45 +19,45 @@ from ..workloads.constants import WORKLOAD_ID_LABEL
 from .constants import (
     AIM_API_GROUP,
     AIM_API_VERSION,
+    AIM_ARTIFACT_PLURAL,
     AIM_CHATTABLE_CONDITIONS,
-    AIM_CLUSTER_MODEL_LABEL,
     AIM_CLUSTER_MODEL_PLURAL,
-    AIM_CLUSTER_SERVICE_TEMPLATE_PLURAL,
+    AIM_CLUSTER_PROFILE_PLURAL,
     AIM_COND_HTTP_ROUTE_READY,
     AIM_MODEL_LABEL,
     AIM_MODEL_PLURAL,
+    AIM_PROFILE_PLURAL,
     AIM_SERVICE_PLURAL,
     AIM_SERVICE_RESOURCE,
-    AIM_SERVICE_TEMPLATE_PLURAL,
     CHAT_TAG_VALUE,
     FINE_TUNED_LABEL,
     HTTP_ROUTE_API_GROUP,
     HTTP_ROUTE_PLURAL,
     KSERVE_API_GROUP,
     KSERVE_INFERENCE_SERVICE_PLURAL,
+    NAMESPACE_AIM_MODEL_LABEL,
 )
 from .crds import (
-    AIMClusterModelResource,
-    AIMClusterServiceTemplateResource,
+    AIMArtifactResource,
     AIMModelResource,
+    AIMProfileResource,
     AIMServiceResource,
-    AIMServiceTemplateResource,
     HTTPRouteResource,
 )
-from .enums import AIMClusterModelStatus
+from .enums import AIMModelStatus
 from .enums import AIMServiceStatus as AIMServiceStatusEnum
 from .schemas import AIMDeployRequest
 from .utils import (
     generate_aim_service_manifest,
-    generate_fine_tuned_aim_service_manifest,
+    generate_namespace_aim_service_manifest,
     is_condition_true,
 )
 
 
 async def list_aims(
     kube_client: KubernetesClient,
-    statuses: list[AIMClusterModelStatus] | None = None,
-) -> list[AIMClusterModelResource]:
+    statuses: list[AIMModelStatus] | None = None,
+) -> list[AIMModelResource]:
     """Get all AIMClusterModels from Kubernetes."""
     try:
         result = await kube_client.custom_objects.list_cluster_custom_object(
@@ -65,7 +68,7 @@ async def list_aims(
 
         aims = []
         for item in result.get("items", []):
-            aim = AIMClusterModelResource.model_validate(item)
+            aim = AIMModelResource.model_validate(item)
             aims.append(aim)
 
         logger.debug(f"Found {len(aims)} AIMClusterModels in cluster")
@@ -81,7 +84,7 @@ async def list_aims(
         return []
 
 
-async def get_aim_by_name(kube_client: KubernetesClient, resource_name: str) -> AIMClusterModelResource | None:
+async def get_aim_by_name(kube_client: KubernetesClient, resource_name: str) -> AIMModelResource | None:
     """Get a specific AIMClusterModel from Kubernetes by resource name."""
     try:
         result = await kube_client.custom_objects.get_cluster_custom_object(
@@ -91,7 +94,7 @@ async def get_aim_by_name(kube_client: KubernetesClient, resource_name: str) -> 
             name=resource_name,
         )
 
-        return AIMClusterModelResource.model_validate(result)
+        return AIMModelResource.model_validate(result)
 
     except Exception as e:
         if hasattr(e, "status") and e.status == 404:
@@ -103,7 +106,7 @@ async def get_aim_by_name(kube_client: KubernetesClient, resource_name: str) -> 
 
 def is_aim_service_chattable(
     aim_service: AIMServiceResource,
-    aims_by_name: dict[str, AIMClusterModelResource],
+    aims_by_name: dict[str, AIMModelResource],
 ) -> bool:
     """Check if an AIM service is chattable.
 
@@ -112,9 +115,10 @@ def is_aim_service_chattable(
     2. HTTPRouteReady condition is True (routing is configured)
     3. Either:
        a. Its associated AIMClusterModel has the "chat" tag in its image metadata, OR
-       b. It is a fine-tuned model service (marked with FINE_TUNED_LABEL) — fine-tuned
-          models don't have cluster-scoped AIMClusterModels, so their chat capability is
-          inferred from the label instead of the model catalog tag.
+       b. It is a namespace AIMModel service (marked with NAMESPACE_AIM_MODEL_LABEL or
+          legacy FINE_TUNED_LABEL) — namespace models don't have cluster-scoped
+          AIMClusterModels, so their chat capability is inferred from the label instead
+          of the model catalog tag.
 
     Note: We check conditions rather than status.status because a service
     can be in Degraded status while still having a functional inference endpoint.
@@ -123,12 +127,13 @@ def is_aim_service_chattable(
     if not all(is_condition_true(conditions, c) for c in AIM_CHATTABLE_CONDITIONS):
         return False
 
-    # Fine-tuned model services are chattable if their conditions are ready.
-    # They don't have associated AIMClusterModels, so we skip the catalog tag check.
-    if FINE_TUNED_LABEL in aim_service.metadata.labels:
+    # Namespace AIMModel services (fine-tuned/custom-onboarded) are chattable
+    # if their conditions are ready. They don't have associated AIMClusterModels,
+    # so we skip the catalog tag check.
+    if NAMESPACE_AIM_MODEL_LABEL in aim_service.metadata.labels or FINE_TUNED_LABEL in aim_service.metadata.labels:
         return True
 
-    aim_name = aim_service.status.resolved_model.name if aim_service.status.resolved_model else None
+    aim_name = aim_service.spec.model.get("name")
     if not aim_name:
         return False
 
@@ -162,9 +167,11 @@ async def list_aim_services(
             plural=AIM_SERVICE_PLURAL,
         )
 
-        httproutes = await _get_httproutes_for_aim_services(kube_client, namespace)
-        isvc_names = await _get_isvc_names(kube_client, namespace)
-        aims_by_name = await _get_aims_by_name(kube_client) if chattable_only else {}
+        httproutes, isvc_names, aims_by_name = await asyncio.gather(
+            _get_httproutes_for_aim_services(kube_client, namespace),
+            _get_isvc_names(kube_client, namespace),
+            _get_aims_by_name(kube_client) if chattable_only else asyncio.sleep(0, result={}),
+        )
 
         aim_services = []
         for item in result.get("items", []):
@@ -230,11 +237,12 @@ async def get_aim_service_by_id(
 async def create_aim_service(
     kube_client: KubernetesClient,
     namespace: str,
-    aim: AIMClusterModelResource,
+    aim: AIMModelResource,
     deploy_request: AIMDeployRequest,
     submitter: str,
     service_name: str,
     cluster_auth_group_id: str | None,
+    display_name: str | None = None,
 ) -> AIMServiceResource:
     """Create an AIMService in Kubernetes.
 
@@ -242,6 +250,7 @@ async def create_aim_service(
         aim: AIMClusterModel resource if found, None if deploying by image reference that doesn't exist yet
         service_name: The K8s resource name for the AIMService
         cluster_auth_group_id: Cluster-Auth group ID to stamp on the resource, or None when disabled
+        display_name: Optional user-visible display name stored as annotation
     """
     manifest = generate_aim_service_manifest(
         aim=aim,
@@ -251,6 +260,7 @@ async def create_aim_service(
         api_version=f"{AIM_API_GROUP}/{AIM_API_VERSION}",
         submitter=submitter,
         cluster_auth_group_id=cluster_auth_group_id,
+        display_name=display_name,
     )
 
     created = await kube_client.custom_objects.create_namespaced_custom_object(
@@ -261,6 +271,52 @@ async def create_aim_service(
         body=manifest,
     )
 
+    return AIMServiceResource.model_validate(created)
+
+
+async def create_namespace_aim_service(
+    kube_client: KubernetesClient,
+    namespace: str,
+    model_name: str,
+    deploy_request: AIMDeployRequest,
+    submitter: str,
+    service_name: str,
+    cluster_auth_group_id: str | None,
+    display_name: str,
+    canonical_name: str,
+    is_fine_tuned: bool = True,
+    resolved_profile_name: str | None = None,
+    deploy_display_name: str | None = None,
+) -> AIMServiceResource:
+    """Create an AIMService for a namespace-scoped AIMModel.
+
+    ``display_name`` carries the onboarded model's identity (used for
+    MODEL_NAME_LABEL/canonical display). ``deploy_display_name`` is the optional
+    user-entered name from the deploy request; when present it takes precedence
+    for the user-visible display-name annotation.
+    """
+    manifest = generate_namespace_aim_service_manifest(
+        model_name=model_name,
+        deploy_request=deploy_request,
+        namespace=namespace,
+        service_name=service_name,
+        api_version=f"{AIM_API_GROUP}/{AIM_API_VERSION}",
+        submitter=submitter,
+        cluster_auth_group_id=cluster_auth_group_id,
+        display_name=display_name,
+        canonical_name=canonical_name,
+        is_fine_tuned=is_fine_tuned,
+        resolved_profile_name=resolved_profile_name,
+        deploy_display_name=deploy_display_name,
+    )
+
+    created = await kube_client.custom_objects.create_namespaced_custom_object(
+        group=AIM_API_GROUP,
+        version=AIM_API_VERSION,
+        namespace=namespace,
+        plural=AIM_SERVICE_PLURAL,
+        body=manifest,
+    )
     return AIMServiceResource.model_validate(created)
 
 
@@ -275,27 +331,19 @@ async def create_fine_tuned_aim_service(
     display_name: str,
     canonical_name: str,
 ) -> AIMServiceResource:
-    """Create an AIMService for a fine-tuned model (references namespace-scoped AIMModel)."""
-    manifest = generate_fine_tuned_aim_service_manifest(
+    """Wrapper for namespace-scoped AIMModel fine-tuned deployments."""
+    return await create_namespace_aim_service(
+        kube_client=kube_client,
+        namespace=namespace,
         model_name=model_name,
         deploy_request=deploy_request,
-        namespace=namespace,
-        service_name=service_name,
-        api_version=f"{AIM_API_GROUP}/{AIM_API_VERSION}",
         submitter=submitter,
+        service_name=service_name,
         cluster_auth_group_id=cluster_auth_group_id,
         display_name=display_name,
         canonical_name=canonical_name,
+        is_fine_tuned=True,
     )
-
-    created = await kube_client.custom_objects.create_namespaced_custom_object(
-        group=AIM_API_GROUP,
-        version=AIM_API_VERSION,
-        namespace=namespace,
-        plural=AIM_SERVICE_PLURAL,
-        body=manifest,
-    )
-    return AIMServiceResource.model_validate(created)
 
 
 async def delete_aim_service(
@@ -320,47 +368,70 @@ async def delete_aim_service(
     return service.metadata.name
 
 
-async def list_aim_cluster_service_templates(
+async def list_aim_cluster_profiles_by_aim_ids(
     kube_client: KubernetesClient,
-    model_name: str | None = None,
-) -> list[AIMClusterServiceTemplateResource]:
+    aim_ids: list[str] | None = None,
+) -> list[AIMProfileResource]:
+    """List AIMClusterProfile resources, optionally filtered by spec.aimId.
+
+    aim-engine declares ``spec.aimId`` in the CRD's ``selectableFields``, so
+    multi-id filtering fans out to N parallel API-server calls (field
+    selectors are equality-only). ``aim_ids`` is deduped before fan-out.
     """
-    List AIMClusterServiceTemplate resources from Kubernetes.
+    selectors: list[str | None] = [f"spec.aimId={aim_id}" for aim_id in dict.fromkeys(aim_ids)] if aim_ids else [None]
 
-    Args:
-        kube_client: Kubernetes client
-        model_name: Optional filter by model name (matches spec.modelName)
+    async def fetch(field_selector: str | None) -> list[dict[str, Any]]:
+        list_kwargs: dict[str, Any] = {
+            "group": AIM_API_GROUP,
+            "version": AIM_API_VERSION,
+            "plural": AIM_CLUSTER_PROFILE_PLURAL,
+        }
+        if field_selector is not None:
+            list_kwargs["field_selector"] = field_selector
+        try:
+            result = await kube_client.custom_objects.list_cluster_custom_object(**list_kwargs)
+        except ApiException as e:
+            logger.error(f"Failed to list AIMClusterProfiles: {e}")
+            raise ExternalServiceError(f"Failed to list AIMClusterProfiles: {e.reason}") from e
+        return result.get("items", [])
 
-    Returns:
-        List of AIMClusterServiceTemplate resources
+    item_lists = await asyncio.gather(*(fetch(fs) for fs in selectors))
+
+    profiles: list[AIMProfileResource] = []
+    for items in item_lists:
+        for item in items:
+            try:
+                profiles.append(AIMProfileResource.model_validate(item))
+            except Exception as e:
+                logger.error(f"Failed to parse AIMClusterProfile: {e}")
+
+    logger.debug(f"Found {len(profiles)} AIMClusterProfiles for aimIds {aim_ids or 'all'}")
+    return profiles
+
+
+async def get_aim_cluster_profile_by_name(
+    kube_client: KubernetesClient,
+    name: str,
+) -> AIMProfileResource | None:
+    """Fetch a single AIMClusterProfile by resource name.
+
+    Direct K8s GET — ``metadata.name`` is always selectable, so no list /
+    Python-side filter is needed. Returns ``None`` when the CR does not exist
+    so callers can map to a 404 at the router boundary.
     """
     try:
-        # Use label selector to filter by model if provided
-        # The controller creates templates with label: aim.eai.amd.com/aim-image: {model-name}
-        label_selector = f"{AIM_CLUSTER_MODEL_LABEL}={model_name}" if model_name else None
-
-        result = await kube_client.custom_objects.list_cluster_custom_object(
+        result = await kube_client.custom_objects.get_cluster_custom_object(
             group=AIM_API_GROUP,
             version=AIM_API_VERSION,
-            plural=AIM_CLUSTER_SERVICE_TEMPLATE_PLURAL,
-            label_selector=label_selector,
+            plural=AIM_CLUSTER_PROFILE_PLURAL,
+            name=name,
         )
-
-        templates = []
-        for item in result.get("items", []):
-            try:
-                template = AIMClusterServiceTemplateResource.model_validate(item)
-                templates.append(template)
-            except Exception as e:
-                logger.error(f"Failed to parse AIMClusterServiceTemplate: {e}")
-                continue
-
-        logger.debug(f"Found {len(templates)} AIMClusterServiceTemplates for model {model_name or 'all'}")
-        return templates
-
-    except Exception as e:
-        logger.exception(f"Failed to list AIMClusterServiceTemplates: {e}")
-        return []
+    except ApiException as e:
+        if e.status == 404:
+            return None
+        logger.error(f"Failed to get AIMClusterProfile {name}: {e}")
+        raise ExternalServiceError(f"Failed to get AIMClusterProfile '{name}': {e.reason}") from e
+    return AIMProfileResource.model_validate(result)
 
 
 async def patch_aim_service_scaling_policy(
@@ -461,6 +532,7 @@ async def list_aim_service_replicas(
 async def list_aim_models(
     kube_client: KubernetesClient,
     namespace: str,
+    label_selector: str | None = None,
 ) -> list[AIMModelResource]:
     """List namespace-scoped AIMModel resources from Kubernetes.
 
@@ -472,6 +544,7 @@ async def list_aim_models(
             version=AIM_API_VERSION,
             namespace=namespace,
             plural=AIM_MODEL_PLURAL,
+            label_selector=label_selector,
         )
 
         models = []
@@ -493,7 +566,7 @@ async def list_aim_models(
 
 async def _get_aims_by_name(
     kube_client: KubernetesClient,
-) -> dict[str, AIMClusterModelResource]:
+) -> dict[str, AIMModelResource]:
     """Get all AIMClusterModels, indexed by name.
 
     Single API call to avoid N+1 queries when checking chattable services.
@@ -653,44 +726,201 @@ async def delete_aim_model(
         raise
 
 
-async def list_aim_service_templates(
+async def create_aim_model(
+    kube_client: KubernetesClient,
+    namespace: str,
+    manifest: dict,
+) -> AIMModelResource:
+    """Create a namespace-scoped AIMModel CR from a fully composed manifest.
+
+    Sibling of create_aim_service; the manifest is composed by the caller because
+    AIMModel covers more onboarding shapes than a single helper would. Translates
+    409 from the API server into ConflictException so the FE sees a stable signal
+    when a CR with the same name already exists.
+    """
+    try:
+        created = await kube_client.custom_objects.create_namespaced_custom_object(
+            group=AIM_API_GROUP,
+            version=AIM_API_VERSION,
+            namespace=namespace,
+            plural=AIM_MODEL_PLURAL,
+            body=manifest,
+        )
+    except ApiException as e:
+        if e.status == 409:
+            raise ConflictException(
+                f"AIMModel '{manifest.get('metadata', {}).get('name')}' already exists in namespace '{namespace}'"
+            ) from e
+        raise
+
+    return AIMModelResource.model_validate(created)
+
+
+async def patch_aim_model(
+    kube_client: KubernetesClient,
+    namespace: str,
+    name: str,
+    patch_body: dict,
+) -> AIMModelResource:
+    """Patch a namespace-scoped AIMModel CR using merge-patch semantics.
+
+    Non-domain K8s failures wrap as ``ExternalServiceError`` (502). Status
+    passthrough via the global ApiException handler is a follow-up — the
+    FastAPI app currently only registers ``kubernetes.client.exceptions.ApiException``
+    (the sync class), so re-raising the async client's ``kubernetes_asyncio.client.ApiException``
+    would fall through to the generic handler and surface as an opaque 500
+    rather than the upstream K8s status/body.
+    """
+    try:
+        patched = await kube_client.custom_objects.patch_namespaced_custom_object(
+            group=AIM_API_GROUP,
+            version=AIM_API_VERSION,
+            namespace=namespace,
+            plural=AIM_MODEL_PLURAL,
+            name=name,
+            body=patch_body,
+            _content_type="application/merge-patch+json",
+        )
+    except ApiException as e:
+        logger.error(f"Failed to patch AIMModel {name} in namespace {namespace}: {e}")
+        raise ExternalServiceError(f"Failed to patch AIMModel '{name}': {e.reason}") from e
+
+    return AIMModelResource.model_validate(patched)
+
+
+def _is_service_owned_profile(item: dict[str, Any]) -> bool:
+    """True if the profile carries an AIMService ownerReference (engine overlay).
+
+    Per ADR 006b §3 the engine materializes ``spec.profileOverrides`` as a
+    namespace-scoped AIMProfile copy owned by the originating AIMService.
+    These are deployment-internal artifacts; they should not appear in the
+    user-facing profile catalog. We distinguish them by the controller
+    ownerReference rather than a label so we don't depend on the engine
+    setting one.
+    """
+    for owner_ref in item.get("metadata", {}).get("ownerReferences", []):
+        if owner_ref.get("kind") == AIM_SERVICE_RESOURCE:
+            return True
+    return False
+
+
+async def list_aim_profiles_by_aim_ids(
+    kube_client: KubernetesClient,
+    namespace: str,
+    aim_ids: list[str] | None = None,
+) -> list[AIMProfileResource]:
+    """List namespace-scoped AIMProfile resources, optionally filtered by spec.aimId.
+
+    Same field-selector mechanic as the cluster-scoped variant. The
+    AIMService-owned overlay exclusion stays client-side — ownerReferences
+    are not a selectable field.
+    """
+    selectors: list[str | None] = [f"spec.aimId={aim_id}" for aim_id in dict.fromkeys(aim_ids)] if aim_ids else [None]
+
+    async def fetch(field_selector: str | None) -> list[dict[str, Any]]:
+        list_kwargs: dict[str, Any] = {
+            "group": AIM_API_GROUP,
+            "version": AIM_API_VERSION,
+            "namespace": namespace,
+            "plural": AIM_PROFILE_PLURAL,
+        }
+        if field_selector is not None:
+            list_kwargs["field_selector"] = field_selector
+        try:
+            result = await kube_client.custom_objects.list_namespaced_custom_object(**list_kwargs)
+        except ApiException as e:
+            logger.error(f"Failed to list AIMProfiles in namespace {namespace}: {e}")
+            raise ExternalServiceError(f"Failed to list AIMProfiles in namespace '{namespace}': {e.reason}") from e
+        return result.get("items", [])
+
+    item_lists = await asyncio.gather(*(fetch(fs) for fs in selectors))
+
+    profiles: list[AIMProfileResource] = []
+    for items in item_lists:
+        for item in items:
+            if _is_service_owned_profile(item):
+                continue
+            try:
+                profiles.append(AIMProfileResource.model_validate(item))
+            except Exception as e:
+                logger.error(f"Failed to parse AIMProfile: {e}")
+
+    logger.debug(f"Found {len(profiles)} AIMProfiles for aimIds {aim_ids or 'all'} in {namespace}")
+    return profiles
+
+
+async def get_aim_profile_by_name(
+    kube_client: KubernetesClient,
+    namespace: str,
+    name: str,
+) -> AIMProfileResource | None:
+    """Fetch a single namespace-scoped AIMProfile by resource name.
+
+    Direct K8s GET — ``metadata.name`` is always selectable, so no list /
+    Python-side filter is needed. Returns ``None`` when the CR does not exist
+    so callers can map to a 404 at the router boundary.
+    """
+    try:
+        result = await kube_client.custom_objects.get_namespaced_custom_object(
+            group=AIM_API_GROUP,
+            version=AIM_API_VERSION,
+            namespace=namespace,
+            plural=AIM_PROFILE_PLURAL,
+            name=name,
+        )
+    except ApiException as e:
+        if e.status == 404:
+            return None
+        logger.error(f"Failed to get AIMProfile {name} in namespace {namespace}: {e}")
+        raise ExternalServiceError(f"Failed to get AIMProfile '{name}' in namespace '{namespace}': {e.reason}") from e
+    return AIMProfileResource.model_validate(result)
+
+
+async def list_aim_artifacts(
     kube_client: KubernetesClient,
     namespace: str,
     model_name: str | None = None,
-) -> list[AIMServiceTemplateResource]:
-    """List namespace-scoped AIMServiceTemplate resources.
+) -> list[AIMArtifactResource]:
+    """List namespace-scoped AIMArtifact resources, optionally filtered to one model.
+
+    AIMArtifacts are created by aim-engine to track weight-import progress.
+    The CRD may not yet be installed in older clusters; a 404 from the API
+    server is treated as an empty list so callers degrade gracefully.
 
     Args:
-        kube_client: Kubernetes client
-        namespace: Namespace to search in
-        model_name: Optional filter by model name via label selector
+        kube_client: Kubernetes client.
+        namespace: Namespace to search in.
+        model_name: Optional AIMModel CR name; when provided only the artifact
+            for that model is returned (via the ``aim.eai.amd.com/model.name``
+            label that aim-engine stamps on every AIMArtifact it creates).
 
     Returns:
-        List of AIMServiceTemplate resources
+        List of AIMArtifact resources; empty when none exist or the CRD is absent.
     """
     try:
         label_selector = f"{AIM_MODEL_LABEL}={model_name}" if model_name else None
-
         result = await kube_client.custom_objects.list_namespaced_custom_object(
             group=AIM_API_GROUP,
             version=AIM_API_VERSION,
             namespace=namespace,
-            plural=AIM_SERVICE_TEMPLATE_PLURAL,
+            plural=AIM_ARTIFACT_PLURAL,
             label_selector=label_selector,
         )
-
-        templates = []
+        artifacts = []
         for item in result.get("items", []):
             try:
-                template = AIMServiceTemplateResource.model_validate(item)
-                templates.append(template)
+                artifacts.append(AIMArtifactResource.model_validate(item))
             except Exception as e:
-                logger.error(f"Failed to parse AIMServiceTemplate: {e}")
+                logger.error(f"Failed to parse AIMArtifact: {e}")
                 continue
-
-        logger.debug(f"Found {len(templates)} AIMServiceTemplates for model {model_name or 'all'} in {namespace}")
-        return templates
-
+        logger.debug(f"Found {len(artifacts)} AIMArtifacts for model {model_name or 'all'} in {namespace}")
+        return artifacts
+    except ApiException as e:
+        if e.status == 404:
+            logger.debug(f"AIMArtifact CRD not found in namespace {namespace}; treating as empty")
+            return []
+        logger.exception(f"Failed to list AIMArtifacts in namespace {namespace}: {e}")
+        return []
     except Exception as e:
-        logger.exception(f"Failed to list AIMServiceTemplates in namespace {namespace}: {e}")
+        logger.exception(f"Failed to list AIMArtifacts in namespace {namespace}: {e}")
         return []

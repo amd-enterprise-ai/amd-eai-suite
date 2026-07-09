@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Input, InputProps } from '@heroui/react';
+import { Input, type InputProps } from '../Input/InputPrimitive';
 import { IconSearch } from '@tabler/icons-react';
 import {
   useCallback,

@@ -2,15 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { Tooltip } from '../Tooltip';
 import React from 'react';
-import {
-  Chip,
-  Tooltip,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  cn,
-} from '@heroui/react';
+import { Chip } from '../Chip';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
+import { cn } from '@heroui/react';
 import {
   IconInfoCircle,
   IconCircleCheck,

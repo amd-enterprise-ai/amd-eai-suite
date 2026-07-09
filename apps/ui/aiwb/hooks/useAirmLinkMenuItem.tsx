@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DropdownItem, DropdownSection } from '@heroui/react';
+import { DropdownItem, DropdownSection } from '@amdenterpriseai/components';
 import { IconExternalLink } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 

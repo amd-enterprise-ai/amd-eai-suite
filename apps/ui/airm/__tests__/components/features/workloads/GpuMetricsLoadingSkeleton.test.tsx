@@ -9,6 +9,9 @@ import { GpuMetricsLoadingSkeleton } from '@/components/features/workloads/GpuMe
 import wrapper from '@/__tests__/ProviderWrapper';
 
 vi.mock('@amdenterpriseai/components', () => ({
+  Skeleton: ({ className }: { className?: string }) => (
+    <div data-testid="skeleton" className={className} />
+  ),
   StatsWithLineChart: ({
     title,
     isLoading,

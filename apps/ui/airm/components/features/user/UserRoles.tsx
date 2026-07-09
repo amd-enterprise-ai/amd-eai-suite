@@ -2,14 +2,20 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectItem, useDisclosure } from '@heroui/react';
+import {
+  Select,
+  SelectItem,
+  DrawerForm,
+  FormFieldComponent,
+  ActionButton,
+} from '@amdenterpriseai/components';
 import { IconUser } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 import { assignRoleToUser as assignRoleToUserAPI } from '@/services/app';
@@ -20,9 +26,6 @@ import { UserRole } from '@amdenterpriseai/types';
 import { FormField } from '@amdenterpriseai/types';
 import { AssignUserRoleFormData, User } from '@/types/users';
 
-import { DrawerForm } from '@amdenterpriseai/components';
-import { FormFieldComponent } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
 import ProjectAndRoleEntry from './ProjectAndRoleEntry';
 
 import { ZodType, z } from 'zod';
@@ -35,7 +38,7 @@ const translationSet = 'users';
 export const UserRoles: React.FC<Props> = ({ user }) => {
   const { t } = useTranslation(translationSet);
   const { toast } = useSystemToast();
-  const { isOpen, onOpen, onOpenChange } = useDisclosure();
+  const { isOpen, onOpen, onOpenChange } = useOverlayState();
   const queryClient = useQueryClient();
   const { isRoleManagementEnabled } = useAccessControl();
 

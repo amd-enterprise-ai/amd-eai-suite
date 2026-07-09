@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DropdownItem } from './types';
+import { DropdownActionItem } from './types';
 
-export type FlattenedDropdownItem = DropdownItem & {
+export type FlattenedDropdownItem = DropdownActionItem & {
   isSectionHeader?: boolean;
 };
 
-export const isActionDisabled = (action: DropdownItem): boolean => {
+export const isActionDisabled = (action: DropdownActionItem): boolean => {
   return !!action.isDisabled;
 };
 

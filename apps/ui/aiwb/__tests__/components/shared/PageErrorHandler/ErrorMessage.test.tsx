@@ -25,16 +25,26 @@ vi.mock('next/router', () => ({
 }));
 
 // Mock HeroUI components
-vi.mock('@heroui/react', () => ({
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@heroui/react')>()),
   Button: ({
     children,
     onPress,
     color,
+    isLoading,
+    isIconOnly,
     startContent,
     endContent,
-    ...props
+    className,
   }: any) => (
-    <button onClick={onPress} data-color={color} {...props}>
+    <button
+      type="button"
+      onClick={onPress}
+      data-color={color}
+      data-loading={isLoading}
+      data-icon-only={isIconOnly}
+      className={className}
+    >
       {startContent}
       {children}
       {endContent}

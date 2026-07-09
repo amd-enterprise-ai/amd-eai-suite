@@ -11,6 +11,9 @@
       "create": {
         "title": "Create API Key"
       },
+      "viewDetails": {
+        "title": "View Details"
+      },
       "edit": {
         "title": "Edit API Key"
       },
@@ -53,6 +56,55 @@
           "label": "Show",
           "entities": "API keys"
         }
+      }
+    }
+  },
+  "details": {
+    "breadcrumb": "API Key Details",
+    "back": "Back to API Keys",
+    "usageMetrics": "Usage metrics",
+    "filters": {
+      "inferenceService": "Inference service",
+      "allServices": "All services"
+    },
+    "stats": {
+      "totalRequests": "Total requests",
+      "totalRequestsTooltip": "Total number of inference requests made using this API key",
+      "successfulRequests": "Successful requests",
+      "successfulRequestsTooltip": "Number of inference requests that completed successfully",
+      "failedRequests": "Failed requests",
+      "failedRequestsTooltip": "Number of inference requests that failed",
+      "totalTokens": "Total tokens",
+      "totalTokensTooltip": "Total number of tokens consumed by this API key",
+      "linkedDeployments": "Linked deployments",
+      "linkedDeploymentsTooltip": "Number of model inference deployments linked to this API key"
+    },
+    "charts": {
+      "inferenceRequests": {
+        "title": "Inference requests",
+        "tooltip": "Number of inference requests made using this API key over time, broken down by inference service"
+      },
+      "tokenConsumption": {
+        "title": "Token consumption",
+        "tooltip": "Number of tokens consumed by this API key over time, broken down by inference service"
+      },
+      "filter": {
+        "total": "Total",
+        "successful": "Successful",
+        "failed": "Failed",
+        "inputTokens": "Input tokens",
+        "outputTokens": "Output tokens"
+      }
+    },
+    "linkedDeployments": {
+      "title": "Linked deployments",
+      "empty": "No linked deployments found",
+      "headers": {
+        "name": "Name",
+        "status": "Status",
+        "replicas": "Replicas",
+        "createdBy": "Created by",
+        "createdAt": "Created at"
       }
     }
   },

@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { WorkloadsResponse } from '@/lib/app/workloads';
 import { WorkloadType } from '@amdenterpriseai/types';
 import { WorkloadStatus } from '@/types/enums/workloads';
+import { Workload } from '@/types/workloads';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -13,7 +13,7 @@ export const generateMockWorkspaceWorkloads = (
   name: string,
   status: WorkloadStatus,
   type: WorkloadType,
-): WorkloadsResponse => {
+): Workload[] => {
   const template = {
     id: '',
     createdAt: new Date().toISOString(),
@@ -118,10 +118,5 @@ export const generateMockWorkspaceWorkloads = (
     };
   });
 
-  return {
-    data: workloads,
-    total: workloads.length,
-    page: 1,
-    pageSize: n,
-  };
+  return workloads;
 };

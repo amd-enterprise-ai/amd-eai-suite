@@ -3,14 +3,20 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  Button,
-  Drawer,
+  SelectItem,
+  DrawerPrimitive as Drawer,
   DrawerBody,
   DrawerContent,
   DrawerFooter,
   DrawerHeader,
-  SelectItem,
-} from '@heroui/react';
+  ActionButton,
+  CloseButton,
+  FormInput,
+  FormSelect,
+  FormTextarea,
+  ManagedForm,
+  Button,
+} from '@amdenterpriseai/components';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
@@ -31,17 +37,6 @@ import {
   CreateSecretRequest,
   CreateSecretForm,
 } from '@/types/secrets';
-
-import {
-  ActionButton,
-  CloseButton,
-  FormInput,
-  FormSelect,
-  FormTextarea,
-  ManagedForm,
-} from '@amdenterpriseai/components';
-
-import { nameRegex } from './constants';
 
 import { z } from 'zod';
 
@@ -90,7 +85,7 @@ function AddSecretKeyValueFields({
 
   useEffect(() => {
     const predefined = useCase ? PREDEFINED_KEYS[useCase] : undefined;
-    form.clearErrors(['name', 'key', 'value', 'dataEntries']);
+    form.clearErrors(['displayName', 'key', 'value', 'dataEntries']);
     if (isOther) {
       form.setValue('dataEntries', [{ key: '', value: '' }]);
     } else {
@@ -226,12 +221,12 @@ export const AddSecret: React.FC<Props> = ({
     () =>
       z
         .object({
-          name: z
+          displayName: z
             .string()
+            .trim()
             .min(1, { message: '' })
-            .regex(nameRegex, {
-              message: t('form.add.validation.nameInvalid'),
-            }),
+            .min(2, { message: t('form.add.validation.nameTooShort') })
+            .max(253, { message: t('form.add.validation.nameTooLong') }),
           useCase: z.nativeEnum(SecretUseCase, { required_error: '' }),
           key: z.string().optional(),
           value: z.string().optional(),
@@ -246,10 +241,11 @@ export const AddSecret: React.FC<Props> = ({
             .default([]),
         })
         .refine(
-          (data) => !secrets?.some((s) => s.metadata.name === data.name.trim()),
+          (data) =>
+            !secrets?.some((s) => s.displayName === data.displayName.trim()),
           {
             message: t('form.add.validation.duplicateName'),
-            path: ['name'],
+            path: ['displayName'],
           },
         )
         .refine(
@@ -357,7 +353,7 @@ export const AddSecret: React.FC<Props> = ({
         }
       }
       const payload: CreateSecretRequest = {
-        name: values.name,
+        displayName: values.displayName,
         useCase: values.useCase,
         data: secretData,
       };
@@ -391,6 +387,7 @@ export const AddSecret: React.FC<Props> = ({
             formRef={formRef}
             validationSchema={formSchema as z.ZodType<CreateSecretForm>}
             defaultValues={{
+              displayName: '',
               key: '',
               value: '',
               dataEntries: [{ key: '', value: '' }],
@@ -401,9 +398,9 @@ export const AddSecret: React.FC<Props> = ({
               <div className="flex flex-col gap-4">
                 <FormInput<CreateSecretForm>
                   form={form}
-                  name="name"
-                  label="Name"
-                  placeholder="my-secret"
+                  name="displayName"
+                  label="Display Name"
+                  placeholder="My HuggingFace Token"
                   isRequired
                 />
                 <FormSelect<CreateSecretForm>

@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 import {
+  ActionButton,
   Card,
   CardBody,
   CardHeader,
+  ConfirmationModal,
   Tooltip,
-  useDisclosure,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
@@ -17,14 +18,11 @@ import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'next-i18next';
 import router from 'next/router';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import { deleteUser as deleteUserAPI } from '@/services/app';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
-
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
 
 interface Props {
   id: string;
@@ -36,7 +34,7 @@ export const DeleteUser: React.FC<Props> = ({ id, email }) => {
 
   const { toast } = useSystemToast();
   const queryClient = useQueryClient();
-  const { isOpen, onOpen, onOpenChange } = useDisclosure();
+  const { isOpen, onOpen, onOpenChange } = useOverlayState();
   const { mutate: deleteUser, isPending } = useMutation({
     mutationFn: deleteUserAPI,
     onSuccess: () => {

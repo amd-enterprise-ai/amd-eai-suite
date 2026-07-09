@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Button } from '@heroui/react';
+import { Button } from '@amdenterpriseai/components';
 import { IconChevronLeft } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -103,20 +103,6 @@ export async function getServerSideProps(context: any) {
   const { locale } = context;
 
   const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   try {
     const [cluster, workloadsStatusStats] = await Promise.all([

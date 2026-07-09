@@ -20,9 +20,11 @@ import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
 import { User, UsersResponse } from '@/types/users';
 
 import { InviteUserButton } from '@/components/features/users/InviteUserButton';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { DateDisplay } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
+import {
+  ActionsToolbar,
+  ClientSideDataTable,
+  DateDisplay,
+} from '@amdenterpriseai/components';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 const customComparator: CustomComparatorConfig<User, UserTableField> = {

@@ -79,6 +79,21 @@ Download indicator can be manually dismissed during preparing state
     Then download indicator should not be visible
     And download indicator should not reappear after dismissal
 
+User browses a long list of datasets with pagination
+    [Documentation]    Verifies the datasets table displays the first page and pagination
+    ...                controls when more datasets exist than fit on a single page, and
+    ...                that navigating to subsequent pages shows different datasets.
+    [Tags]    ui    datasets    pagination
+
+    Given a ready project with user access exists
+    And the project contains more datasets than fit on a single page
+    And user is logged in
+    And project "${TEST_PROJECT}[name]" is selected
+    When user is on datasets page
+    Then the datasets table shows the first page of datasets
+    And pagination controls should be visible
+    And the user can navigate to the next page
+
 Download indicator auto-dismisses after download completes
     [Documentation]    Verify that the download indicator transitions from preparing to done
     ...                once the download completes, then automatically disappears.

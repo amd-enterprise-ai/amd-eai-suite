@@ -2,16 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 import {
-  Dropdown,
+  ActionButton,
   DropdownItem,
   DropdownMenu,
+  Dropdown,
   DropdownTrigger,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
 import React from 'react';
 
 import { useTranslation } from 'next-i18next';
 
-import { ActionButton } from '@amdenterpriseai/components';
 import { useAccessControl } from '@/hooks/useAccessControl';
 import { IconChevronDown } from '@tabler/icons-react';
 

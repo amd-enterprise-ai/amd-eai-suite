@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectItem } from '@heroui/react';
+import {
+  Select,
+  SelectItem,
+  DrawerForm,
+  FormFieldComponent,
+} from '@amdenterpriseai/components';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
@@ -18,9 +23,6 @@ import { StorageStatus } from '@/types/enums/storages';
 import { FormField } from '@amdenterpriseai/types';
 import { Project } from '@/types/projects';
 import { Storage } from '@/types/storages';
-
-import { DrawerForm } from '@amdenterpriseai/components';
-import { FormFieldComponent } from '@amdenterpriseai/components';
 
 import { z } from 'zod';
 

@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-} from '@heroui/react';
+  ModalPrimitive,
+  ModalPrimitiveBody,
+  ModalPrimitiveContent,
+  ModalPrimitiveFooter,
+  ModalPrimitiveHeader,
+} from '../Modal/ModalPrimitive';
 import { FC, ReactNode } from 'react';
 
 import { Trans, useTranslation } from 'next-i18next';
@@ -42,22 +42,24 @@ export const ConfirmationModal: FC<Props> = ({
   onClose,
   confirmationButtonText,
 }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation('common');
   return (
     <div className="flex items-center justify-center text-default-900 rounded-lg">
-      <Modal
+      <ModalPrimitive
         data-testid="confirmation-modal"
         hideCloseButton
         isDismissable={!loading}
         onClose={onClose}
         isOpen={isOpen}
       >
-        <ModalContent>
-          <ModalHeader className="flex flex-col gap-1">{title}</ModalHeader>
-          <ModalBody className="dark:text-default-500 text-default-600">
+        <ModalPrimitiveContent>
+          <ModalPrimitiveHeader className="flex flex-col gap-1">
+            {title}
+          </ModalPrimitiveHeader>
+          <ModalPrimitiveBody className="dark:text-default-500 text-default-600">
             <Trans parent="p">{description}</Trans>
-          </ModalBody>
-          <ModalFooter>
+          </ModalPrimitiveBody>
+          <ModalPrimitiveFooter>
             <ActionButton
               tertiary
               aria-label={t('actions.close.title') || ''}
@@ -78,9 +80,9 @@ export const ConfirmationModal: FC<Props> = ({
             >
               {confirmationButtonText || t('actions.confirm.title')}
             </ActionButton>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+          </ModalPrimitiveFooter>
+        </ModalPrimitiveContent>
+      </ModalPrimitive>
     </div>
   );
 };

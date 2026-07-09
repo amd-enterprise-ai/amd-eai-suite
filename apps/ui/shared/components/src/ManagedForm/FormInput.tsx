@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Input, InputProps } from '@heroui/react';
+import { Input, type InputProps } from '../Input/InputPrimitive';
 import { cn } from '@heroui/react';
 import { ComponentType } from 'react';
 import { FieldValues, Path, UseFormReturn } from 'react-hook-form';

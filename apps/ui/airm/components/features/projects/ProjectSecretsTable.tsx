@@ -14,13 +14,13 @@ import { ProjectSecretWithParentSecret } from '@/types/secrets';
 import { SecretUseCase } from '@amdenterpriseai/types';
 import {
   ClientSideDataTable,
-  StatusDisplay,
   DateDisplay,
+  StatusDisplay,
+  StatusError,
 } from '@amdenterpriseai/components';
 
 import { getProjectSecretStatusVariants } from '@/utils/project-secret-status-variants';
 import { ProjectSecretStatus } from '@/types/enums/secrets';
-import { StatusError } from '@amdenterpriseai/components';
 
 interface Props {
   filters?: ClientSideDataFilter<ProjectSecretWithParentSecret>[];

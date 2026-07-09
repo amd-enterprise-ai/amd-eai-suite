@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	aimv1alpha1 "github.com/amd-enterprise-ai/aim-engine/api/v1alpha1"
+	aimv1alpha2 "github.com/amd-enterprise-ai/aim-engine/api/v1alpha2"
 	"github.com/go-logr/logr"
 	"github.com/silogen/agent/internal/secrets"
 	"github.com/silogen/agent/internal/workloads"
@@ -46,6 +47,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(kaiwov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(aimv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(aimv1alpha2.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
 }
 

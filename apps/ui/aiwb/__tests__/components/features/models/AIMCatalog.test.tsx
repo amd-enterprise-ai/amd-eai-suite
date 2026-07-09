@@ -13,7 +13,7 @@ import userEvent from '@testing-library/user-event';
 
 import { useRouter } from 'next/router';
 
-import { getAimClusterModels, undeployAim } from '@/lib/app/aims';
+import { getInferenceCatalog } from '@/lib/app/inference';
 
 import AIMCatalog from '@/components/features/models/AIMCatalog';
 
@@ -52,6 +52,7 @@ vi.mock('next-i18next', () => ({
       const translations: Record<string, string> = {
         'aimCatalog.card.gated': 'Gated',
         'aimCatalog.card.actionsMenu': 'Actions menu',
+        'aimCatalog.card.menuTrigger': 'Menu',
         'aimCatalog.status.deploying': 'Deploying',
         'aimCatalog.actions.deploy.label': 'Deploy',
         'aimCatalog.actions.undeploy.label': 'Undeploy',
@@ -76,10 +77,13 @@ vi.mock('@/lib/app/aims', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
-    getAimClusterModels: vi.fn(),
-    undeployAim: vi.fn(),
   };
 });
+
+vi.mock('@/lib/app/inference', () => ({
+  getInferenceCatalog: vi.fn().mockResolvedValue([]),
+  deleteInferenceDeployment: vi.fn(),
+}));
 
 // Mock useSystemToast for testing
 vi.mock('@amdenterpriseai/hooks', async (importOriginal) => ({
@@ -172,7 +176,7 @@ describe('AIM Catalog', () => {
       pathname: '/models',
       query: {},
     });
-    (getAimClusterModels as Mock).mockResolvedValue(mockAims);
+    (getInferenceCatalog as Mock).mockResolvedValue(mockAims);
   });
 
   describe('Basic rendering', () => {
@@ -184,7 +188,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -195,8 +199,11 @@ describe('AIM Catalog', () => {
     });
 
     it('shows loading state', async () => {
-      (getAimClusterModels as Mock).mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 1000)),
+      (getInferenceCatalog as Mock).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve(mockAims), 1000);
+          }),
       );
 
       render(<AIMCatalog />, {
@@ -216,7 +223,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -235,7 +242,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -252,7 +259,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       // The catalog should aggregate deployment counts from all versions
@@ -272,7 +279,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       const searchInput = screen.getByPlaceholderText(
@@ -291,6 +298,57 @@ describe('AIM Catalog', () => {
       });
     });
 
+    it('filters AIMs by cluster model resource name (not only card title)', async () => {
+      await act(async () => {
+        render(<AIMCatalog />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(getInferenceCatalog).toHaveBeenCalled();
+      });
+
+      const searchInput = screen.getByPlaceholderText(
+        'list.filter.search.placeholder',
+      );
+      fireEvent.change(searchInput, {
+        target: { value: 'aim-stable-diffusion-xl' },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Stable Diffusion XL')).toBeInTheDocument();
+        expect(screen.queryByText('Llama 2 7B')).not.toBeInTheDocument();
+        expect(
+          screen.queryByText('Vision Detection Model'),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it('filters AIMs by Hugging Face canonical id substring', async () => {
+      await act(async () => {
+        render(<AIMCatalog />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        expect(getInferenceCatalog).toHaveBeenCalled();
+      });
+
+      const searchInput = screen.getByPlaceholderText(
+        'list.filter.search.placeholder',
+      );
+      fireEvent.change(searchInput, {
+        target: { value: 'stabilityai/stable-diffusion' },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Stable Diffusion XL')).toBeInTheDocument();
+        expect(screen.queryByText('Llama 2 7B')).not.toBeInTheDocument();
+      });
+    });
+
     it('filters on individual AIMs then re-aggregates', async () => {
       await act(async () => {
         render(<AIMCatalog />, {
@@ -299,7 +357,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       // Filter should apply to individual ParsedAIMs before aggregation
@@ -321,7 +379,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       // Verify the tag filter is available
@@ -337,7 +395,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       // Deployment status filter should work across all versions of a model
@@ -348,6 +406,9 @@ describe('AIM Catalog', () => {
     });
 
     it('clears filters when clear button is clicked', async () => {
+      // Ensure React Query always gets defined data for the aim-catalog query in this test.
+      (getInferenceCatalog as Mock).mockResolvedValue(mockAims);
+
       await act(async () => {
         render(<AIMCatalog />, {
           wrapper,
@@ -355,7 +416,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       const searchInput = screen.getByPlaceholderText(
@@ -389,7 +450,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -417,7 +478,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       // The UndeployAIMModal should be rendered (but not visible initially)
@@ -427,7 +488,7 @@ describe('AIM Catalog', () => {
 
   describe('Empty states and errors', () => {
     it('shows empty state when no AIMs match filters', async () => {
-      (getAimClusterModels as Mock).mockResolvedValue([]);
+      (getInferenceCatalog as Mock).mockResolvedValue([]);
 
       await act(async () => {
         render(<AIMCatalog />, {
@@ -436,7 +497,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -446,7 +507,7 @@ describe('AIM Catalog', () => {
 
     it('handles API errors gracefully', async () => {
       const mockError = new Error('API Error');
-      (getAimClusterModels as Mock).mockRejectedValue(mockError);
+      (getInferenceCatalog as Mock).mockRejectedValue(mockError);
 
       await act(async () => {
         render(<AIMCatalog />, {
@@ -455,7 +516,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
     });
   });
@@ -469,7 +530,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       await waitFor(() => {
@@ -489,7 +550,7 @@ describe('AIM Catalog', () => {
       });
 
       await waitFor(() => {
-        expect(getAimClusterModels).toHaveBeenCalled();
+        expect(getInferenceCatalog).toHaveBeenCalled();
       });
 
       await waitFor(() => {

@@ -4,35 +4,67 @@
 
 import {
   AIM_CANONICAL_NAME_ANNOTATION,
+  AIM_DISPLAY_NAME_ANNOTATION,
   AIM_MODEL_NAME_LABEL,
   AIMClusterModel,
   AIMModel,
-  AIMClusterServiceTemplate,
-  FINE_TUNED_LABEL,
+  AIMClusterProfile,
   AIMMetric,
   AIMAutoscaling,
-  UpdateScalingPolicyPayload,
   AutoscalingPolicyConfig,
-  AIMServiceHistoryResponse,
+  SOURCE_URI_ANNOTATION,
 } from '@/types/aims';
+import { IconCircleCaretRight } from '@tabler/icons-react';
 import { Intent, StatusBadgeVariant } from '@amdenterpriseai/types';
 import {
-  AIMNamespaceServiceTemplate,
+  AcceleratorType,
+  AIMProfile,
   AIMService,
   AIMServiceStatus,
   AIMStatus,
-  AIMDeployPayload,
   AIMWorkloadStatus,
   ParsedAIM,
   AggregatedAIM,
-  AimServiceReplica,
 } from '@/types/aims';
 import { WorkloadStatus } from '@/types/enums/workloads';
-import { WorkloadLogParams, WorkloadLogResponse } from '@/types/workloads';
 import { APIRequestError, getErrorMessage } from '@amdenterpriseai/utils/app';
+import type { PaginatedList } from '@/types/pagination';
+import { fetchAllPages } from './pagination';
+import { translationKeyGenerator } from './i18n';
 
 // Autoscaling constants
 export const AIM_MAX_REPLICAS = 30;
+
+const isAcceleratorType = (value: unknown): value is AcceleratorType =>
+  value === 'cpu' || value === 'gpu';
+
+/** Base model weights source on an AIMModel, regardless of which spec field carries it. */
+type BaseModelSource = { modelId: string; sourceUri: string };
+
+/**
+ * Returns the AIMModel source carrying the base model's weights, or null.
+ *
+ * Mirrors the backend `_resolve_base_model_source`: the legacy flat
+ * `spec.modelSources` is populated for official and fine-tuning-published
+ * models, while v1alpha2 imported / re-finetuned models carry their weights
+ * under `spec.profiles.overrides.modelSources`. Prefer the flat field and fall
+ * back to the profiles override.
+ *
+ * Accepts the `AIMClusterModel | AIMModel` union so `aimParser` can call it for
+ * either shape; cluster models carry neither field and resolve to null.
+ *
+ * TODO(EAI 2.3): drop the legacy flat `spec.modelSources` branch once all
+ * models carry weights under `spec.profiles.overrides.modelSources`.
+ */
+export const resolveBaseModelSource = (
+  aimModel: AIMClusterModel | AIMModel,
+): BaseModelSource | null => {
+  const spec = aimModel.spec as AIMModel['spec'];
+  const flat = spec.modelSources?.[0];
+  if (flat) return flat;
+  const override = spec.profiles?.overrides?.modelSources?.[0];
+  return override ?? null;
+};
 
 // Metric keys for vLLM
 export const SCALING_METRIC_KEYS = [
@@ -52,6 +84,17 @@ export const TARGET_TYPE_OPTION_KEYS = [
   { key: 'Value', translationKey: 'value' },
   { key: 'AverageValue', translationKey: 'averageValue' },
 ] as const;
+
+export const PERFORMANCE_METRIC_KEYS = {
+  [AIMMetric.Latency]: 'performanceMetrics.values.latency',
+  [AIMMetric.Throughput]: 'performanceMetrics.values.throughput',
+  [AIMMetric.Default]: 'performanceMetrics.values.default',
+} as const satisfies Record<AIMMetric, string>;
+
+export const getMetricTranslationKey = translationKeyGenerator(
+  PERFORMANCE_METRIC_KEYS,
+  AIMMetric.Default,
+);
 
 export const DEFAULT_AUTOSCALING: AutoscalingFieldValues = {
   minReplicas: 1,
@@ -110,13 +153,15 @@ export const resolveAIMServiceDisplay = (
   aimService: AIMService,
   parsedAIMs?: ParsedAIM[],
 ): AIMServiceDisplayInfo => {
-  const modelRef = aimService.status.resolvedModel?.name;
-  const matchingAIM = modelRef
-    ? parsedAIMs?.find((aim) => aim.model === modelRef)
+  const resourceName = aimService.spec.model.name;
+  const matchingAIM = resourceName
+    ? parsedAIMs?.find((aim) => aim.model === resourceName)
     : undefined;
+  const modelRef = resourceName;
 
   const displayName =
-    matchingAIM?.model ?? modelRef ?? aimService.metadata.name;
+    aimService.metadata.annotations?.[AIM_DISPLAY_NAME_ANNOTATION] ||
+    (matchingAIM?.model ?? modelRef ?? aimService.metadata.name);
   const metric = [AIMMetric.Latency, AIMMetric.Throughput].includes(
     aimService.spec.overrides?.metric as AIMMetric,
   )
@@ -177,39 +222,52 @@ export const aimParser = (
   aim: AIMClusterModel | AIMModel,
   deployedServices?: AIMService[],
 ): ParsedAIM => {
-  const imageMetadata = aim.status.imageMetadata;
-  const model = imageMetadata.model;
-  const oci = imageMetadata.oci;
+  // Fine-tuned AIMModels carry no spec.image, so status.imageMetadata is absent;
+  // every read below tolerates the missing block via optional chaining.
+  const imageMetadata = aim.status?.imageMetadata;
+  const model = imageMetadata?.model;
+  const oci = imageMetadata?.oci;
 
   // Check if model has a 'preview' tag
-  const isPreview = model.tags?.includes('preview') || false;
+  const isPreview = model?.tags?.includes('preview') || false;
 
   // Fine-tuned AIMModels have no spec.image, so status.imageMetadata is empty.
   // Fall back to authoritative spec/labels so callers don't need to special-case.
-  // - canonicalName: spec.modelSources[0].modelId (the base model name)
+  // - canonicalName: the base model id from the resolved weights source
   // - title: the user-given fine-tune name from the model-name label, then metadata.name
-  const baseModelId =
-    'modelSources' in aim.spec
-      ? aim.spec.modelSources?.[0]?.modelId
-      : undefined;
+  const baseModelId = resolveBaseModelSource(aim)?.modelId;
   const userGivenName = aim.metadata.labels?.[AIM_MODEL_NAME_LABEL];
 
+  const annotations = aim.metadata.annotations ?? {};
+  const sourceUri = annotations[SOURCE_URI_ANNOTATION];
+  const isCustomImport =
+    !!annotations[AIM_DISPLAY_NAME_ANNOTATION] || !!sourceUri;
+
+  const discoveredProfiles = aim.status?.discoveredProfiles ?? null;
+  const acceleratorTypes = Array.from(
+    new Set(
+      (discoveredProfiles?.byHardware ?? [])
+        .map((group) => group.acceleratorType?.toLowerCase())
+        .filter(isAcceleratorType),
+    ),
+  ).sort();
+
   const parsedAim: ParsedAIM = {
-    annotations: aim.metadata.annotations,
+    annotations,
     model: aim.metadata.name,
-    imageReference: aim.spec.image,
+    aimId: aim.status?.aimId ?? null,
+    imageReference: aim.spec.image ?? '',
     description: {
       short: oci?.description || '',
-      full: model.descriptionFull || '',
+      full: model?.descriptionFull || '',
     },
     imageVersion:
-      oci?.version ||
-      aim.metadata.annotations['aim.eai.amd.com/source-tag'] ||
-      '',
-    title: model.title || oci?.title || userGivenName || aim.metadata.name,
-    tags: model.tags || [],
-    canonicalName: model.canonicalName || baseModelId || '',
-    status: aim.status.status,
+      oci?.version || annotations['aim.eai.amd.com/source-tag'] || '',
+    title: model?.title || oci?.title || userGivenName || aim.metadata.name,
+    tags: model?.tags || [],
+    acceleratorTypes,
+    canonicalName: model?.canonicalName || baseModelId || '',
+    status: aim.status?.status ?? '',
     workloadStatuses:
       deployedServices && deployedServices.length > 0
         ? deployedServices.map((s) =>
@@ -217,7 +275,9 @@ export const aimParser = (
           )
         : [AIMWorkloadStatus.NOT_DEPLOYED],
     isPreview,
-    isHfTokenRequired: model.hfTokenRequired === true,
+    isHfTokenRequired: model?.hfTokenRequired === true,
+    isCustomImport,
+    sourceUri,
     deployedService: deployedServices?.[0],
     deployedServices,
   };
@@ -225,344 +285,16 @@ export const aimParser = (
   return parsedAim;
 };
 
-/**
- * Parses an AIM object and an AIM Service History object to extract structured information from their metadata.
- *
- * @param {AIMClusterModel} aim - The aim object to parse.
- * @param {AIMServiceHistoryResponse} historicalService - Required historical entity for a previously deployed AIM Service.
- * @returns {ParsedAIM} The parsed AIM data with extracted description, version, tags, and status.
- */
-export const historicalAimParser = (
-  aim: AIMClusterModel | AIMModel,
-  historicalService: AIMServiceHistoryResponse,
-): ParsedAIM => {
-  const imageMetadata = aim.status.imageMetadata;
-  const model = imageMetadata.model;
-  const oci = imageMetadata.oci;
-
-  // Check if model has a 'preview' tag
-  const isPreview = model.tags?.includes('preview') || false;
-
-  const historicalDeployedService: AIMService = {
-    id: historicalService.id,
-    metadata: {
-      name: historicalService.id,
-      namespace: '',
-      uid: historicalService.id,
-      creationTimestamp: historicalService.createdAt,
-      ownerReferences: [],
-      labels: {},
-      annotations: {},
-    },
-    status: {
-      status: historicalService.status,
-    },
-    clusterAuthGroupId: null,
-    endpoints: {
-      internal: '',
-      external: '',
-    },
-    spec: {
-      model: {
-        name: historicalService.model,
-      },
-      replicas: 0,
-      overrides: {},
-      cacheModel: false,
-      routing: {
-        annotations: {},
-        enabled: false,
-      },
-      runtimeConfigName: '',
-      template: {},
-    },
-  };
-
-  const parsedAim: ParsedAIM = {
-    annotations: aim.metadata.annotations,
-    model: aim.metadata.name,
-    imageReference: aim.spec.image,
-    description: {
-      short: oci?.description || '',
-      full: model.descriptionFull || '',
-    },
-    imageVersion:
-      oci?.version ||
-      aim.metadata.annotations['aim.eai.amd.com/source-tag'] ||
-      '',
-    title:
-      model.title ||
-      oci?.title ||
-      aim.metadata.labels?.[AIM_MODEL_NAME_LABEL] ||
-      aim.metadata.name,
-    tags: model.tags || [],
-    canonicalName:
-      model.canonicalName ||
-      ('modelSources' in aim.spec
-        ? aim.spec.modelSources?.[0]?.modelId
-        : undefined) ||
-      '',
-    status: aim.status.status,
-    workloadStatuses: [
-      mapAIMServiceStatusToAIMWorkloadStatus(historicalService.status),
-    ],
-    isPreview,
-    isHfTokenRequired: model.hfTokenRequired === true,
-    deployedService: historicalDeployedService,
-    deployedServices: [historicalDeployedService],
-  };
-
-  return parsedAim;
-};
-
-/** Profile resolved from an AIMClusterServiceTemplate for a deployed service. */
-export type AIMServiceProfile = {
-  metric?: string | null;
-  gpu?: string | null;
-  /** Maps from AIMClusterServiceTemplateProfileMetadata.gpuCount. */
-  templateGpuCount?: number | null;
-  precision?: string | null;
-};
-
-/**
- * Fetches deployed AIM services for a namespace.
- *
- * @param {string} namespace - The namespace to fetch services from.
- * @returns {Promise<AIMService[]>} A promise that resolves to the list of deployed services.
- */
-export const getAimServices = async (
-  namespace: string,
-): Promise<AIMService[]> => {
-  const url = `/api/namespaces/${namespace}/aims/services`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      console.warn(
-        'Failed to fetch AIM services, continuing without deployment status',
-      );
-      return [];
-    }
-
-    const result = await response.json();
-    return result.data || [];
-  } catch (error) {
-    console.warn('Error fetching AIM services:', error);
-    return [];
-  }
-};
-
-/**
- * Fetches historical AIM services for a namespace.
- *
- * @param {string} namespace - The namespace to fetch services from.
- * @returns {Promise<AIMServiceHistoryResponse[]>} A promise that resolves to the list of historical services.
- */
-export const getAimServiceHistory = async (
-  namespace: string,
-): Promise<AIMServiceHistoryResponse[]> => {
-  const url = `/api/namespaces/${namespace}/aims/services/history`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to fetch AIM service history: ${errorMessage}`,
-      response.status,
-    );
-  }
-  return (await response.json()).data || [];
-};
-
-/**
- * Fetches all available AIMs and their deployment status.
- *
- * @param {string} namespace - The namespace to check for deployed services.
- * @returns {Promise<ParsedAIM[]>} A promise that resolves to the parsed AIMs with deployment status.
- */
-export const getAimClusterModels = async (
-  namespace?: string,
-): Promise<ParsedAIM[]> => {
-  const url = `/api/cluster/aims/models`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to fetch AIM items: ${errorMessage}`,
-      response.status,
-    );
-  }
-  const aims: { data: AIMClusterModel[] } = await response.json();
-
-  // Fetch deployed services if namespace is provided
-  const services = namespace ? await getAimServices(namespace) : [];
-
-  const servicesByAimRef = new Map<string, AIMService[]>();
-  services.forEach((service) => {
-    const key = service.status.resolvedModel?.name;
-    if (!key) return;
-    const existing = servicesByAimRef.get(key) ?? [];
-    servicesByAimRef.set(key, [...existing, service]);
-  });
-
-  return (
-    aims.data?.map((aim) => {
-      const deployedServices = servicesByAimRef.get(aim.metadata.name);
-      return aimParser(aim, deployedServices);
-    }) ?? []
-  );
-};
-
-export const getAimService = async (
-  namespace: string,
-  id: string,
-): Promise<AIMService> => {
-  const url = `/api/namespaces/${namespace}/aims/services/${id}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to fetch AIM service: ${errorMessage}`,
-      response.status,
-    );
-  }
-
-  const service = await response.json();
-  return service;
-};
-
-export const getAimServiceReplicas = async (
-  namespace: string,
-  id: string,
-): Promise<AimServiceReplica[]> => {
-  const url = `/api/namespaces/${namespace}/aims/services/${id}/replicas`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to fetch AIM service replicas: ${errorMessage}`,
-      response.status,
-    );
-  }
-  return (await response.json()).data ?? [];
-};
-
-/**
- * Fetches logs for an AIM service.
- *
- * @param {string} namespace - The namespace containing the service.
- * @param {string} serviceId - The service ID (UUID) to fetch logs for.
- * @param {WorkloadLogParams} params - Optional parameters for filtering logs.
- * @returns {Promise<WorkloadLogResponse>} A promise that resolves to the logs response.
- * @throws {APIRequestError} If the API request fails.
- */
-export const getAimServiceLogs = async (
-  namespace: string,
-  serviceId: string,
-  params: WorkloadLogParams = {},
-): Promise<WorkloadLogResponse> => {
-  const urlParams = new URLSearchParams();
-
-  // AIM logs endpoint requires 'start' and 'end' parameters (ISO format)
-  // Default to last 24 hours if not provided
-  const end = params.endDate ? new Date(params.endDate) : new Date();
-  const start = params.startDate
-    ? new Date(params.startDate)
-    : new Date(end.getTime() - 24 * 60 * 60 * 1000);
-
-  urlParams.append('start', start.toISOString());
-  urlParams.append('end', end.toISOString());
-
-  if (params.pageToken) {
-    // Ensure the pageToken has timezone info
-    let pageToken = params.pageToken;
-    // If it doesn't end with 'Z' or contain timezone offset (+/-), assume UTC and add 'Z'
-    if (!pageToken.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(pageToken)) {
-      pageToken = pageToken + 'Z';
-    }
-    urlParams.append('pageToken', pageToken);
-  }
-  if (params.level) urlParams.append('level', params.level);
-  if (params.limit) urlParams.append('limit', params.limit.toString());
-  if (params.direction) urlParams.append('direction', params.direction);
-  if (params.logType) urlParams.append('logType', params.logType);
-
-  const response = await fetch(
-    `/api/namespaces/${namespace}/aims/services/${serviceId}/logs?${urlParams.toString()}`,
-    { method: 'GET' },
-  );
-
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to get AIM service logs: ${errorMessage}`,
-      response.status,
-    );
-  }
-
-  return response.json();
-};
-
-export const getAimClusterModel = async (
+export const getProjectFineTunedModel = async (
   resourceName: string,
-): Promise<AIMClusterModel> => {
-  if (!resourceName) {
-    throw new APIRequestError('No AIM resource name provided', 422);
-  }
-
-  const response = await fetch(`/api/cluster/aims/models/${resourceName}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to fetch AIM items: ${errorMessage}`,
-      response.status,
-    );
-  }
-
-  const aim = await response.json();
-  return aim;
-};
-
-export const getAimNamespaceModel = async (
-  resourceName: string,
-  namespace: string,
+  projectId: string,
 ): Promise<AIMModel> => {
   if (!resourceName) {
     throw new APIRequestError('No AIM model resource name provided', 422);
   }
 
   const response = await fetch(
-    `/api/namespaces/${namespace}/aims/models/${encodeURIComponent(resourceName)}`,
+    `/api/projects/${projectId}/fine-tuning/models/${encodeURIComponent(resourceName)}`,
     {
       method: 'GET',
       headers: {
@@ -583,272 +315,199 @@ export const getAimNamespaceModel = async (
 };
 
 /**
- * Fetches service templates for a specific AIM.
- * Service templates contain optimization profiles (latency/throughput) with GPU requirements.
+ * Fetches a single page of cluster-scoped AIMClusterProfile resources. Pass
+ * `aimIds` to narrow the result; the backend accepts repeated `?aimId=` query
+ * params so multiple aimIds are batched into a single round-trip.
  *
- * @param {string} aimResourceName - The AIM resource name to get templates for.
- * @returns {Promise<AIMClusterServiceTemplate[]>} A promise that resolves to the list of service templates.
- * @throws {APIRequestError} If the API request fails.
+ * Per the "Paginated List Loaders" rule in `apps/ui/aiwb/CLAUDE.md`, this is
+ * the single-page primitive — UI consumers walking every page for a given
+ * filter should call {@link getAimClusterProfilesByAimIds}.
  */
-export const getAimClusterServiceTemplates = async (
-  aimResourceName: string,
-): Promise<AIMClusterServiceTemplate[]> => {
-  if (!aimResourceName) {
-    throw new APIRequestError('No AIM resource name provided', 422);
-  }
-
-  const url = `/api/cluster/aims/templates?aimResourceName=${encodeURIComponent(aimResourceName)}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+export const listAimClusterProfilesPage = async (
+  page: number,
+  pageSize: number,
+  options: { aimIds?: string[] } = {},
+): Promise<PaginatedList<AIMClusterProfile>> => {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
   });
-
+  for (const id of options.aimIds ?? []) {
+    if (id) params.append('aimId', id);
+  }
+  const response = await fetch(`/api/inference/profiles?${params.toString()}`, {
+    headers: { 'Content-Type': 'application/json' },
+  });
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
     throw new APIRequestError(
-      `Failed to fetch AIM service templates: ${errorMessage}`,
+      `Failed to fetch AIM cluster profiles: ${errorMessage}`,
       response.status,
     );
   }
-
-  const result = await response.json();
-  return result.data || [];
-};
-
-/**
- * Resolves hardware profile metadata for each AIM service by looking up its
- * selected template via the appropriate template API.
- *
- * For cluster-scoped models: uses GET /cluster/aims/templates.
- * For namespace-scoped fine-tuned models (label aiwb.apps.eai.amd.com/fine-tuned=true):
- * uses GET /namespaces/{namespace}/models/{model}/templates.
- *
- * Groups services by model name to avoid redundant template fetches, then
- * matches each service's resolvedTemplate.name to a template's metadata.name.
- *
- * @param services - Deployed AIM services to resolve profiles for.
- * @returns Map from service ID to its resolved profile.
- */
-export const fetchProfilesForServices = async (
-  services: AIMService[],
-): Promise<Map<string, AIMServiceProfile>> => {
-  // Track unique models with their fetch context (finetuned status + namespace).
-  const modelNameToServiceIds = new Map<string, string[]>();
-  const modelNameToContext = new Map<
-    string,
-    { isFinetuned: boolean; namespace: string }
-  >();
-
-  for (const service of services) {
-    const modelName = service.status.resolvedModel?.name;
-    if (!modelName || !service.id) continue;
-    if (!modelNameToServiceIds.has(modelName)) {
-      modelNameToServiceIds.set(modelName, []);
-      modelNameToContext.set(modelName, {
-        isFinetuned: service.metadata.labels[FINE_TUNED_LABEL] === 'true',
-        namespace: service.metadata.namespace,
-      });
-    }
-    modelNameToServiceIds.get(modelName)!.push(String(service.id));
-  }
-
-  const templatesByModel = new Map<string, AIMClusterServiceTemplate[]>();
-  await Promise.all(
-    Array.from(modelNameToServiceIds.keys()).map(async (modelName) => {
-      const context = modelNameToContext.get(modelName)!;
-      try {
-        const templates = context.isFinetuned
-          ? await getAimNamespaceServiceTemplates(context.namespace, modelName)
-          : await getAimClusterServiceTemplates(modelName);
-        templatesByModel.set(
-          modelName,
-          templates as AIMClusterServiceTemplate[],
-        );
-      } catch (error) {
-        console.warn(
-          `Failed to fetch templates for model "${modelName}":`,
-          error,
-        );
-        templatesByModel.set(modelName, []);
-      }
-    }),
-  );
-
-  const profileMap = new Map<string, AIMServiceProfile>();
-  for (const service of services) {
-    const modelName = service.status.resolvedModel?.name;
-    const templateName = service.status.resolvedTemplate?.name;
-    if (!service.id || !modelName || !templateName) continue;
-    const templates = templatesByModel.get(modelName) ?? [];
-    const template = templates.find((t) => t.metadata.name === templateName);
-    if (!template?.status.profile?.metadata) continue;
-    const meta = template.status.profile.metadata;
-    profileMap.set(String(service.id), {
-      metric: meta.metric ?? null,
-      gpu: meta.gpu ?? null,
-      templateGpuCount: meta.gpuCount ?? null,
-      precision: meta.precision ?? null,
-    });
-  }
-  return profileMap;
-};
-
-/**
- * Deploys an AIM by creating an AIMService.
- *
- * @param {string} namespace - The namespace (project) to deploy to.
- * @param {AIMDeployPayload} payload - The deployment configuration.
- * @returns {Promise<AIMService>} A promise that resolves to the deployment result.
- * @throws {APIRequestError} If the API request fails.
- */
-export const deployAim = async (
-  namespace: string,
-  payload: AIMDeployPayload,
-): Promise<AIMService> => {
-  if (!namespace) {
-    throw new APIRequestError('No namespace selected', 422);
-  }
-
-  const response = await fetch(`/api/namespaces/${namespace}/aims/services`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to deploy AIM: ${errorMessage}`,
-      response.status,
-    );
-  }
-
   return response.json();
 };
 
 /**
- * Undeploys an AIM service by deleting it.
- *
- * @param {string} namespace - The namespace containing the service.
- * @param {string} serviceId - The service ID (UUID) to undeploy.
- * @returns {Promise<void>} A promise that resolves when the service is deleted.
- * @throws {APIRequestError} If the API request fails.
+ * Fetches cluster-scoped AIMClusterProfile resources for one or more aimIds,
+ * paginated under the hood so the caller gets the full filtered set in a
+ * single Promise. Returns `[]` when `aimIds` is empty (no fetch issued) —
+ * callers can pass the unique-aimId set derived from displayed services
+ * without short-circuiting upstream.
  */
-export const undeployAim = async (
-  namespace: string,
-  serviceId: string,
-): Promise<void> => {
-  if (!namespace) {
-    throw new APIRequestError('No namespace provided', 422);
-  }
-
-  if (!serviceId) {
-    throw new APIRequestError('No service ID provided', 422);
-  }
-
-  const response = await fetch(
-    `/api/namespaces/${namespace}/aims/services/${serviceId}`,
-    {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    },
+export const getAimClusterProfilesByAimIds = (
+  aimIds: string[],
+): Promise<AIMClusterProfile[]> => {
+  // Drop empties (avoid unfiltered full-catalog fan-out) and dedupe
+  // (callers passing repeats inflate the query string and create distinct
+  // React Query cache keys for the same logical aimId set).
+  const filtered = Array.from(new Set(aimIds.filter(Boolean)));
+  if (filtered.length === 0) return Promise.resolve([]);
+  return fetchAllPages<AIMClusterProfile>((page, pageSize) =>
+    listAimClusterProfilesPage(page, pageSize, { aimIds: filtered }),
   );
-
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to undeploy AIM service: ${errorMessage}`,
-      response.status,
-    );
-  }
 };
 
 /**
- * Updates the autoscaling policy for an AIM service.
- *
- * Configures min/max replicas, scaling metric, aggregation operation,
- * target type, and target value for horizontal pod autoscaling.
- *
- * @param {string} namespace - The namespace (project) where the AIM service is deployed.
- * @param {string} id - The unique identifier of the AIM service to update.
- * @param {UpdateScalingPolicyPayload} payload - The scaling policy configuration.
- * @returns {Promise<void>} A promise that resolves when the update is successful.
- * @throws {APIRequestError} If the API request fails.
+ * Convenience: cluster profiles for a single aimId. Used by the deploy modal
+ * where the AIM is already selected.
  */
-export const updateAimScalingPolicy = async (
-  namespace: string,
-  id: string,
-  payload: UpdateScalingPolicyPayload,
-): Promise<void> => {
-  const response = await fetch(
-    `/api/namespaces/${namespace}/aims/services/${id}`,
-    {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    },
-  );
-
-  if (!response.ok) {
-    const errorMessage = await getErrorMessage(response);
-    throw new APIRequestError(
-      `Failed to update AIM service scaling: ${errorMessage}`,
-      response.status,
-    );
+export const getAimClusterProfiles = async (
+  aimId: string,
+): Promise<AIMClusterProfile[]> => {
+  if (!aimId) {
+    throw new APIRequestError('No aimId provided', 422);
   }
+  return getAimClusterProfilesByAimIds([aimId]);
 };
 
 /**
- * Fetches namespace-scoped AIMServiceTemplate CRs for a fine-tuned AIMModel.
+ * Fetches a single cluster-scoped AIMClusterProfile by resource name.
  *
- * Calls GET /namespaces/{namespace}/models/{modelId}/templates.
- * Returns the full CRD structure; callers are responsible for reading
- * the fields they need from metadata and spec.
+ * Calls the targeted `GET /api/inference/profiles/{name}` endpoint — direct
+ * K8s GET by `metadata.name`, no listing or aimId derivation. Used when the
+ * caller already knows the profile name (typically from
+ * `AIMService.status.resolvedProfile.name`).
  *
- * @param {string} namespace - The namespace (project) the AIMModel lives in.
- * @param {string} modelId - The AIMModel CR name (resource name).
- * @returns {Promise<AIMNamespaceServiceTemplate[]>} List of available deployment templates.
- * @throws {APIRequestError} If the API request fails.
+ * @throws {APIRequestError} 404 when no profile with that name exists.
  */
-export const getAimNamespaceServiceTemplates = async (
-  namespace: string,
-  modelId: string,
-): Promise<AIMNamespaceServiceTemplate[]> => {
-  if (!namespace) {
-    throw new APIRequestError('No namespace selected', 422);
+export const getAimClusterProfileByName = async (
+  name: string,
+): Promise<AIMClusterProfile> => {
+  if (!name) {
+    throw new APIRequestError('No profile name provided', 422);
   }
-  if (!modelId) {
-    throw new APIRequestError('No model ID provided', 422);
+  const response = await fetch(
+    `/api/inference/profiles/${encodeURIComponent(name)}`,
+    { headers: { 'Content-Type': 'application/json' } },
+  );
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(response);
+    throw new APIRequestError(
+      `Failed to fetch AIM cluster profile '${name}': ${errorMessage}`,
+      response.status,
+    );
   }
+  return response.json();
+};
 
-  const url = `/api/namespaces/${namespace}/models/${modelId}/templates`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+/**
+ * Fetches a single page of project-scoped AIMProfile resources. Pass
+ * `aimIds` to narrow the result (repeated `?aimId=` query params).
+ */
+export const listProjectAimProfilesPage = async (
+  project: string,
+  page: number,
+  pageSize: number,
+  options: { aimIds?: string[] } = {},
+): Promise<PaginatedList<AIMProfile>> => {
+  if (!project) {
+    throw new APIRequestError('No project selected', 422);
+  }
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
   });
-
+  for (const id of options.aimIds ?? []) {
+    if (id) params.append('aimId', id);
+  }
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(project)}/profiles?${params.toString()}`,
+    { headers: { 'Content-Type': 'application/json' } },
+  );
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response);
     throw new APIRequestError(
-      `Failed to fetch AIM service templates: ${errorMessage}`,
+      `Failed to fetch project AIM profiles: ${errorMessage}`,
       response.status,
     );
   }
+  return response.json();
+};
 
-  const result = await response.json();
-  return result.data || [];
+/**
+ * Fetches namespace-scoped AIMProfile resources for one or more aimIds,
+ * paginated under the hood. Returns `[]` when `aimIds` is empty (no fetch).
+ */
+export const getProjectAimProfilesByAimIds = (
+  project: string,
+  aimIds: string[],
+): Promise<AIMProfile[]> => {
+  // See getAimClusterProfilesByAimIds — drop empties (avoid unfiltered
+  // full-catalog fan-out) and dedupe (stable React Query cache keys).
+  const filtered = Array.from(new Set(aimIds.filter(Boolean)));
+  if (filtered.length === 0) return Promise.resolve([]);
+  return fetchAllPages<AIMProfile>((page, pageSize) =>
+    listProjectAimProfilesPage(project, page, pageSize, { aimIds: filtered }),
+  );
+};
+
+/**
+ * Convenience: namespace-scoped AIMProfiles for a single aimId.
+ */
+export const getProjectModelProfiles = async (
+  project: string,
+  aimId: string,
+): Promise<AIMProfile[]> => {
+  if (!aimId) {
+    throw new APIRequestError('No aimId provided', 422);
+  }
+  return getProjectAimProfilesByAimIds(project, [aimId]);
+};
+
+/**
+ * Fetches a single namespace-scoped AIMProfile by resource name.
+ *
+ * Calls the targeted `GET /api/projects/{project}/profiles/{name}` endpoint —
+ * direct K8s GET by `metadata.name`. Used by the AIM detail page for
+ * fine-tuned deployments where the profile name is already known from
+ * `AIMService.status.resolvedProfile.name`.
+ *
+ * @throws {APIRequestError} 404 when no profile with that name exists in
+ *   the project.
+ */
+export const getProjectAimProfileByName = async (
+  project: string,
+  name: string,
+): Promise<AIMProfile> => {
+  if (!project) {
+    throw new APIRequestError('No project selected', 422);
+  }
+  if (!name) {
+    throw new APIRequestError('No profile name provided', 422);
+  }
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(project)}/profiles/${encodeURIComponent(name)}`,
+    { headers: { 'Content-Type': 'application/json' } },
+  );
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(response);
+    throw new APIRequestError(
+      `Failed to fetch project AIM profile '${name}': ${errorMessage}`,
+      response.status,
+    );
+  }
+  return response.json();
 };
 
 /**
@@ -918,7 +577,8 @@ export const getAIMServiceStatusVariants = (
   },
   [AIMServiceStatus.RUNNING]: {
     label: t('models:status.running'),
-    intent: Intent.SUCCESS,
+    color: 'primary',
+    icon: IconCircleCaretRight,
   },
   [AIMServiceStatus.FAILED]: {
     label: t('models:status.failed'),
@@ -1021,7 +681,9 @@ export const transformToAggregatedAIMs = (
       metaSource;
 
     let isHfTokenRequired = false;
+    let isCustomImport = false;
     let isSupported = false;
+    const acceleratorTypeSet = new Set<AcceleratorType>();
     const deploymentCounts: Record<AIMWorkloadStatus, number> = {
       [AIMWorkloadStatus.DEPLOYED]: 0,
       [AIMWorkloadStatus.DEGRADED]: 0,
@@ -1044,8 +706,15 @@ export const transformToAggregatedAIMs = (
       // Check whether it requires hf token
       isHfTokenRequired = isHfTokenRequired || aim.isHfTokenRequired;
 
+      // Mark the family as custom-imported if any version was onboarded by a user.
+      isCustomImport = isCustomImport || aim.isCustomImport === true;
+
       // At least one version with Ready status makes the model supported
       isSupported = isSupported || aim.status === AIMStatus.READY;
+
+      aim.acceleratorTypes?.forEach((type) => {
+        acceleratorTypeSet.add(type);
+      });
     });
 
     return {
@@ -1060,7 +729,9 @@ export const transformToAggregatedAIMs = (
         canonicalName,
         latestImageVersion: imageVersion,
         isHfTokenRequired,
+        isCustomImport,
         tags,
+        acceleratorTypes: Array.from(acceleratorTypeSet).sort(),
         description: {
           short: description.short,
           full: description.full,
@@ -1070,6 +741,35 @@ export const transformToAggregatedAIMs = (
   });
 
   // Supported models appear first, unsupported last
+  result.sort((a, b) => Number(b.isSupported) - Number(a.isSupported));
+  return result;
+};
+
+/**
+ * Filters the catalog while preserving family-level support status.
+ *
+ * Accelerator filters operate on individual ParsedAIM versions, so re-aggregating
+ * the filtered subset can make a family appear unsupported when its only Ready
+ * version was excluded by the filter. This function corrects that by restoring
+ * each family's support status from the unfiltered aggregation.
+ */
+export const buildFilteredCatalog = (
+  allAims: ParsedAIM[],
+  filteredAims: ParsedAIM[],
+): AggregatedAIM[] => {
+  const supportByRepo = new Map(
+    transformToAggregatedAIMs(allAims).map((a) => [
+      a.repository,
+      a.isSupported,
+    ]),
+  );
+  const result = transformToAggregatedAIMs(filteredAims).map((a) => ({
+    ...a,
+    isSupported: supportByRepo.get(a.repository) ?? a.isSupported,
+  }));
+  // Re-sort after restoring correct isSupported values. transformToAggregatedAIMs
+  // sorts by the filtered subset's support status, which may be wrong for families
+  // whose only Ready version was excluded by an accelerator filter.
   result.sort((a, b) => Number(b.isSupported) - Number(a.isSupported));
   return result;
 };

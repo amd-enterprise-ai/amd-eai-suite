@@ -11,7 +11,6 @@ from api_common.exceptions import ConflictException
 from app.datasets.models import DatasetType
 from app.datasets.repository import (
     delete_dataset_by_id,
-    delete_datasets,
     insert_dataset,
     list_datasets,
     select_dataset,
@@ -108,37 +107,6 @@ async def test_list_datasets(db_session: AsyncSession, test_namespace: str, test
     assert len(selected_datasets) == 2
     returned_ids = {d.id for d in selected_datasets}
     assert set(selected_ids) == returned_ids
-
-
-@pytest.mark.asyncio
-async def test_delete_datasets(db_session: AsyncSession, test_namespace: str, test_user: str) -> None:
-    # Create multiple datasets
-    dataset_ids = []
-    for i in range(10):
-        dataset = await insert_dataset(
-            db_session,
-            name=f"Dataset {i}",
-            creator=test_user,
-            description=f"Description {i}",
-            namespace=test_namespace,
-            type=DatasetType.FINETUNING,
-            path=f"datasets/test{i}",
-        )
-        dataset_ids.append(dataset.id)
-
-    await delete_datasets(db_session, dataset_ids, test_namespace)
-
-    # Try to list datasets
-    all_datasets = await list_datasets(db_session, test_namespace)
-    assert len(all_datasets) == 0
-
-
-@pytest.mark.asyncio
-async def test_delete_datasets_with_wrong_ids(db_session: AsyncSession, test_namespace: str) -> None:
-    # Try to delete with wrong IDs - should return empty list, not raise exception
-    wrong_ids = [uuid4() for _ in range(2)]
-    deleted_ids = await delete_datasets(db_session, wrong_ids, test_namespace)
-    assert deleted_ids == []
 
 
 @pytest.mark.asyncio

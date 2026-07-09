@@ -34,6 +34,8 @@
   },
   "customModels": {
     "list": {
+      "loading": "Loading models…",
+      "description": "Bring your own models from Hugging Face or your own model registry, powered by AMD Inference Microservices engine.",
       "headers": {
         "name": {
           "title": "Model name"
@@ -68,7 +70,8 @@
           "label": "Types"
         },
         "status": {
-          "label": "Statuses"
+          "label": "Statuses",
+          "placeholder": "All statuses"
         },
         "search": {
           "placeholder": "Search by name..."
@@ -92,7 +95,12 @@
         }
       },
       "empty": {
-        "description": "List of models is empty."
+        "title": "No custom models yet",
+        "description": "List of models is empty.",
+        "filtered": {
+          "title": "No models match your filters",
+          "description": "Try clearing the search or status filters to see all custom models."
+        }
       },
       "actions": {
         "delete": {
@@ -104,7 +112,14 @@
           },
           "notification": {
             "success": "Model successfully deleted.",
-            "error": "Failed to delete model. Please try again."
+            "error": "Failed to delete model. Please try again.",
+            "conflictWithServices": "Cannot delete {{displayName}} while these deployments are still running: {{services}}. Undeploy them first, then try again.",
+            "conflictGeneric": "{{displayName}} cannot be deleted yet because deployments are still using it. Undeploy those deployments first, then try again.",
+            "notFound": "That model is no longer available. The list has been refreshed."
+          },
+          "workloadNotification": {
+            "success": "Workload deleted successfully",
+            "error": "Error deleting workload"
           }
         },
         "deploy": {
@@ -183,13 +198,214 @@
               "description": "Range of 1-10 is recommended",
               "placeholder": "Auto"
             }
+          },
+          "notification": {
+            "success": "Adapter fine-tuning started",
+            "error": "Error fine-tuning model"
+          }
+        },
+        "importModel": {
+          "title": "Onboard model"
+        }
+      }
+    },
+    "import": {
+      "loading": "Loading model…",
+      "title": "Add new model",
+      "description": "Onboard a model from Hugging Face into this project. Step through the source, model information, and runtime profile to start onboarding.",
+      "editTitle": "Edit model",
+      "editDescription": "Update this model's display information and runtime profile. The model source cannot be changed.",
+      "stepper": {
+        "source": "Model source",
+        "information": "Model information",
+        "runtime": "Runtime profile"
+      },
+      "actions": {
+        "previewAndContinue": "Preview model",
+        "discardChanges": "Discard changes",
+        "nextRuntime": "Next - Define runtime parameters",
+        "submit": "Save and start onboarding"
+      },
+      "notifications": {
+        "onboardSuccess": "Model onboarding started",
+        "editSuccess": "Model updated"
+      },
+      "errors": {
+        "noProject": "No project selected",
+        "missingPreview": "Preview the model source before submitting.",
+        "previewGeneric": "Failed to preview the model source. Please try again.",
+        "onboardGeneric": "Failed to start onboarding. Please try again.",
+        "editGeneric": "Failed to update the model. Please try again.",
+        "loadFailed": "Failed to load this model. Please go back and try again.",
+        "profileNotReady": "This model's runtime profile is not ready yet. Wait for onboarding to finish before editing the runtime profile.",
+        "sourceRequired": "Enter a model source (repository ID or URL).",
+        "displayNameRequired": "Enter a display name for the model.",
+        "containerImageRequired": "Select a container image.",
+        "containerVersionRequired": "Select a container version.",
+        "acceleratorTypeRequired": "Select an accelerator type.",
+        "acceleratorRequired": "Select an accelerator.",
+        "modelPrecisionRequired": "Select a model precision.",
+        "acceleratorCountRequired": "Enter a valid accelerator count.",
+        "invalidEngineArgsYaml": "Engine arguments must be valid YAML key-value pairs.",
+        "invalidEnvVarsYaml": "Environment variables must be valid YAML key-value pairs."
+      },
+      "steps": {
+        "source": {
+          "title": "Model source",
+          "description": "Point the wizard at a Hugging Face repository. Private and gated repos require a token.",
+          "readOnlyDescription": "The import source for this model. It cannot be changed after onboarding.",
+          "fields": {
+            "source": {
+              "label": "Model source",
+              "placeholder": "meta-llama/Llama-3 or https://huggingface.co/...",
+              "description": "Use a repository ID (for example meta-llama/Llama-3) or a full Hugging Face URL. A revision can be embedded in the URL (e.g. /tree/<rev>)."
+            },
+            "huggingFace": {
+              "title": "Hugging Face authentication",
+              "description": "Optional. Select an existing token secret or add a new one for private or gated repositories."
+            }
+          }
+        },
+        "information": {
+          "title": "Model information",
+          "displayProperties": {
+            "title": "Display properties",
+            "subtitle": "Display properties can be updated after the onboarding."
+          },
+          "fields": {
+            "canonicalName": {
+              "label": "Canonical name"
+            },
+            "displayName": {
+              "label": "Model display name",
+              "placeholder": "Populated from model source",
+              "duplicateWarning": {
+                "title": "A model with this name already exists",
+                "description": "Another custom model in this project already uses this display name. Saving may overwrite that model's settings or be rejected. Use a different name to keep both models."
+              }
+            },
+            "description": {
+              "label": "Description",
+              "placeholder": "Short description of the onboarded model"
+            },
+            "tags": {
+              "label": "Tags",
+              "placeholder": "Populated from model source",
+              "description": "Add tags separated by comma."
+            }
+          }
+        },
+        "runtime": {
+          "title": "Runtime profile",
+          "profileNotReadyNotice": "The runtime profile becomes editable once the model finishes onboarding. You can still update the display information.",
+          "catalog": {
+            "loading": "Loading runtime profile options…",
+            "error": "Failed to load runtime profile options.",
+            "retry": "Retry",
+            "emptyAccelerators": "No accelerators were detected on this cluster."
+          },
+          "profileParameters": {
+            "title": "Profile parameters",
+            "subtitle": "You can modify these values after onboarding the model."
+          },
+          "fields": {
+            "containerImage": {
+              "label": "Container image",
+              "placeholder": "Select a container image"
+            },
+            "containerVersion": {
+              "label": "Container version",
+              "placeholder": "Select a version"
+            },
+            "inferenceEngine": {
+              "label": "Inference engine",
+              "placeholder": "Select an engine"
+            },
+            "acceleratorType": {
+              "label": "Accelerator type",
+              "placeholder": "Select an accelerator type"
+            },
+            "accelerator": {
+              "label": "Accelerator",
+              "placeholder": "Select an accelerator"
+            },
+            "acceleratorCount": {
+              "label": "Accelerator count"
+            },
+            "modelPrecision": {
+              "label": "Model precision",
+              "placeholder": "Select a precision"
+            }
+          },
+          "engineArguments": {
+            "title": "Engine arguments",
+            "body": "Define custom <docs>engine arguments</docs> to enable specific vLLM functionalities. You can use the <profiles>published AIM profiles</profiles> as a starting point.",
+            "field": {
+              "label": "Engine arguments (yaml)",
+              "placeholder": "Provide the arguments as key-value pairs in yaml format, e.g.\nattention-backend: TRITON_ATTN"
+            }
+          },
+          "environmentVariables": {
+            "title": "Environment variables",
+            "body": "Define custom <docs>environment variables</docs> to optimize the model performance. You can use the <profiles>published AIM profiles</profiles> as a starting point.",
+            "field": {
+              "label": "Environment variables (yaml)",
+              "placeholder": "Provide the env variables as key-value pairs in yaml format, e.g.\nVLLM_ROCM_USE_AITER: '1'"
+            }
           }
         }
       }
+    },
+    "card": {
+      "actionsMenu": "Open actions menu",
+      "status": {
+        "importing": "Importing",
+        "onboarding": "Onboarding",
+        "failed": "Failed",
+        "ready": "Ready"
+      },
+      "actions": {
+        "settings": {
+          "label": "Model settings"
+        },
+        "makeCopy": {
+          "label": "Make a copy",
+          "notifications": {
+            "success": "A copy of the model has been created.",
+            "error": "Failed to make a copy. {{error, default='Please try again'}}.",
+            "errorFallback": "Please try again",
+            "noProject": "Select a project and try again"
+          }
+        },
+        "delete": {
+          "label": "Delete"
+        },
+        "comingSoon": "{{action}} is coming soon."
+      },
+      "tagsMoreCount": "+{{count}}"
+    }
+  },
+  "huggingFaceTokenSelector": {
+    "selectLabel": "Hugging Face token",
+    "selectPlaceholder": "Select a token",
+    "addNew": "Add new Hugging Face token",
+    "dialog": {
+      "title": "Add Hugging Face token",
+      "nameLabel": "Name",
+      "namePlaceholder": "my-hf-token",
+      "tokenLabel": "Token",
+      "tokenPlaceholder": "hf_...",
+      "cancel": "Cancel",
+      "submit": "Add token"
+    },
+    "errors": {
+      "invalidSecretResponse": "The server did not return a secret name.",
+      "missingNamespace": "Select a project before adding a token."
     }
   },
   "aimCatalog": {
     "list": {
+      "loading": "Loading catalog…",
       "title": "AIM Catalog",
       "description": "Ready-to-deploy open source models created by the worldwide AI community. You can easily deploy these models as inference services.",
       "filter": {
@@ -212,6 +428,11 @@
         },
         "tag": {
           "placeholder": "Tag"
+        },
+        "accelerator": {
+          "placeholder": "Accelerator",
+          "gpu": "GPU",
+          "cpu": "CPU"
         }
       },
       "empty": {
@@ -236,7 +457,10 @@
       "gated": "Gated",
       "deploymentsCount_one": "Deployments ({{count}})",
       "deploymentsCount_other": "Deployments ({{count}})",
+      "hasDeployments": "Has deployments",
+      "hasDeploymentsTooltip": "This model has active deployments",
       "actionsMenu": "Actions menu",
+      "menuTrigger": "Menu",
       "tagsMoreCount": "+{{count}} more",
       "descriptionDisclaimer": "This description is an AI-generated summary sourced from Hugging Face and may contain inaccuracies."
     },
@@ -268,7 +492,7 @@
           "internalUrl": "Internal URL (accessible only within the cluster)",
           "codeTitle": "Code snippet",
           "codeExample": "Use this snippet to connect to the model.",
-          "inferenceUrl": "Inference URL",
+          "inferenceUrl": "Inference URL (unified AI gateway, accessible from outside the cluster)",
           "openChat": "Open in chat",
           "useInternalUrl": "Use internal URL",
           "languages": {
@@ -354,6 +578,10 @@
     },
     "fields": {
       "title": "Deployment settings",
+      "displayName": {
+        "title": "Name",
+        "placeholder": "My deployment name (optional)"
+      },
       "version": {
         "title": "Container version",
         "label": "Version",
@@ -404,30 +632,39 @@
     "notifications": {
       "success": "Model deployment started",
       "error": "Error deploying model, reason: {{message}}",
-      "noTemplatesDescription": "The model cannot be deployed because no deployment templates are available for your hardware configuration."
+      "noProfilesDescription": "The model cannot be deployed because no deployment profiles are available for your hardware configuration."
     }
   },
   "tabs": {
     "aimCatalog": "AIM Catalog",
     "customModels": "Custom Models",
+    "fineTuneModels": "Fine-tune models",
     "deployedModels": "Deployed Models"
   },
-  "deployFinetuneAIMDrawer": {
-    "title": "Deploy via AIM Engine",
+  "deployCustomAIMDrawer": {
+    "title": "Custom model deployment",
     "actions": {
       "cancel": "Cancel",
       "deploy": "Deploy"
     },
+    "header": {
+      "deployingInto": "Deploying into {{namespace}}",
+      "sourceUri": "Source"
+    },
     "fields": {
-      "name": {
-        "label": "Name",
-        "description": "This name is auto-generated and cannot be updated."
+      "displayName": {
+        "title": "Display name",
+        "placeholder": "Input a descriptive name",
+        "helper": "The display name is filled with the Kubernetes resource name if you leave the field empty."
+      },
+      "autoscaling": {
+        "title": "Autoscaling",
+        "enable": "Enable autoscaling"
       }
     },
     "notifications": {
       "success": "Model deployment started",
-      "error": "Error deploying model, reason: {{message}}",
-      "fetchError": "Failed to fetch deployment configurations. Please try again."
+      "error": "Error deploying model, reason: {{message}}"
     }
   }
 }

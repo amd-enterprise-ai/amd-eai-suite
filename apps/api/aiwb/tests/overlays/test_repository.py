@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.exceptions import ConflictException, NotFoundException
-from app.overlays.repository import delete_overlay, delete_overlays, get_overlay, insert_overlay, list_overlays
+from app.overlays.repository import delete_overlay, get_overlay, insert_overlay, list_overlays
 from app.overlays.schemas import OverlayUpdate
 from app.overlays.service import update_overlay
 from tests import factory
@@ -25,7 +25,7 @@ async def test_create_overlay(db_session: AsyncSession) -> None:
     creator = "test@example.com"
 
     # Create overlay
-    overlay = await insert_overlay(db_session, chart.id, overlay_data, canonical_name, creator)
+    overlay = await insert_overlay(db_session, chart.id, overlay_data, canonical_name, creator=creator)
 
     assert overlay.canonical_name == "test/overlay"
     assert overlay.chart_id == chart.id
@@ -42,7 +42,9 @@ async def test_select_overlay(db_session: AsyncSession) -> None:
     overlay_data = {"config": "test_config"}
 
     # Create overlay
-    overlay = await insert_overlay(db_session, chart.id, overlay_data, "test/select-overlay", "test@example.com")
+    overlay = await insert_overlay(
+        db_session, chart.id, overlay_data, "test/select-overlay", creator="test@example.com"
+    )
 
     found_overlay = await get_overlay(db_session, overlay.id)
 
@@ -64,8 +66,8 @@ async def test_get_overlays_by_chart(db_session: AsyncSession) -> None:
     overlay1_data = {"env": "production"}
     overlay2_data = {"env": "staging"}
 
-    await insert_overlay(db_session, chart.id, overlay1_data, "test/prod-overlay", "test@example.com")
-    await insert_overlay(db_session, chart.id, overlay2_data, "test/staging-overlay", "test@example.com")
+    await insert_overlay(db_session, chart.id, overlay1_data, "test/prod-overlay", creator="test@example.com")
+    await insert_overlay(db_session, chart.id, overlay2_data, "test/staging-overlay", creator="test@example.com")
 
     # Note: list_overlays may return all overlays, so we'll filter by chart_id in assertions
     chart_overlays = await list_overlays(db_session)
@@ -85,7 +87,7 @@ async def test_delete_overlay(db_session: AsyncSession) -> None:
     overlay_data = {"temporary": "data"}
 
     # Create overlay
-    overlay = await insert_overlay(db_session, chart.id, overlay_data, "test/temp-overlay", "test@example.com")
+    overlay = await insert_overlay(db_session, chart.id, overlay_data, "test/temp-overlay", creator="test@example.com")
     overlay_id = overlay.id
 
     found_overlay = await get_overlay(db_session, overlay_id)
@@ -107,12 +109,12 @@ async def test_create_overlay_duplicate_canonical_name_chart(db_session: AsyncSe
     creator = "test@example.com"
 
     # Create first overlay
-    await insert_overlay(db_session, chart.id, overlay_data, canonical_name, creator)
+    await insert_overlay(db_session, chart.id, overlay_data, canonical_name, creator=creator)
 
     # Try to create second overlay with same canonical name and chart
     # This should raise a ConflictException due to unique constraint
     with pytest.raises(ConflictException):
-        await insert_overlay(db_session, chart.id, overlay_data, canonical_name, creator)
+        await insert_overlay(db_session, chart.id, overlay_data, canonical_name, creator=creator)
 
 
 @pytest.mark.asyncio
@@ -126,8 +128,8 @@ async def test_overlay_isolation_between_charts(db_session: AsyncSession) -> Non
     overlay_data = {"shared": "config"}
     canonical_name = "shared/overlay"
 
-    overlay1 = await insert_overlay(db_session, chart1.id, overlay_data, canonical_name, "test@example.com")
-    overlay2 = await insert_overlay(db_session, chart2.id, overlay_data, canonical_name, "test@example.com")
+    overlay1 = await insert_overlay(db_session, chart1.id, overlay_data, canonical_name, creator="test@example.com")
+    overlay2 = await insert_overlay(db_session, chart2.id, overlay_data, canonical_name, creator="test@example.com")
 
     assert overlay1.chart_id == chart1.id
     assert overlay2.chart_id == chart2.id
@@ -144,7 +146,9 @@ async def test_insert_overlay_invalid_chart_id(db_session: AsyncSession) -> None
 
     # This should raise a NotFoundException due to foreign key constraint
     with pytest.raises(NotFoundException):
-        await insert_overlay(db_session, invalid_chart_id, overlay_data, "test/invalid-chart", "test@example.com")
+        await insert_overlay(
+            db_session, invalid_chart_id, overlay_data, "test/invalid-chart", creator="test@example.com"
+        )
 
 
 @pytest.mark.asyncio
@@ -284,72 +288,6 @@ async def test_delete_non_existent_overlay(db_session: AsyncSession) -> None:
     result = await delete_overlay(db_session, non_existent_id)
 
     assert result is False
-
-
-@pytest.mark.asyncio
-async def test_delete_multiple_overlays(db_session: AsyncSession) -> None:
-    """Test bulk deletion of multiple overlays."""
-    chart = await factory.create_chart(db_session, name="Test Chart")
-
-    # Create multiple overlays
-    overlay1 = await factory.create_overlay(
-        db_session, chart_id=chart.id, canonical_name="config/overlay1", overlay_data={"id": 1}
-    )
-    overlay2 = await factory.create_overlay(
-        db_session, chart_id=chart.id, canonical_name="config/overlay2", overlay_data={"id": 2}
-    )
-    overlay3 = await factory.create_overlay(
-        db_session, chart_id=chart.id, canonical_name="config/overlay3", overlay_data={"id": 3}
-    )
-
-    deleted_ids = await delete_overlays(db_session, [overlay1.id, overlay2.id])
-
-    assert len(deleted_ids) == 2
-    assert overlay1.id in deleted_ids
-    assert overlay2.id in deleted_ids
-
-    assert await get_overlay(db_session, overlay1.id) is None
-    assert await get_overlay(db_session, overlay2.id) is None
-
-    # Verify third overlay still exists
-    assert await get_overlay(db_session, overlay3.id) is not None
-
-
-@pytest.mark.asyncio
-async def test_delete_overlays_with_non_existent(db_session: AsyncSession) -> None:
-    """Test bulk deletion with mix of existing and non-existent overlays."""
-    chart = await factory.create_chart(db_session, name="Test Chart")
-
-    # Create one real overlay
-    overlay = await factory.create_overlay(
-        db_session, chart_id=chart.id, canonical_name="config/overlay", overlay_data={"real": True}
-    )
-
-    non_existent_id = uuid4()
-
-    # Delete mix of existing and non-existent
-    deleted_ids = await delete_overlays(db_session, [overlay.id, non_existent_id])
-
-    # Should only return the existing overlay ID
-    assert len(deleted_ids) == 1
-    assert overlay.id in deleted_ids
-    assert non_existent_id not in deleted_ids
-
-    # Verify overlay was deleted
-    assert await get_overlay(db_session, overlay.id) is None
-
-
-@pytest.mark.asyncio
-async def test_delete_overlays_all_non_existent(db_session: AsyncSession) -> None:
-    """Test bulk deletion with all non-existent overlays."""
-    non_existent_id1 = uuid4()
-    non_existent_id2 = uuid4()
-
-    # Delete non-existent overlays
-    deleted_ids = await delete_overlays(db_session, [non_existent_id1, non_existent_id2])
-
-    # Should return empty list
-    assert len(deleted_ids) == 0
 
 
 @pytest.mark.asyncio

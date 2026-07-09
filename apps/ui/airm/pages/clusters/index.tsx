@@ -5,9 +5,19 @@
 import {
   Accordion,
   AccordionItem,
+  ActionButton,
+  ActionsToolbar,
+  AirmDocsPage,
+  airmDocumentationMapping,
+  ClientSideDataTable,
+  ConfirmationModal,
+  DateDisplay,
+  NoDataDisplay,
+  RelevantDocs,
+  Status,
+  StatusDisplay,
   Tooltip,
-  useDisclosure,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
 import {
   IconCircleCheck,
   IconEye,
@@ -24,7 +34,7 @@ import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import router from 'next/router';
 
 import { useAccessControl } from '@/hooks/useAccessControl';
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import {
   deleteCluster as deleteClusterAPI,
@@ -35,8 +45,6 @@ import { getClusters, getWorkloadsStats } from '@/services/server';
 
 import { doesClusterDataNeedToBeRefreshed } from '@/utils/clusters';
 import {
-  airmMenuItems,
-  getAuthRedirect,
   getFilteredData,
   dateComparator,
   isHttpUrl,
@@ -67,19 +75,6 @@ import { WorkloadsStats } from '@/types/workloads';
 
 import { ClustersStats, EditCluster } from '@/components/features/clusters';
 import ConnectClusterModal from '@/components/features/clusters/ConnectClusterModal';
-import {
-  AirmDocsPage,
-  airmDocumentationMapping,
-  ActionButton,
-  StatusDisplay,
-  NoDataDisplay,
-  DateDisplay,
-  RelevantDocs,
-  ActionsToolbar,
-  ConfirmationModal,
-  ClientSideDataTable,
-  Status,
-} from '@amdenterpriseai/components';
 
 import { getClusterStatusVariants } from '@/utils/clusters-status-variants';
 
@@ -139,19 +134,19 @@ const ClustersPage: React.FC<Props> & WithDocumentationLink = ({
     isOpen: isAddClusterModalOpen,
     onOpen: onAddClusterModalOpen,
     onOpenChange: onAddClusterModalOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isEditClusterOpen,
     onOpen: onEditClusterOpen,
     onOpenChange: onEditClusterOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isDeleteClusterModalOpen,
     onOpen: onDeleteClusterModalOpen,
     onOpenChange: onDeleteClusterModalOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     data,
@@ -524,12 +519,6 @@ export async function getServerSideProps(context: any) {
   const { locale } = context;
 
   const session = await getServerSession(context.req, context.res, authOptions);
-
-  // Redirect unauthenticated users to '/'
-  const authRedirect = getAuthRedirect(session, airmMenuItems);
-  if (authRedirect && !session?.user) {
-    return authRedirect;
-  }
 
   const [clusters, workloadsStats = []] = await Promise.all([
     getClusters(session?.accessToken as string),

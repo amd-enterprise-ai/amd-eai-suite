@@ -7,8 +7,9 @@
 .env.local
 .env.gcp
 
-# Dependencies
-node_modules
+# Dependencies — needs ** so nested workspace packages (aiwb/node_modules,
+# airm/node_modules, shared/node_modules) are also excluded.
+**/node_modules
 
 # Build outputs
 .next

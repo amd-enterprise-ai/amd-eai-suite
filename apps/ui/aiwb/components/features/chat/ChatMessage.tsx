@@ -2,7 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Code, Skeleton } from '@heroui/react';
+import {
+  CodeBlock,
+  MarkdownCodeBlock,
+  MemoizedReactMarkdown,
+  Skeleton,
+} from '@amdenterpriseai/components';
 import {
   IconBug,
   IconCircleCheck,
@@ -20,9 +25,6 @@ import { useTranslation } from 'next-i18next';
 
 import { ContentItem, DebugInfo, Message } from '@/types/chat';
 import { extractTextContent } from '@/lib/app/image-utils';
-
-import { CodeBlock } from '@amdenterpriseai/components';
-import { MemoizedReactMarkdown } from '@amdenterpriseai/components';
 
 import { DebugInfoModal } from './DebugInfoModal';
 
@@ -263,7 +265,7 @@ export const ChatMessage: FC<Props> = memo(
                         onClick={handleEditMessage}
                         disabled={messageContent.trim().length <= 0}
                       >
-                        {t('Save & Submit')}
+                        {t('edit.saveAndSubmit')}
                       </button>
                       <button
                         className="h-10 rounded-md border border-default-300 px-4 py-1 text-sm font-medium text-default-800 hover:bg-default-100 dark:border-default-700 dark:hover:bg-default-800"
@@ -274,7 +276,7 @@ export const ChatMessage: FC<Props> = memo(
                           setIsEditing(false);
                         }}
                       >
-                        {t('Cancel')}
+                        {t('edit.cancel')}
                       </button>
                     </div>
                   </div>
@@ -371,7 +373,7 @@ export const ChatMessage: FC<Props> = memo(
                           const match = /language-(\w+)/.exec(className || '');
 
                           return className ? (
-                            <CodeBlock
+                            <MarkdownCodeBlock
                               key={Math.random()}
                               language={match?.[1] || ''}
                               value={String(children).replace(/\n$/, '')}
@@ -379,9 +381,9 @@ export const ChatMessage: FC<Props> = memo(
                             />
                           ) : (
                             <span {...props}>
-                              <Code size="sm" className="px-1 py-0.5">
+                              <CodeBlock size="sm" className="px-1 py-0.5">
                                 {children}
-                              </Code>
+                              </CodeBlock>
                             </span>
                           );
                         },

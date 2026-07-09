@@ -9,9 +9,11 @@ Documentation       BDD keywords for Chat UI features.
 ...
 ...                 Layer: Feature (tests import this, NOT page resources directly)
 Resource            common/session.resource
+Resource            common/login.resource
 Resource            pages/chat_page.resource
 Resource            pages/workloads_page.resource
 Library             libraries/ChatAimSelector.py
+Library             ../libraries/TemporaryUserManager.py
 
 
 *** Keywords ***
@@ -218,3 +220,74 @@ Two model selectors should be visible
     ${count}=    Get model selector count
     Should Be Equal As Integers    ${count}    2
     ...    msg=Compare mode should show two model selectors
+
+# =============================================================================
+# Multi-user / authorization keywords (project membership scenario)
+# =============================================================================
+
+A chattable AIM exists in project A
+    [Documentation]    Ensures the current test project (project A) has a Running AIM
+    ...                deployment ready for chat. Sets the project as project A.
+    ...                Sets: ${TEST_AIM_ID}, ${TEST_PROJECT}
+
+    AIM is deployed and running
+
+User Alice has access to project A
+    [Documentation]    The kubeconfig-provided user (project member) acts as Alice and
+    ...                signs in to AIWB. Project A is selected so subsequent navigation
+    ...                resolves the project namespace.
+
+    User is logged in
+    Project "${TEST_PROJECT}[name]" is selected
+
+User Bob does not have access to project A
+    [Documentation]    Creates a temporary AIRM user that is registered but not added to
+    ...                project A's membership. Tracked for suite-teardown cleanup.
+    ...                Sets: ${TEST_BOB_EMAIL}, ${TEST_BOB_PASSWORD}
+
+    ${users_endpoint}=    Service API Endpoint    airm    endpoint=users
+    ${email}    ${password}    ${user_id}=    Create Temporary Airm User    ${users_endpoint}
+    Set Test Variable    ${TEST_BOB_EMAIL}    ${email}
+    Set Test Variable    ${TEST_BOB_PASSWORD}    ${password}
+
+Alice sends a chat message to project A's AIM
+    [Documentation]    As Alice, opens the chat for project A's AIM and sends a message.
+
+    Navigate to chat page    ${UI_BASE_URL}    ${TEST_PROJECT}[name]
+    Wait Until Keyword Succeeds    60s    3s    Open selector and pick first model
+    Chat input should be enabled
+    Type chat message    Hello, can you tell me what you are?
+    Click send button
+
+She receives a streamed reply
+    [Documentation]    Verifies the assistant produced a non-empty streamed response.
+
+    ${text}=    Get assistant message text
+    ${length}=    Get Length    ${text}
+    Should Be True    ${length} > 10
+    ...    msg=Expected a streamed assistant reply, got "${text}"
+
+Bob attempts to chat with project A's AIM
+    [Documentation]    Switches the browser session to Bob, navigates to project A's chat
+    ...                view, and tries to send a message.
+
+    User logs out    ${UI_BASE_URL}
+    Log in via Keycloak With Credentials
+    ...    ${UI_BASE_URL}    ${TEST_BOB_EMAIL}    ${TEST_BOB_PASSWORD}
+    Navigate to chat page with workload    ${UI_BASE_URL}    ${TEST_PROJECT}[name]    ${TEST_AIM_ID}
+    Type chat message    Hello, can you tell me what you are?
+    Click send button
+
+His request is rejected
+    [Documentation]    Verifies the AIWB UI shows the chat-response failure toast,
+    ...                indicating Bob's request was not served.
+
+    VAR    ${error_toast}    text="Error fetching chat response. Please try again."
+    Wait For Elements State    ${error_toast}    visible    timeout=30s
+
+Clean Up Temporary Users
+    [Documentation]    Deletes all temporary AIRM users created during the suite.
+    ...                Tolerates partial failures so cleanup runs to completion.
+
+    ${users_endpoint}=    Service API Endpoint    airm    endpoint=users
+    Clean Up Temporary Airm Users    ${users_endpoint}

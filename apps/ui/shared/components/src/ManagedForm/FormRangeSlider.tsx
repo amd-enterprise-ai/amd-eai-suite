@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Slider, SliderProps } from '@heroui/react';
+import { Slider, SliderProps } from '@amdenterpriseai/components';
 import { useEffect } from 'react';
 import { FieldValues, Path, PathValue, UseFormReturn } from 'react-hook-form';
 

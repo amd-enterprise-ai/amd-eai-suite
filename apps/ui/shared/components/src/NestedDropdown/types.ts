@@ -11,7 +11,7 @@ export type DropdownItemHint = {
   message: string;
 };
 
-export type DropdownItem = {
+export type DropdownActionItem = {
   key: string;
   className?: string;
   onPress: () => void;
@@ -21,6 +21,6 @@ export type DropdownItem = {
   hint?: DropdownItemHint[];
   isDisabled?: boolean;
   description?: string | ReactNode;
-  actions?: DropdownItem[];
+  actions?: DropdownActionItem[];
   isSection?: boolean;
 };

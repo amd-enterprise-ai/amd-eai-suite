@@ -41,6 +41,13 @@ vi.mock('@heroui/react', async () => {
     await vi.importActual<typeof import('@heroui/react')>('@heroui/react');
   return {
     ...actual,
+  };
+});
+vi.mock('@amdenterpriseai/components', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/components')>();
+  return {
+    ...actual,
     Tooltip: ({
       children,
       content,
@@ -55,6 +62,21 @@ vi.mock('@heroui/react', async () => {
     ),
   };
 });
+
+vi.mock('../../../src/Tooltip', () => ({
+  Tooltip: ({
+    children,
+    content,
+  }: {
+    children: React.ReactNode;
+    content: React.ReactNode;
+  }) => (
+    <div data-testid="datesince-tooltip-wrapper">
+      <span data-testid="datesince-trigger">{children}</span>
+      <span data-testid="datesince-tooltip-content">{content}</span>
+    </div>
+  ),
+}));
 
 describe('DateSince', () => {
   const fixedDate = new Date('2025-02-24T12:00:00Z');

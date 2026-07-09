@@ -11,6 +11,10 @@ Resource            ui_endpoint.resource
 
 
 *** Keywords ***
+An admin user is logged in to AIRM
+    [Documentation]    BDD alias for admin login. Use in Given steps for natural language flow.
+    Admin user is logged in
+
 Admin user is logged in
     [Documentation]    Logs in to AIRM via Keycloak as admin and sets the base URL for navigation.
     ...                Expects a browser to already be open (via Test Setup).

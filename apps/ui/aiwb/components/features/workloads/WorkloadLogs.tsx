@@ -2,19 +2,25 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Select, SelectItem, Spinner, Switch } from '@heroui/react';
+import {
+  Select,
+  SelectItem,
+  Spinner,
+  Switch,
+} from '@amdenterpriseai/components';
+
+import { PageLoader } from '@/components/shared/PageLoader';
 
 import { useTranslation } from 'next-i18next';
 
 import { Workload } from '@/types/workloads';
 import { WorkloadLogResponse } from '@/types/workloads';
-import type { ResourceMetrics } from '@/types/namespaces';
+import type { ResourceMetrics } from '@/types/projects';
 import { LogLevel, LogType, WorkloadStatus } from '@/types/enums/workloads';
 import { WorkloadLogPagination } from '@/types/workloads';
 
 import { useQuery } from '@tanstack/react-query';
 import { getWorkloadLogs } from '@/lib/app/workloads';
-import { getAimServiceLogs } from '@/lib/app/aims';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { LogEntry } from '@/types/workloads';
 import { throttle } from 'lodash';
@@ -23,20 +29,13 @@ import { useWorkloadLogsStream } from '@/hooks/useWorkloadLogsStream';
 import Ansi from 'ansi-to-react';
 import { getLogLevelColor } from '@/lib/app/logs';
 
-export enum LogSource {
-  AIM = 'aim',
-  WORKLOAD = 'workload',
-}
-
 interface Props {
   workload: Workload | ResourceMetrics | undefined;
   isOpen: boolean;
-  /** Log source type - defaults to 'workload' */
-  logSource?: LogSource;
   namespace: string;
 }
 
-const WorkloadLogs = ({ workload, isOpen, logSource, namespace }: Props) => {
+const WorkloadLogs = ({ workload, isOpen, namespace }: Props) => {
   const { t } = useTranslation('workloads');
 
   const [isStreamingMode, setIsStreamingMode] = useState(false);
@@ -80,7 +79,7 @@ const WorkloadLogs = ({ workload, isOpen, logSource, namespace }: Props) => {
     stopStreaming,
     clearLogs: clearStreamLogs,
   } = useWorkloadLogsStream({
-    namespace: namespace || '',
+    projectId: namespace || '',
     workloadId: workloadId || '',
   });
 
@@ -91,7 +90,6 @@ const WorkloadLogs = ({ workload, isOpen, logSource, namespace }: Props) => {
   } = useQuery<WorkloadLogResponse | undefined>({
     queryKey: [
       'workloadLogs',
-      logSource,
       namespace,
       workloadId,
       currentStartDate,
@@ -100,18 +98,12 @@ const WorkloadLogs = ({ workload, isOpen, logSource, namespace }: Props) => {
     ],
     queryFn: async () => {
       if (!workloadId) return;
-
-      const params = {
+      return await getWorkloadLogs(namespace!, workloadId, {
         direction: 'backward' as const,
         pageToken: currentStartDate,
         level: selectedLogLevel || undefined,
         logType: selectedLogType,
-      };
-
-      if (logSource === LogSource.AIM && namespace)
-        return await getAimServiceLogs(namespace, workloadId, params);
-
-      return await getWorkloadLogs(namespace!, workloadId, params);
+      });
     },
     enabled: !!workloadId && isOpen && !isStreamingMode,
   });
@@ -388,18 +380,15 @@ const WorkloadLogs = ({ workload, isOpen, logSource, namespace }: Props) => {
               ))}
             </Select>
           </div>
-          {/* Streaming is not supported for AIM service logs */}
-          {logSource !== LogSource.AIM && (
-            <div className="flex items-center gap-2">
-              <Switch
-                isSelected={isStreamingMode}
-                onValueChange={handleStreamingToggle}
-                size="sm"
-                color="primary"
-              />
-              {t('list.actions.logs.modal.streaming')}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <Switch
+              isSelected={isStreamingMode}
+              onValueChange={handleStreamingToggle}
+              size="sm"
+              color="primary"
+            />
+            {t('list.actions.logs.modal.streaming')}
+          </div>
         </div>
       </div>
       <div
@@ -419,12 +408,11 @@ const WorkloadLogs = ({ workload, isOpen, logSource, namespace }: Props) => {
           </div>
         )}
         {isCurrentlyLoading ? (
-          <div
-            className="flex justify-center items-center h-64"
-            data-testid="workload-logs-loading"
-          >
-            <Spinner size="lg" color="primary" />
-          </div>
+          <PageLoader
+            label={t('list.actions.logs.modal.loading')}
+            testId="workload-logs-loading"
+            className="h-64"
+          />
         ) : currentLogs.length === 0 ? (
           <div
             className="flex justify-center items-center h-64 text-gray-500"

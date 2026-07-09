@@ -3,25 +3,34 @@
 // SPDX-License-Identifier: MIT
 
 import {
+  type Selection,
   Button,
   Dropdown,
   DropdownItem,
   DropdownMenu,
   DropdownTrigger,
-  Selection,
-  useDisclosure,
-} from '@heroui/react';
+  ActionButton,
+  RelevantDocs,
+  AiwbDocsPage,
+  aiwbDocumentationMapping,
+  ConfirmationModal,
+  ServerSideDataTable,
+  ChipDisplay,
+  DateDisplay,
+  ActionsToolbar,
+} from '@amdenterpriseai/components';
+import {
+  useDebouncedCallback,
+  useOverlayState,
+  useSystemToast,
+} from '@amdenterpriseai/hooks';
 import { IconChevronDown, IconCloudUpload } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { getServerSession } from 'next-auth';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
-import { useSystemToast } from '@amdenterpriseai/hooks';
-
-import { getFilteredData } from '@amdenterpriseai/utils/app';
 import {
   DOCS_WORKBENCH_BASE,
   WithDocumentationLink,
@@ -29,34 +38,38 @@ import {
 import {
   deleteDatasets,
   downloadDatasetById,
-  getDatasets,
   getDatasetTypeVariants,
+  listDatasets,
 } from '@/lib/app/datasets';
-import { authOptions } from '@amdenterpriseai/utils/server';
+import { PaginatedList } from '@/types/pagination';
 
 import { TableColumns } from '@amdenterpriseai/types';
-import { DatasetType } from '@/types/datasets';
+import { CollectionRequestParams } from '@amdenterpriseai/types';
+import { FilterParams } from '@amdenterpriseai/types';
+import { SortDirection } from '@amdenterpriseai/types';
+import { Dataset, DatasetType } from '@/types/datasets';
 import { DatasetsTableField } from '@/types/enums/dataset-table-fields';
 import { FilterComponentType } from '@amdenterpriseai/types';
-import { Dataset } from '@/types/datasets';
-import { ClientSideDataFilter, FilterValueMap } from '@amdenterpriseai/types';
-import { ActionButton } from '@amdenterpriseai/components';
+import { FilterValueMap } from '@amdenterpriseai/types';
 import { DatasetUpload } from '@/components/features/datasets/DatasetUpload';
 import {
   DatasetDownloadIndicator,
   DownloadStatus,
 } from '@/components/features/datasets/DatasetDownloadIndicator';
-import {
-  RelevantDocs,
-  AiwbDocsPage,
-  aiwbDocumentationMapping,
-} from '@amdenterpriseai/components';
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { ChipDisplay, DateDisplay } from '@amdenterpriseai/components';
-import { ActionsToolbar } from '@amdenterpriseai/components';
 
 import { useProject } from '@/contexts/ProjectContext';
+
+const API_REQUEST_DEFAULTS: CollectionRequestParams<Dataset> = {
+  page: 1,
+  pageSize: 10,
+  sort: [
+    {
+      field: 'createdAt' as keyof Dataset,
+      direction: SortDirection.DESC,
+    },
+  ],
+  filter: [],
+};
 
 const DatasetsPage: React.FC & WithDocumentationLink = () => {
   const { toast } = useSystemToast();
@@ -64,13 +77,11 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
   const { activeProject } = useProject();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch, dataUpdatedAt } = useQuery<Dataset[]>({
-    queryKey: ['project', activeProject, 'datasets'],
-    queryFn: () => getDatasets(activeProject!),
-    enabled: !!activeProject,
-  });
-
-  const [filters, setFilters] = useState<ClientSideDataFilter<Dataset>[]>([]);
+  const [tableParams, setTableParams] =
+    useState<CollectionRequestParams<Dataset>>(API_REQUEST_DEFAULTS);
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<
+    DatasetType | undefined
+  >(undefined);
   const [datasetUploadVisible, setDatasetUploadVisible] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Selection>(new Set([]));
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus | null>(
@@ -83,14 +94,33 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
     isOpen: isDeleteConfirmOpen,
     onOpen: onDeleteConfirmOpen,
     onOpenChange: onDeleteConfirmOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
+
+  const fetchParams = useMemo(() => {
+    return {
+      page: tableParams.page,
+      pageSize: tableParams.pageSize,
+      type: selectedTypeFilter,
+    };
+  }, [tableParams.page, tableParams.pageSize, selectedTypeFilter]);
+
+  const {
+    data: paginatedDatasets,
+    isLoading,
+    isFetching,
+    refetch,
+    dataUpdatedAt,
+  } = useQuery<PaginatedList<Dataset>>({
+    queryKey: ['project', activeProject, 'datasets', fetchParams],
+    queryFn: () => listDatasets(activeProject!, fetchParams),
+    enabled: !!activeProject,
+  });
+
+  const data = paginatedDatasets?.data ?? [];
+  const total = paginatedDatasets?.pagination.total ?? 0;
 
   const typeFilterOptions = useMemo(
     () => [
-      {
-        name: t(`types.${DatasetType.Evaluation}`),
-        type: DatasetType.Evaluation,
-      },
       {
         name: t(`types.${DatasetType.Finetuning}`),
         type: DatasetType.Finetuning,
@@ -99,18 +129,15 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
     [t],
   );
 
+  // Sort is intentionally disabled: the datasets list endpoint does not accept
+  // sort params (no SortCondition on ListDatasetsQuery), so a sortable header
+  // would just toggle a sort indicator without re-fetching ordered data.
   const columns: TableColumns<DatasetsTableField | null> = [
-    {
-      key: DatasetsTableField.TYPE,
-      sortable: true,
-    },
-    {
-      key: DatasetsTableField.NAME,
-      sortable: true,
-    },
+    { key: DatasetsTableField.TYPE },
+    { key: DatasetsTableField.NAME },
     { key: DatasetsTableField.DESCRIPTION },
-    { key: DatasetsTableField.CREATED_BY, sortable: true },
-    { key: DatasetsTableField.CREATED_AT, sortable: true },
+    { key: DatasetsTableField.CREATED_BY },
+    { key: DatasetsTableField.CREATED_AT },
   ];
 
   const actions = [
@@ -174,13 +201,6 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
     }
   };
 
-  const filteredDatasets = useMemo(() => {
-    if (data) {
-      return getFilteredData(data, filters);
-    }
-    return [];
-  }, [data, filters]);
-
   const customRenderers: Partial<
     Record<DatasetsTableField, (item: Dataset) => React.ReactNode | string>
   > = {
@@ -198,14 +218,22 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
   const { mutate: handleDatasetDelete, isPending: isDeletingDatasets } =
     useMutation({
       mutationFn: (ids: string[]) => deleteDatasets(ids, activeProject!),
-      onSuccess: () => {
+      onSuccess: (result) => {
         onDeleteConfirmOpenChange();
         queryClient.invalidateQueries({
           queryKey: ['project', activeProject, 'datasets'],
         });
         setSelectedKeys(new Set([]));
         refreshDatasets();
-        toast.success(t('actions.delete.success'));
+        if (result.failed.length === 0) {
+          toast.success(t('actions.delete.success'));
+        } else if (result.succeededIds.length === 0) {
+          toast.error(t('actions.delete.error'));
+        } else {
+          toast.error(
+            t('actions.delete.partialError', { count: result.failed.length }),
+          );
+        }
       },
       onError: () => {
         toast.error(t('actions.delete.error'));
@@ -215,15 +243,18 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
   const handleDeleteSelected = useCallback(() => {
     let datasetIds: string[] = [];
 
+    // Server-side pagination: "select all" refers to rows on the current page.
+    // Bulk operations therefore target the visible page only — the backend does
+    // not expose an "all matching" delete contract.
     if (selectedKeys === 'all') {
-      datasetIds = filteredDatasets.map((dataset) => dataset.id.toString());
+      datasetIds = data.map((dataset) => dataset.id.toString());
     } else if (selectedKeys instanceof Set && selectedKeys.size > 0) {
       datasetIds = Array.from(selectedKeys) as string[];
     }
     if (datasetIds.length > 0) {
       handleDatasetDelete(datasetIds);
     }
-  }, [handleDatasetDelete, filteredDatasets, selectedKeys]);
+  }, [handleDatasetDelete, data, selectedKeys]);
 
   const filterConfig = useMemo(
     () => ({
@@ -233,7 +264,9 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
         label: t('actions.datasetTypeFilter'),
         placeholder: t('actions.datasetTypeFilter'),
         type: FilterComponentType.SELECT,
-        allowMultipleSelection: true,
+        // EAI-6577: backend supports a single exact `type` match only.
+        // Constrain UI to single-select to keep filter semantics honest.
+        allowMultipleSelection: false,
         fields: typeFilterOptions.map((option) => ({
           label: option.name,
           key: option.type,
@@ -244,15 +277,35 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
   );
 
   const handleFilterChange = useCallback((filters: FilterValueMap) => {
-    const newFilters: ClientSideDataFilter<Dataset>[] = [];
-    if (filters.type && filters.type.length > 0) {
-      newFilters.push({
-        field: 'type',
-        values: filters.type,
-      });
-    }
-    setFilters(newFilters);
+    const next = filters.type?.[0] as DatasetType | undefined;
+    setSelectedTypeFilter(next);
+    setSelectedKeys(new Set([]));
+    // Reset to page 1 immediately so the next fetch uses the new filter on
+    // page 1, not the old page number. ServerSideDataTable also resets via
+    // its filters effect, but this avoids the brief window where a stale
+    // page request is issued before that effect runs.
+    setTableParams((prev) => ({ ...prev, page: 1 }));
   }, []);
+
+  // Surface the type filter to ServerSideDataTable so its built-in
+  // reset-to-page-1 effect fires when the user changes filters. Without this,
+  // a filter change while on page > 1 would refetch the same page with the
+  // new filter — likely empty — while the pagination control still shows the
+  // old page.
+  const tableFilters = useMemo<FilterParams<Dataset>[]>(
+    () =>
+      selectedTypeFilter
+        ? [{ fields: ['type'], values: [selectedTypeFilter] }]
+        : [],
+    [selectedTypeFilter],
+  );
+
+  const handleTableParamsChange = useDebouncedCallback(
+    (params: CollectionRequestParams<Dataset>) => {
+      setTableParams(params);
+    },
+    100,
+  );
 
   return (
     <div className="min-h-full flex flex-col w-full">
@@ -262,7 +315,7 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
           onFilterChange={handleFilterChange}
           onRefresh={refreshDatasets}
           updatedTimestamp={dataUpdatedAt}
-          isRefreshing={isLoading}
+          isRefreshing={isLoading || isFetching}
           endContent={
             <div className="flex gap-3 items-center">
               <Dropdown>
@@ -282,7 +335,7 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
                     {t('actions.actionsDropdown')}
                   </Button>
                 </DropdownTrigger>
-                <DropdownMenu aria-label="Actions">
+                <DropdownMenu aria-label={t('actions.actionsDropdown')}>
                   <DropdownItem
                     key="delete"
                     className="text-danger"
@@ -332,18 +385,23 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
           }
         />
 
-        <ClientSideDataTable
-          data={filteredDatasets}
+        <ServerSideDataTable
+          filters={tableFilters}
+          data={data}
+          total={total}
+          handleDataRequest={handleTableParamsChange}
           isSelectable
           selectedKeys={selectedKeys}
           onSelectionChange={handleSelectionChange}
           className="flex-1 overflow-y-auto"
           columns={columns}
-          defaultSortByField={DatasetsTableField.NAME}
+          defaultSortByField={DatasetsTableField.CREATED_AT}
+          defaultSortDirection={SortDirection.DESC}
           translation={t}
           customRenderers={customRenderers}
           rowActions={actions}
           isLoading={isLoading}
+          isFetching={isFetching}
           idKey={'id'}
         />
       </div>
@@ -363,22 +421,6 @@ const DatasetsPage: React.FC & WithDocumentationLink = () => {
 
 export async function getServerSideProps(context: any) {
   const { locale } = context;
-
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   return {
     props: {

@@ -34,7 +34,7 @@ Resource            resources/workloads.resource
 Resource            resources/aiwb_aims.resource
 Resource            resources/airm_projects.resource
 
-Suite Teardown      Clean Up All Created Projects
+Suite Teardown      Run Keywords    Clean Up Temporary Users    AND    Clean Up All Created Projects
 Test Setup          Open test browser
 Test Teardown       Close test browser
 
@@ -107,6 +107,20 @@ Chat page shows available models for selection
     Then available models should be listed for selection
     And user should be able to select a model
 
+Single deployed model is auto-selected on chat page
+    [Documentation]    When exactly one inference deployment is running in the project,
+    ...                navigating to the chat page should make the input ready without
+    ...                the user manually selecting a model.
+    [Tags]    ui    chat    inference    gpu
+
+    Given a ready project with user access exists
+    And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
+    And AIM is deployed and running
+    And user is logged in
+    And project "${TEST_PROJECT}[name]" is selected
+    When user navigates to the chat page
+    Then chat input should be enabled
+
 # =============================================================================
 # Chat Message and Response Rendering
 # =============================================================================
@@ -144,3 +158,22 @@ Compare tab shows responses from two models side by side
     When user opens the compare tab and selects two models
     And user sends a message
     Then responses from both models should be displayed side by side
+
+# =============================================================================
+# Project membership boundary (multi-user)
+# =============================================================================
+
+Chat respects project membership
+    [Documentation]    A project member can chat with a chattable AIM in that project;
+    ...                a non-member's request is rejected.
+    [Tags]    ui    chat    inference    multi-user    gpu
+
+    Given a ready project with user access exists
+    And project quota is set to    gpu_count=2    cpu_milli_cores=8000    memory_bytes=68719476736
+    And a chattable AIM exists in project A
+    And user Alice has access to project A
+    And user Bob does not have access to project A
+    When Alice sends a chat message to project A's AIM
+    Then she receives a streamed reply
+    When Bob attempts to chat with project A's AIM
+    Then his request is rejected

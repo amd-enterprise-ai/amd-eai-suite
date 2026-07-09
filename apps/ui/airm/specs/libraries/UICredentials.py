@@ -5,45 +5,56 @@
 """
 Robot Framework library that exposes OIDC credentials for browser-based login.
 
-Supports multiple user roles for RBAC testing. Admin credentials come from
-kubeconfig, team member credentials from environment variables or defaults.
+Admin credentials come from KubeconfigAuth (kubeconfig OIDC config).
+Team-member credentials and provisioning detection delegate to the shared
+TeamMemberCredentials library so the same logic powers both API and UI
+RBAC suites.
 """
 
 import importlib.util
-import os
 import sys
 from pathlib import Path
+from types import ModuleType
 
-# KubeconfigAuth lives in the shared testing libraries, which is on the RF
-# pythonpath but shadowed by the local libraries/ package. Import it directly.
-_testing = Path(__file__).resolve().parents[5] / "testing"
-_kca_path = _testing / "libraries" / "KubeconfigAuth.py"
-if not _kca_path.exists():
-    raise ImportError(f"KubeconfigAuth not found at expected path: {_kca_path}")
-_spec = importlib.util.spec_from_file_location("KubeconfigAuth", _kca_path)
-if _spec is None or _spec.loader is None:
-    raise ImportError(f"Failed to create module spec from {_kca_path}")
-_module = importlib.util.module_from_spec(_spec)
-sys.modules["KubeconfigAuth"] = _module
-_spec.loader.exec_module(_module)
-KubeconfigAuth = _module.KubeconfigAuth
+
+def _load_from_testing(name: str) -> ModuleType:
+    """Import a module from the shared testing/libraries by absolute path.
+
+    The shared libraries are on Robot's pythonpath but are shadowed by the
+    local libraries/ package, so a normal import would resolve incorrectly.
+    """
+    testing_lib = Path(__file__).resolve().parents[5] / "testing" / "libraries"
+    module_path = testing_lib / f"{name}.py"
+    if not module_path.exists():
+        raise ImportError(f"{name} not found at expected path: {module_path}")
+    spec = importlib.util.spec_from_file_location(name, module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Failed to create module spec from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault(name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+KubeconfigAuth = _load_from_testing("KubeconfigAuth").KubeconfigAuth
+TeamMemberCredentials = _load_from_testing("TeamMemberCredentials").TeamMemberCredentials
 
 
 class UICredentials:
     """Provides UI login credentials for multiple user roles.
 
     Admin credentials are extracted from kubeconfig OIDC configuration.
-    Team member credentials use a convention-based default (same domain,
-    'teammember' username, same password) or can be set via environment
-    variables E2E_TEAM_MEMBER_USERNAME and E2E_TEAM_MEMBER_PASSWORD.
+    Team-member credentials follow the shared convention encapsulated in
+    TeamMemberCredentials (env vars or derived from admin).
     """
 
     ROBOT_LIBRARY_SCOPE = "GLOBAL"
 
     def __init__(self):
         self._auth = KubeconfigAuth()
+        self._team_member = TeamMemberCredentials()
 
-    def _get_credentials(self) -> dict[str, str]:
+    def _get_admin_credentials(self) -> dict[str, str]:
         """Get admin credentials from environment or kubeconfig.
 
         Uses KubeconfigAuth private methods directly because it has no public
@@ -57,44 +68,30 @@ class UICredentials:
 
     def get_ui_username(self) -> str:
         """Get the admin OIDC username for browser login."""
-        username = self._get_credentials().get("username")
+        username = self._get_admin_credentials().get("username")
         if not username:
             raise ValueError("No username found in credentials")
         return username
 
     def get_ui_password(self) -> str:
         """Get the admin OIDC password for browser login."""
-        password = self._get_credentials().get("password")
+        password = self._get_admin_credentials().get("password")
         if not password:
             raise ValueError("No password found in credentials")
         return password
 
     def get_team_member_username(self) -> str:
-        """Get the team member username for browser login.
-
-        Uses E2E_TEAM_MEMBER_USERNAME env var if set, otherwise derives from
-        admin username by replacing the local part with 'teammember'.
-        """
-        env_username = os.environ.get("E2E_TEAM_MEMBER_USERNAME")
-        if env_username:
-            return env_username
-
-        admin_username = self.get_ui_username()
-        domain = admin_username.split("@")[1] if "@" in admin_username else ""
-        if not domain:
-            raise ValueError(
-                "Cannot derive team member username: admin username has no domain. "
-                "Set E2E_TEAM_MEMBER_USERNAME environment variable."
-            )
-        return f"teammember@{domain}"
+        """Get the team-member username for browser login."""
+        return self._team_member.get_username()
 
     def get_team_member_password(self) -> str:
-        """Get the team member password for browser login.
+        """Get the team-member password for browser login."""
+        return self._team_member.get_password()
 
-        Uses E2E_TEAM_MEMBER_PASSWORD env var if set, otherwise uses the same
-        password as the admin user (common in dev/test environments).
-        """
-        env_password = os.environ.get("E2E_TEAM_MEMBER_PASSWORD")
-        if env_password:
-            return env_password
-        return self.get_ui_password()
+    def team_member_is_provisioned(self) -> bool:
+        """Return True if the team-member account exists on the target environment."""
+        return self._team_member.is_provisioned()
+
+    def team_member_skip_reason(self) -> str:
+        """Human-readable reason suitable for a Robot Framework Skip message."""
+        return self._team_member.not_provisioned_reason()

@@ -3,10 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 import React from 'react';
-import { getServerSession } from 'next-auth';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
-import { authOptions } from '@amdenterpriseai/utils/server';
 import { WorkbenchSecretsPageContent } from '@/components/features/secrets/WorkbenchSecretsPageContent';
 import {
   DOCS_WORKBENCH_BASE,
@@ -23,22 +21,6 @@ WorkbenchSecretsPage.documentationLink = `${DOCS_WORKBENCH_BASE}/secrets.html`;
 
 export async function getServerSideProps(context: any) {
   const { locale } = context;
-
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   return {
     props: {

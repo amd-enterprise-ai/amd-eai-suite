@@ -2,22 +2,19 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useDisclosure } from '@heroui/react';
-
-import { getServerSession } from 'next-auth';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
-
-import { authOptions } from '@amdenterpriseai/utils/server';
 
 import ApiKeysTable from '@/components/features/api-keys/ApiKeysTable';
 import CreateApiKey from '@/components/features/api-keys/CreateApiKey';
 import {
-  RelevantDocs,
+  ActionButton,
   AiwbDocsPage,
   aiwbDocumentationMapping,
+  RelevantDocs,
 } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
+
+import { useOverlayState } from '@amdenterpriseai/hooks';
 
 import { useProject } from '@/contexts/ProjectContext';
 import {
@@ -33,7 +30,7 @@ const ApiKeysPage: React.FC & WithDocumentationLink = () => {
     isOpen: isCreateFormOpen,
     onOpenChange: onCreateFormOpenChange,
     onClose: onCreateFormClose,
-  } = useDisclosure();
+  } = useOverlayState();
 
   if (!clusterAuthEnabled) {
     return (
@@ -67,22 +64,6 @@ const ApiKeysPage: React.FC & WithDocumentationLink = () => {
 
 export async function getServerSideProps(context: any) {
   const { locale } = context;
-
-  const session = await getServerSession(context.req, context.res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: {
-        destination: '/',
-        permanent: false,
-      },
-    };
-  }
 
   return {
     props: {

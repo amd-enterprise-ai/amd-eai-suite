@@ -2,7 +2,17 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Divider, SelectItem } from '@heroui/react';
+import {
+  SelectItem,
+  Divider,
+  DrawerForm,
+  FormFieldComponent,
+  FormSelect,
+  NoDataDisplay,
+  Status,
+  StatusProps,
+  StatusError,
+} from '@amdenterpriseai/components';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
@@ -21,20 +31,13 @@ import {
   SecretsResponse,
 } from '@/types/secrets';
 
-import { DrawerForm } from '@amdenterpriseai/components';
-import { FormFieldComponent } from '@amdenterpriseai/components';
-
 import { z } from 'zod';
 import { SecretScope } from '@/types/enums/secrets';
 import { Secret } from '@/types/secrets';
 import { SecretUseCase } from '@amdenterpriseai/types';
-import { FormSelect } from '@amdenterpriseai/components';
 import { displayTimestamp } from '@amdenterpriseai/utils/app';
 import { SecretProjectAssignedTo } from './SecretProjectAssignedTo';
-import { NoDataDisplay } from '@amdenterpriseai/components';
-import { Status, StatusProps } from '@amdenterpriseai/components';
 import { getSecretStatusVariants } from '@/utils/secrets-status-variants';
-import { StatusError } from '@amdenterpriseai/components';
 
 interface Props {
   isOpen: boolean;
@@ -160,13 +163,13 @@ export const AssignOrgSecretToProject: React.FC<Props> = ({
             <div className="flex flex-col gap-4">
               <h2>{t('form.assignOrgSecret.secretDetails.title')}</h2>
               <div className="flex flex-col gap-2">
-                <span className="text-small font-thin">
+                <span className="text-sm font-thin">
                   {t('form.assignOrgSecret.secretDetails.type.label')}
                 </span>
                 <span>{selectedSecret?.name ?? <NoDataDisplay />}</span>
               </div>
               <div className="flex flex-col gap-2">
-                <span className="text-small font-thin">
+                <span className="text-sm font-thin">
                   {t('form.assignOrgSecret.secretDetails.useCase.label')}
                 </span>
                 <span>
@@ -183,7 +186,7 @@ export const AssignOrgSecretToProject: React.FC<Props> = ({
               </div>
 
               <div className="flex flex-col gap-2">
-                <span className="text-small font-thin">
+                <span className="text-sm font-thin">
                   {t('form.assignOrgSecret.secretDetails.updatedAt.label')}
                 </span>
                 <span>
@@ -195,7 +198,7 @@ export const AssignOrgSecretToProject: React.FC<Props> = ({
                 </span>
               </div>
               <div className="flex flex-col gap-2">
-                <span className="text-small font-thin">
+                <span className="text-sm font-thin">
                   {t('form.assignOrgSecret.secretDetails.assignedTo.label')}
                 </span>
                 <span>
@@ -207,7 +210,7 @@ export const AssignOrgSecretToProject: React.FC<Props> = ({
                 </span>
               </div>
               <div className="flex flex-col gap-2">
-                <span className="text-small font-thin">
+                <span className="text-sm font-thin">
                   {t('form.assignOrgSecret.secretDetails.status.label')}
                 </span>
                 {selectedSecret?.status ? (

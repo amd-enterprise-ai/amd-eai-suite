@@ -13,8 +13,11 @@ import { SecretsTableField } from '@amdenterpriseai/types';
 import { ClientSideDataFilter } from '@amdenterpriseai/types';
 import { SecretResponseData } from '@/types/secrets';
 
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { DateDisplay, NoDataDisplay } from '@amdenterpriseai/components';
+import {
+  ClientSideDataTable,
+  DateDisplay,
+  NoDataDisplay,
+} from '@amdenterpriseai/components';
 
 import { SUBMITTER_ANNOTATION_KEY } from './constants';
 
@@ -97,7 +100,9 @@ export const SecretsTable: React.FC<Props> = ({
   const customRenderers = useMemo(
     () => ({
       [SecretsTableField.NAME]: (item: SecretResponseData) => (
-        <div className={'max-w-64 truncate'}>{item.metadata.name}</div>
+        <div className={'max-w-64 truncate'}>
+          {item.displayName ?? item.metadata.name}
+        </div>
       ),
       // TODO: Fix (or clean up) these colums after decoupling
       // [SecretsTableField.TYPE]: (item: SecretResponseData) => {

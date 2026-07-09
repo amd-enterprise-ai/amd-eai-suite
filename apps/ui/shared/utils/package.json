@@ -17,7 +17,8 @@
     ".": "./src/index.ts",
     "./app": "./src/app/index.ts",
     "./data": "./src/data/index.ts",
-    "./server": "./src/server/index.ts"
+    "./server": "./src/server/index.ts",
+    "./server/proxy": "./src/server/proxy.ts"
   },
   "dependencies": {
     "@amdenterpriseai/types": "workspace:*"

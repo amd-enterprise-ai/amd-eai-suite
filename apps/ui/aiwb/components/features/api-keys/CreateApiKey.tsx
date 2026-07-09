@@ -2,9 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { SelectItem, Spinner } from '@heroui/react';
+import {
+  SelectItem,
+  Alert,
+  DrawerForm,
+  FormInput,
+  FormSelect,
+  Spinner,
+} from '@amdenterpriseai/components';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
 
@@ -22,27 +29,26 @@ import { displayTimestamp } from '@amdenterpriseai/utils/app';
 import { ApiKey } from '@/types/api-keys';
 import { ApiKeyDetails, ApiKeyWithFullKey } from '@/types/api-keys';
 
-import {
-  Alert,
-  DrawerForm,
-  FormInput,
-  FormSelect,
-} from '@amdenterpriseai/components';
 import { KeyCreatedDrawer } from './KeyCreatedDrawer';
 
 import { z, ZodType } from 'zod';
-import {
-  fetchProfilesForServices,
-  getAimClusterModels,
-  getAimServices,
-  resolveAIMServiceDisplay,
-} from '@/lib/app/aims';
-import type { AIMServiceProfile } from '@/lib/app/aims';
+import { aimParser, resolveAIMServiceDisplay } from '@/lib/app/aims';
+import { listAllProjectFineTunedModels } from '@/lib/app/models';
+import { listAllInferenceDeployments } from '@/lib/app/inference';
+import { useInferenceModelsByName } from '@/hooks/useInferenceModelsByName';
+import { useProfileSpecsForServices } from '@/hooks/useProfileSpecsForServices';
+import { toProfileSummaryFields } from '@/components/shared/ModelProfileSummary';
 import { formatModelDeploymentSubtitle } from '@/lib/app/modelDeploymentDisplay';
-import { AIMService, AIMServiceStatus } from '@/types/aims';
+import {
+  AIM_DISPLAY_NAME_ANNOTATION,
+  AIMService,
+  AIMServiceStatus,
+  FINE_TUNED_LABEL,
+  NAMESPACE_AIM_MODEL_LABEL,
+} from '@/types/aims';
 
 interface CreateApiKeyFormData {
-  name: string;
+  displayName: string;
   validityPeriod?: string;
   modelDeployments: string[];
 }
@@ -60,7 +66,8 @@ export const CreateApiKey: React.FC<Props> = ({
   apiKey,
   onClose,
 }) => {
-  const { t } = useTranslation(['api-keys', 'models']);
+  const { t } = useTranslation('api-keys');
+  const { t: tModels } = useTranslation('models');
   const { toast } = useSystemToast();
   const queryClient = useQueryClient();
   const isEditMode = !!apiKey;
@@ -82,7 +89,7 @@ export const CreateApiKey: React.FC<Props> = ({
 
   const { mutate: createKey, isPending: isCreating } = useMutation({
     mutationFn: async (data: {
-      name: string;
+      displayName: string;
       ttl?: string;
       aimIds?: string[];
     }) => {
@@ -175,8 +182,12 @@ export const CreateApiKey: React.FC<Props> = ({
         }
       } else {
         // Create mode: create new key with aim_ids
-        const payload: { name: string; ttl?: string; aimIds?: string[] } = {
-          name: data.name,
+        const payload: {
+          displayName: string;
+          ttl?: string;
+          aimIds?: string[];
+        } = {
+          displayName: data.displayName,
           aimIds: data.modelDeployments,
         };
 
@@ -206,14 +217,14 @@ export const CreateApiKey: React.FC<Props> = ({
     if (isEditMode) {
       // In edit mode, only modelDeployments is required
       return z.object({
-        name: z.string().optional(),
+        displayName: z.string().optional(),
         validityPeriod: z.string().optional(),
         modelDeployments: modelDeploymentsField.default([]),
       }) as ZodType<CreateApiKeyFormData>;
     }
     // In create mode, name is required
     return z.object({
-      name: z
+      displayName: z
         .string()
         .min(3, t('form.create.field.name.error.minLength'))
         .max(64, t('form.create.field.name.error.maxLength')),
@@ -224,29 +235,61 @@ export const CreateApiKey: React.FC<Props> = ({
 
   const { data: aimServices = [], isLoading: isLoadingAimServices } = useQuery({
     queryKey: ['aim-services', projectId],
-    queryFn: () => getAimServices(projectId),
+    queryFn: () => listAllInferenceDeployments(projectId),
     enabled: isOpen && !!projectId,
   });
 
-  const { data: aimServiceProfiles = new Map<string, AIMServiceProfile>() } =
+  // Cluster-catalog models are only needed to enrich the display of cluster-scoped AIM
+  // services. Namespace-scoped AIMModel services (fine-tuned and custom-imported) aren't
+  // in that catalog — resolveAIMServiceDisplay already falls back to their annotations,
+  // so we skip those names. Profile metric/gpu/precision come from
+  // `useProfileSpecsForServices` (separate fetch joined by `status.resolvedProfile.name`),
+  // so this fan-out only covers display-name enrichment.
+  const clusterAimNames = useMemo(
+    () =>
+      aimServices
+        .filter(
+          (s: AIMService) =>
+            s.metadata.labels?.[FINE_TUNED_LABEL] !== 'true' &&
+            s.metadata.labels?.[NAMESPACE_AIM_MODEL_LABEL] !== 'true',
+        )
+        .map((s: AIMService) => s.spec.model?.name)
+        .filter((name): name is string => !!name),
+    [aimServices],
+  );
+  const { byName: clusterAimsByName, isLoading: isClusterAimsLoading } =
+    useInferenceModelsByName(isOpen ? clusterAimNames : []);
+  const parsedAIMs = useMemo(
+    () => Array.from(clusterAimsByName.values()).map((m) => aimParser(m)),
+    [clusterAimsByName],
+  );
+
+  // Project AIMModel CRs — used here only so namespace-scoped (fine-tuned)
+  // deployments contribute their `status.aimId` to the namespace AIMProfile
+  // fetch below. Cluster-scoped deployments contribute via clusterAimsByName.
+  const { data: fineTunedModels = [], isLoading: isFineTunedLoading } =
     useQuery({
-      queryKey: [
-        'aim-service-profiles',
-        projectId,
-        aimServices.map((s: AIMService) => s.id),
-      ],
-      queryFn: () => fetchProfilesForServices(aimServices),
-      enabled: isOpen && aimServices.length > 0,
+      queryKey: ['project', projectId, 'fine-tuned-models'],
+      queryFn: () => listAllProjectFineTunedModels(projectId),
+      enabled: isOpen && !!projectId,
+      staleTime: 5 * 60_000,
     });
 
-  const { data: parsedAIMs } = useQuery({
-    queryKey: ['parsed-aims', projectId],
-    queryFn: async () => {
-      const response = await getAimClusterModels(projectId);
-      return response;
-    },
-    enabled: isOpen,
-  });
+  // Profile lookup map for the metric / gpu / precision subtitle. Wait for
+  // both upstream model fetches to settle before deriving aimIds — otherwise
+  // each per-name model landing would trigger a superseding profile fetch.
+  const isUpstreamLoading = isClusterAimsLoading || isFineTunedLoading;
+  const aimIds = isUpstreamLoading
+    ? []
+    : [
+        ...Array.from(clusterAimsByName.values()).map((m) => m.status?.aimId),
+        ...fineTunedModels.map((m) => m.status?.aimId),
+      ].filter((id): id is string => !!id);
+  const { specByName: profileSpecByName, isLoading: isLoadingProfiles } =
+    useProfileSpecsForServices({
+      aimIds,
+      project: projectId,
+    });
 
   const modelDeployments = useMemo(() => {
     return aimServices
@@ -259,13 +302,22 @@ export const CreateApiKey: React.FC<Props> = ({
       )
       .map((service: AIMService) => {
         const displayInfo = resolveAIMServiceDisplay(service, parsedAIMs);
-        const profile = aimServiceProfiles.get(String(service.id));
-        const title =
+        const profile = toProfileSummaryFields(service, profileSpecByName);
+        const canonicalName =
           `${displayInfo.canonicalName} ${displayInfo.imageVersion ? `(${displayInfo.imageVersion})` : ''}`.trim();
-        const subtitle = formatModelDeploymentSubtitle(t, {
+        // Prefer the user-entered deploy name; fall back to canonical + version
+        // when the API only echoes the K8s resource name.
+        const deployDisplayName =
+          service.metadata.annotations?.[AIM_DISPLAY_NAME_ANNOTATION];
+        const title =
+          deployDisplayName && deployDisplayName !== service.metadata.name
+            ? deployDisplayName
+            : canonicalName;
+        const subtitle = formatModelDeploymentSubtitle(tModels, {
           metric: profile?.metric ?? String(displayInfo.metric),
           gpu: profile?.gpu,
           templateGpuCount: profile?.templateGpuCount,
+          acceleratorType: profile?.acceleratorType,
           precision: profile?.precision,
         });
         return {
@@ -276,15 +328,15 @@ export const CreateApiKey: React.FC<Props> = ({
           groupId: service.clusterAuthGroupId!,
         };
       });
-  }, [aimServices, aimServiceProfiles, parsedAIMs, t]);
+  }, [aimServices, parsedAIMs, profileSpecByName, tModels]);
 
   const defaultValues = useMemo((): CreateApiKeyFormData => {
     if (!isEditMode) {
-      return { name: '', validityPeriod: '0', modelDeployments: [] };
+      return { displayName: '', validityPeriod: '0', modelDeployments: [] };
     }
     if (!apiKeyDetails || modelDeployments.length === 0) {
       return {
-        name: apiKeyDetails?.name ?? apiKey?.name ?? '',
+        displayName: apiKeyDetails?.displayName ?? apiKey?.displayName ?? '',
         validityPeriod: '0',
         modelDeployments: [],
       };
@@ -293,17 +345,46 @@ export const CreateApiKey: React.FC<Props> = ({
       .filter((d) => apiKeyDetails.groups?.includes(d.groupId))
       .map((d) => d.id);
     return {
-      name: apiKeyDetails.name ?? apiKey?.name ?? '',
+      displayName: apiKeyDetails.displayName ?? apiKey?.displayName ?? '',
       validityPeriod: '0',
       modelDeployments: selectedAimIds,
     };
-  }, [isEditMode, apiKeyDetails, modelDeployments, apiKey?.name]);
+  }, [isEditMode, apiKeyDetails, modelDeployments, apiKey?.displayName]);
+
+  // Capture form.reset so we can call it imperatively once both data sources
+  // are ready, instead of remounting the form via a key change (which flashes).
+  const resetFormRef = useRef<((values: CreateApiKeyFormData) => void) | null>(
+    null,
+  );
+  // All five fetches must settle before modelDeployments has stable titles,
+  // subtitles, and groupIds. Gate the field on all of them so the select goes
+  // directly from spinner to correct values with no intermediary states.
+  // isLoadingDetails (not !!apiKeyDetails) is used so an error response still
+  // unblocks the field rather than leaving it stuck in a permanent loading state.
+  const isDeploymentsLoading =
+    isLoadingDetails ||
+    isLoadingAimServices ||
+    isClusterAimsLoading ||
+    isFineTunedLoading ||
+    isLoadingProfiles;
+  const dataReady = isEditMode && !isDeploymentsLoading;
+  const isSelectLoading = isEditMode ? !dataReady : isDeploymentsLoading;
+  useEffect(() => {
+    if (dataReady) {
+      resetFormRef.current?.(defaultValues);
+    }
+    // `defaultValues` is intentionally omitted from deps. This effect is a
+    // one-shot trigger: we want to reset the form exactly once, when `dataReady`
+    // first flips to true. Re-firing on every `defaultValues` recomputation
+    // (e.g. profile subtitle changes) would wipe user edits mid-session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataReady]);
 
   const editModeFields = isEditMode
     ? [
         {
           label: t('form.create.field.name.label'),
-          value: apiKeyDetails?.name || apiKey?.name,
+          value: apiKeyDetails?.displayName || apiKey?.displayName,
         },
         {
           label: t('form.create.field.expiresAt.label'),
@@ -326,10 +407,10 @@ export const CreateApiKey: React.FC<Props> = ({
         ? Array.from(selectedAimIdsRaw)
         : [];
 
-    if (isLoadingDetails || isLoadingAimServices) {
+    if (isSelectLoading) {
       return (
         <div className="pl-2">
-          <Spinner size="sm" color="default" />
+          <Spinner size="sm" color="primary" />
         </div>
       );
     }
@@ -368,7 +449,7 @@ export const CreateApiKey: React.FC<Props> = ({
   return (
     <>
       <DrawerForm<CreateApiKeyFormData>
-        key={`create-api-key-${projectId}-${isEditMode ? apiKey?.id : 'new'}-${apiKeyDetails ? 'loaded' : 'pending'}`}
+        key={`create-api-key-${projectId}-${isEditMode ? apiKey?.id : 'new'}`}
         isOpen={isOpen && !isKeyCreatedDrawerOpen}
         isActioning={isPending}
         onFormSuccess={(values) => {
@@ -388,88 +469,93 @@ export const CreateApiKey: React.FC<Props> = ({
         }
         defaultValues={defaultValues}
         validationSchema={formSchema}
-        renderFields={(form) => (
-          <div className="flex flex-col gap-4">
-            {isEditMode &&
-              editModeFields.map((field, index) => (
-                <div key={index} className="flex flex-col gap-1">
-                  <label className="text-sm text-foreground-500">
-                    {field.label}
-                  </label>
-                  <p className="text-foreground">{field.value}</p>
-                </div>
-              ))}
-            {!isEditMode && (
-              <>
-                <FormInput<CreateApiKeyFormData>
-                  form={form}
-                  name="name"
-                  label={t('form.create.field.name.label')}
-                  placeholder={t('form.create.field.name.placeholder')}
-                  isRequired
-                />
-                <FormSelect<CreateApiKeyFormData>
-                  form={form}
-                  name="validityPeriod"
-                  label={t('form.create.field.validityPeriod.label')}
-                  placeholder={t(
-                    'form.create.field.validityPeriod.placeholder',
-                  )}
-                  description={t(
-                    'form.create.field.validityPeriod.description',
-                  )}
-                >
-                  {validityPeriodOptions.map((option) => (
-                    <SelectItem key={option.value}>{option.label}</SelectItem>
-                  ))}
-                </FormSelect>
-              </>
-            )}
-            <div className="text-sm font-semibold text-foreground-600 mt-2">
-              {t('form.create.section.endpointAccess')}
+        renderFields={(form) => {
+          resetFormRef.current = form.reset;
+          return (
+            <div className="flex flex-col gap-4">
+              {isEditMode &&
+                editModeFields.map((field, index) => (
+                  <div key={index} className="flex flex-col gap-1">
+                    <label className="text-sm text-foreground-500">
+                      {field.label}
+                    </label>
+                    <p className="text-foreground">{field.value}</p>
+                  </div>
+                ))}
+              {!isEditMode && (
+                <>
+                  <FormInput<CreateApiKeyFormData>
+                    form={form}
+                    name="displayName"
+                    label={t('form.create.field.name.label')}
+                    placeholder={t('form.create.field.name.placeholder')}
+                    isRequired
+                  />
+                  <FormSelect<CreateApiKeyFormData>
+                    form={form}
+                    name="validityPeriod"
+                    label={t('form.create.field.validityPeriod.label')}
+                    placeholder={t(
+                      'form.create.field.validityPeriod.placeholder',
+                    )}
+                    description={t(
+                      'form.create.field.validityPeriod.description',
+                    )}
+                  >
+                    {validityPeriodOptions.map((option) => (
+                      <SelectItem key={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </FormSelect>
+                </>
+              )}
+              <div className="text-sm font-semibold text-foreground-600 mt-2">
+                {t('form.create.section.endpointAccess')}
+              </div>
+              <FormSelect<CreateApiKeyFormData>
+                form={form}
+                name="modelDeployments"
+                label={t('form.create.field.modelDeployment.label')}
+                placeholder={t('form.create.field.modelDeployment.placeholder')}
+                description={t('form.create.field.modelDeployment.description')}
+                selectionMode="multiple"
+                isLoading={isSelectLoading}
+                isDisabled={isSelectLoading}
+              >
+                {modelDeployments.map((d) => (
+                  <SelectItem
+                    key={d.id}
+                    textValue={`${d.title} ${d.subtitle}`}
+                    description={d.subtitle || undefined}
+                    classNames={{
+                      description: 'text-default-500',
+                    }}
+                  >
+                    {d.title}
+                  </SelectItem>
+                ))}
+              </FormSelect>
+              {isEditMode && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="block text-small subpixel-antialiased text-foreground-500">
+                      {t('form.edit.section.linkedDeployments')}
+                    </label>
+                    {renderLinkedDeployments(
+                      form.watch('modelDeployments') ?? [],
+                    )}
+                  </div>
+                  <Alert
+                    color="warning"
+                    hideIconWrapper={true}
+                    description={t(
+                      'form.edit.warning.linkedDeploymentsWarning',
+                    )}
+                  />
+                </>
+              )}
             </div>
-            <FormSelect<CreateApiKeyFormData>
-              form={form}
-              name="modelDeployments"
-              label={t('form.create.field.modelDeployment.label')}
-              placeholder={t('form.create.field.modelDeployment.placeholder')}
-              description={t('form.create.field.modelDeployment.description')}
-              selectionMode="multiple"
-              isLoading={isLoadingAimServices || isLoadingDetails}
-              isDisabled={isLoadingAimServices || isLoadingDetails}
-            >
-              {modelDeployments.map((d) => (
-                <SelectItem
-                  key={d.id}
-                  textValue={`${d.title} ${d.subtitle}`}
-                  description={d.subtitle || undefined}
-                  classNames={{
-                    description: 'text-default-500',
-                  }}
-                >
-                  {d.title}
-                </SelectItem>
-              ))}
-            </FormSelect>
-            {isEditMode && (
-              <>
-                <div className="flex flex-col gap-1.5">
-                  <label className="block text-small subpixel-antialiased text-foreground-500">
-                    {t('form.edit.section.linkedDeployments')}
-                  </label>
-                  {renderLinkedDeployments(
-                    form.watch('modelDeployments') ?? [],
-                  )}
-                </div>
-                <Alert
-                  color="warning"
-                  hideIconWrapper={true}
-                  description={t('form.edit.warning.linkedDeploymentsWarning')}
-                />
-              </>
-            )}
-          </div>
-        )}
+          );
+        }}
       />
 
       <KeyCreatedDrawer

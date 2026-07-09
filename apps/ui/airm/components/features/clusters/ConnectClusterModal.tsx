@@ -2,11 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Checkbox, Snippet } from '@heroui/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef, useState } from 'react';
 
-import { Alert } from '@amdenterpriseai/components';
+import {
+  ActionButton,
+  Alert,
+  Checkbox,
+  CopySnippet,
+  StepModal,
+} from '@amdenterpriseai/components';
 
 import { useTranslation } from 'next-i18next';
 
@@ -19,9 +24,6 @@ import { APIRequestError } from '@amdenterpriseai/utils/app';
 import { CLUSTER_ONBOARDING_DOC_URL } from '@/constants/clusters/connectCluster';
 import { CreateClusterResponse } from '@/types/clusters';
 import { StepModalHandle } from '@amdenterpriseai/types';
-
-import { StepModal } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
 
 interface Props {
   onOpenChange: (isOpen: boolean) => void;
@@ -133,7 +135,7 @@ const ConnectClusterModal: React.FC<Props> = ({ onOpenChange, isOpen }) => {
           content: (
             <div>
               <p>{t('connectCluster.script.content.description')} </p>
-              <Snippet
+              <CopySnippet
                 hideSymbol={true}
                 classNames={{
                   base: 'mt-8 w-full',
@@ -141,7 +143,7 @@ const ConnectClusterModal: React.FC<Props> = ({ onOpenChange, isOpen }) => {
                 }}
               >
                 <span>{installationCMD}</span>
-              </Snippet>
+              </CopySnippet>
 
               <Alert
                 className="mt-4"

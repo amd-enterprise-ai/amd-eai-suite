@@ -8,6 +8,10 @@
 
 FROM python:3.13 AS base
 
+# Flush Python stdout/stderr line-by-line so `kubectl logs -f` streams test
+# output in real time instead of waiting for the block buffer to fill at exit.
+ENV PYTHONUNBUFFERED=1
+
 # Helm binary install (pinned version)
 WORKDIR /tmp
 RUN HELM_VERSION=v3.17.3 && \
@@ -72,13 +76,15 @@ COPY apps/api/aiwb/specs /code/apps/api/aiwb/specs
 
 # Copy testing infrastructure
 COPY testing/entrypoint.sh /code/testing/entrypoint.sh
+COPY testing/silodev-credential-plugin.py /code/testing/silodev-credential-plugin.py
 COPY testing/resources /code/testing/resources
 COPY testing/libraries /code/testing/libraries
 
 # Create non-root user and set permissions
 RUN useradd -m -u 1000 apiserver && \
     chown -R 1000:1000 /code && \
-    chmod +x /code/testing/entrypoint.sh
+    chmod +x /code/testing/entrypoint.sh && \
+    chmod +x /code/testing/silodev-credential-plugin.py
 
 USER apiserver
 

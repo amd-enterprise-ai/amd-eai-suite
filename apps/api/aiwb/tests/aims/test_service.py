@@ -8,41 +8,51 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from kubernetes_asyncio.client import ApiException
+from pydantic.alias_generators import to_camel
 
 from api_common.exceptions import ExternalServiceError, NotFoundException, ValidationException
 from app.aims.constants import AIM_COND_HTTP_ROUTE_READY, AIM_COND_INFERENCE_SERVICE_READY
 from app.aims.crds import (
+    AIMModelProfilesDerivedFrom,
+    AIMModelProfilesSpec,
     AIMModelResource,
     AIMModelSource,
     AIMModelSpec,
     AIMModelStatusFields,
+    AIMProfileResource,
+    AIMProfileStatus,
     AIMServiceResource,
     AIMServiceSpec,
+    AIMServiceStatusFields,
+    ProfileOverrides,
+    ProfileSelector,
+    ResolvedRef,
 )
-from app.aims.enums import AIMServiceStatus
+from app.aims.enums import AcceleratorType, AIMModelStatus, AIMServiceStatus, OptimizationMetric
 from app.aims.schemas import AIMDeployRequest
 from app.aims.service import (
     _create_cluster_auth_group_for_aim,
     _delete_cluster_auth_group_for_aim,
-    chat_with_aim_service,
     deploy_aim,
     get_aim_by_resource_name,
+    get_aim_cluster_profile,
+    get_aim_profile,
     get_aim_service,
-    list_aim_cluster_service_templates,
+    list_aim_cluster_profiles,
     list_aim_services,
-    list_aim_services_history,
     list_aims,
     list_chattable_aim_services,
     undeploy_aim,
     update_aim_scaling_policy,
 )
+from app.custom_models.constants import IMPORT_ERROR_ANNOTATION, IMPORT_STATE_ANNOTATION
 from app.dispatch.crds import K8sMetadata
-from app.workloads.constants import MODEL_NAME_LABEL
+from app.workloads.constants import MODEL_NAME_LABEL, MODEL_SOURCE_TYPE_LABEL
+from app.workloads.enums import ModelSourceType
 from tests.factory import (
-    create_aim_service_db,
     make_aim_cluster_model,
-    make_aim_cluster_service_template,
+    make_aim_cluster_profile,
     make_aim_service_k8s,
 )
 
@@ -77,6 +87,239 @@ async def test_get_aim_by_resource_name_not_found(kube_client: MagicMock) -> Non
     with patch("app.aims.service.get_aim_by_name", return_value=None):
         with pytest.raises(NotFoundException):
             await get_aim_by_resource_name(kube_client, "missing")
+
+
+@pytest.mark.asyncio
+async def test_list_aims_passes_through_discovered_hardware(kube_client: MagicMock) -> None:
+    """The catalog returns the AIMClusterModel resource as-is; the engine's
+    ``status.discoveredProfiles.byHardware`` survives unchanged so consumers
+    can read accelerator metadata directly from the resource."""
+    aim = make_aim_cluster_model(
+        name="llama3-8b",
+        accelerator_type="gpu",
+        accelerator_model="MI300X",
+        accelerator_count=1,
+    )
+
+    with patch("app.aims.service.get_aims_from_k8s", return_value=[aim]):
+        result = await list_aims(kube_client)
+
+    assert len(result) == 1
+    assert result[0].status.discovered_profiles is not None
+    by_hardware = result[0].status.discovered_profiles.by_hardware
+    assert len(by_hardware) == 1
+    entry = by_hardware[0]
+    assert entry.accelerator_type == "gpu"
+    assert entry.accelerator_model == "MI300X"
+    assert entry.accelerator_count == 1
+    assert entry.supported is True
+
+
+@pytest.mark.asyncio
+async def test_list_aims_passes_through_multiple_hardware_groups(kube_client: MagicMock) -> None:
+    """When the engine publishes multiple hardware groups, every group is
+    surfaced verbatim and in order — the UI renders the AIM's full set of
+    runtime options without picking a representative."""
+    aim = AIMModelResource.model_validate(
+        {
+            "metadata": {"name": "multi-hw", "namespace": "ns"},
+            "spec": {"image": "img"},
+            "status": {
+                "status": "Ready",
+                "discoveredProfiles": {
+                    "byHardware": [
+                        {
+                            "acceleratorType": "gpu",
+                            "acceleratorModel": "MI300X",
+                            "acceleratorCount": 1,
+                            "supported": True,
+                        },
+                        {
+                            "acceleratorType": "gpu",
+                            "acceleratorModel": "MI300X",
+                            "acceleratorCount": 2,
+                            "supported": True,
+                        },
+                        {
+                            "acceleratorType": "gpu",
+                            "acceleratorModel": "MI300X",
+                            "acceleratorCount": 8,
+                            "supported": False,
+                        },
+                    ],
+                },
+            },
+        }
+    )
+
+    with patch("app.aims.service.get_aims_from_k8s", return_value=[aim]):
+        result = await list_aims(kube_client)
+
+    assert result[0].status.discovered_profiles is not None
+    by_hardware = result[0].status.discovered_profiles.by_hardware
+    assert len(by_hardware) == 3
+    assert [h.accelerator_count for h in by_hardware] == [1, 2, 8]
+    assert [h.supported for h in by_hardware] == [True, True, False]
+    assert all(h.accelerator_type == "gpu" and h.accelerator_model == "MI300X" for h in by_hardware)
+
+
+@pytest.mark.asyncio
+async def test_list_aims_passes_through_unknown_accelerator_type(kube_client: MagicMock) -> None:
+    """Hardware groups with an accelerator family AIWB doesn't model still
+    surface in the response — the raw engine value is passed through verbatim
+    so the UI doesn't lose useful data."""
+    aim = make_aim_cluster_model(
+        name="unknown-hw",
+        accelerator_type="tpu",
+        accelerator_model="TPU_V5",
+        accelerator_count=4,
+    )
+
+    with patch("app.aims.service.get_aims_from_k8s", return_value=[aim]):
+        result = await list_aims(kube_client)
+
+    assert result[0].status.discovered_profiles is not None
+    by_hardware = result[0].status.discovered_profiles.by_hardware
+    assert len(by_hardware) == 1
+    entry = by_hardware[0]
+    assert entry.accelerator_type == "tpu"
+    assert entry.accelerator_model == "TPU_V5"
+    assert entry.accelerator_count == 4
+
+
+@pytest.mark.asyncio
+async def test_list_aims_passes_through_aim_without_discovery(kube_client: MagicMock) -> None:
+    """AIMs whose engine hasn't populated discoveredProfiles yet still appear
+    in the catalog (no filter); ``status.discovered_profiles`` is ``None`` on
+    the response, matching the underlying CRD shape."""
+    aim = make_aim_cluster_model(name="no-discovery")
+
+    with patch("app.aims.service.get_aims_from_k8s", return_value=[aim]):
+        result = await list_aims(kube_client)
+
+    assert len(result) == 1
+    assert result[0].status.discovered_profiles is None
+
+
+@pytest.mark.asyncio
+async def test_list_aims_filters_by_accelerator_type_single(kube_client: MagicMock) -> None:
+    """Single-value `accelerator_type=[CPU]` returns only AIMs with a CPU footprint;
+    AIMs with unknown or missing accelerator families are excluded."""
+    cpu_aim = make_aim_cluster_model(
+        name="cpu-aim",
+        accelerator_type="cpu",
+        accelerator_model="EPYC_ZEN5",
+    )
+    gpu_aim = make_aim_cluster_model(
+        name="gpu-aim",
+        accelerator_type="gpu",
+        accelerator_model="MI300X",
+        accelerator_count=1,
+    )
+    unknown_aim = make_aim_cluster_model(
+        name="unknown-aim",
+        accelerator_type="tpu",
+    )
+
+    with patch("app.aims.service.get_aims_from_k8s", return_value=[cpu_aim, gpu_aim, unknown_aim]):
+        result = await list_aims(kube_client, accelerator_type=[AcceleratorType.CPU])
+
+    assert len(result) == 1
+    assert result[0].metadata.name == "cpu-aim"
+    assert result[0].status.discovered_profiles is not None
+    assert result[0].status.discovered_profiles.by_hardware[0].accelerator_type == "cpu"
+
+
+@pytest.mark.asyncio
+async def test_list_aims_filters_by_accelerator_type_multiple(kube_client: MagicMock) -> None:
+    """Multi-value `accelerator_type=[CPU, GPU]` ORs the requested families together
+    — both the CPU and GPU AIMs match, the unknown-family AIM does not."""
+    cpu_aim = make_aim_cluster_model(name="cpu-aim", accelerator_type="cpu", accelerator_model="EPYC_ZEN5")
+    gpu_aim = make_aim_cluster_model(name="gpu-aim", accelerator_type="gpu", accelerator_model="MI300X")
+    unknown_aim = make_aim_cluster_model(name="unknown-aim", accelerator_type="tpu")
+
+    with patch("app.aims.service.get_aims_from_k8s", return_value=[cpu_aim, gpu_aim, unknown_aim]):
+        result = await list_aims(kube_client, accelerator_type=[AcceleratorType.CPU, AcceleratorType.GPU])
+
+    names = {aim.metadata.name for aim in result}
+    assert names == {"cpu-aim", "gpu-aim"}
+
+
+@pytest.mark.asyncio
+async def test_list_aims_filter_excludes_aims_with_no_hardware(kube_client: MagicMock) -> None:
+    """AIMs whose engine hasn't published a hardware breakdown drop out when a
+    filter is set (no way to know if they match), but reappear when the filter
+    is removed — same behavior as the prior scalar implementation."""
+    aim = make_aim_cluster_model(name="no-discovery")
+
+    with patch("app.aims.service.get_aims_from_k8s", return_value=[aim]):
+        filtered = await list_aims(kube_client, accelerator_type=[AcceleratorType.CPU])
+        unfiltered = await list_aims(kube_client)
+
+    assert filtered == []
+    assert len(unfiltered) == 1
+    assert unfiltered[0].status.discovered_profiles is None
+
+
+@pytest.mark.asyncio
+async def test_list_aims_filter_matches_when_any_group_matches(kube_client: MagicMock) -> None:
+    """An AIM with mixed hardware groups (hypothetical CPU+GPU AIM) matches a
+    filter requesting either family — surfacing the AIM in both CPU-only and
+    GPU-only catalog views."""
+    aim = AIMModelResource.model_validate(
+        {
+            "metadata": {"name": "mixed-aim", "namespace": "ns"},
+            "spec": {"image": "img"},
+            "status": {
+                "status": "Ready",
+                "discoveredProfiles": {
+                    "byHardware": [
+                        {"acceleratorType": "cpu", "acceleratorModel": "EPYC_ZEN5", "supported": True},
+                        {
+                            "acceleratorType": "gpu",
+                            "acceleratorModel": "MI300X",
+                            "acceleratorCount": 1,
+                            "supported": True,
+                        },
+                    ],
+                },
+            },
+        }
+    )
+
+    with patch("app.aims.service.get_aims_from_k8s", return_value=[aim]):
+        cpu_result = await list_aims(kube_client, accelerator_type=[AcceleratorType.CPU])
+        gpu_result = await list_aims(kube_client, accelerator_type=[AcceleratorType.GPU])
+
+    assert len(cpu_result) == 1
+    assert cpu_result[0].metadata.name == "mixed-aim"
+    assert len(gpu_result) == 1
+    assert gpu_result[0].metadata.name == "mixed-aim"
+
+
+@pytest.mark.asyncio
+async def test_discovered_hardware_survives_list_and_detail(kube_client: MagicMock) -> None:
+    """The discovered hardware breakdown survives both the list and detail
+    call paths. AIWB no longer enriches the response, so this is essentially a
+    contract lock-in — both endpoints return the AIMClusterModel as-is, with
+    the engine's ``status.discoveredProfiles.byHardware`` intact."""
+    aim = make_aim_cluster_model(
+        name="llama3-8b",
+        accelerator_type="gpu",
+        accelerator_model="MI300X",
+        accelerator_count=1,
+    )
+
+    with patch("app.aims.service.get_aim_by_name", return_value=aim):
+        result = await get_aim_by_resource_name(kube_client, "llama3-8b")
+
+    assert result.status.discovered_profiles is not None
+    by_hardware = result.status.discovered_profiles.by_hardware
+    assert len(by_hardware) == 1
+    entry = by_hardware[0]
+    assert entry.accelerator_type == "gpu"
+    assert entry.accelerator_model == "MI300X"
+    assert entry.accelerator_count == 1
 
 
 @pytest.mark.asyncio
@@ -152,8 +395,9 @@ async def test_deploy_finetuned_aim_propagates_aimmodel_labels(kube_client: Magi
     with (
         patch("app.aims.service.get_aim_by_name", return_value=None),
         patch("app.aims.service.get_aim_model_from_k8s", return_value=aim_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=None),
         patch("app.aims.service._create_cluster_auth_group_for_aim", return_value="group-id"),
-        patch("app.aims.service.create_fine_tuned_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
     ):
         mock_create.return_value = AIMServiceResource(
             metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
@@ -169,6 +413,385 @@ async def test_deploy_finetuned_aim_propagates_aimmodel_labels(kube_client: Magi
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("profile_name", "mi300x-throughput-fp8"),
+        ("image_pull_secrets", ["registry-credentials"]),
+        ("hf_token", "hf-secret-name"),
+    ],
+)
+async def test_deploy_finetuned_aim_rejects_disallowed_overrides(
+    kube_client: MagicMock, field: str, value: object
+) -> None:
+    """Fine-tuned deployments reject profile_name, image pull secrets, and hf_token."""
+    aim_model = AIMModelResource(
+        metadata=K8sMetadata(name="wb-finetune-job", namespace="ns"),
+        spec=AIMModelSpec(),
+        status=AIMModelStatusFields(),
+    )
+    req = AIMDeployRequest(model="wb-finetune-job", **{field: value})
+    mock_cluster_auth_client = AsyncMock()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=aim_model),
+        pytest.raises(ValidationException, match=to_camel(field)),
+    ):
+        await deploy_aim(kube_client, req, "ns", "user", mock_cluster_auth_client)
+
+
+@pytest.mark.asyncio
+async def test_deploy_finetuned_aim_accepts_profile_selector_and_overrides(kube_client: MagicMock) -> None:
+    """Fine-tuned deployments propagate selector criteria and profileOverrides to the manifest builder."""
+    aim_model = AIMModelResource(
+        metadata=K8sMetadata(name="wb-finetune-job", namespace="ns"),
+        spec=AIMModelSpec(),
+        status=AIMModelStatusFields(),
+    )
+    req = AIMDeployRequest(
+        model="wb-finetune-job",
+        metric=OptimizationMetric.LATENCY,
+        precision="fp8",
+        gpu_model="MI300X",
+        gpu_count=2,
+        engine_args={"max-model-len": 8192},
+        engine_env=[{"name": "VLLM_LOGGING_LEVEL", "value": "DEBUG"}],
+    )
+    mock_cluster_auth_client = AsyncMock()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=aim_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=None),
+        patch("app.aims.service._create_cluster_auth_group_for_aim", return_value="group-id"),
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", mock_cluster_auth_client)
+
+    assert mock_create.call_args.kwargs["resolved_profile_name"] is None
+    deploy_request = mock_create.call_args.kwargs["deploy_request"]
+    assert deploy_request.metric == OptimizationMetric.LATENCY
+    assert deploy_request.precision == "fp8"
+    assert deploy_request.gpu_model == "MI300X"
+    assert deploy_request.gpu_count == 2
+    assert deploy_request.engine_args == {"max-model-len": 8192}
+    assert deploy_request.engine_env == [{"name": "VLLM_LOGGING_LEVEL", "value": "DEBUG"}]
+
+
+def _make_custom_namespace_aim_model(
+    *,
+    status: AIMModelStatus = AIMModelStatus.READY,
+    hf_token_required: bool = False,
+    import_annotations: dict[str, str] | None = None,
+) -> AIMModelResource:
+    annotations = {"airm.silogen.ai/display-name": "Custom Display", **(import_annotations or {})}
+    return AIMModelResource(
+        metadata=K8sMetadata(
+            name="custom-model",
+            namespace="ns",
+            labels={MODEL_SOURCE_TYPE_LABEL: ModelSourceType.CUSTOM, MODEL_NAME_LABEL: "custom-display"},
+            annotations=annotations,
+        ),
+        spec=AIMModelSpec(
+            profiles=AIMModelProfilesSpec(
+                derived_from=AIMModelProfilesDerivedFrom(selector=ProfileSelector(role="base")),
+                overrides=ProfileOverrides(model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0"),
+            )
+        ),
+        status=AIMModelStatusFields(
+            status=status,
+            image_metadata={"model": {"hfTokenRequired": hf_token_required}},
+        ),
+    )
+
+
+def _make_ready_profile(
+    *, name: str = "custom-profile", with_image_ref: bool = True, status: str = "Ready"
+) -> AIMProfileResource:
+    annotations = {"aim.eai.amd.com/deployment-image-ref": "docker.io/amd/tinyllama:1.0.0"} if with_image_ref else {}
+    return AIMProfileResource(
+        metadata=K8sMetadata(name=name, namespace="ns", annotations=annotations),
+        status=AIMProfileStatus(status=status),
+    )
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_requires_ready_aimmodel(kube_client: MagicMock) -> None:
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model(status=AIMModelStatus.PENDING)
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile()),
+        pytest.raises(ValidationException, match="AIMModel status"),
+    ):
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_rejected_when_weight_import_failed(kube_client: MagicMock) -> None:
+    """A failed HF→S3 weight import blocks deploy even though the AIMModel and its
+    AIMProfile are Ready (profiles derive from the base image, not the weights)."""
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model(
+        import_annotations={
+            IMPORT_STATE_ANNOTATION: "Failed",
+            IMPORT_ERROR_ANNOTATION: "MinIO returned HTTP 500 (disk full)",
+        },
+    )
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile()),
+        pytest.raises(ValidationException, match="weight import failed.*disk full"),
+    ):
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_rejected_while_weight_import_in_progress(kube_client: MagicMock) -> None:
+    """An in-flight weight import blocks deploy even when a Ready profile exists."""
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model(
+        import_annotations={IMPORT_STATE_ANNOTATION: "Importing"},
+    )
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile()),
+        pytest.raises(ValidationException, match="weight import is still in progress"),
+    ):
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_succeeds_when_weight_import_ready(kube_client: MagicMock) -> None:
+    """A completed weight import (import-state=Ready) does not block deploy."""
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model(
+        import_annotations={IMPORT_STATE_ANNOTATION: "Ready"},
+    )
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile()),
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+    mock_create.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_requires_profile(kube_client: MagicMock) -> None:
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=None),
+        pytest.raises(ValidationException, match="no namespace AIMProfile"),
+    ):
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_requires_ready_profile(kube_client: MagicMock) -> None:
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile(status="Pending")),
+        pytest.raises(ValidationException, match="AIMProfile 'custom-profile' status"),
+    ):
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_succeeds_without_deployment_image_annotation(kube_client: MagicMock) -> None:
+    """v1alpha2 AIMProfiles embed image in spec overrides; deployment-image-ref annotation is not required."""
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile(with_image_ref=False)),
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+    mock_create.assert_awaited_once()
+    assert mock_create.call_args.kwargs["resolved_profile_name"] == "custom-profile"
+    assert mock_create.call_args.kwargs["is_fine_tuned"] is False
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_passes_deploy_display_name(kube_client: MagicMock) -> None:
+    """A display name on the deploy request is forwarded as deploy_display_name,
+    while the model identity (display_name) stays the onboarded model name."""
+    req = AIMDeployRequest(model="custom-model", display_name="My TinyLlama")
+    custom_model = _make_custom_namespace_aim_model()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile()),
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["deploy_display_name"] == "My TinyLlama"
+    assert call_kwargs["display_name"] == "custom-display"
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_without_display_name_passes_none(kube_client: MagicMock) -> None:
+    """When the deploy request omits a display name, deploy_display_name is None
+    so the manifest falls back to the onboarded model identity."""
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile()),
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+    assert mock_create.call_args.kwargs["deploy_display_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_ignores_deploy_profile_fields_when_namespace_profile_ready(
+    kube_client: MagicMock,
+) -> None:
+    """Custom deploy pins the onboarded profile; extra selector fields on the request are ignored."""
+    req = AIMDeployRequest(
+        model="custom-model",
+        metric=OptimizationMetric.LATENCY,
+        precision="fp8",
+        gpu_model="MI300X",
+        gpu_count=2,
+    )
+    custom_model = _make_custom_namespace_aim_model()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile()),
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+    assert mock_create.call_args.kwargs["resolved_profile_name"] == "custom-profile"
+
+
+@pytest.mark.asyncio
+async def test_deploy_finetuned_pins_namespace_profile_when_ready(kube_client: MagicMock) -> None:
+    aim_model = AIMModelResource(
+        metadata=K8sMetadata(name="wb-finetune-job", namespace="ns"),
+        spec=AIMModelSpec(),
+        status=AIMModelStatusFields(),
+    )
+    req = AIMDeployRequest(model="wb-finetune-job", metric=OptimizationMetric.LATENCY, precision="fp8")
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=aim_model),
+        patch("app.aims.service.find_aim_profile_for_model", return_value=_make_ready_profile(name="ft-profile")),
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+    assert mock_create.call_args.kwargs["resolved_profile_name"] == "ft-profile"
+
+
+@pytest.mark.asyncio
+async def test_deploy_finetuned_falls_back_when_profile_lookup_fails(kube_client: MagicMock) -> None:
+    aim_model = AIMModelResource(
+        metadata=K8sMetadata(name="wb-finetune-job", namespace="ns"),
+        spec=AIMModelSpec(),
+        status=AIMModelStatusFields(),
+    )
+    req = AIMDeployRequest(model="wb-finetune-job", precision="fp8")
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=aim_model),
+        patch(
+            "app.aims.service.find_aim_profile_for_model",
+            side_effect=ApiException(status=503, reason="Service Unavailable"),
+        ),
+        patch("app.aims.service.create_namespace_aim_service_in_k8s", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = AIMServiceResource(
+            metadata=K8sMetadata(name="wb-aim-test", namespace="ns"),
+            spec=AIMServiceSpec(),
+        )
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+    assert mock_create.call_args.kwargs["resolved_profile_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_deploy_custom_model_profile_lookup_error_raises_external_service_error(
+    kube_client: MagicMock,
+) -> None:
+    req = AIMDeployRequest(model="custom-model")
+    custom_model = _make_custom_namespace_aim_model()
+
+    with (
+        patch("app.aims.service.get_aim_by_name", return_value=None),
+        patch("app.aims.service.get_aim_model_from_k8s", return_value=custom_model),
+        patch(
+            "app.aims.service.find_aim_profile_for_model",
+            side_effect=ApiException(status=503, reason="Service Unavailable"),
+        ),
+        pytest.raises(ExternalServiceError, match="Failed to look up AIMProfile for custom model"),
+    ):
+        await deploy_aim(kube_client, req, "ns", "user", None)
+
+
+@pytest.mark.asyncio
 async def test_deploy_aim_with_camelcase_deploy_request(kube_client: MagicMock) -> None:
     """Test deploy_aim accepts deploy_request parsed from camelCase (as sent by UI)."""
     aim = make_aim_cluster_model()
@@ -177,7 +800,6 @@ async def test_deploy_aim_with_camelcase_deploy_request(kube_client: MagicMock) 
         model="meta-llama-3-8b",
         imagePullSecrets=["s1"],
         hfToken="hf-secret",
-        allowUnoptimized=True,
         minReplicas=1,
         maxReplicas=5,
         autoScaling={"metrics": []},
@@ -195,7 +817,6 @@ async def test_deploy_aim_with_camelcase_deploy_request(kube_client: MagicMock) 
     call_kwargs = mock_create.call_args.kwargs
     assert call_kwargs["deploy_request"].image_pull_secrets == ["s1"]
     assert call_kwargs["deploy_request"].hf_token == "hf-secret"
-    assert call_kwargs["deploy_request"].allow_unoptimized is True
     assert call_kwargs["deploy_request"].min_replicas == 1
     assert call_kwargs["deploy_request"].max_replicas == 5
     assert call_kwargs["deploy_request"].auto_scaling == {"metrics": []}
@@ -325,6 +946,29 @@ async def test_list_aim_services(kube_client: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_aim_services_returns_resolved_profile_name_only(kube_client: MagicMock) -> None:
+    """status.resolvedProfile carries only the reference name on the wire. Joining
+    against the AIMProfile catalog for spec details is the FE's responsibility now
+    (was previously inlined here, but coupled the services endpoint to the profile
+    catalog and hid RBAC failures as silent empty rows)."""
+    svc = make_aim_service_k8s(profile_name="llama3-8b-latency")
+    svc.status = AIMServiceStatusFields(
+        status=AIMServiceStatus.RUNNING,
+        resolved_profile=ResolvedRef(name="llama3-8b-latency"),
+    )
+
+    with patch("app.aims.service.get_aim_services_from_k8s", return_value=[svc]):
+        result = await list_aim_services(kube_client, "ns")
+
+    assert len(result) == 1
+    resolved = result[0].status.resolved_profile
+    assert resolved is not None
+    assert resolved.name == "llama3-8b-latency"
+    # No profile catalog lookups happen here anymore.
+    assert not hasattr(resolved, "spec") or getattr(resolved, "spec", None) is None
+
+
+@pytest.mark.asyncio
 async def test_get_aim_service(kube_client: MagicMock) -> None:
     """Test getting single AIMService."""
     svc = make_aim_service_k8s()
@@ -342,47 +986,78 @@ async def test_get_aim_service_not_found(kube_client: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_aim_services_history(db_session: AsyncSession) -> None:
-    """Test listing history from DB."""
-    await create_aim_service_db(db_session, namespace="my-ns")
-    await create_aim_service_db(db_session, namespace="my-ns")
+async def test_list_aim_cluster_profiles_filters_by_aim_ids(kube_client: MagicMock) -> None:
+    """Delegates to the gateway with the supplied aimId list."""
+    profile = make_aim_cluster_profile(aim_id="org/my-aim")
+    with patch(
+        "app.aims.service.get_aim_cluster_profiles_from_k8s",
+        return_value=[profile],
+    ) as mock_gateway:
+        result = await list_aim_cluster_profiles(kube_client, aim_ids=["org/my-aim"])
 
-    result = await list_aim_services_history(db_session, "my-ns")
-    assert len(result) == 2
-
-
-@pytest.mark.asyncio
-async def test_list_aim_cluster_service_templates(kube_client: MagicMock) -> None:
-    """Test listing templates."""
-    aim = make_aim_cluster_model(name="my-aim")
-    template = make_aim_cluster_service_template()
-
-    with (
-        patch("app.aims.service.get_aim_by_name", return_value=aim),
-        patch("app.aims.service.get_aim_templates_from_k8s", return_value=[template]),
-    ):
-        result = await list_aim_cluster_service_templates(kube_client, "my-aim")
     assert len(result) == 1
+    mock_gateway.assert_awaited_once_with(kube_client, aim_ids=["org/my-aim"])
 
 
 @pytest.mark.asyncio
-async def test_list_aim_cluster_service_templates_aim_not_found(kube_client: MagicMock) -> None:
-    """Test raises when AIM not found."""
-    with patch("app.aims.service.get_aim_by_name", return_value=None):
-        with pytest.raises(NotFoundException):
-            await list_aim_cluster_service_templates(kube_client, "missing")
+async def test_list_aim_cluster_profiles_no_filter(kube_client: MagicMock) -> None:
+    """Omitting aim_ids lists every profile cluster-wide."""
+    profiles = [make_aim_cluster_profile(aim_id="org/a"), make_aim_cluster_profile(aim_id="org/b")]
+    with patch(
+        "app.aims.service.get_aim_cluster_profiles_from_k8s",
+        return_value=profiles,
+    ) as mock_gateway:
+        result = await list_aim_cluster_profiles(kube_client)
+
+    assert len(result) == 2
+    mock_gateway.assert_awaited_once_with(kube_client, aim_ids=None)
 
 
 @pytest.mark.asyncio
-async def test_list_aim_cluster_service_templates_no_templates(kube_client: MagicMock) -> None:
-    """Test raises when no templates found."""
-    aim = make_aim_cluster_model()
-    with (
-        patch("app.aims.service.get_aim_by_name", return_value=aim),
-        patch("app.aims.service.get_aim_templates_from_k8s", return_value=[]),
-    ):
+async def test_list_aim_cluster_profiles_returns_empty(kube_client: MagicMock) -> None:
+    """No matching profiles returns an empty list (not an exception)."""
+    with patch("app.aims.service.get_aim_cluster_profiles_from_k8s", return_value=[]):
+        result = await list_aim_cluster_profiles(kube_client, aim_ids=["org/unknown"])
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_aim_cluster_profile_returns_match(kube_client: MagicMock) -> None:
+    """Direct GET by name returns the matching profile."""
+    profile = make_aim_cluster_profile(name="profile-x", aim_id="org/my-aim")
+    with patch("app.aims.service.get_aim_cluster_profile_from_k8s", return_value=profile) as mock_gateway:
+        result = await get_aim_cluster_profile(kube_client, "profile-x")
+
+    assert result is profile
+    mock_gateway.assert_awaited_once_with(kube_client, "profile-x")
+
+
+@pytest.mark.asyncio
+async def test_get_aim_cluster_profile_not_found(kube_client: MagicMock) -> None:
+    """Missing profile maps to NotFoundException so the router returns 404."""
+    with patch("app.aims.service.get_aim_cluster_profile_from_k8s", return_value=None):
         with pytest.raises(NotFoundException):
-            await list_aim_cluster_service_templates(kube_client, "my-aim")
+            await get_aim_cluster_profile(kube_client, "missing-profile")
+
+
+@pytest.mark.asyncio
+async def test_get_aim_profile_returns_match(kube_client: MagicMock) -> None:
+    """Direct GET by name in a namespace returns the matching profile."""
+    profile = make_aim_cluster_profile(name="profile-x", aim_id="org/ft-aim")
+    with patch("app.aims.service.get_aim_profile_from_k8s", return_value=profile) as mock_gateway:
+        result = await get_aim_profile(kube_client, "test-ns", "profile-x")
+
+    assert result is profile
+    mock_gateway.assert_awaited_once_with(kube_client, "test-ns", "profile-x")
+
+
+@pytest.mark.asyncio
+async def test_get_aim_profile_not_found(kube_client: MagicMock) -> None:
+    """Missing namespace-scoped profile maps to NotFoundException."""
+    with patch("app.aims.service.get_aim_profile_from_k8s", return_value=None):
+        with pytest.raises(NotFoundException):
+            await get_aim_profile(kube_client, "test-ns", "missing")
 
 
 @pytest.mark.asyncio
@@ -421,88 +1096,6 @@ async def test_list_chattable_aim_services(kube_client: MagicMock) -> None:
     with patch("app.aims.service.get_aim_services_from_k8s", return_value=[svc]):
         result = await list_chattable_aim_services(kube_client, "ns")
     assert len(result) == 1
-
-
-# Tests for chat_with_aim_service
-
-
-@pytest.mark.asyncio
-async def test_chat_with_aim_service_success(kube_client: MagicMock, mock_request: MagicMock) -> None:
-    """Test successful chat with AIM service."""
-    service_id = uuid4()
-    conditions = [
-        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
-        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
-    ]
-    svc = make_aim_service_k8s(
-        workload_id=service_id,
-        status=AIMServiceStatus.RUNNING,
-        model_ref="llama",
-        conditions=conditions,
-    )
-
-    # Mock the endpoints dict that AIMServiceResponse will compute
-    with (
-        patch("app.aims.service.get_aim_service_from_k8s", return_value=svc),
-        patch("app.aims.service.AIMServiceResponse") as mock_response_class,
-        patch("app.aims.service.stream_downstream", new_callable=AsyncMock) as mock_stream,
-    ):
-        mock_response = MagicMock()
-        mock_response.endpoints.get.return_value = "http://test-service.workbench.svc.cluster.local"
-        mock_response_class.model_validate.return_value = mock_response
-
-        mock_stream.return_value = MagicMock()
-        await chat_with_aim_service(kube_client, "ns", service_id, mock_request)
-
-    # Verify stream_downstream was called with internal URL
-    mock_stream.assert_called_once()
-    call_kwargs = mock_stream.call_args.kwargs
-    assert "test-service" in call_kwargs["base_url"]
-
-
-@pytest.mark.asyncio
-async def test_chat_with_aim_service_not_found(kube_client: MagicMock, mock_request: MagicMock) -> None:
-    """Test raises NotFoundException when service not found."""
-    with patch("app.aims.service.get_aim_service_from_k8s", return_value=None):
-        with pytest.raises(NotFoundException, match="not found"):
-            await chat_with_aim_service(kube_client, "ns", uuid4(), mock_request)
-
-
-@pytest.mark.asyncio
-async def test_chat_with_aim_service_not_chattable(kube_client: MagicMock, mock_request: MagicMock) -> None:
-    """Test raises ValidationException when service is not chattable."""
-    svc = make_aim_service_k8s(status=AIMServiceStatus.PENDING)
-
-    with patch("app.aims.service.get_aim_service_from_k8s", return_value=svc):
-        with pytest.raises(ValidationException, match="not available for chat"):
-            await chat_with_aim_service(kube_client, "ns", uuid4(), mock_request)
-
-
-@pytest.mark.asyncio
-async def test_chat_with_aim_service_no_endpoint(kube_client: MagicMock, mock_request: MagicMock) -> None:
-    """Test raises ValidationException when no internal endpoint available."""
-    service_id = uuid4()
-    conditions = [
-        {"type": AIM_COND_INFERENCE_SERVICE_READY, "status": "True"},
-        {"type": AIM_COND_HTTP_ROUTE_READY, "status": "True"},
-    ]
-    svc = make_aim_service_k8s(
-        workload_id=service_id,
-        status=AIMServiceStatus.RUNNING,
-        model_ref="llama",
-        conditions=conditions,
-    )
-
-    with (
-        patch("app.aims.service.get_aim_service_from_k8s", return_value=svc),
-        patch("app.aims.service.AIMServiceResponse") as mock_response_class,
-    ):
-        mock_response = MagicMock()
-        mock_response.endpoints.get.return_value = None  # No endpoint
-        mock_response_class.model_validate.return_value = mock_response
-
-        with pytest.raises(ValidationException, match="No endpoint available"):
-            await chat_with_aim_service(kube_client, "ns", service_id, mock_request)
 
 
 # Tests for cluster-auth helper functions

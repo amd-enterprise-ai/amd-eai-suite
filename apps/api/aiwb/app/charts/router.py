@@ -29,14 +29,27 @@ router = APIRouter(tags=["Charts"])
 @router.post(
     "/charts",
     operation_id="create_chart",
-    summary="Create workload template",
+    summary="Create a workload chart",
     description=dedent("""
-        Create reusable Helm chart template for standardized AI/ML workload deployment.
-        Requires super administrator role. Defines container specifications, resource
-        requirements, and configuration patterns for consistent workload management.
+        Register a new chart in the cluster-wide chart catalog.
+
+        A chart is a Helm-like template surface that AIWB uses to render the
+        Kubernetes manifests for a workload class (workspaces, inference
+        scaffolding, fine-tuning jobs). Each chart bundles a signature
+        (YAML schema describing user-facing inputs and defaults) plus the
+        template files themselves, and is keyed by a unique `name` within a
+        `type` (workspace / inference / fine-tuning).
+
+        Charts are global (not project-scoped). Once created, projects can
+        reference the chart when deploying workloads, optionally further
+        customised by an overlay (see the Overlays API).
     """),
     status_code=status.HTTP_201_CREATED,
     response_model=ChartResponse,
+    responses={
+        400: {"description": "Invalid YAML in the uploaded signature file."},
+        409: {"description": "A chart with this name already exists."},
+    },
 )
 async def create_chart_endpoint(
     chart: ChartCreate = Form(), session: AsyncSession = Depends(get_session), user: str = Depends(get_user_email)
@@ -51,14 +64,25 @@ async def create_chart_endpoint(
 @router.put(
     "/charts/{chart_id}",
     operation_id="update_chart",
-    summary="Update workload template",
+    summary="Update a workload chart",
     description=dedent("""
-        Modify existing Helm chart template including configuration files and resource
-        specifications. Requires super administrator role. Updates template definitions
-        for improved workload deployment patterns and configurations.
+        Update an existing chart in place.
+
+        Supports partial updates: only the fields supplied on the multipart
+        form are modified; omitted metadata fields are left untouched.
+        Providing `files` replaces the chart's file set wholesale (the old
+        files are deleted before the new ones are written), so always
+        re-submit the full template tree when uploading files. Providing
+        `signature` replaces the signature YAML.
+
+        Charts are global (not project-scoped).
     """),
     status_code=status.HTTP_200_OK,
     response_model=ChartResponse,
+    responses={
+        400: {"description": "Invalid YAML in the uploaded signature file."},
+        404: {"description": "Chart not found."},
+    },
 )
 async def update_chart_endpoint(
     chart_id: UUID,
@@ -77,11 +101,16 @@ async def update_chart_endpoint(
     "/charts",
     response_model=ListResponse[ChartListResponse],
     status_code=status.HTTP_200_OK,
-    summary="List workload templates",
+    summary="List workload charts",
     description=dedent("""
-        List all available Helm chart templates for AI/ML workload deployment.
-        Requires authentication. Used for discovering available workload patterns
-        and standardized deployment configurations.
+        List all charts in the cluster-wide catalog.
+
+        Returns the lightweight `ChartListResponse` representation (no
+        signature or file contents) — fetch a single chart by id to obtain
+        its full body.
+
+        Filter by workload class with `?type=` (one of `INFERENCE`,
+        `FINE_TUNING`, `WORKSPACE`); omitted returns all types.
     """),
 )
 async def get_charts(
@@ -95,13 +124,17 @@ async def get_charts(
 @router.get(
     "/charts/{chart_id}",
     operation_id="get_chart",
-    summary="Get workload template details",
+    summary="Get a workload chart",
     description=dedent("""
-        Retrieve detailed information about a specific Helm chart template including
-        configuration files and user input definitions. Used for understanding
-        template specifications before workload deployment.
+        Retrieve a single chart by id, including the parsed signature and
+        the full list of template files (path + content). Use this before
+        rendering a deployment form for the chart, or for inspecting the
+        templates the workload will be deployed from.
     """),
     response_model=ChartResponse,
+    responses={
+        404: {"description": "Chart not found."},
+    },
 )
 async def get_chart_endpoint(
     chart_id: UUID,
@@ -114,13 +147,23 @@ async def get_chart_endpoint(
 @router.delete(
     "/charts/{chart_id}",
     operation_id="delete_chart",
-    summary="Delete workload template",
+    summary="Delete a workload chart",
     description=dedent("""
-        Remove Helm chart template from system. Requires super administrator role.
-        Permanently deletes template and associated configuration files. Use with
-        caution as this affects workload deployment capabilities.
+        Remove a chart from the catalog. The deletion cascades to the
+        chart's stored template files but is not a soft-delete and cannot
+        be undone.
+
+        Overlays that reference the chart will be left dangling — delete
+        or repoint them first to avoid orphans. Existing deployments
+        rendered from the chart are not affected, since they hold their
+        own rendered manifests.
+
+        Charts are global (not project-scoped).
     """),
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        404: {"description": "Chart not found."},
+    },
 )
 async def delete_chart_endpoint(chart_id: UUID, session: AsyncSession = Depends(get_session)) -> None:
     deleted = await delete_chart(session, chart_id)

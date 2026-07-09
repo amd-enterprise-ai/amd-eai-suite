@@ -10,7 +10,8 @@ import { Intent } from '@amdenterpriseai/types';
 import { Status } from '@amdenterpriseai/components';
 
 // Mock HeroUI components
-vi.mock('@heroui/react', () => ({
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@heroui/react')>()),
   Chip: ({
     children,
     color,
@@ -32,15 +33,7 @@ vi.mock('@heroui/react', () => ({
       {endContent && <div data-testid="chip-end-content">{endContent}</div>}
     </div>
   ),
-  Tooltip: ({ children, content, placement }: any) => (
-    <div
-      data-testid="tooltip"
-      data-placement={placement}
-      data-content={content}
-    >
-      {children}
-    </div>
-  ),
+
   Popover: ({ children, placement }: any) => (
     <div data-testid="popover" data-placement={placement}>
       {children}
@@ -115,6 +108,22 @@ vi.mock('@tabler/icons-react', async (importOriginal) => {
     ),
   };
 });
+vi.mock('@amdenterpriseai/components', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/components')>();
+  return {
+    ...actual,
+    Tooltip: ({ children, content, placement }: any) => (
+      <div
+        data-testid="tooltip"
+        data-placement={placement}
+        data-content={content}
+      >
+        {children}
+      </div>
+    ),
+  };
+});
 
 // Custom icon for testing overrides
 const MockCustomIcon = ({ size, role, className }: any) => (
@@ -127,6 +136,18 @@ const MockCustomIcon = ({ size, role, className }: any) => (
     Custom Icon
   </svg>
 );
+
+vi.mock('../../../src/Tooltip', () => ({
+  Tooltip: ({ children, content, placement }: any) => (
+    <div
+      data-testid="tooltip"
+      data-placement={placement}
+      data-content={content}
+    >
+      {children}
+    </div>
+  ),
+}));
 
 describe('Status', () => {
   beforeEach(() => {

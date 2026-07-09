@@ -2,7 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Card, CardBody, Button } from '@heroui/react';
+import {
+  Button,
+  Card,
+  CardBody,
+  ChartTimeSelector,
+  StatusDisplay,
+} from '@amdenterpriseai/components';
 import { IconArrowLeft, IconTrash } from '@tabler/icons-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -49,9 +55,6 @@ import { ClusterNode } from '@/types/clusters';
 
 import { WorkloadResponse, WorkloadMetricsDetails } from '@/types/workloads';
 import { WorkloadStatus } from '@/types/enums/workloads';
-
-import { ChartTimeSelector } from '@amdenterpriseai/components';
-import { StatusDisplay } from '@amdenterpriseai/components';
 
 import DeleteWorkloadModal from '@/components/features/workloads/DeleteWorkloadModal';
 import { GpuDeviceMetricsGrid } from '@/components/features/workloads/GpuDeviceMetricsGrid';
@@ -352,29 +355,18 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
   const locale = context.locale ?? 'en';
   const session = await getServerSession(context.req, context.res, authOptions);
 
-  if (
-    !session ||
-    !session.user ||
-    !session.user.email ||
-    !session.accessToken
-  ) {
-    return {
-      redirect: { destination: '/', permanent: false },
-    };
-  }
-
   const workloadId = context.params?.id as string;
 
   try {
     const workload = (await getWorkload({
-      accessToken: session.accessToken as string,
+      accessToken: session?.accessToken as string,
       workloadId,
     })) as WorkloadResponse;
 
     const clusterId = workload?.clusterId;
 
     const clusterNodesResponse = clusterId
-      ? await getClusterNodes(clusterId, session.accessToken as string).catch(
+      ? await getClusterNodes(clusterId, session?.accessToken as string).catch(
           () => ({ data: [] }),
         )
       : { data: [] };

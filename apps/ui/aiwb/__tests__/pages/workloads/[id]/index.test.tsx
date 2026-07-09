@@ -1,6 +1,7 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
+import React from 'react';
 import {
   act,
   fireEvent,
@@ -13,9 +14,14 @@ import { useRouter } from 'next/router';
 
 import { useProject } from '@/contexts/ProjectContext';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
-import { deleteWorkload, getWorkload } from '@/lib/app/workloads';
-import { deleteModel } from '@/lib/app/models';
-import { getAimNamespaceModel } from '@/lib/app/aims';
+import { cancelFineTuningJob } from '@/lib/app/models';
+import { getProjectFineTunedModel } from '@/lib/app/aims';
+import {
+  deleteWorkspace,
+  getWorkload,
+  getWorkloadMetrics,
+} from '@/lib/app/workloads';
+import { deleteInferenceDeployment } from '@/lib/app/inference';
 import { getDataset } from '@/lib/app/datasets';
 import { getChart } from '@/lib/app/charts';
 
@@ -25,6 +31,7 @@ import { Workload } from '@/types/workloads';
 
 import WorkloadDetailsPage from '@/pages/[project]/workloads/[id]/index';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import wrapper from '@/__tests__/ProviderWrapper';
 import '@testing-library/jest-dom';
 import { Mock, vi } from 'vitest';
@@ -44,8 +51,18 @@ vi.mock('@/contexts/ProjectContext', async (importOriginal) => ({
 vi.mock('@/lib/app/workloads', async (importOriginal) => ({
   ...(await importOriginal()),
   getWorkload: vi.fn(),
-  deleteWorkload: vi.fn(),
+  deleteWorkspace: vi.fn(),
   getWorkloadMetrics: vi.fn(),
+}));
+
+vi.mock('@/lib/app/inference', async (importOriginal) => ({
+  ...(await importOriginal()),
+  deleteInferenceDeployment: vi.fn(),
+}));
+
+vi.mock('@/components/features/models/AIMConnectModal', () => ({
+  __esModule: true,
+  default: vi.fn(() => <div data-testid="aim-connect-modal" />),
 }));
 
 vi.mock('@/components/features/workloads/DeleteWorkloadModal', () => ({
@@ -82,12 +99,12 @@ vi.mock('@/lib/app/datasets', async (importOriginal) => ({
 // Mock the workload services
 vi.mock('@/lib/app/models', async (importOriginal) => ({
   ...(await importOriginal()),
-  deleteModel: vi.fn(),
+  cancelFineTuningJob: vi.fn(),
 }));
 
 vi.mock('@/lib/app/aims', async (importOriginal) => ({
   ...(await importOriginal()),
-  getAimNamespaceModel: vi.fn(),
+  getProjectFineTunedModel: vi.fn(),
 }));
 
 // Mock useSystemToast
@@ -156,14 +173,6 @@ describe('WorkloadDetailsPage', () => {
     status: WorkloadStatus.RUNNING,
   };
 
-  const mockFTModelInferenceWorkload: Workload = {
-    ...mockWorkload,
-    id: 'ft-inference-1',
-    type: WorkloadType.INFERENCE,
-    status: WorkloadStatus.RUNNING,
-    aimId: null,
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
     (useRouter as Mock).mockReturnValue({
@@ -179,9 +188,11 @@ describe('WorkloadDetailsPage', () => {
         `/test-project${path.startsWith('/') ? path : `/${path}`}`,
     });
     (getWorkload as Mock).mockResolvedValue(mockWorkload);
-    (deleteWorkload as Mock).mockResolvedValue({});
-    (deleteModel as Mock).mockResolvedValue({});
-    (getAimNamespaceModel as Mock).mockResolvedValue({
+    (getWorkloadMetrics as Mock).mockResolvedValue({ data: [] });
+    (deleteWorkspace as Mock).mockResolvedValue({});
+    (deleteInferenceDeployment as Mock).mockResolvedValue(undefined);
+    (cancelFineTuningJob as Mock).mockResolvedValue(undefined);
+    (getProjectFineTunedModel as Mock).mockResolvedValue({
       id: 'model-1',
       displayName: null,
       workloadId: null,
@@ -290,6 +301,40 @@ describe('WorkloadDetailsPage', () => {
       });
     });
 
+    it('renders the unified AI gateway inference URL for inference workloads when the gateway is enabled', async () => {
+      (useProject as Mock).mockReturnValue({
+        activeProject: 'test-project',
+        projectPath: (path: string) =>
+          `/test-project${path.startsWith('/') ? path : `/${path}`}`,
+        projectUrl: (path: string) =>
+          `/test-project${path.startsWith('/') ? path : `/${path}`}`,
+        aiGatewayEnabled: true,
+        aiGatewayUrl: 'https://ai.example.com',
+      });
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, {
+          wrapper,
+        });
+      });
+
+      await waitFor(() => {
+        // The unified inference URL replaces the per-service external host.
+        expect(
+          screen.getByText(
+            'models:aimCatalog.actions.connect.modal.inferenceUrl',
+          ),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByText('details.fields.externalHost'),
+        ).not.toBeInTheDocument();
+        // The per-service internal host stays.
+        expect(
+          screen.getByText('details.fields.internalHost'),
+        ).toBeInTheDocument();
+      });
+    });
+
     it('renders workload without output data', async () => {
       const workloadWithoutOutput = {
         ...mockWorkload,
@@ -351,6 +396,12 @@ describe('WorkloadDetailsPage', () => {
     });
 
     it('shows delete button for non-deleted workload', async () => {
+      // Default mockWorkload is INFERENCE which is now non-deletable on the
+      // detail page (raw inference workloads have no capability delete).
+      // Use a workspace to verify the Delete button surfaces for deletable
+      // capability-backed workloads.
+      (getWorkload as Mock).mockResolvedValue(mockWorkspaceWorkload);
+
       await act(async () => {
         render(<WorkloadDetailsPage />, { wrapper });
       });
@@ -380,6 +431,56 @@ describe('WorkloadDetailsPage', () => {
           screen.queryByText('list.actions.delete.label'),
         ).not.toBeInTheDocument();
       });
+    });
+
+    it('does not show delete button for MODEL_DOWNLOAD workload', async () => {
+      // MODEL_DOWNLOAD has no owning capability surface — the workloads detail
+      // page must not offer Delete (which would hit the throw in the mutation).
+      const modelDownloadWorkload = {
+        ...mockWorkload,
+        type: WorkloadType.MODEL_DOWNLOAD,
+        status: WorkloadStatus.RUNNING,
+      };
+
+      (getWorkload as Mock).mockResolvedValue(modelDownloadWorkload);
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('details.sections.basicInformation'),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByText('list.actions.delete.label'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not show delete button for CUSTOM workload', async () => {
+      // Same reasoning as MODEL_DOWNLOAD — CUSTOM has no capability-specific
+      // delete endpoint, so the Delete button must not appear.
+      const customWorkload = {
+        ...mockWorkload,
+        type: WorkloadType.CUSTOM,
+        status: WorkloadStatus.RUNNING,
+      };
+
+      (getWorkload as Mock).mockResolvedValue(customWorkload);
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('details.sections.basicInformation'),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByText('list.actions.delete.label'),
+      ).not.toBeInTheDocument();
     });
 
     it('does not show workspace button for non-running workload', async () => {
@@ -506,7 +607,9 @@ describe('WorkloadDetailsPage', () => {
     });
 
     it('opens delete modal when delete button is clicked', async () => {
-      (getWorkload as Mock).mockResolvedValue(mockWorkload);
+      // Default mockWorkload is INFERENCE, which no longer surfaces Delete on
+      // this page. Use a workspace to exercise the modal-open path.
+      (getWorkload as Mock).mockResolvedValue(mockWorkspaceWorkload);
 
       await act(async () => {
         render(<WorkloadDetailsPage />, { wrapper });
@@ -544,7 +647,7 @@ describe('WorkloadDetailsPage', () => {
       });
 
       await waitFor(() => {
-        expect(getAimNamespaceModel).toHaveBeenCalledWith(
+        expect(getProjectFineTunedModel).toHaveBeenCalledWith(
           'ft-workload-id',
           'test-project',
         );
@@ -573,7 +676,7 @@ describe('WorkloadDetailsPage', () => {
       });
 
       await waitFor(() => {
-        expect(getAimNamespaceModel).not.toHaveBeenCalled();
+        expect(getProjectFineTunedModel).not.toHaveBeenCalled();
       });
     });
 
@@ -597,14 +700,14 @@ describe('WorkloadDetailsPage', () => {
       });
 
       await waitFor(() => {
-        expect(getAimNamespaceModel).toHaveBeenCalledWith(
+        expect(getProjectFineTunedModel).toHaveBeenCalledWith(
           'ft-workload-id',
           'test-project',
         );
       });
     });
 
-    it('calls deleteModel for fine-tuning workloads instead of deleteWorkload', async () => {
+    it('calls cancelFineTuningJob for fine-tuning workloads', async () => {
       const mockFTWorkload: Workload = {
         ...mockWorkload,
         id: 'workload-4',
@@ -636,9 +739,143 @@ describe('WorkloadDetailsPage', () => {
       });
 
       await waitFor(() => {
-        expect(deleteModel).toHaveBeenCalledWith('workload-4', 'test-project');
-        expect(deleteWorkload).not.toHaveBeenCalled();
+        expect(cancelFineTuningJob).toHaveBeenCalledWith(
+          'workload-4',
+          'test-project',
+        );
       });
+    });
+
+    it('hides the Delete action for raw inference workloads', async () => {
+      // AIM-service-backed inference deployments link to /aims/[id], so an
+      // INFERENCE row on this page is a raw workload-table row. The
+      // inference capability DELETE expects an AIM service id and would 404
+      // on a workload-table id, so the Delete action must be hidden.
+      const mockInferenceWorkload: Workload = {
+        ...mockWorkload,
+        id: 'inference-7',
+        type: WorkloadType.INFERENCE,
+        status: WorkloadStatus.RUNNING,
+      };
+
+      (getWorkload as Mock).mockResolvedValue(mockInferenceWorkload);
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('list.actions.logs.label')).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByText('list.actions.delete.label'),
+      ).not.toBeInTheDocument();
+      expect(deleteInferenceDeployment).not.toHaveBeenCalled();
+    });
+
+    it('calls deleteWorkspace for workspace workloads', async () => {
+      const mockWorkspace: Workload = {
+        ...mockWorkload,
+        id: 'workspace-5',
+        name: 'wb-vscode-abc',
+        type: WorkloadType.WORKSPACE,
+        status: WorkloadStatus.RUNNING,
+      };
+
+      (getWorkload as Mock).mockResolvedValue(mockWorkspace);
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      const deleteButton = await waitFor(() =>
+        screen.getByText('list.actions.delete.label'),
+      );
+
+      await act(async () => {
+        fireEvent.click(deleteButton);
+      });
+
+      const confirmButton = await waitFor(() =>
+        screen.getByTestId('confirm-delete'),
+      );
+
+      await act(async () => {
+        fireEvent.click(confirmButton);
+      });
+
+      await waitFor(() => {
+        expect(deleteWorkspace).toHaveBeenCalledWith(
+          'test-project',
+          'workspace-5',
+        );
+      });
+    });
+  });
+
+  describe('Connect to model button', () => {
+    it('renders connect to model button for inference workload with endpoints', async () => {
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('connect-to-model-button'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('opens connect modal when connect to model button is clicked', async () => {
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      const connectButton = await waitFor(() =>
+        screen.getByTestId('connect-to-model-button'),
+      );
+
+      await act(async () => {
+        fireEvent.click(connectButton);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('aim-connect-modal')).toBeInTheDocument();
+      });
+    });
+
+    it('does not render connect to model button for non-inference workloads', async () => {
+      (getWorkload as Mock).mockResolvedValue(mockWorkspaceWorkload);
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('list.actions.logs.label')).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByTestId('connect-to-model-button'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not render connect to model button for inference workload without endpoints', async () => {
+      (getWorkload as Mock).mockResolvedValue({
+        ...mockWorkload,
+        endpoints: undefined,
+      });
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('list.actions.logs.label')).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByTestId('connect-to-model-button'),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -663,6 +900,35 @@ describe('WorkloadDetailsPage', () => {
       });
 
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('test');
+    });
+  });
+
+  describe('Query keys', () => {
+    it('includes activeProject in the workload query key so cache invalidates on project switch', async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const localWrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      );
+
+      await act(async () => {
+        render(<WorkloadDetailsPage />, { wrapper: localWrapper });
+      });
+
+      await waitFor(() => {
+        const workloadQuery = queryClient
+          .getQueryCache()
+          .getAll()
+          .find((q) => q.queryKey[0] === 'workload' && q.queryKey.length === 3);
+        expect(workloadQuery?.queryKey).toEqual([
+          'workload',
+          'test-project',
+          'workload-1',
+        ]);
+      });
     });
   });
 

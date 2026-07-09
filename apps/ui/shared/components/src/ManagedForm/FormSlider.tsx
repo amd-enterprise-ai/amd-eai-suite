@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Slider, SliderProps, cn } from '@heroui/react';
+import { cn } from '@heroui/react';
+import { Slider, SliderProps } from '@amdenterpriseai/components';
 import { useMemo } from 'react';
 import { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 
@@ -61,12 +62,12 @@ export const FormSlider = <T extends FieldValues>({
         onChange={updateFormValue}
         color={!errorMessage ? color : 'danger'}
         classNames={{
-          mark: 'text-tiny',
+          mark: 'text-xs',
         }}
       />
       {(!!errorMessage || description) && (
         <div
-          className={cn('text-tiny p-1 relative flex flex-col gap-1.5', {
+          className={cn('text-xs p-1 relative flex flex-col gap-1.5', {
             'text-foreground-400': !errorMessage,
             'text-danger': !!errorMessage,
           })}

@@ -4,7 +4,7 @@
 
 *** Settings ***
 Documentation       Low-level keywords for AIWB API secrets endpoints.
-...                 Provides direct API operation wrappers for the /namespaces/{namespace}/secrets endpoints.
+...                 Provides direct API operation wrappers for the /projects/{project}/secrets endpoints.
 ...                 This is part of the API layer that handles raw HTTP requests/responses.
 Library             RequestsLibrary
 Library             Collections
@@ -13,26 +13,26 @@ Resource            resources/api/common.resource
 
 *** Keywords ***
 AIWB Secrets Endpoint
-    [Documentation]    Return the full secrets endpoint URL for a namespace.
-    ...    Pattern: /namespaces/{namespace}/secrets
-    [Arguments]    ${namespace}
-    ${endpoint}=    Service API Endpoint    aiwb    endpoint=namespaces/${namespace}/secrets
+    [Documentation]    Return the full secrets endpoint URL for a project.
+    ...    Pattern: /projects/{project}/secrets
+    [Arguments]    ${project}
+    ${endpoint}=    Service API Endpoint    aiwb    endpoint=projects/${project}/secrets
     RETURN    ${endpoint}
 
 Create AIWB Secret
     [Documentation]    Create a new secret via AIWB API.
     ...
     ...    Args:
-    ...    namespace (str): Kubernetes namespace
+    ...    project (str): Project identifier (workbench namespace name)
     ...    body (dict): Secret creation payload (name, data, useCase)
     ...    expected_status (int/str): Expected HTTP status code
     ...
     ...    Returns:
     ...    response: API response containing the created secret
-    [Arguments]    ${namespace}    ${body}    ${expected_status}=any
+    [Arguments]    ${project}    ${body}    ${expected_status}=any
     Create api session    aiwb
 
-    ${endpoint}=    AIWB Secrets Endpoint    ${namespace}
+    ${endpoint}=    AIWB Secrets Endpoint    ${project}
 
     Log    POST ${endpoint}    DEBUG
     Log    Request body: ${body}    DEBUG
@@ -46,20 +46,20 @@ Create AIWB Secret
     RETURN    ${response}
 
 List AIWB Secrets
-    [Documentation]    List all secrets in a namespace via AIWB API.
+    [Documentation]    List all secrets in a project via AIWB API.
     ...    Optionally filter by useCase query parameter.
     ...
     ...    Args:
-    ...    namespace (str): Kubernetes namespace
+    ...    project (str): Project identifier (workbench namespace name)
     ...    use_case (str): Optional useCase filter
     ...    expected_status (int/str): Expected HTTP status code
     ...
     ...    Returns:
     ...    response: API response containing the list of secrets
-    [Arguments]    ${namespace}    ${use_case}=${None}    ${expected_status}=any
+    [Arguments]    ${project}    ${use_case}=${None}    ${expected_status}=any
     Create api session    aiwb
 
-    ${endpoint}=    AIWB Secrets Endpoint    ${namespace}
+    ${endpoint}=    AIWB Secrets Endpoint    ${project}
 
     &{params}=    Create Dictionary
     IF    $use_case is not None
@@ -80,16 +80,16 @@ Get AIWB Secret
     [Documentation]    Get a specific secret by name via AIWB API.
     ...
     ...    Args:
-    ...    namespace (str): Kubernetes namespace
+    ...    project (str): Project identifier (workbench namespace name)
     ...    secret_name (str): Name of the secret
     ...    expected_status (int/str): Expected HTTP status code
     ...
     ...    Returns:
     ...    response: API response containing the secret details
-    [Arguments]    ${namespace}    ${secret_name}    ${expected_status}=any
+    [Arguments]    ${project}    ${secret_name}    ${expected_status}=any
     Create api session    aiwb
 
-    ${endpoint}=    AIWB Secrets Endpoint    ${namespace}
+    ${endpoint}=    AIWB Secrets Endpoint    ${project}
 
     Log    GET ${endpoint}/${secret_name}    DEBUG
 
@@ -104,16 +104,16 @@ Delete AIWB Secret
     [Documentation]    Delete a secret by name via AIWB API.
     ...
     ...    Args:
-    ...    namespace (str): Kubernetes namespace
+    ...    project (str): Project identifier (workbench namespace name)
     ...    secret_name (str): Name of the secret to delete
     ...    expected_status (int/str): Expected HTTP status code
     ...
     ...    Returns:
     ...    response: API response (204 No Content on success)
-    [Arguments]    ${namespace}    ${secret_name}    ${expected_status}=any
+    [Arguments]    ${project}    ${secret_name}    ${expected_status}=any
     Create api session    aiwb
 
-    ${endpoint}=    AIWB Secrets Endpoint    ${namespace}
+    ${endpoint}=    AIWB Secrets Endpoint    ${project}
 
     Log    DELETE ${endpoint}/${secret_name}    DEBUG
 

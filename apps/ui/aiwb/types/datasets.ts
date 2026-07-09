@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 export enum DatasetType {
-  Evaluation = 'Evaluation',
   Finetuning = 'Fine-tuning',
 }
 

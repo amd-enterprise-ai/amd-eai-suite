@@ -2,16 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { SelectItem, Tooltip } from '@heroui/react';
-import { IconInfoCircle } from '@tabler/icons-react';
-import type { TFunction } from 'i18next';
-import type { UseFormReturn } from 'react-hook-form';
-
 import {
+  SelectItem,
   FormNumberInput,
   FormSelect,
   FormSwitch,
+  Tooltip,
 } from '@amdenterpriseai/components';
+import { IconInfoCircle } from '@tabler/icons-react';
+import type { TFunction } from 'i18next';
+import type { UseFormReturn } from 'react-hook-form';
 
 import { GpuPreemptionPolicy } from '@/types/enums/gpu-preemption-policy';
 import { ProjectGpuPreemptionFormFields } from '@/types/enums/project-form-fields';

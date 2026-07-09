@@ -29,17 +29,15 @@ JupyterLab workspace is deployed
     ...    Uses default configuration: 1 GPU, standard image
     [Arguments]    ${display_name}=test-jupyter    ${gpus}=1    ${image}=${None}
 
-    IF    "${image}" == "${None}"
-        VAR    ${workspace_image}    rocm/pytorch:rocm6.4_ubuntu24.04_py3.12_pytorch_release_2.6.0
-    ELSE
-        VAR    ${workspace_image}    ${image}
-    END
-
     ${workspace_data}=    Create Dictionary
-    ...    image=${workspace_image}
     ...    gpus=${gpus}
     ...    memoryPerGpu=128
     ...    cpuPerGpu=4
+    # Omit image when the caller didn't pass one so the server applies the chart's
+    # default workspace image (matching the UI) rather than pinning a stale tag.
+    IF    $image is not None
+        Set To Dictionary    ${workspace_data}    image=${image}
+    END
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -51,7 +49,7 @@ JupyterLab workspace is deployed
     ...    expected_status=201
 
     ${workspace_id}=    Get From Dictionary    ${response.json()}    id
-    Set Test Variable    ${TEST_WORKSPACE_ID}    ${workspace_id}
+    VAR    ${TEST_WORKSPACE_ID}    ${workspace_id}    scope=TEST
 
     Track Workload For Cleanup    ${workspace_id}
 
@@ -89,7 +87,7 @@ MLflow workspace is deployed
     ...    expected_status=201
 
     ${workspace_id}=    Get From Dictionary    ${response.json()}    id
-    Set Test Variable    ${TEST_WORKSPACE_ID}    ${workspace_id}
+    VAR    ${TEST_WORKSPACE_ID}    ${workspace_id}    scope=TEST
 
     Track Workload For Cleanup    ${workspace_id}
 
@@ -100,17 +98,15 @@ VSCode workspace is deployed
     ...    Uses default configuration: 1 GPU, standard image
     [Arguments]    ${display_name}=test-vscode    ${gpus}=1    ${image}=${None}
 
-    IF    "${image}" == "${None}"
-        VAR    ${workspace_image}    rocm/pytorch:rocm6.4_ubuntu24.04_py3.12_pytorch_release_2.6.0
-    ELSE
-        VAR    ${workspace_image}    ${image}
-    END
-
     ${workspace_data}=    Create Dictionary
-    ...    image=${workspace_image}
     ...    gpus=${gpus}
     ...    memoryPerGpu=128
     ...    cpuPerGpu=4
+    # Omit image when the caller didn't pass one so the server applies the chart's
+    # default workspace image (matching the UI) rather than pinning a stale tag.
+    IF    $image is not None
+        Set To Dictionary    ${workspace_data}    image=${image}
+    END
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -122,7 +118,7 @@ VSCode workspace is deployed
     ...    expected_status=201
 
     ${workspace_id}=    Get From Dictionary    ${response.json()}    id
-    Set Test Variable    ${TEST_WORKSPACE_ID}    ${workspace_id}
+    VAR    ${TEST_WORKSPACE_ID}    ${workspace_id}    scope=TEST
 
     Track Workload For Cleanup    ${workspace_id}
 
@@ -130,20 +126,19 @@ VSCode workspace is deployed
 
 ComfyUI workspace is deployed
     [Documentation]    Deploys a ComfyUI workspace via AIWB API
-    ...    Uses default configuration: 0 GPUs (CPU-only), standard image
-    [Arguments]    ${display_name}=test-comfyui    ${gpus}=0    ${image}=${None}
-
-    IF    "${image}" == "${None}"
-        VAR    ${workspace_image}    rocm/pytorch:rocm6.4_ubuntu24.04_py3.12_pytorch_release_2.6.0
-    ELSE
-        VAR    ${workspace_image}    ${image}
-    END
+    ...    Uses default configuration: 1 GPU, standard image
+    ...    ComfyUI requires a GPU to start, so the default is 1.
+    [Arguments]    ${display_name}=test-comfyui    ${gpus}=1    ${image}=${None}
 
     ${workspace_data}=    Create Dictionary
-    ...    image=${workspace_image}
     ...    gpus=${gpus}
     ...    memoryPerGpu=128
     ...    cpuPerGpu=4
+    # Omit image when the caller didn't pass one so the server applies the chart's
+    # default workspace image (matching the UI) rather than pinning a stale tag.
+    IF    $image is not None
+        Set To Dictionary    ${workspace_data}    image=${image}
+    END
 
     ${namespace}=    Get Project Namespace
     ${response}=    Create workspace
@@ -155,7 +150,7 @@ ComfyUI workspace is deployed
     ...    expected_status=201
 
     ${workspace_id}=    Get From Dictionary    ${response.json()}    id
-    Set Test Variable    ${TEST_WORKSPACE_ID}    ${workspace_id}
+    VAR    ${TEST_WORKSPACE_ID}    ${workspace_id}    scope=TEST
 
     Track Workload For Cleanup    ${workspace_id}
 
@@ -177,7 +172,7 @@ Attempting to deploy second MLflow workspace
     ...    namespace=${namespace}
     ...    expected_status=409
 
-    Set Test Variable    ${TEST_RESPONSE}    ${response}
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
 
 Attempting to deploy second JupyterLab workspace
     [Documentation]    Attempts to deploy a second JupyterLab workspace (should fail with 409)
@@ -196,7 +191,7 @@ Attempting to deploy second JupyterLab workspace
     ...    namespace=${namespace}
     ...    expected_status=any
 
-    Set Test Variable    ${TEST_RESPONSE}    ${response}
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
 
 Attempting to deploy second VSCode workspace
     [Documentation]    Attempts to deploy a second VSCode workspace (should fail with 409)
@@ -215,7 +210,7 @@ Attempting to deploy second VSCode workspace
     ...    namespace=${namespace}
     ...    expected_status=any
 
-    Set Test Variable    ${TEST_RESPONSE}    ${response}
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
 
 Attempting to deploy second ComfyUI workspace
     [Documentation]    Attempts to deploy a second ComfyUI workspace (should fail with 409)
@@ -234,7 +229,7 @@ Attempting to deploy second ComfyUI workspace
     ...    namespace=${namespace}
     ...    expected_status=any
 
-    Set Test Variable    ${TEST_RESPONSE}    ${response}
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
 
 Workspace should be visible via API
     [Documentation]    Verifies that the workspace is visible via AIWB workloads API
@@ -251,13 +246,13 @@ Workspace is in database
     ...    Used with polling to wait for async workspace creation
     ${namespace}=    Get Project Namespace
     ${response}=    Get AIWB workload    ${TEST_WORKSPACE_ID}    namespace=${namespace}    expected_status=200
-    Set Test Variable    ${TEST_RESPONSE}    ${response}
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
 
 Workspace should have valid ID and status
     [Documentation]    Verifies workspace response contains valid id and status fields
     Should Not Be Equal    ${TEST_RESPONSE}    ${None}    msg=Response not set. Call 'workspace should be visible via API' first.
 
-    ${json}=    Set Variable    ${TEST_RESPONSE.json()}
+    VAR    ${json}    ${TEST_RESPONSE.json()}
     Dictionary Should Contain Key    ${json}    id
     Dictionary Should Contain Key    ${json}    status
 
@@ -303,7 +298,7 @@ Verify workspace has URLs populated
     ...    AIWB uses computed 'endpoints' field with 'external' and 'internal' keys
     ${namespace}=    Get Project Namespace
     ${workspace_response}=    Get AIWB workload    ${TEST_WORKSPACE_ID}    namespace=${namespace}    expected_status=200
-    ${json}=    Set Variable    ${workspace_response.json()}
+    VAR    ${json}    ${workspace_response.json()}
 
     # URLs are in the 'endpoints' computed field
     Dictionary Should Contain Key    ${json}    endpoints    msg=Workload should have endpoints field
@@ -324,37 +319,44 @@ Verify workspace has URLs populated
     END
 
 Workspace external URL should be accessible
-    [Documentation]    Verifies that the workspace external URL is accessible via HTTP
-    ...    Accepts any non-error response (200-499) as success since auth is expected
-    ...    Only fails on connection errors or server errors (500+)
+    [Documentation]    Verifies that the workspace external URL is reachable and routed correctly.
+    ...    The URL must be served on a dedicated workspaces.<domain> host (so it is not
+    ...    shadowed by the inference-only workloads.<domain> vhost) and must not 404
+    ...    (the regression this guards against). Auth challenges (401/403) and redirects
+    ...    are accepted; connection errors, 404, and server errors (500+) fail.
     Should Not Be Equal    ${TEST_WORKSPACE_ID}    ${None}
     ...    msg=TEST_WORKSPACE_ID not set. Deploy workspace first.
 
     # Get the external URL from workspace endpoints
     ${namespace}=    Get Project Namespace
     ${workspace_response}=    Get AIWB workload    ${TEST_WORKSPACE_ID}    namespace=${namespace}    expected_status=200
-    ${json}=    Set Variable    ${workspace_response.json()}
+    VAR    ${json}    ${workspace_response.json()}
     ${endpoints}=    Get From Dictionary    ${json}    endpoints
     Dictionary Should Contain Key    ${endpoints}    external    msg=Workspace should have external endpoint URL
     ${external_url}=    Get From Dictionary    ${endpoints}    external
 
+    # The route must be pinned to the dedicated workspaces.<domain> host.
+    Should Contain    ${external_url}    //workspaces.
+    ...    msg=Workspace external URL ${external_url} is not on a workspaces.<domain> host
+
     # Make HTTP request - allow redirects and don't verify SSL for internal testing
     ${http_response}=    GET    ${external_url}    expected_status=any    verify=${VERIFY_SSL}
 
-    # Accept any non-server-error response (200-499 are all valid)
-    # This includes: 200 OK, 301/302 redirects, 401/403 auth challenges
-    ${status}=    Set Variable    ${http_response.status_code}
+    # Reject 404 (the routing regression) and server errors; auth/redirects are fine.
+    VAR    ${status}    ${http_response.status_code}
+    Should Not Be Equal As Integers    ${status}    404
+    ...    msg=Workspace URL returned 404 - route not matched (regression)
     Should Be True    ${status} < 500
     ...    msg=Workspace URL returned server error ${status}, expected < 500
 
     Log    Workspace external URL is accessible: ${external_url} (HTTP ${status})    INFO
 
 Workspace is deleted
-    [Documentation]    Deletes the workspace via AIWB DELETE /namespaces/{namespace}/workloads/{id}
+    [Documentation]    Deletes the workspace via AIWB DELETE /projects/{project}/workspaces/{id}
     Should Not Be Equal    ${TEST_WORKSPACE_ID}    ${None}    msg=TEST_WORKSPACE_ID not set. Deploy workspace first.
 
     ${namespace}=    Get Project Namespace
-    ${response}=    Delete AIWB workload    ${TEST_WORKSPACE_ID}    namespace=${namespace}    expected_status=204
+    ${response}=    Delete workspace    ${TEST_WORKSPACE_ID}    namespace=${namespace}    expected_status=204
 
     Log    Deleted workspace ${TEST_WORKSPACE_ID} via API    INFO
 
@@ -378,11 +380,25 @@ Verify workspace is fully deleted
 
 Workspace creation should fail with conflict
     [Documentation]    Verifies that workspace creation failed with 409 Conflict
-    ${status_code}=    Set Variable    ${TEST_RESPONSE.status_code}
+    VAR    ${status_code}    ${TEST_RESPONSE.status_code}
     Should Be Equal As Integers    ${status_code}    409
     ...    msg=Expected 409 Conflict, but got ${status_code}
 
     Log    Workspace creation correctly failed with 409 Conflict    INFO
+
+Deleting workspace by missing workload id is attempted
+    [Documentation]    Attempts to delete via the workspace-typed endpoint using an id that
+    ...    does not correspond to any workload, expecting a 404 response.
+    [Arguments]    ${workload_id}
+    ${namespace}=    Get Project Namespace
+    ${response}=    Delete workspace    ${workload_id}    namespace=${namespace}    expected_status=any
+    VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
+
+Workspace deletion should report workspace not found
+    [Documentation]    Verifies that the response is 404 with a workspace-specific not-found error
+    VAR    ${status_code}    ${TEST_RESPONSE.status_code}
+    Should Be Equal As Integers    ${status_code}    404
+    ...    msg=Expected 404 Not Found, but got ${status_code}
 
 "${count}" workspaces of type "${workspace_type}" should be visible in project
     [Documentation]    Verifies that the specified number of workspaces are visible in the namespace
@@ -397,7 +413,7 @@ Workspace creation should fail with conflict
     ...    expected_status=200
 
     # Extract data field from response (ListResponse has 'data' key)
-    ${response_json}=    Set Variable    ${response.json()}
+    VAR    ${response_json}    ${response.json()}
     ${all_workspaces}=    Get From Dictionary    ${response_json}    data
 
     # Filter out workspaces with Deleting or Deleted status
@@ -418,7 +434,8 @@ Workspace creation should fail with conflict
 
 Clean Up Workspace Test Resources
     [Documentation]    Clean up all resources created during workspace tests.
-    ...    Uses AIWB workload endpoint for workspace cleanup, then cleans up projects.
+    ...    Uses the workspaces capability endpoint for cleanup (the generic /workloads
+    ...    DELETE was removed in EAI-6313), then cleans up projects.
     ${tracking_list}=    Get Variable Value    ${CREATED_WORKLOAD_IDS}    ${None}
     ${count}=    Evaluate    len($tracking_list) if $tracking_list is not None else 0
     IF    ${count} > 0
@@ -426,13 +443,13 @@ Clean Up Workspace Test Resources
         ${namespace}=    Get Project Namespace
         FOR    ${workload_id}    IN    @{tracking_list}
             TRY
-                Delete AIWB workload    ${workload_id}    namespace=${namespace}    expected_status=any
+                Delete workspace    ${workload_id}    namespace=${namespace}    expected_status=any
                 Log    Deleted workspace ${workload_id}    INFO
             EXCEPT    AS    ${error}
                 Log    Failed to delete workspace ${workload_id}: ${error}    WARN
             END
         END
-        @{empty_list}=    Create List
-        Set Suite Variable    ${CREATED_WORKLOAD_IDS}    ${empty_list}
+        VAR    @{empty_list}    @{EMPTY}    scope=SUITE
+        VAR    ${CREATED_WORKLOAD_IDS}    ${empty_list}    scope=SUITE
     END
     Clean Up All Created Projects

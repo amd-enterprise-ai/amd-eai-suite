@@ -1,0 +1,89 @@
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
+controller:
+  image:
+    repository: amdenterpriseai/ai-gateway-discovery
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  imagePullSecrets: []
+
+  # Label used to identify InferenceService objects that should be managed.
+  # Only InferenceServices carrying this label will have InferencePool, AIGatewayRoute,
+  # and EPP resources created for them.
+  labels:
+    managedBy:
+      name: app.kubernetes.io/managed-by
+      value: aim-engine
+
+  annotations:
+    allowedGroup: cluster-auth/allowed-group
+    # Annotation set by AIM-engine on each InferenceService with the actual
+    # vLLM-served model name (HF model ID). ISes without this annotation are skipped.
+    modelName: aim.eai.amd.com/model-id
+
+  # Envoy Gateway resource that the AIGatewayRoute attaches to.
+  gateway:
+    name: https
+    namespace: envoy-gateway-system
+    # Host header added to every AIGatewayRoute so AI traffic is distinguished
+    # from regular apps sharing the same Gateway listener. MUST be set
+    # per-cluster (e.g. "gateway.<cluster-domain>") — the controller refuses
+    # to start if this is empty, because an absent host filter would allow
+    # any incoming hostname to match AI backend routes.
+    routeHostname: ""
+
+    # Timeouts applied to every generated AIGatewayRoute rule. LLM completions
+    # routinely exceed Envoy AI Gateway's 60s nil-default, which surfaces as
+    # HTTP 504 "upstream request timeout". Gateway API duration strings (e.g.
+    # "30m", "90s"); tune per-environment as needed.
+    timeouts:
+      request: 30m
+      backendRequest: 30m
+
+  # Namespace used by the controller to look up gateway resources.
+  # Must be the namespace where the Envoy AI Gateway controller is running.
+  targetNamespace: envoy-ai-gateway-system
+
+  # Endpoint Picker Plugin deployed by the controller alongside each InferenceService.
+  epp:
+    image:
+      repository: registry.k8s.io/gateway-api-inference-extension/epp
+      tag: v1.5.0-rc.2
+    # gRPC port used by both the EPP container and the Service it exposes.
+    port: 9002
+
+  # InferencePool configuration. An InferencePool is created per InferenceService,
+  # in the InferenceService's own namespace.
+  inferencePool:
+    # Port exposed by the KServe predictor pods (vLLM default).
+    targetPort: 8000
+
+  # cluster-auth extAuth service used for per-IS SecurityPolicy group enforcement.
+  clusterAuth:
+    service: cluster-auth
+    namespace: cluster-auth
+    port: 50051
+
+  healthPort: 8081
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true

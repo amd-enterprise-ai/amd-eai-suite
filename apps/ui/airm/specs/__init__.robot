@@ -5,7 +5,7 @@
 *** Settings ***
 Documentation       Frontend E2E tests for AIRM UI using Browser Library (Playwright).
 ...                 Tests verify UI behavior for cluster management, the admin dashboard,
-...                 RBAC, storage management, secrets autodiscovery, and other AIRM UI
+...                 RBAC, storage management, secrets management, and other AIRM UI
 ...                 features.
 
 Resource            resources/common/suite_setup.resource

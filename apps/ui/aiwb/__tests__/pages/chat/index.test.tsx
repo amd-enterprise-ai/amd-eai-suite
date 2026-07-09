@@ -57,7 +57,7 @@ vi.mock('@/components/features/chat/ChatView', () => ({
 }));
 
 describe('Chat Page', () => {
-  const chattableWorkloads: Workload[] = [mockWorkloads[0], mockWorkloads[2]];
+  const chattableWorkloads: Workload[] = [mockWorkloads[0]];
   const chattableData = {
     workloads: chattableWorkloads,
     workloadDisplayInfo: {} as Record<
@@ -91,7 +91,7 @@ describe('Chat Page', () => {
     });
   });
 
-  it('displays chattable workloads returned from endpoint', async () => {
+  it('passes workloads from listChattableWorkloads to ChatView', async () => {
     await act(async () => {
       render(<ChatPage />, { wrapper });
     });
@@ -100,13 +100,22 @@ describe('Chat Page', () => {
       expect(listChattableWorkloads).toHaveBeenCalled();
     });
 
-    // Verify ChatView is rendered with workloads
     await waitFor(() => {
       expect(screen.getByTestId('chat-view')).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('workload-count')).toHaveTextContent('2');
+    expect(screen.getByTestId('workload-count')).toHaveTextContent('1');
     expect(screen.getByTestId('workload-workload-1')).toBeInTheDocument();
+  });
+
+  it('does not mount ChatView while workloads are loading', async () => {
+    (listChattableWorkloads as Mock).mockReturnValue(new Promise(() => {}));
+
+    await act(async () => {
+      render(<ChatPage />, { wrapper });
+    });
+
+    expect(screen.queryByTestId('chat-view')).not.toBeInTheDocument();
   });
 
   it('handles chattable workloads loading error', async () => {
@@ -151,11 +160,7 @@ describe('Chat Page', () => {
   });
 
   it('shows all matching workloads when multiple chat models are available', async () => {
-    const multipleWorkloads = [
-      mockWorkloads[0],
-      mockWorkloads[2],
-      mockWorkloads[10],
-    ];
+    const multipleWorkloads = [mockWorkloads[0], mockWorkloads[10]];
     (listChattableWorkloads as Mock).mockResolvedValue({
       workloads: multipleWorkloads,
       workloadDisplayInfo: {},
@@ -173,7 +178,7 @@ describe('Chat Page', () => {
       expect(screen.getByTestId('chat-view')).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('workload-count')).toHaveTextContent('3');
+    expect(screen.getByTestId('workload-count')).toHaveTextContent('2');
   });
 
   it('uses optimized chattable endpoint instead of filtering client-side', async () => {

@@ -4,7 +4,16 @@
 
 import { render, screen } from '@testing-library/react';
 
-import { LinkToast } from '@amdenterpriseai/components';
+// Mock Link adapter (LinkToast imports ../Link directly)
+vi.mock('../../../src/Link', () => ({
+  Link: ({ href, children }: any) => (
+    <a href={href} data-testid="toast-link">
+      {children}
+    </a>
+  ),
+}));
+
+import { LinkToast } from '../../../src/Toast/LinkToast';
 
 // Mock useTranslation
 vi.mock('next-i18next', () => ({
@@ -16,15 +25,6 @@ vi.mock('next-i18next', () => ({
       return translations[key] || key;
     },
   }),
-}));
-
-// Mock heroui Link component
-vi.mock('@heroui/react', () => ({
-  Link: ({ href, children }: any) => (
-    <a href={href} data-testid="toast-link">
-      {children}
-    </a>
-  ),
 }));
 
 describe('LinkToast', () => {

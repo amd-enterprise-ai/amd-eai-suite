@@ -33,7 +33,7 @@ describe('Hugging Face Secret Utils', () => {
 
       const request = createHuggingFaceSecretRequest(name, token);
 
-      expect(request.name).toBe('my-test-hf-token');
+      expect(request.displayName).toBe('my-test-hf-token');
       expect(request.useCase).toBe(SecretUseCase.HUGGING_FACE);
       expect(request.data.token).toBe(
         Buffer.from(token, 'utf-8').toString('base64'),
@@ -54,7 +54,7 @@ describe('Hugging Face Secret Utils', () => {
           name,
           'hf_test1234567890abcdefghijklmnopqr',
         );
-        expect(request.name).toBe(name);
+        expect(request.displayName).toBe(name);
       });
     });
   });

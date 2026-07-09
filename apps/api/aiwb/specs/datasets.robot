@@ -15,19 +15,8 @@ Test Teardown       Clean Up Dataset Test Resources
 
 
 *** Test Cases ***
-Create dataset
-    [Documentation]    UNSUPPORTED: Verify that a new dataset can be created via POST /datasets
-    ...    NOTE: AIWB API does not support POST to base /datasets endpoint.
-    ...    This test documents the unsupported endpoint. Use "Upload dataset" test instead.
-    [Tags]                  datasets                create                  negative
-
-    Given a ready project with user access exists
-    and valid dataset data is prepared
-    When create dataset request is sent
-    Then response status should be 405  # Method Not Allowed - endpoint exists but POST not supported
-
 Upload dataset
-    [Documentation]    Verify that a new dataset can be uploaded via POST /datasets/upload
+    [Documentation]    Verify that a new dataset can be uploaded via POST /datasets
     [Tags]                  datasets                upload                  smoke
     Given a ready project with user access exists
     And valid dataset upload data is prepared
@@ -67,6 +56,15 @@ List datasets with name filter
     Then response status should be 200
     And response should contain datasets list
     And response should contain only datasets with name "${TEST_DATASET}[name]"
+
+User can browse datasets page by page
+    [Documentation]    Datasets are served in pages rather than as one flat list,
+    ...                so a consumer can navigate without loading the whole project.
+    [Tags]                  datasets                list                    pagination
+    Given a ready project with user access exists
+    And a dataset exists
+    When list datasets request is sent
+    Then the result is returned page by page
 
 Get specific dataset
     [Documentation]    Verify that a specific dataset can be retrieved by ID via GET /datasets/{id}
@@ -117,15 +115,6 @@ Delete existing dataset
     When delete dataset request is sent
     Then response status should be 204  # API returns 204 NO CONTENT
     And the dataset should not exist in database
-
-Batch delete datasets
-    [Documentation]    Verify that multiple datasets can be deleted via POST /datasets/delete
-    [Tags]                  datasets                delete                  batch
-    Given a ready project with user access exists
-    And multiple datasets exist
-    When batch delete datasets request is sent
-    Then response status should be 200
-    # Note: API returns 200 with list of deleted IDs, not 204
 
 Full dataset lifecycle
     [Documentation]    Verify the complete dataset lifecycle: upload, get, list, download, delete, and confirm deletion.

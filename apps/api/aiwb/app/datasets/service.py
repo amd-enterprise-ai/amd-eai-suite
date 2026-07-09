@@ -10,6 +10,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
+from api_common.collections import PaginatedResult, paginate_list
 from api_common.exceptions import (
     ConflictException,
     NotFoundException,
@@ -18,14 +19,8 @@ from api_common.exceptions import (
 )
 
 from ..minio.config import MINIO_BUCKET
-from .models import Dataset
-from .repository import delete_datasets as delete_datasets_by_ids
-from .repository import (
-    insert_dataset,
-    list_datasets,
-    select_dataset,
-)
-from .schemas import DatasetType
+from . import repository
+from .models import Dataset, DatasetType
 from .utils import (
     MinioClient,
     delete_from_s3,
@@ -78,11 +73,12 @@ async def create_and_upload_dataset(
         # Generate a new UUID for the dataset
         dataset_id = uuid4()
 
-        # Generate the S3 object key using the namespace name
-        object_key = get_object_key(name, namespace)
+        # Generate the S3 object key using the dataset UUID so display names can contain
+        # any characters without risking S3 path collisions from slugify normalisation.
+        object_key = get_object_key(str(dataset_id), namespace)
 
         # Create the dataset record with the generated path
-        dataset_db = await insert_dataset(
+        dataset_db = await repository.insert_dataset(
             session,
             id=dataset_id,
             name=name,
@@ -137,7 +133,7 @@ async def download_dataset_file(
     Raises:
         NotFoundException: If the dataset is not found or has no content
     """
-    dataset = await select_dataset(session, dataset_id, namespace)
+    dataset = await repository.select_dataset(session, dataset_id, namespace)
     if not dataset:
         raise NotFoundException(message=f"Dataset {dataset_id} not found")
 
@@ -163,23 +159,37 @@ async def download_dataset_file(
 
 async def get_dataset_by_id(session: AsyncSession, dataset_id: UUID, namespace: str) -> Dataset:
     """Get a dataset by ID, raising NotFoundException if not found."""
-    dataset = await select_dataset(session, dataset_id, namespace)
+    dataset = await repository.select_dataset(session, dataset_id, namespace)
     if not dataset:
-        raise NotFoundException(f"Dataset with ID {dataset_id} not found in this namespace")
+        raise NotFoundException(f"Dataset with ID {dataset_id} not found")
     return dataset
 
 
-async def delete_datasets(
-    session: AsyncSession, dataset_ids: list[UUID], namespace: str, minio_client: MinioClient
-) -> list[UUID]:
-    """Delete datasets from database and S3 storage."""
-    datasets = await list_datasets(session, namespace, selected_datasets_ids=dataset_ids)
-    existing_ids = [ds.id for ds in datasets]
+async def list_paginated_datasets(
+    session: AsyncSession,
+    namespace: str,
+    type: DatasetType | None,
+    name: str | None,
+    page: int,
+    page_size: int,
+) -> PaginatedResult[Dataset]:
+    datasets = await repository.list_datasets(
+        session=session,
+        namespace=namespace,
+        type=type,
+        name=name,
+    )
+    # Paginate after filtering so `total` reflects the filtered set.
+    return paginate_list(datasets, page=page, page_size=page_size)
 
-    # Delete from database first (will be rolled back if S3 operations fail)
-    await delete_datasets_by_ids(session, existing_ids, namespace)
 
-    # Delete from S3 storage
-    await asyncio.gather(*(delete_from_s3(ds, minio_client) for ds in datasets), return_exceptions=True)
-
-    return existing_ids
+async def delete_dataset(session: AsyncSession, dataset_id: UUID, namespace: str, minio_client: MinioClient) -> None:
+    """Delete a single dataset from database and S3 storage. Idempotent."""
+    dataset = await repository.select_dataset(session, dataset_id, namespace)
+    if dataset is None:
+        return
+    await repository.delete_dataset_by_id(session, dataset_id, namespace)
+    try:
+        await delete_from_s3(dataset, minio_client)
+    except Exception as e:
+        logger.warning(f"S3 deletion failed for dataset {dataset_id}: {e}")

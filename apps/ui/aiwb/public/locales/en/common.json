@@ -59,6 +59,9 @@
     "customModels": {
       "title": "Custom Models"
     },
+    "fineTuneModels": {
+      "title": "Fine-tune models"
+    },
     "deployedModels": {
       "title": "Deployed Models"
     },
@@ -116,7 +119,8 @@
       "title": "Clear"
     },
     "copy": {
-      "title": "Copy"
+      "title": "Copy",
+      "copied": "Copied"
     },
     "clearFilters": {
       "title": "Clear filters"
@@ -130,6 +134,8 @@
     "download": {
       "title": "Download"
     },
+    "next": "Next",
+    "previous": "Previous",
     "refresh": {
       "title": "Refresh"
     },
@@ -235,6 +241,9 @@
     "nodata": "Data not available",
     "refresh": "Refresh",
     "refreshing": "Refreshing ..."
+  },
+  "pageLoader": {
+    "loading": "Loading…"
   },
   "data": {
     "lastUpdated": "Last update: {{timestamp}}",

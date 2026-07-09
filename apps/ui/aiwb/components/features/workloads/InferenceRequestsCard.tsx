@@ -10,9 +10,14 @@ import {
   getTickGap,
   transformTimeSeriesDataToChartData,
 } from '@amdenterpriseai/utils/app';
-import { Card, CardBody, CardHeader, Tooltip } from '@heroui/react';
+import {
+  BarChart,
+  Card,
+  CardBody,
+  CardHeader,
+  Tooltip,
+} from '@amdenterpriseai/components';
 import { IconInfoCircle } from '@tabler/icons-react';
-import { BarChart } from '@amdenterpriseai/components';
 import { TimeSeriesResponse } from '@amdenterpriseai/types';
 import { getInferenceRequests } from '@/lib/app/metrics';
 import { useQuery } from '@tanstack/react-query';

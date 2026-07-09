@@ -16,7 +16,7 @@ import {
   deployWorkspace,
   getCatalogItemById,
   getWorkload,
-  listWorkloads,
+  listAllWorkloads,
 } from '@/lib/app/workloads';
 import { mockWorkloads } from '@/__mocks__/services/app/workloads.data';
 
@@ -48,7 +48,7 @@ vi.mock('@/lib/app/workloads', () => ({
   deployWorkspace: vi.fn(),
   getCatalogItemById: vi.fn(),
   getWorkload: vi.fn(),
-  listWorkloads: vi.fn(),
+  listAllWorkloads: vi.fn(),
 }));
 
 // Mock the toast system
@@ -70,6 +70,21 @@ vi.mock('next-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key, // Simple pass-through mock
   }),
+}));
+
+// Mock next/image: the real component rejects relative srcs and requires a
+// configured loader, neither of which exist in jsdom.
+vi.mock('next/image', () => ({
+  default: ({ src, alt, width, height, className }: any) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      width={width}
+      height={height}
+      className={className}
+    />
+  ),
 }));
 
 // Mock next/router
@@ -167,7 +182,7 @@ describe('DeployWorkspaceDrawer', () => {
     });
     (deployWorkspace as Mock).mockResolvedValue({ id: 'workload-1' });
     (getWorkload as Mock).mockResolvedValue(mockWorkload);
-    (listWorkloads as Mock).mockResolvedValue({ data: [mockWorkload] });
+    (listAllWorkloads as Mock).mockResolvedValue([mockWorkload]);
     (getCatalogItemById as Mock).mockResolvedValue(mockCatalogItem);
     (fetchProjectSecrets as Mock).mockResolvedValue({ data: [] });
   });
@@ -198,7 +213,7 @@ describe('DeployWorkspaceDrawer', () => {
     });
   });
 
-  it('generates default workload name with timestamp', async () => {
+  it('defaults the workload name to the catalog item display name', async () => {
     await act(async () => {
       render(
         <DeployWorkspaceDrawer
@@ -214,7 +229,7 @@ describe('DeployWorkspaceDrawer', () => {
       const workloadNameInput = screen.getByLabelText(
         'deployModal.settings.displayName.label',
       ) as HTMLInputElement;
-      expect(workloadNameInput.value).toMatch(/^test-workload-\d{8}-\d{6}$/);
+      expect(workloadNameInput.value).toBe(mockCatalogItem.displayName);
     });
   });
 
@@ -398,7 +413,7 @@ describe('DeployWorkspaceDrawer', () => {
       expect(deployWorkspace).toHaveBeenCalledWith(
         'project1',
         expect.objectContaining({
-          displayName: expect.stringMatching(/^test-workload-\d{8}-\d{6}$/),
+          displayName: mockCatalogItem.displayName,
           template: mockCatalogItem.slug,
           gpus: mockCatalogItem.requiredResources!.gpuCount,
           memoryPerGpu: mockCatalogItem.requiredResources!.systemMemory,
@@ -420,34 +435,46 @@ describe('DeployWorkspaceDrawer', () => {
   });
 
   it('handles deployment errors', async () => {
-    (deployWorkspace as Mock).mockRejectedValue(new Error('Deployment failed'));
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
-    await act(async () => {
-      render(
-        <DeployWorkspaceDrawer
-          isOpen={true}
-          catalogItem={mockCatalogItem}
-          onClose={mockOnClose}
-        />,
-        { wrapper },
+    try {
+      (deployWorkspace as Mock).mockRejectedValue(
+        new Error('Deployment failed'),
       );
-    });
 
-    // Wait for the workload name field to be available
-    await waitFor(() => {
-      expect(
-        screen.getByLabelText('deployModal.settings.displayName.label'),
-      ).toBeInTheDocument();
-    });
+      await act(async () => {
+        render(
+          <DeployWorkspaceDrawer
+            isOpen={true}
+            catalogItem={mockCatalogItem}
+            onClose={mockOnClose}
+          />,
+          { wrapper },
+        );
+      });
 
-    const deployButton = screen.getByText('deployModal.actions.deploy');
-    fireEvent.click(deployButton);
+      // Wait for the workload name field to be available
+      await waitFor(() => {
+        expect(
+          screen.getByLabelText('deployModal.settings.displayName.label'),
+        ).toBeInTheDocument();
+      });
 
-    await waitFor(() => {
-      expect(toastErrorMock).toHaveBeenCalledWith(
-        'notifications.deployWorkload.error',
-      );
-    });
+      const deployButton = screen.getByText('deployModal.actions.deploy');
+      fireEvent.click(deployButton);
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          'notifications.deployWorkload.error',
+        );
+      });
+
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('shows deployment status during deployment', async () => {
@@ -549,9 +576,9 @@ describe('DeployWorkspaceDrawer', () => {
   });
 
   it('opens workload URL when launch button is clicked', async () => {
-    (listWorkloads as Mock).mockResolvedValue({
-      data: [{ ...mockWorkload, id: 'workload-1' }],
-    });
+    (listAllWorkloads as Mock).mockResolvedValue([
+      { ...mockWorkload, id: 'workload-1' },
+    ]);
 
     // Mock window.open
     const originalOpen = window.open;
@@ -696,7 +723,7 @@ describe('DeployWorkspaceDrawer', () => {
         'deployModal.settings.displayName.label',
       ) as HTMLInputElement;
       // The displayName doesn't regenerate when catalogItem changes since defaultValues are set at DrawerForm level
-      expect(workloadNameInput.value).toMatch(/^test-workload-\d{8}-\d{6}$/);
+      expect(workloadNameInput.value).toBe(mockCatalogItem.displayName);
     });
   });
 

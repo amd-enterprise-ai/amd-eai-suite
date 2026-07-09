@@ -3,20 +3,24 @@
 # SPDX-License-Identifier: MIT
 
 from contextlib import AbstractContextManager
+from enum import Enum
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+import yaml
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_common.exceptions import DeletionConflictException, NotFoundException, ValidationException
 from app.aims.crds import (
     AIMImageMetadata,
     AIMModelMetadata,
+    AIMModelProfilesSpec,
     AIMModelResource,
     AIMModelSource,
     AIMModelSpec,
     AIMModelStatusFields,
+    ProfileOverrides,
 )
 from app.charts.config import FINETUNING_CHART_NAME, MLFLOW_CHART_NAME
 from app.dispatch.crds import K8sMetadata
@@ -32,7 +36,7 @@ from app.models.service import (
 )
 from app.overlays.models import Overlay
 from app.secrets.schemas import SecretResponse
-from app.workloads.constants import MODEL_ID_LABEL, MODEL_NAME_LABEL, WORKLOAD_ID_LABEL
+from app.workloads.constants import MODEL_ID_LABEL, MODEL_NAME_LABEL, WORKLOAD_ID_LABEL, WORKLOAD_TYPE_LABEL
 from app.workloads.enums import WorkloadStatus, WorkloadType
 from app.workloads.schemas import WorkloadResponse
 from tests import factory
@@ -212,55 +216,91 @@ async def test_delete_model_cancels_job_and_cleans_completed_model(test_namespac
     mock_delete_s3.assert_called_once()
 
 
-_DEFAULT_AIM_ID = object()
+_DEFAULT = object()
 
 
 def make_overlay(
     canonical_name: str | None = None,
     compatible_accelerators: list[str] | None = None,
-    aim_id: str | None | object = _DEFAULT_AIM_ID,
+    aim_id: str | None | object = _DEFAULT,
+    model_id: str | None | object = _DEFAULT,
+    hf_token_required: bool | str | int | None = None,
     **extra_overlay_fields: object,
 ) -> MagicMock:
     """Build a mock Overlay.
 
-    `aim_id` defaults to the canonical_name (the typical real-world setup where
-    aimManifest.aimId mirrors the model identifier). Pass `aim_id=None` to omit
-    the aimManifest entirely, or an explicit string to override.
+    `aim_id` and `model_id` each default to the canonical_name (the typical real-world
+    setup where the overlay's manifest identifiers mirror the model identifier). Pass
+    explicit strings to override, or `None` to omit that field; passing `None` for
+    both omits the aimManifest entirely. The two parameters can diverge so tests can
+    construct overlays where the family identity (aimId) and the artifact identity
+    (modelId) differ — the case that motivated EAI-6219. Production code joins on
+    `modelId`.
+
+    `hf_token_required` mirrors the overlay's top-level `hfTokenRequired` field (the
+    recipe's own declaration of whether the base weights are gated on Hugging Face).
+    Omitted when None so tests can exercise the "not declared" case.
     """
     overlay = MagicMock(spec=Overlay)
     overlay.canonical_name = canonical_name
     overlay_data: dict = {**extra_overlay_fields}
+    metadata: dict = {}
     if compatible_accelerators is not None:
-        overlay_data["metadata"] = {"compatibleAccelerators": compatible_accelerators}
-    resolved_aim_id = canonical_name if aim_id is _DEFAULT_AIM_ID else aim_id
-    if resolved_aim_id is not None:
-        overlay_data["aimManifest"] = {"aimId": resolved_aim_id}
+        metadata["compatibleAccelerators"] = compatible_accelerators
+    if hf_token_required is not None:
+        metadata["hfTokenRequired"] = hf_token_required
+    if metadata:
+        overlay_data["metadata"] = metadata
+    resolved_aim_id = canonical_name if aim_id is _DEFAULT else aim_id
+    resolved_model_id = canonical_name if model_id is _DEFAULT else model_id
+    if resolved_aim_id is not None or resolved_model_id is not None:
+        aim_manifest: dict = {}
+        if resolved_aim_id is not None:
+            aim_manifest["aimId"] = resolved_aim_id
+        if resolved_model_id is not None:
+            aim_manifest["modelId"] = resolved_model_id
+        overlay_data["aimManifest"] = aim_manifest
     overlay.overlay = overlay_data
     return overlay
 
 
-def make_template(
+def make_profile(
     spec_aim_id: str | None = None,
-    status_aim_id: str | None = None,
     status: str = "Ready",
 ) -> MagicMock:
-    """Build a mock AIMClusterServiceTemplate carrying spec.aimId and/or status.profile.aimId.
+    """Build a mock AIMClusterProfile carrying spec.aim_id via typed attributes.
 
-    Defaults to `status.status == "Ready"` to mirror the deployable-profile case.
+    Status is a typed model — use attribute access, not dict access — to match
+    the production crds.py shape.
     """
-    template = MagicMock()
-    template.spec = {"aimId": spec_aim_id} if spec_aim_id else {}
-    template_status: dict = {"status": status}
-    if status_aim_id:
-        template_status["profile"] = {"aimId": status_aim_id}
-    template.status = template_status
-    return template
+    profile = MagicMock()
+    profile.spec.aim_id = spec_aim_id or ""
+    profile.status.status = status
+    return profile
 
 
-def patch_cluster_templates(aim_ids: list[str] | None = None) -> AbstractContextManager[MagicMock]:
-    """Patch list_aim_cluster_service_templates to advertise the given aimIds via spec.aimId."""
-    templates = [make_template(spec_aim_id=aim_id) for aim_id in (aim_ids or [])]
-    return patch("app.aims.gateway.list_aim_cluster_service_templates", return_value=templates)
+def make_cluster_model(
+    aim_id: str | None = None,
+    status: str = "Ready",
+) -> MagicMock:
+    """Build a mock AIMClusterModel carrying status.aim_id and status.status."""
+    model = MagicMock()
+    model.status.aim_id = aim_id or ""
+    model.status.status = status
+    return model
+
+
+def patch_cluster_model(aim_id: str, name: str = "default-cluster-model") -> AbstractContextManager[MagicMock]:
+    """Patch list_aims to return a single Ready AIMClusterModel with the given aimId."""
+    model = make_cluster_model(aim_id=aim_id, status="Ready")
+    model.metadata.name = name
+    return patch("app.models.service.aims_gateway.list_aims", new_callable=AsyncMock, return_value=[model])
+
+
+def patch_cluster_profiles(aim_ids: list[str] | None = None) -> AbstractContextManager[MagicMock]:
+    """Patch list_aim_cluster_profiles_by_aim_ids to advertise the given aimIds."""
+    profiles = [make_profile(spec_aim_id=aim_id) for aim_id in (aim_ids or [])]
+    return patch("app.aims.gateway.list_aim_cluster_profiles_by_aim_ids", return_value=profiles)
 
 
 def make_kube_client() -> AsyncMock:
@@ -281,7 +321,7 @@ async def test_get_finetunable_models_success(db_session: AsyncSession) -> None:
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["meta-llama/Llama-3.1-8B", "microsoft/DialoGPT-medium"]),
+        patch_cluster_profiles(["meta-llama/Llama-3.1-8B", "microsoft/DialoGPT-medium"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -298,7 +338,7 @@ async def test_get_finetunable_models_empty(db_session: AsyncSession) -> None:
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=[]),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={}),
-        patch_cluster_templates([]),
+        patch_cluster_profiles([]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -319,7 +359,7 @@ async def test_get_finetunable_models_filters_incompatible_gpus(db_session: Asyn
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["meta-llama/Llama-3.1-8B", "big-model/70B"]),
+        patch_cluster_profiles(["meta-llama/Llama-3.1-8B", "big-model/70B"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -340,7 +380,7 @@ async def test_get_finetunable_models_no_compatible_accelerators_always_included
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["legacy-model/1B", "new-model/7B"]),
+        patch_cluster_profiles(["legacy-model/1B", "new-model/7B"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -361,7 +401,7 @@ async def test_get_finetunable_models_empty_cluster_gpu_ids_excludes_all_constra
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={}),
-        patch_cluster_templates(["legacy-model/1B", "new-model/7B"]),
+        patch_cluster_profiles(["legacy-model/1B", "new-model/7B"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -382,7 +422,7 @@ async def test_get_finetunable_models_skips_generic_overlays(db_session: AsyncSe
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["meta-llama/Llama-3.1-8B"]),
+        patch_cluster_profiles(["meta-llama/Llama-3.1-8B"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -402,7 +442,7 @@ async def test_get_finetunable_models_enriches_gpu_metadata(db_session: AsyncSes
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["meta-llama/Llama-3.1-8B"]),
+        patch_cluster_profiles(["meta-llama/Llama-3.1-8B"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -425,7 +465,7 @@ async def test_get_finetunable_models_gpu_count_none_when_absent(db_session: Asy
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["meta-llama/Llama-3.1-8B"]),
+        patch_cluster_profiles(["meta-llama/Llama-3.1-8B"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -435,7 +475,7 @@ async def test_get_finetunable_models_gpu_count_none_when_absent(db_session: Asy
 
 @pytest.mark.asyncio
 async def test_get_finetunable_models_excludes_recipe_without_matching_template(db_session: AsyncSession) -> None:
-    """Recipes whose aimManifest.aimId has no matching cluster template are excluded."""
+    """Recipes whose aimManifest.modelId has no matching cluster template are excluded."""
     finetune_chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
     overlays = [
         make_overlay("meta-llama/Llama-3.1-8B"),  # template present
@@ -447,26 +487,7 @@ async def test_get_finetunable_models_excludes_recipe_without_matching_template(
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["meta-llama/Llama-3.1-8B"]),
-    ):
-        result = await get_finetunable_models(db_session, kube_client)
-
-    assert [m.canonical_name for m in result] == ["meta-llama/Llama-3.1-8B"]
-
-
-@pytest.mark.asyncio
-async def test_get_finetunable_models_matches_template_via_status_profile(db_session: AsyncSession) -> None:
-    """Templates that advertise aimId via status.profile.aimId (controller-derived) are matched."""
-    finetune_chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
-    overlays = [make_overlay("meta-llama/Llama-3.1-8B")]
-    kube_client = make_kube_client()
-    templates = [make_template(status_aim_id="meta-llama/Llama-3.1-8B")]
-
-    with (
-        patch("app.models.service.get_chart", return_value=finetune_chart),
-        patch("app.models.service.list_overlays", return_value=overlays),
-        patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch("app.aims.gateway.list_aim_cluster_service_templates", return_value=templates),
+        patch_cluster_profiles(["meta-llama/Llama-3.1-8B"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -475,10 +496,10 @@ async def test_get_finetunable_models_matches_template_via_status_profile(db_ses
 
 @pytest.mark.asyncio
 async def test_get_finetunable_models_excludes_recipe_without_aim_manifest(db_session: AsyncSession) -> None:
-    """Recipes lacking aimManifest.aimId are excluded — the cluster cannot vouch for them."""
+    """Recipes lacking aimManifest.modelId are excluded — the cluster cannot vouch for them."""
     finetune_chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
     overlays = [
-        make_overlay("meta-llama/Llama-3.1-8B", aim_id=None),  # no aimManifest
+        make_overlay("meta-llama/Llama-3.1-8B", aim_id=None, model_id=None),  # no aimManifest
         make_overlay("microsoft/DialoGPT-medium"),
     ]
     kube_client = make_kube_client()
@@ -487,7 +508,7 @@ async def test_get_finetunable_models_excludes_recipe_without_aim_manifest(db_se
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["meta-llama/Llama-3.1-8B", "microsoft/DialoGPT-medium"]),
+        patch_cluster_profiles(["meta-llama/Llama-3.1-8B", "microsoft/DialoGPT-medium"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -496,7 +517,7 @@ async def test_get_finetunable_models_excludes_recipe_without_aim_manifest(db_se
 
 @pytest.mark.asyncio
 async def test_get_finetunable_models_excludes_when_no_templates_present(db_session: AsyncSession) -> None:
-    """When the cluster advertises no AIMClusterServiceTemplates, all recipes are hidden."""
+    """When the cluster advertises no AIMClusterProfiles, all recipes are hidden."""
     finetune_chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
     overlays = [make_overlay("meta-llama/Llama-3.1-8B")]
     kube_client = make_kube_client()
@@ -505,7 +526,7 @@ async def test_get_finetunable_models_excludes_when_no_templates_present(db_sess
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates([]),
+        patch_cluster_profiles([]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -527,7 +548,7 @@ async def test_get_finetunable_models_combines_template_and_gpu_filters(db_sessi
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch_cluster_templates(["template-and-gpu-ok/A", "template-ok-gpu-bad/B"]),
+        patch_cluster_profiles(["template-and-gpu-ok/A", "template-ok-gpu-bad/B"]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -546,8 +567,8 @@ async def test_get_finetunable_models_reflects_templates_added_after_first_call(
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
         patch(
-            "app.aims.gateway.list_aim_cluster_service_templates",
-            side_effect=[[], [make_template(spec_aim_id="meta-llama/Llama-3.1-8B")]],
+            "app.aims.gateway.list_aim_cluster_profiles_by_aim_ids",
+            side_effect=[[], [make_profile(spec_aim_id="meta-llama/Llama-3.1-8B")]],
         ),
     ):
         before = await get_finetunable_models(db_session, kube_client)
@@ -557,22 +578,94 @@ async def test_get_finetunable_models_reflects_templates_added_after_first_call(
     assert [m.canonical_name for m in after] == ["meta-llama/Llama-3.1-8B"]
 
 
-@pytest.mark.parametrize("non_ready_status", ["Pending", "Progressing", "Degraded", "Failed", "NotAvailable"])
 @pytest.mark.asyncio
-async def test_get_finetunable_models_excludes_recipe_when_template_not_ready(
-    db_session: AsyncSession, non_ready_status: str
-) -> None:
-    """Templates whose status.status is not Ready do not contribute their aimId, even if spec.aimId is populated."""
+async def test_get_finetunable_models_carries_hf_token_required_from_overlay(db_session: AsyncSession) -> None:
+    """Each result mirrors the recipe overlay's top-level hfTokenRequired flag.
+
+    Three overlays cover the full domain: explicitly gated (True), explicitly not gated
+    (False), and not declared (None). The UI relies on the True/False/None distinction
+    to decide whether to show the HF token section.
+    """
     finetune_chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
-    overlays = [make_overlay("meta-llama/Llama-3.1-8B")]
+    overlays = [
+        make_overlay("gated/model", hf_token_required=True),
+        make_overlay("open/model", hf_token_required=False),
+        make_overlay("undeclared/model"),
+    ]
     kube_client = make_kube_client()
-    not_ready_template = make_template(spec_aim_id="meta-llama/Llama-3.1-8B", status=non_ready_status)
 
     with (
         patch("app.models.service.get_chart", return_value=finetune_chart),
         patch("app.models.service.list_overlays", return_value=overlays),
         patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
-        patch("app.aims.gateway.list_aim_cluster_service_templates", return_value=[not_ready_template]),
+        patch_cluster_profiles(["gated/model", "open/model", "undeclared/model"]),
+    ):
+        result = await get_finetunable_models(db_session, kube_client)
+
+    by_name = {m.canonical_name: m for m in result}
+    assert by_name["gated/model"].hf_token_required is True
+    assert by_name["open/model"].hf_token_required is False
+    assert by_name["undeclared/model"].hf_token_required is None
+
+
+@pytest.mark.asyncio
+async def test_get_finetunable_models_ignores_non_bool_hf_token_required(db_session: AsyncSession) -> None:
+    """A malformed overlay value (string, int) is coerced to None rather than leaking through.
+
+    Guards the contract surfaced to the UI: `hfTokenRequired` is either bool or null,
+    never a truthy string that would silently force the token prompt on a non-gated model.
+    """
+    finetune_chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
+    overlays = [make_overlay("weird/model", hf_token_required="yes")]
+    kube_client = make_kube_client()
+
+    with (
+        patch("app.models.service.get_chart", return_value=finetune_chart),
+        patch("app.models.service.list_overlays", return_value=overlays),
+        patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
+        patch_cluster_profiles(["weird/model"]),
+    ):
+        result = await get_finetunable_models(db_session, kube_client)
+
+    assert result[0].hf_token_required is None
+
+
+@pytest.mark.asyncio
+async def test_get_finetunable_models_serializes_hf_token_required_as_camel_case(db_session: AsyncSession) -> None:
+    """The wire payload uses camelCase `hfTokenRequired` so the UI can read it directly."""
+    finetune_chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
+    overlays = [make_overlay("gated/model", hf_token_required=True)]
+    kube_client = make_kube_client()
+
+    with (
+        patch("app.models.service.get_chart", return_value=finetune_chart),
+        patch("app.models.service.list_overlays", return_value=overlays),
+        patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
+        patch_cluster_profiles(["gated/model"]),
+    ):
+        result = await get_finetunable_models(db_session, kube_client)
+
+    payload = result[0].model_dump(by_alias=True)
+    assert payload["hfTokenRequired"] is True
+    assert "hf_token_required" not in payload
+
+
+@pytest.mark.parametrize("non_ready_status", ["Pending", "Progressing", "Degraded", "Failed", "NotAvailable"])
+@pytest.mark.asyncio
+async def test_get_finetunable_models_excludes_recipe_when_template_not_ready(
+    db_session: AsyncSession, non_ready_status: str
+) -> None:
+    """Templates whose status.status is not Ready do not contribute their modelId, even if spec.modelId is populated."""
+    finetune_chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
+    overlays = [make_overlay("meta-llama/Llama-3.1-8B")]
+    kube_client = make_kube_client()
+    not_ready_template = make_profile(spec_aim_id="meta-llama/Llama-3.1-8B", status=non_ready_status)
+
+    with (
+        patch("app.models.service.get_chart", return_value=finetune_chart),
+        patch("app.models.service.list_overlays", return_value=overlays),
+        patch("app.models.service.get_cluster_gpu_device_info", return_value={"74a1": "AMD Instinct MI300X"}),
+        patch("app.aims.gateway.list_aim_cluster_profiles_by_aim_ids", return_value=[not_ready_template]),
     ):
         result = await get_finetunable_models(db_session, kube_client)
 
@@ -659,6 +752,23 @@ async def test_delete_model_s3_not_found_logs_warning(test_namespace: str) -> No
 # ============================================================================
 
 
+@pytest.fixture(autouse=True)
+def neutralize_aim_base_provisioning():  # type: ignore[misc]
+    """Stub k8s calls that finetune launch performs outside the workload path.
+
+    Both patched targets hit live k8s custom-objects surfaces that finetune
+    tests only mock enough for the workload path itself. Tests that assert
+    specific provisioning or profile-resolution behavior re-patch these targets
+    inside their own with-block.
+
+    list_aims returns a single Ready AIMClusterModel by default so tests that
+    don't care about cluster model resolution don't fail the mandatory model
+    check introduced with the removal of the aim-base fallback.
+    """
+    with patch("app.models.service.ensure_namespace_aim_base_model", new_callable=AsyncMock):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_run_finetune_model_workload_with_uuid(
     db_session: AsyncSession, test_namespace: str, test_user: str
@@ -669,7 +779,8 @@ async def test_run_finetune_model_workload_with_uuid(
         metadata=K8sMetadata(name=str(model_uuid), namespace=test_namespace),
         spec=AIMModelSpec(model_sources=[AIMModelSource(source_uri="s3://bucket/models/base-model/weights")]),
         status=AIMModelStatusFields(
-            image_metadata=AIMImageMetadata(model=AIMModelMetadata(canonical_name="meta-llama/Llama-3.1-8B"))
+            status="Ready",
+            image_metadata=AIMImageMetadata(model=AIMModelMetadata(canonical_name="meta-llama/Llama-3.1-8B")),
         ),
     )
 
@@ -677,7 +788,7 @@ async def test_run_finetune_model_workload_with_uuid(
     await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
 
     finetuning_data = FinetuneCreate(
-        name="Finetuned-Model",
+        display_name="Finetuned-Model",
         dataset_id=dataset.id,
         batch_size=4,
         learning_rate=0.0001,
@@ -686,11 +797,13 @@ async def test_run_finetune_model_workload_with_uuid(
 
     mock_kube_client = AsyncMock(spec=KubernetesClient)
     mock_overlay = MagicMock(spec=Overlay)
-    mock_overlay.overlay = {}
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
 
     with (
         patch("app.models.service.aims_gateway.get_aim_model", return_value=aim_model),
         patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
         patch("app.models.service.get_workloads", return_value=[]),
         patch("app.models.service.render_helm_template", return_value="mock-manifest"),
         patch("app.models.service.apply_manifest", new_callable=AsyncMock) as mock_apply,
@@ -710,8 +823,74 @@ async def test_run_finetune_model_workload_with_uuid(
         assert extra_labels[MODEL_NAME_LABEL] == "Finetuned-Model"
         assert extra_labels[MODEL_ID_LABEL] == str(result.workload_id)
 
-        assert result.model_name == "Finetuned-Model"
+        assert result.display_name == "Finetuned-Model"
         assert result.base_model == "meta-llama/Llama-3.1-8B"
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_model_workload_resolves_weights_from_profiles_overrides(
+    db_session: AsyncSession, test_namespace: str, test_user: str
+) -> None:
+    """A re-finetune base whose weights live under spec.profiles.overrides.modelSources
+    (the v1alpha2 imported / fine-tuned shape, with no flat spec.modelSources) succeeds,
+    and that override URI is forwarded as the base model URI for training."""
+    model_uuid = uuid4()
+    override_uri = "s3://bucket/ns/finetuned-models/llama3/run1/checkpoint-final"
+    aim_model = AIMModelResource(
+        metadata=K8sMetadata(name=str(model_uuid), namespace=test_namespace),
+        spec=AIMModelSpec(
+            model_sources=[],  # legacy flat field empty — weights only in profiles overrides
+            profiles=AIMModelProfilesSpec(
+                overrides=ProfileOverrides(
+                    model_id="meta-llama/Llama-3.1-8B",
+                    model_sources=[AIMModelSource(model_id="meta-llama/Llama-3.1-8B", source_uri=override_uri)],
+                )
+            ),
+        ),
+        status=AIMModelStatusFields(status="Ready", aim_id="meta-llama/Llama-3.1-8B"),
+    )
+
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
+
+    finetuning_data = FinetuneCreate(display_name="Re-Finetuned-Model", dataset_id=dataset.id)
+
+    mock_kube_client = AsyncMock(spec=KubernetesClient)
+    mock_overlay = MagicMock(spec=Overlay)
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
+    helm_overrides_captured: list = []
+
+    async def capture_render(*, chart, name, namespace, overlays_values):  # noqa: ARG001
+        helm_overrides_captured.append(overlays_values[-1] if overlays_values else {})
+        return ""
+
+    with (
+        patch("app.models.service.aims_gateway.get_aim_model", return_value=aim_model),
+        patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
+        patch("app.models.service.get_workloads", return_value=[]),
+        patch("app.models.service.render_helm_template", side_effect=capture_render),
+        patch("app.models.service.apply_manifest", new_callable=AsyncMock),
+    ):
+        result = await run_finetune_model_workload(
+            session=db_session,
+            kube_client=mock_kube_client,
+            model_id=model_uuid,
+            finetuning_data=finetuning_data,
+            submitter=test_user,
+            namespace=test_namespace,
+        )
+
+    assert result.base_model == "meta-llama/Llama-3.1-8B"
+    assert len(helm_overrides_captured) == 1
+    overrides = helm_overrides_captured[0]
+    # basemodel is the override weights URI with the s3:// scheme stripped, as the
+    # training chart expects.
+    assert overrides["basemodel"] == override_uri.removeprefix("s3://")
+    # modelId is carried forward from the resolved source so the published AIMModel CR
+    # gets the correct artifact identity.
+    assert overrides["aimManifest"]["modelId"] == "meta-llama/Llama-3.1-8B"
 
 
 @pytest.mark.asyncio
@@ -727,7 +906,7 @@ async def test_run_finetune_model_workload_with_canonical_name(
 
     # Create finetuning request
     finetuning_data = FinetuneCreate(
-        name="HF-Finetuned-Model",
+        display_name="HF-Finetuned-Model",
         dataset_id=dataset.id,
         batch_size=4,
         learning_rate=0.0001,
@@ -737,10 +916,12 @@ async def test_run_finetune_model_workload_with_canonical_name(
     # Mock dependencies
     mock_kube_client = AsyncMock(spec=KubernetesClient)
     mock_overlay = MagicMock(spec=Overlay)
-    mock_overlay.overlay = {}
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
 
     with (
         patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
         patch("app.models.service.get_workloads", return_value=[]),
         patch("app.models.service.render_helm_template", return_value="mock-manifest"),
         patch("app.models.service.apply_manifest", new_callable=AsyncMock) as mock_apply,
@@ -759,8 +940,51 @@ async def test_run_finetune_model_workload_with_canonical_name(
         extra_labels = call_kwargs.get("extra_labels", {})
         assert extra_labels[MODEL_NAME_LABEL] == "HF-Finetuned-Model"
         assert extra_labels[MODEL_ID_LABEL] == str(result.workload_id)
-        assert result.model_name == "HF-Finetuned-Model"
+        assert result.display_name == "HF-Finetuned-Model"
         assert result.base_model == "meta-llama/Llama-3.1-8B"
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_model_workload_with_single_segment_hf_name(
+    db_session: AsyncSession, test_namespace: str, test_user: str
+) -> None:
+    """Single-segment HuggingFace model IDs (for example 'gpt2') should remain supported."""
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
+
+    finetuning_data = FinetuneCreate(
+        display_name="HF-Single-Segment-Finetuned-Model",
+        dataset_id=dataset.id,
+        batch_size=4,
+        learning_rate=0.0001,
+        epochs=3,
+    )
+
+    mock_kube_client = AsyncMock(spec=KubernetesClient)
+    mock_overlay = MagicMock(spec=Overlay)
+    mock_overlay.canonical_name = "gpt2"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "gpt2", "modelId": "gpt2"}}
+
+    with (
+        patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch("app.models.service.get_workloads", return_value=[]),
+        patch_cluster_model("gpt2"),
+        patch("app.models.service.render_helm_template", return_value="mock-manifest"),
+        patch("app.models.service.apply_manifest", new_callable=AsyncMock),
+        patch(
+            "app.models.service.get_aim_model", new_callable=AsyncMock, side_effect=NotFoundException("not found")
+        ) as mock_get_aim_model,
+    ):
+        result = await run_finetune_model_workload(
+            session=db_session,
+            kube_client=mock_kube_client,
+            model_id="gpt2",
+            finetuning_data=finetuning_data,
+            submitter=test_user,
+            namespace=test_namespace,
+        )
+
+    assert result.base_model == "gpt2"
 
 
 @pytest.mark.asyncio
@@ -788,8 +1012,14 @@ async def test_run_finetune_model_workload_includes_mlflow_tracking_when_mlflow_
         helm_overrides_captured.append(overlays_values[-1] if overlays_values else {})
         return ""
 
+    test_overlay = MagicMock(spec=Overlay)
+    test_overlay.canonical_name = "test/model"
+    test_overlay.overlay = {"aimManifest": {"aimId": "test/model", "modelId": "test/model"}}
+
     kube_client = MagicMock()
     with (
+        patch("app.models.service.list_overlays", return_value=[test_overlay]),
+        patch_cluster_model("test/model"),
         patch("app.models.service.get_workloads", new_callable=AsyncMock, return_value=[mlflow_workload]),
         patch("app.models.service.render_helm_template", side_effect=capture_render),
         patch("app.models.service.apply_manifest", new_callable=AsyncMock),
@@ -798,7 +1028,7 @@ async def test_run_finetune_model_workload_includes_mlflow_tracking_when_mlflow_
             session=db_session,
             kube_client=kube_client,
             model_id="test/model",
-            finetuning_data=FinetuneCreate(name="my-run", dataset_id=dataset.id),
+            finetuning_data=FinetuneCreate(display_name="my-run", dataset_id=dataset.id),
             submitter="test@example.com",
             namespace=test_namespace,
         )
@@ -826,8 +1056,14 @@ async def test_run_finetune_model_workload_skips_mlflow_tracking_when_no_mlflow_
         helm_overrides_captured.append(overlays_values[-1] if overlays_values else {})
         return ""
 
+    test_overlay = MagicMock(spec=Overlay)
+    test_overlay.canonical_name = "test/model"
+    test_overlay.overlay = {"aimManifest": {"aimId": "test/model", "modelId": "test/model"}}
+
     kube_client = MagicMock()
     with (
+        patch("app.models.service.list_overlays", return_value=[test_overlay]),
+        patch_cluster_model("test/model"),
         patch("app.models.service.get_workloads", new_callable=AsyncMock, return_value=[]),
         patch("app.models.service.render_helm_template", side_effect=capture_render),
         patch("app.models.service.apply_manifest", new_callable=AsyncMock),
@@ -836,7 +1072,7 @@ async def test_run_finetune_model_workload_skips_mlflow_tracking_when_no_mlflow_
             session=db_session,
             kube_client=kube_client,
             model_id="test/model",
-            finetuning_data=FinetuneCreate(name="my-run", dataset_id=dataset.id),
+            finetuning_data=FinetuneCreate(display_name="my-run", dataset_id=dataset.id),
             submitter="test@example.com",
             namespace=test_namespace,
         )
@@ -848,13 +1084,54 @@ async def test_run_finetune_model_workload_skips_mlflow_tracking_when_no_mlflow_
 
 
 @pytest.mark.asyncio
+async def test_run_finetune_model_workload_sets_bucket_storage_host(
+    db_session: AsyncSession, test_namespace: str
+) -> None:
+    """bucketStorageHost in helm overrides uses MINIO_URL so pods do not inherit a stale chart default."""
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME)
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace)
+
+    helm_overrides_captured: list = []
+
+    async def capture_render(*, chart, name, namespace, overlays_values):  # noqa: ARG001
+        helm_overrides_captured.append(overlays_values[-1] if overlays_values else {})
+        return ""
+
+    test_overlay = MagicMock(spec=Overlay)
+    test_overlay.canonical_name = "test/model"
+    test_overlay.overlay = {"aimManifest": {"aimId": "test/model", "modelId": "test/model"}}
+
+    minio_url = "http://minio.example.svc.cluster.local:80"
+    with (
+        patch("app.models.service.list_overlays", return_value=[test_overlay]),
+        patch_cluster_model("test/model"),
+        patch("app.models.service.get_workloads", new_callable=AsyncMock, return_value=[]),
+        patch("app.models.service.render_helm_template", side_effect=capture_render),
+        patch("app.models.service.apply_manifest", new_callable=AsyncMock),
+        patch("app.models.service.MINIO_URL", minio_url),
+    ):
+        await run_finetune_model_workload(
+            session=db_session,
+            kube_client=MagicMock(),
+            model_id="test/model",
+            finetuning_data=FinetuneCreate(display_name="my-run", dataset_id=dataset.id),
+            submitter="test@example.com",
+            namespace=test_namespace,
+        )
+
+    assert len(helm_overrides_captured) == 1
+    overrides = helm_overrides_captured[0]
+    assert overrides["bucketStorageHost"] == minio_url
+
+
+@pytest.mark.asyncio
 async def test_run_finetune_model_workload_without_hf_token_does_not_call_get_secret_details(
     db_session: AsyncSession, test_namespace: str, test_user: str
 ) -> None:
     dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
     chart = await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
     finetuning_data = FinetuneCreate(
-        name="No-HF-Token-Model",
+        display_name="No-HF-Token-Model",
         dataset_id=dataset.id,
         batch_size=4,
         learning_rate=0.0001,
@@ -862,10 +1139,12 @@ async def test_run_finetune_model_workload_without_hf_token_does_not_call_get_se
     )
     mock_kube_client = AsyncMock(spec=KubernetesClient)
     mock_overlay = MagicMock(spec=Overlay)
-    mock_overlay.overlay = {}
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
 
     with (
         patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
         patch("app.models.service.get_workloads", return_value=[]),
         patch("app.models.service.render_helm_template", return_value="mock-manifest"),
         patch("app.models.service.apply_manifest", new_callable=AsyncMock),
@@ -894,7 +1173,7 @@ async def test_run_finetune_model_workload_with_hf_token(
 
     # Create finetuning request with HF token secret name
     finetuning_data = FinetuneCreate(
-        name="HF-Token-Model",
+        display_name="HF-Token-Model",
         dataset_id=dataset.id,
         batch_size=4,
         learning_rate=0.0001,
@@ -905,12 +1184,14 @@ async def test_run_finetune_model_workload_with_hf_token(
     # Mock dependencies
     mock_kube_client = AsyncMock(spec=KubernetesClient)
     mock_overlay = MagicMock(spec=Overlay)
-    mock_overlay.overlay = {}
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
 
     hf_secret = SecretResponse(metadata=K8sMetadata(name="hf-token-secret", namespace=test_namespace))
 
     with (
         patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
         patch("app.models.service.get_workloads", return_value=[]),
         patch("app.models.service.render_helm_template", return_value="mock-manifest") as mock_render,
         patch("app.models.service.apply_manifest", new_callable=AsyncMock),
@@ -955,16 +1236,22 @@ async def test_run_finetune_model_workload_sets_aim_manifest_helm_overrides(
         helm_overrides_captured.append(overlays_values[-1] if overlays_values else {})
         return ""
 
+    test_overlay = MagicMock(spec=Overlay)
+    test_overlay.canonical_name = "test/model"
+    test_overlay.overlay = {"aimManifest": {"aimId": "test/model", "modelId": "test/model"}}
+
     with (
+        patch("app.models.service.list_overlays", return_value=[test_overlay]),
+        patch_cluster_model("test/model"),
         patch("app.models.service.get_workloads", new_callable=AsyncMock, return_value=[]),
         patch("app.models.service.render_helm_template", side_effect=capture_render),
         patch("app.models.service.apply_manifest", new_callable=AsyncMock),
     ):
-        await run_finetune_model_workload(
+        result = await run_finetune_model_workload(
             session=db_session,
             kube_client=MagicMock(),
             model_id="test/model",
-            finetuning_data=FinetuneCreate(name="my-finetuned-model", dataset_id=dataset.id),
+            finetuning_data=FinetuneCreate(display_name="my-finetuned-model", dataset_id=dataset.id),
             submitter="test@example.com",
             namespace=test_namespace,
         )
@@ -975,11 +1262,94 @@ async def test_run_finetune_model_workload_sets_aim_manifest_helm_overrides(
     assert aim_manifest is not None, "aimManifest must be in helm overrides to enable the aimmodel-applier sidecar"
     assert aim_manifest["enabled"] is True
     assert aim_manifest["modelName"].startswith("wb-"), "modelName should be the workload's K8s resource name"
-    assert "modelId" not in aim_manifest, "modelId is owned by the workloads_manager chart"
-    # Labels must be sanitized — canonical name has '/' which is invalid in K8s label values
     labels = aim_manifest.get("labels", {})
-    canonical = labels.get("aiwb.apps.eai.amd.com/canonical-name", "")
-    assert "/" not in canonical, f"canonical-name label must not contain '/': {canonical}"
+    # WORKLOAD_TYPE_LABEL is the contract with fine_tuning.service._is_fine_tuning_model, which
+    # backs GET /v1/projects/{project}/fine-tuning/models. Without it the resulting AIMModel is
+    # invisible to the Custom Models page.
+    assert labels.get(WORKLOAD_TYPE_LABEL) == WorkloadType.FINE_TUNING.value
+    assert labels.get(WORKLOAD_ID_LABEL) == str(result.workload_id)
+    assert labels.get(MODEL_NAME_LABEL) == "my-finetuned-model"
+    # Every label value MUST be a plain str — if a StrEnum or UUID leaks through,
+    # yaml.dump emits it as a YAML sequence and the Helm `quote` filter renders
+    # it as `"[FINE_TUNING]"`, which K8s rejects as an invalid label value.
+    for key, value in labels.items():
+        assert isinstance(value, str) and not isinstance(value, Enum), (
+            f"label {key} must be a plain str, got {type(value).__name__}: {value!r}"
+        )
+    # Belt-and-suspenders: dump through PyYAML and confirm no flow-style sequence
+    # leaks into the rendered output for any label value.
+    rendered = yaml.dump({"labels": labels})
+    assert "[" not in rendered and "]" not in rendered, (
+        f"aim_manifest labels must yaml-dump as scalars, not sequences:\n{rendered}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_model_workload_uuid_base_uses_aim_id_for_overlay_lookup(
+    db_session: AsyncSession, test_namespace: str, test_user: str
+) -> None:
+    """When a finetuned model (UUID) has no image_metadata canonical_name, spec.aim_id is used
+    for overlay lookup so the correct DeepSpeed/bf16 config is applied."""
+    model_uuid = uuid4()
+    aim_model = AIMModelResource(
+        metadata=K8sMetadata(name=str(model_uuid), namespace=test_namespace),
+        spec=AIMModelSpec(
+            model_sources=[AIMModelSource(source_uri="s3://bucket/models/finetuned/weights")],
+            aim_id="meta-llama/Llama-3.1-8B",  # stamped by aimmodel-applier; no OCI image metadata
+        ),
+        # status.aim_id mirrors spec.aim_id — the v1alpha2 controller populates
+        # it from spec or discovery, and production code reads from status.
+        status=AIMModelStatusFields(status="Ready", aim_id="meta-llama/Llama-3.1-8B"),
+    )
+
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
+
+    finetuning_data = FinetuneCreate(
+        display_name="Level-2-Finetuned",
+        dataset_id=dataset.id,
+    )
+
+    mock_kube_client = AsyncMock(spec=KubernetesClient)
+    overlay_canonical_names_used: list[str | None] = []
+    helm_overrides_captured: list = []
+
+    async def capture_list_overlays(session, chart_id, canonical_name, include_generic=False):  # noqa: ARG001
+        overlay_canonical_names_used.append(canonical_name)
+        return []
+
+    async def capture_render(*, chart, name, namespace, overlays_values):  # noqa: ARG001
+        helm_overrides_captured.append(overlays_values[-1] if overlays_values else {})
+        return ""
+
+    with (
+        patch("app.models.service.aims_gateway.get_aim_model", return_value=aim_model),
+        patch("app.models.service.list_overlays", side_effect=capture_list_overlays),
+        patch("app.models.service.get_workloads", return_value=[]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
+        patch("app.models.service.render_helm_template", side_effect=capture_render),
+        patch("app.models.service.apply_manifest", new_callable=AsyncMock),
+    ):
+        result = await run_finetune_model_workload(
+            session=db_session,
+            kube_client=mock_kube_client,
+            model_id=model_uuid,
+            finetuning_data=finetuning_data,
+            submitter=test_user,
+            namespace=test_namespace,
+        )
+
+    assert result.base_model == "meta-llama/Llama-3.1-8B"
+    assert overlay_canonical_names_used == ["meta-llama/Llama-3.1-8B"], (
+        "Overlay lookup must use the original HF canonical name from aim_id, not the UUID"
+    )
+
+    assert len(helm_overrides_captured) == 1
+    aim_manifest = helm_overrides_captured[0].get("aimManifest", {})
+    assert aim_manifest.get("aimId") == "meta-llama/Llama-3.1-8B", (
+        "aimId must be forwarded from the AIMModel spec so the resulting CR gets the correct identifier"
+    )
+    assert aim_manifest.get("modelId") == aim_model.spec.model_sources[0].model_id
 
 
 @pytest.mark.asyncio
@@ -991,7 +1361,7 @@ async def test_run_finetune_model_workload_dataset_not_found(
 
     # Create finetuning request with non-existent dataset
     finetuning_data = FinetuneCreate(
-        name="Model-with-Missing-Dataset",
+        display_name="Model-with-Missing-Dataset",
         dataset_id=uuid4(),  # Non-existent dataset
         batch_size=4,
         learning_rate=0.0001,
@@ -1001,10 +1371,12 @@ async def test_run_finetune_model_workload_dataset_not_found(
     # Mock dependencies
     mock_kube_client = AsyncMock(spec=KubernetesClient)
     mock_overlay = MagicMock(spec=Overlay)
-    mock_overlay.overlay = {}
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
 
     with (
         patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
         pytest.raises(NotFoundException, match="Dataset not found"),
     ):
         await run_finetune_model_workload(
@@ -1017,18 +1389,31 @@ async def test_run_finetune_model_workload_dataset_not_found(
         )
 
 
+@pytest.mark.parametrize(
+    "spec",
+    [
+        # No weights in either the flat field or any profiles override.
+        AIMModelSpec(model_sources=[]),
+        # A profiles block exists but its override carries no model sources — still no weights.
+        AIMModelSpec(model_sources=[], profiles=AIMModelProfilesSpec(overrides=ProfileOverrides(model_sources=[]))),
+    ],
+    ids=["no-profiles", "empty-profiles-override"],
+)
 @pytest.mark.asyncio
 async def test_run_finetune_model_workload_model_without_weights(
-    db_session: AsyncSession, test_namespace: str, test_user: str
+    db_session: AsyncSession, test_namespace: str, test_user: str, spec: AIMModelSpec
 ) -> None:
+    """When neither the flat spec.modelSources nor profiles.overrides.modelSources
+    carries a weights URI, finetuning is rejected with the existing ValidationException."""
     model_uuid = uuid4()
     aim_model = AIMModelResource(
         metadata=K8sMetadata(name=str(model_uuid), namespace=test_namespace),
-        spec=AIMModelSpec(model_sources=[]),  # No weights URI
+        spec=spec,
+        status=AIMModelStatusFields(status="Ready"),
     )
 
     finetuning_data = FinetuneCreate(
-        name="Finetuned-Model",
+        display_name="Finetuned-Model",
         dataset_id=uuid4(),
         batch_size=4,
         learning_rate=0.0001,
@@ -1064,7 +1449,7 @@ async def test_run_finetune_model_workload_deployment_failure(
 
     # Create finetuning request
     finetuning_data = FinetuneCreate(
-        name="Failed-Deployment",
+        display_name="Failed-Deployment",
         dataset_id=dataset.id,
         batch_size=4,
         learning_rate=0.0001,
@@ -1074,14 +1459,247 @@ async def test_run_finetune_model_workload_deployment_failure(
     # Mock dependencies
     mock_kube_client = AsyncMock(spec=KubernetesClient)
     mock_overlay = MagicMock(spec=Overlay)
-    mock_overlay.overlay = {}
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
 
     with (
         patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
         patch("app.models.service.get_workloads", return_value=[]),
         patch("app.models.service.render_helm_template", return_value="mock-manifest"),
         patch("app.models.service.apply_manifest", side_effect=Exception("K8s deployment failed")),
         pytest.raises(Exception, match="K8s deployment failed"),
+    ):
+        await run_finetune_model_workload(
+            session=db_session,
+            kube_client=mock_kube_client,
+            model_id="meta-llama/Llama-3.1-8B",
+            finetuning_data=finetuning_data,
+            submitter=test_user,
+            namespace=test_namespace,
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_model_workload_provisions_namespace_aim_base(
+    db_session: AsyncSession, test_namespace: str, test_user: str
+) -> None:
+    """Launching a finetune provisions the namespace aim-base the published model derives from."""
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
+
+    finetuning_data = FinetuneCreate(
+        display_name="Finetuned-Model",
+        dataset_id=dataset.id,
+        batch_size=4,
+        learning_rate=0.0001,
+        epochs=3,
+    )
+
+    mock_kube_client = AsyncMock(spec=KubernetesClient)
+    mock_overlay = MagicMock(spec=Overlay)
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
+
+    with (
+        patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
+        patch("app.models.service.get_workloads", return_value=[]),
+        patch("app.models.service.render_helm_template", return_value="mock-manifest"),
+        patch("app.models.service.apply_manifest", new_callable=AsyncMock),
+        patch("app.models.service.ensure_namespace_aim_base_model", new_callable=AsyncMock) as mock_ensure,
+    ):
+        await run_finetune_model_workload(
+            session=db_session,
+            kube_client=mock_kube_client,
+            model_id="meta-llama/Llama-3.1-8B",
+            finetuning_data=finetuning_data,
+            submitter=test_user,
+            namespace=test_namespace,
+        )
+
+    mock_ensure.assert_awaited_once_with(mock_kube_client, test_namespace)
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_model_workload_provisions_aim_base_before_creating_workload(
+    db_session: AsyncSession, test_namespace: str, test_user: str
+) -> None:
+    """A provisioning failure aborts before any workload is created, leaving no orphan PENDING row."""
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
+
+    finetuning_data = FinetuneCreate(
+        display_name="Finetuned-Model",
+        dataset_id=dataset.id,
+        batch_size=4,
+        learning_rate=0.0001,
+        epochs=3,
+    )
+
+    mock_kube_client = AsyncMock(spec=KubernetesClient)
+    mock_overlay = MagicMock(spec=Overlay)
+    mock_overlay.canonical_name = "meta-llama/Llama-3.1-8B"
+    mock_overlay.overlay = {"aimManifest": {"aimId": "meta-llama/Llama-3.1-8B", "modelId": "meta-llama/Llama-3.1-8B"}}
+
+    with (
+        patch("app.models.service.list_overlays", return_value=[mock_overlay]),
+        patch_cluster_model("meta-llama/Llama-3.1-8B"),
+        patch("app.models.service.get_workloads", return_value=[]),
+        patch("app.models.service.render_helm_template", return_value="mock-manifest"),
+        patch("app.models.service.apply_manifest", new_callable=AsyncMock) as mock_apply,
+        patch("app.models.service.create_workload", new_callable=AsyncMock) as mock_create_workload,
+        patch(
+            "app.models.service.ensure_namespace_aim_base_model",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("base provisioning failed"),
+        ),
+        pytest.raises(RuntimeError, match="base provisioning failed"),
+    ):
+        await run_finetune_model_workload(
+            session=db_session,
+            kube_client=mock_kube_client,
+            model_id="meta-llama/Llama-3.1-8B",
+            finetuning_data=finetuning_data,
+            submitter=test_user,
+            namespace=test_namespace,
+        )
+
+    mock_create_workload.assert_not_called()
+    mock_apply.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_model_workload_sets_base_model_from_cluster_model(
+    db_session: AsyncSession, test_namespace: str, test_user: str
+) -> None:
+    """aimManifest.baseModel.name is the AIMClusterModel name matching the recipe's aimId.
+
+    The aim-engine controller resolves modelRef by AIMClusterModel name (not AIMClusterProfile
+    name). The fine-tuned AIMModel inherits the optimized profiles via the source-model label
+    that aim-engine stamps on profiles when it discovers them from the AIMClusterModel.
+    """
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
+
+    finetuning_data = FinetuneCreate(display_name="FT-Model", dataset_id=dataset.id)
+    mock_kube_client = AsyncMock(spec=KubernetesClient)
+
+    overlay = make_overlay("meta-llama/Llama-3.1-8B", aim_id="meta-llama/Llama-3.1-8B")
+
+    cluster_model = make_cluster_model(aim_id="meta-llama/Llama-3.1-8B", status="Ready")
+    cluster_model.metadata.name = "amdenterpriseai-aim-instinct-meta-llama-3-1-8b-cluster-model"
+
+    helm_overrides_captured: list = []
+
+    async def capture_render(*, chart, name, namespace, overlays_values):  # noqa: ARG001
+        helm_overrides_captured.append(overlays_values[-1] if overlays_values else {})
+        return ""
+
+    with (
+        patch("app.models.service.list_overlays", return_value=[overlay]),
+        patch("app.models.service.get_workloads", return_value=[]),
+        patch("app.models.service.aims_gateway.list_aims", return_value=[cluster_model]),
+        patch("app.models.service.render_helm_template", side_effect=capture_render),
+        patch("app.models.service.apply_manifest", new_callable=AsyncMock),
+    ):
+        await run_finetune_model_workload(
+            session=db_session,
+            kube_client=mock_kube_client,
+            model_id="meta-llama/Llama-3.1-8B",
+            finetuning_data=finetuning_data,
+            submitter=test_user,
+            namespace=test_namespace,
+        )
+
+    assert len(helm_overrides_captured) == 1
+    base_model = helm_overrides_captured[0]["aimManifest"]["baseModel"]
+    assert base_model["name"] == "amdenterpriseai-aim-instinct-meta-llama-3-1-8b-cluster-model"
+    assert base_model["scope"] == "Auto"
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_model_workload_sets_base_model_from_cluster_model_uuid_base(
+    db_session: AsyncSession, test_namespace: str, test_user: str
+) -> None:
+    """For UUID-based re-finetunes, aimId falls back to aim_model.status.aim_id when the overlay lacks it."""
+    model_uuid = uuid4()
+    aim_model = AIMModelResource(
+        metadata=K8sMetadata(name=str(model_uuid), namespace=test_namespace),
+        spec=AIMModelSpec(model_sources=[AIMModelSource(source_uri="s3://bucket/models/base-model/weights")]),
+        status=AIMModelStatusFields(
+            status="Ready",
+            aim_id="meta-llama/Llama-3.1-8B",
+            image_metadata=AIMImageMetadata(model=AIMModelMetadata(canonical_name="meta-llama/Llama-3.1-8B")),
+        ),
+    )
+
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
+
+    finetuning_data = FinetuneCreate(display_name="Re-FT-Model", dataset_id=dataset.id)
+    mock_kube_client = AsyncMock(spec=KubernetesClient)
+
+    # Overlay has no aimManifest.aimId — simulates a generic or missing recipe overlay
+    overlay_without_aim_id = MagicMock(spec=Overlay)
+    overlay_without_aim_id.canonical_name = "meta-llama/Llama-3.1-8B"
+    overlay_without_aim_id.overlay = {}
+
+    cluster_model = make_cluster_model(aim_id="meta-llama/Llama-3.1-8B", status="Ready")
+    cluster_model.metadata.name = "amdenterpriseai-aim-instinct-meta-llama-3-1-8b-cluster-model"
+
+    helm_overrides_captured: list = []
+
+    async def capture_render(*, chart, name, namespace, overlays_values):  # noqa: ARG001
+        helm_overrides_captured.append(overlays_values[-1] if overlays_values else {})
+        return ""
+
+    with (
+        patch("app.models.service.aims_gateway.get_aim_model", return_value=aim_model),
+        patch("app.models.service.list_overlays", return_value=[overlay_without_aim_id]),
+        patch("app.models.service.get_workloads", return_value=[]),
+        patch("app.models.service.aims_gateway.list_aims", return_value=[cluster_model]),
+        patch("app.models.service.render_helm_template", side_effect=capture_render),
+        patch("app.models.service.apply_manifest", new_callable=AsyncMock),
+    ):
+        await run_finetune_model_workload(
+            session=db_session,
+            kube_client=mock_kube_client,
+            model_id=model_uuid,
+            finetuning_data=finetuning_data,
+            submitter=test_user,
+            namespace=test_namespace,
+        )
+
+    assert len(helm_overrides_captured) == 1
+    base_model = helm_overrides_captured[0]["aimManifest"]["baseModel"]
+    assert base_model["name"] == "amdenterpriseai-aim-instinct-meta-llama-3-1-8b-cluster-model"
+    assert base_model["scope"] == "Auto"
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_model_workload_raises_when_no_ready_cluster_model(
+    db_session: AsyncSession, test_namespace: str, test_user: str
+) -> None:
+    """When no Ready AIMClusterModel matches the recipe aimId, a ValidationException is raised.
+
+    There is no fallback — a fine-tuning job without a resolvable model would produce a
+    broken AIMModel that can never deploy, so we fail fast before the job is submitted.
+    """
+    dataset = await factory.create_dataset(db_session, namespace=test_namespace, name="Training Dataset")
+    await factory.create_chart(db_session, name=FINETUNING_CHART_NAME, chart_type=WorkloadType.FINE_TUNING)
+
+    finetuning_data = FinetuneCreate(display_name="FT-Model-No-Profile", dataset_id=dataset.id)
+    mock_kube_client = AsyncMock(spec=KubernetesClient)
+
+    overlay = make_overlay("meta-llama/Llama-3.1-8B", aim_id="meta-llama/Llama-3.1-8B")
+    not_ready_model = make_cluster_model(aim_id="meta-llama/Llama-3.1-8B", status="Pending")
+
+    with (
+        patch("app.models.service.list_overlays", return_value=[overlay]),
+        patch("app.models.service.get_workloads", return_value=[]),
+        patch("app.models.service.aims_gateway.list_aims", return_value=[not_ready_model]),
+        pytest.raises(ValidationException),
     ):
         await run_finetune_model_workload(
             session=db_session,

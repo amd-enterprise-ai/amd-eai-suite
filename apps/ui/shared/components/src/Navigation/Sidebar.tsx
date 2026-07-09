@@ -1,7 +1,7 @@
 // Copyright © Advanced Micro Devices, Inc., or its affiliates.
 //
 // SPDX-License-Identifier: MIT
-import { Button } from '@heroui/react';
+import { Button } from '../Buttons/Button';
 import { IconLock, IconLockOff, IconServer } from '@tabler/icons-react';
 import { useSession } from 'next-auth/react';
 import React, { useEffect, useState } from 'react';

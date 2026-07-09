@@ -5,10 +5,14 @@
 import {
   Accordion,
   AccordionItem,
-  Divider,
   SelectItem,
+  Divider,
+  FormInput,
+  FormNumberInput,
+  FormSelect,
+  DrawerForm,
   Spinner,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
@@ -16,9 +20,10 @@ import { UseFormReturn } from 'react-hook-form';
 
 import { useTranslation } from 'next-i18next';
 
-import { getDatasets } from '@/lib/app/datasets';
-import { getModels } from '@/lib/app/models';
-import { listWorkloads } from '@/lib/app/workloads';
+import { getAllDatasets } from '@/lib/app/datasets';
+import { listProjectFineTunedModels } from '@/lib/app/models';
+import { fetchAllPages } from '@/lib/app/pagination';
+import { listAllWorkloads } from '@/lib/app/workloads';
 import { useProject } from '@/contexts/ProjectContext';
 import { useSystemToast } from '@amdenterpriseai/hooks';
 
@@ -27,17 +32,10 @@ import { createHuggingFaceSecretRequest } from '@/lib/app/huggingface-secret';
 import { Dataset } from '@/types/datasets';
 import { DatasetType } from '@/types/datasets';
 import { SecretUseCase } from '@amdenterpriseai/types';
-import { AIM_MODEL_NAME_LABEL } from '@/types/aims';
+import { AIM_MODEL_NAME_LABEL, AIMModel } from '@/types/aims';
 import { FinetunableModel, Model, ModelFinetuneParams } from '@/types/models';
 import { WorkloadType } from '@amdenterpriseai/types';
 import { WorkloadStatus } from '@/types/enums/workloads';
-
-import {
-  FormInput,
-  FormNumberInput,
-  FormSelect,
-} from '@amdenterpriseai/components';
-import { DrawerForm } from '@amdenterpriseai/components';
 
 import { debounce } from 'lodash';
 import { z } from 'zod';
@@ -63,6 +61,25 @@ const getRecipeGpuCount = (
     (m) => m.canonicalName === (canonicalName || model?.canonicalName),
   )?.gpuCount || undefined;
 
+/**
+ * Resolve whether the model selected for fine-tuning needs a Hugging Face token.
+ *
+ * Prefers the model's own `hfTokenRequired` flag, then the source recipe's
+ * requirement (looked up by canonical name). Defaults to not gated, since a
+ * re-finetune of weights already in S3 needs no token.
+ */
+const isBaseModelGated = (
+  finetunableModels: FinetunableModel[],
+  canonicalName: string | undefined,
+  model: Model | undefined,
+): boolean => {
+  if (model?.hfTokenRequired != null) return model.hfTokenRequired;
+  const found = finetunableModels.find(
+    (m) => m.canonicalName === (canonicalName || model?.canonicalName),
+  );
+  return found?.hfTokenRequired === true;
+};
+
 const FinetuneDrawer = ({
   isOpen,
   model,
@@ -75,11 +92,10 @@ const FinetuneDrawer = ({
   const { activeProject } = useProject();
   const { toast } = useSystemToast();
   const queryClient = useQueryClient();
-
   const { data: datasets = [] } = useQuery({
     queryKey: ['project', activeProject, 'datasets'],
     queryFn: (): Promise<Dataset[]> =>
-      getDatasets(activeProject!, { type: DatasetType.Finetuning }),
+      getAllDatasets(activeProject!, { type: DatasetType.Finetuning }),
     enabled: isOpen && !!activeProject,
   });
 
@@ -106,7 +122,7 @@ const FinetuneDrawer = ({
 
       toast.success(
         tHf('huggingFaceTokenDrawer.notifications.secretCreated', {
-          name: variables.name,
+          name: variables.displayName,
         }),
       );
     },
@@ -126,16 +142,23 @@ const FinetuneDrawer = ({
     async (name: string, resolve: (result: boolean) => void) => {
       setUniqueCheckInProgress(true);
       try {
-        const [models, workloadsResponse] = await Promise.all([
+        const [models, workloads] = await Promise.all([
           queryClient.fetchQuery({
             queryKey: ['project', activeProject, 'models', 'name-check'],
-            queryFn: () => getModels(activeProject!),
+            // Walk via fetchAllPages directly so errors propagate to the
+            // catch block. Using listAllProjectFineTunedModels here would
+            // swallow failures (returns []), letting a duplicate name slip
+            // through during backend outages.
+            queryFn: () =>
+              fetchAllPages<AIMModel>((page, pageSize) =>
+                listProjectFineTunedModels(activeProject!, { page, pageSize }),
+              ),
             staleTime: 0,
           }),
           queryClient.fetchQuery({
             queryKey: ['project', activeProject, 'workloads', 'name-check'],
             queryFn: () =>
-              listWorkloads(activeProject!, {
+              listAllWorkloads(activeProject!, {
                 type: [WorkloadType.FINE_TUNING],
                 status: [
                   WorkloadStatus.PENDING,
@@ -150,7 +173,7 @@ const FinetuneDrawer = ({
         const completedModelExists = models.some(
           (m) => m.metadata?.labels?.[AIM_MODEL_NAME_LABEL] === name,
         );
-        const inProgressJobExists = workloadsResponse.data.some(
+        const inProgressJobExists = workloads.some(
           (w) => w.displayName === name,
         );
 
@@ -183,17 +206,12 @@ const FinetuneDrawer = ({
     () =>
       z
         .object({
-          name: z
+          displayName: z
             .string()
             .trim()
             .nonempty({
               message: t(
                 'list.actions.finetune.modal.modelName.emptyNameError',
-              ),
-            })
-            .regex(/^[0-9A-Za-z-_.]+$/, {
-              message: t(
-                'list.actions.finetune.modal.modelName.invalidCharactersError',
               ),
             })
             .refine(async (name) => validateModelName(name), {
@@ -213,25 +231,25 @@ const FinetuneDrawer = ({
           batchSize: z.number().int().nonnegative().min(1).max(128).optional(),
         })
         .superRefine((data, ctx) => {
+          const selectedCanonicalName =
+            data.canonicalName || model?.canonicalName;
+          // Skip validation until a base model is selected, and when the selected model is not gated.
+          if (
+            !selectedCanonicalName ||
+            !isBaseModelGated(finetunableModels, selectedCanonicalName, model)
+          )
+            return;
           // If user selected an existing token or is training local model, validation passes
           // otherwise validate HF token
-          if (data.selectedToken || model?.modelWeightsPath) return;
+          if (data.selectedToken || model?.sourceUri) return;
           validateHuggingFaceTokenFields(data, ctx, tHf);
         }),
-    [
-      t,
-      tHf,
-      validateModelName,
-      model?.modelWeightsPath,
-      model?.canonicalName,
-      finetunableModels,
-      projectSecrets,
-    ],
+    [t, tHf, validateModelName, model, finetunableModels],
   );
 
   const formDefaultValues = useMemo(
     () => ({
-      name: '',
+      displayName: '',
       description: '',
       canonicalName: '',
       baseModelId: '',
@@ -250,7 +268,7 @@ const FinetuneDrawer = ({
     // Helper function to build and submit finetune params
     const buildAndSubmitParams = (hfTokenSecretName?: string) => {
       const finetuneParams: ModelFinetuneParams = {
-        name: data.name as string,
+        displayName: data.displayName as string,
         datasetId: data.datasetId as string,
         epochs: data.epochs,
         learningRate: data.learningRate,
@@ -262,22 +280,22 @@ const FinetuneDrawer = ({
       }
 
       onConfirmAction({
-        id:
-          model?.id ??
-          model?.resourceName ??
-          encodeURIComponent(data.canonicalName),
+        id: model?.id ?? model?.resourceName ?? data.canonicalName,
         params: finetuneParams,
       });
       onOpenChange();
     };
 
-    // If model is available locally, skip HF token processing
-    if (model?.modelWeightsPath) {
+    // If model is available locally or is not gated, skip HF token processing
+    if (
+      model?.sourceUri ||
+      !isBaseModelGated(finetunableModels, data.canonicalName, model)
+    ) {
       buildAndSubmitParams();
       return;
     }
 
-    // Otherwise, process HF token for canonical name fine-tuning
+    // Otherwise, process HF token for gated canonical name fine-tuning
     const isNewToken = !data.selectedToken && data.tokenName && data.token;
 
     if (isNewToken) {
@@ -299,17 +317,18 @@ const FinetuneDrawer = ({
         },
       });
     } else {
-      const hfTokenSecretName =
-        huggingFaceTokens[data.selectedToken].metadata.name;
+      // HuggingFaceTokenSelector stores the selected token's list index as a
+      // string; an empty value means nothing was picked.
+      const selectedToken = huggingFaceTokens[parseInt(data.selectedToken, 10)];
 
-      if (!hfTokenSecretName) {
+      if (!selectedToken) {
         toast.error(
           tHf('huggingFaceTokenDrawer.notifications.noTokenSelected'),
         );
         return;
       }
 
-      buildAndSubmitParams(hfTokenSecretName);
+      buildAndSubmitParams(selectedToken.metadata.name);
     }
   };
 
@@ -328,7 +347,7 @@ const FinetuneDrawer = ({
         <div className="flex flex-col gap-4">
           <FormInput
             form={form}
-            name="name"
+            name="displayName"
             label={t('list.actions.finetune.modal.modelName.label')}
             placeholder={t('list.actions.finetune.modal.modelName.placeholder')}
             description={t('list.actions.finetune.modal.modelName.description')}
@@ -402,29 +421,37 @@ const FinetuneDrawer = ({
             )}
           />
 
-          {/* Only show HF Token section when model is not available locally */}
-          {!model?.modelWeightsPath && (
-            <>
-              {/* Divider */}
-              <Divider className="my-2" />
+          {/* Only show the HF Token section for gated base models, never for
+              local weights. In the recipe-list flow it stays hidden until a
+              base model is picked; a pre-selected model always has one. */}
+          {!model?.sourceUri &&
+            (form.watch('canonicalName') || !!model) &&
+            isBaseModelGated(
+              finetunableModels,
+              form.watch('canonicalName'),
+              model,
+            ) && (
+              <>
+                {/* Divider */}
+                <Divider className="my-2" />
 
-              {/* Hugging Face Authentication Section */}
-              <div className="flex flex-col gap-4">
-                <h4 className="font-semibold">
-                  {tHf('huggingFaceTokenDrawer.title')}
-                </h4>
-                <HuggingFaceTokenSelector
-                  form={form}
-                  existingTokens={huggingFaceTokens}
-                  fieldNames={{
-                    selectedToken: 'selectedToken',
-                    name: 'tokenName',
-                    token: 'token',
-                  }}
-                />
-              </div>
-            </>
-          )}
+                {/* Hugging Face Authentication Section */}
+                <div className="flex flex-col gap-4">
+                  <h4 className="font-semibold">
+                    {tHf('huggingFaceTokenDrawer.title')}
+                  </h4>
+                  <HuggingFaceTokenSelector
+                    form={form}
+                    existingTokens={huggingFaceTokens}
+                    fieldNames={{
+                      selectedToken: 'selectedToken',
+                      name: 'tokenName',
+                      token: 'token',
+                    }}
+                  />
+                </div>
+              </>
+            )}
 
           <Accordion className="px-0">
             <AccordionItem

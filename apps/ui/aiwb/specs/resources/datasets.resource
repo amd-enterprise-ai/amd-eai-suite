@@ -16,6 +16,9 @@ Resource            resources/aiwb_datasets.resource
 
 *** Variables ***
 ${UI_DATASET_FILE}    ${EXECDIR}/test_data/datasets/sample.jsonl
+# Default UI page size is 10; uploading 11 forces a second page.
+${UI_DATASETS_PAGE_SIZE}    10
+${UI_PAGINATION_DATASET_COUNT}    11
 
 
 *** Keywords ***
@@ -28,6 +31,13 @@ User is on datasets page
     ...                Expects ${TEST_PROJECT} to be set.
 
     Navigate to datasets page    ${TEST_PROJECT}[name]
+
+The project contains more datasets than fit on a single page
+    [Documentation]    Uploads enough datasets to spill onto a second page so the
+    ...                pagination UI is exercised. Uses the existing API-level
+    ...                ``Multiple datasets exist`` keyword for the actual upload.
+
+    Multiple datasets exist    count=${UI_PAGINATION_DATASET_COUNT}
 
 # =============================================================================
 # When keywords (actions)
@@ -129,3 +139,26 @@ Track UI uploaded dataset for cleanup
     EXCEPT    AS    ${error}
         Log    Could not track UI-uploaded dataset for cleanup: ${error}    WARN
     END
+
+The datasets table shows the first page of datasets
+    [Documentation]    Verifies the dataset table contains exactly one page worth of rows.
+    ...                With ${UI_PAGINATION_DATASET_COUNT} datasets uploaded and a page
+    ...                size of ${UI_DATASETS_PAGE_SIZE}, the first page must be full.
+
+    Dataset table should have rows
+    Dataset table row count should equal    ${UI_DATASETS_PAGE_SIZE}
+
+Pagination controls should be visible
+    [Documentation]    Verifies the table's pagination navigation widget renders.
+
+    Datasets pagination controls should be visible
+
+The user can navigate to the next page
+    [Documentation]    Clicks "next" on the pagination control and asserts that the
+    ...                table re-renders with a different set of rows. Compares the
+    ...                first row's text before and after to detect a real page swap
+    ...                without coupling to specific dataset names.
+
+    ${before}=    Get first dataset row text
+    Click next page in datasets pagination
+    Wait until first dataset row text changes from    ${before}

@@ -3,21 +3,21 @@
 // SPDX-License-Identifier: MIT
 
 import {
+  Alert,
   Button,
-  Drawer,
   DrawerBody,
   DrawerContent,
   DrawerFooter,
   DrawerHeader,
+  DrawerPrimitive as Drawer,
   Input,
-} from '@heroui/react';
+} from '@amdenterpriseai/components';
 import { IconCopy } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 
 import { ApiKeyWithFullKey } from '@/types/api-keys';
 
 import { useSystemToast } from '@amdenterpriseai/hooks';
-import { Alert } from '@amdenterpriseai/components';
 
 interface KeyCreatedDrawerProps {
   isOpen: boolean;
@@ -75,7 +75,7 @@ export const KeyCreatedDrawer: React.FC<KeyCreatedDrawerProps> = ({
                 {t('form.keyCreated.field.name.label')}
               </label>
               <Input
-                value={apiKey.name}
+                value={apiKey.displayName}
                 isReadOnly
                 variant="bordered"
                 classNames={{

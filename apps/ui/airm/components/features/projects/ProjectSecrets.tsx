@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tooltip, useDisclosure } from '@heroui/react';
+import { useOverlayState } from '@amdenterpriseai/hooks';
 import React, { useCallback, useMemo, useState } from 'react';
 
 import { useTranslation } from 'next-i18next';
@@ -22,15 +22,19 @@ import { SecretType } from '@/types/enums/secrets';
 import { AddSecret, AssignOrgSecretToProject } from '../secrets';
 import DeleteSecretModal from '../secrets/DeleteSecretModal';
 import ProjectSecretsTable from './ProjectSecretsTable';
-import { ActionsToolbar } from '@amdenterpriseai/components';
+import {
+  ActionsToolbar,
+  Status,
+  StatusError,
+  StatusProps,
+  Tooltip,
+} from '@amdenterpriseai/components';
 import AddProjectSecretButton from '../secrets/AddProjectSecretButton';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProjectSecrets } from '@/services/app';
 import { doesProjectSecretDataNeedToBeRefreshed } from '@/utils/secrets';
 import { DEFAULT_REFETCH_INTERVAL_FOR_PENDING_DATA } from '@amdenterpriseai/utils/app';
-import { Status, StatusProps } from '@amdenterpriseai/components';
 import { getProjectStatusVariants } from '@/utils/projects-status-variants';
-import { StatusError } from '@amdenterpriseai/components';
 
 interface Props {
   project: ProjectWithMembers;
@@ -56,18 +60,18 @@ export const ProjectSecrets: React.FC<Props> = ({
   const {
     isOpen: isAddSecretFormOpen,
     onOpenChange: onAddSecretFormOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isAssignSecretFormOpen,
     onOpenChange: onAssignSecretFormOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const [targetSecret, setTargetSecret] =
     useState<ProjectSecretWithParentSecret | null>(null);
 
   const { isOpen: isDeleteSecretOpen, onOpenChange: onDeleteSecretOpenChange } =
-    useDisclosure();
+    useOverlayState();
 
   const {
     data: projectSecretsData,

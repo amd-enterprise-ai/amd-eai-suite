@@ -4,13 +4,13 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import { AIMModelResponse } from '@/types/models';
+import { AIMModel } from '@/types/aims';
 
 import ModelDetailsModal from '@/components/features/models/ModelDetailsModal';
 
 import { describe, expect, it, vi } from 'vitest';
 
-const mockModel: AIMModelResponse = {
+const mockModel: AIMModel = {
   metadata: {
     name: 'test-model-resource',
     creationTimestamp: '2023-01-02T00:00:00Z',
@@ -19,10 +19,16 @@ const mockModel: AIMModelResponse = {
     },
   },
   spec: {
-    image: 'test-image:latest',
-    modelSources: [
-      { modelId: 'test-org/test-model', sourceUri: 'hf://test-org/test-model' },
-    ],
+    profiles: {
+      overrides: {
+        modelSources: [
+          {
+            modelId: 'test-org/test-model',
+            sourceUri: 'hf://test-org/test-model',
+          },
+        ],
+      },
+    },
   },
   status: {
     status: 'Ready',

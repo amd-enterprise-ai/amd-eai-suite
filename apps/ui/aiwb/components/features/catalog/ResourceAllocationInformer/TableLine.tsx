@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Chip, Skeleton, Tooltip, cn } from '@heroui/react';
+import { Chip, Skeleton, Tooltip } from '@amdenterpriseai/components';
+import { cn } from '@heroui/react';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { JSX, memo, useMemo } from 'react';
 import { ResourceType } from './constants';

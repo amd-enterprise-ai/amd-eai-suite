@@ -11,12 +11,12 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-    "robotframework>=7.1.1",
-    "robotframework-browser>=19.0.0",
+    "robotframework>=7.4.2",
+    "robotframework-browser>=19.15.1",
     "robotframework-requests>=0.9.7",
     "robotframework-jsonlibrary>=0.5",
     "PyJWT>=2.12.0",
     "PyYAML>=6.0.2",
-    "kubernetes>=35.0.0",
+    "kubernetes>=36.0.2",
     "loguru>=0.7.3",
 ]

@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tooltip, useDisclosure } from '@heroui/react';
 import { IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
@@ -10,7 +9,7 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from 'next-i18next';
 
 import { useAccessControl } from '@/hooks/useAccessControl';
-import { useSystemToast } from '@amdenterpriseai/hooks';
+import { useOverlayState, useSystemToast } from '@amdenterpriseai/hooks';
 
 import { fetchOrganization } from '@/services/app';
 import { deleteUserFromProject as deleteUserFromProjectAPI } from '@/services/app';
@@ -21,9 +20,12 @@ import { ProjectWithMembers } from '@/types/projects';
 import { InvitedUser } from '@/types/users';
 
 import InviteUserModal from '@/components/features/users/InviteUserModal';
-import { ConfirmationModal } from '@amdenterpriseai/components';
-import { ClientSideDataTable } from '@amdenterpriseai/components';
-import { ActionButton } from '@amdenterpriseai/components';
+import {
+  ActionButton,
+  ClientSideDataTable,
+  ConfirmationModal,
+  Tooltip,
+} from '@amdenterpriseai/components';
 
 interface Props {
   project: ProjectWithMembers;
@@ -65,13 +67,13 @@ export const InvitedUsers: React.FC<Props> = ({ project }) => {
     isOpen: isInviteUserOpen,
     onOpen: onInviteUserOpen,
     onOpenChange: onInviteUserOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const {
     isOpen: isRemoveConfirmOpen,
     onOpen: onRemoveConfirmOpen,
     onOpenChange: onRemoveConfirmOpenChange,
-  } = useDisclosure();
+  } = useOverlayState();
 
   const queryClient = useQueryClient();
   const [userBeingRemoved, setUserBeingRemoved] = useState<InvitedUser>();

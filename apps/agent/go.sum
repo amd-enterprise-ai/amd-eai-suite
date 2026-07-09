@@ -1,7 +1,7 @@
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
-github.com/amd-enterprise-ai/aim-engine v0.2.1 h1:7T7SwXhfxHJPRwode5+qHiStGVcaXuj4kUSWYyrOvlw=
-github.com/amd-enterprise-ai/aim-engine v0.2.1/go.mod h1:TNw4JU1nurPRjT7dXCZiIpOAw1MaTrXXpOzGL8WFiNw=
+github.com/amd-enterprise-ai/aim-engine v0.2.4 h1:xgxTgdAQe01J1MZ0C+nD7M0E5onavv8zLsgiSJnhlfM=
+github.com/amd-enterprise-ai/aim-engine v0.2.4/go.mod h1:TNw4JU1nurPRjT7dXCZiIpOAw1MaTrXXpOzGL8WFiNw=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

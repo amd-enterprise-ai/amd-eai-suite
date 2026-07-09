@@ -19,9 +19,9 @@ metadata:
   labels:
     {{- include "aiwb.labels" . | nindent 4 }}
 rules:
-# AIM CRD access
+# AIM CRD access.
 - apiGroups: ["aim.eai.amd.com"]
-  resources: ["aimservices", "aimclustermodels", "aimclusterservicetemplates", "aimruntimeconfigs", "aimclusterruntimeconfigs", "aimmodels", "aimservicetemplates"]
+  resources: ["aimservices", "aimclustermodels", "aimclusterprofiles", "aimprofiles", "aimprofilecaches", "aimruntimeconfigs", "aimclusterruntimeconfigs", "aimmodels", "aimartifacts"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 # Kubernetes Secret access (on-demand reads, no database persistence)

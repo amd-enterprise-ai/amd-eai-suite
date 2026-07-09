@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
@@ -31,8 +31,8 @@ vi.mock('@/lib/app/app-config', () => ({
   AppConfig: {},
 }));
 
-vi.mock('@/lib/app/namespaces', () => ({
-  fetchNamespaces: vi.fn(() =>
+vi.mock('@/lib/app/projects', () => ({
+  fetchProjects: vi.fn(() =>
     Promise.resolve({
       data: [
         { id: 'my-project', name: 'My Project' },
@@ -71,8 +71,10 @@ describe('ProjectContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouter.query = {};
+    mockRouter.pathname = '/';
     mockRouter.locale = 'en';
     mockRouter.defaultLocale = 'en';
+    mockRouter.push = vi.fn();
   });
 
   describe('projectPath (for router.push)', () => {
@@ -277,6 +279,62 @@ describe('ProjectContext', () => {
         expect(result.current.projectUrl('/chat?workload=abc')).toBe(
           '/de/my-project/chat?workload=abc',
         );
+      });
+    });
+  });
+
+  describe('setActiveProject routing', () => {
+    it('redirects to dashboard when switching project from a workload detail page', async () => {
+      mockRouter.query = { project: 'my-project', id: 'workload-1' };
+      mockRouter.pathname = '/[project]/workloads/[id]';
+
+      const { result } = renderHook(() => useProject(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitForProjectsLoaded(result);
+
+      await act(async () => {
+        result.current.setActiveProject('other-project');
+      });
+
+      expect(mockRouter.push).toHaveBeenCalledWith('/other-project/');
+    });
+
+    it('redirects to dashboard when switching project from an AIM detail page', async () => {
+      mockRouter.query = { project: 'my-project', id: 'aim-service-1' };
+      mockRouter.pathname = '/[project]/aims/[id]';
+
+      const { result } = renderHook(() => useProject(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitForProjectsLoaded(result);
+
+      await act(async () => {
+        result.current.setActiveProject('other-project');
+      });
+
+      expect(mockRouter.push).toHaveBeenCalledWith('/other-project/');
+    });
+
+    it('stays on list page when switching project from a list page', async () => {
+      mockRouter.query = { project: 'my-project' };
+      mockRouter.pathname = '/[project]/workloads';
+
+      const { result } = renderHook(() => useProject(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitForProjectsLoaded(result);
+
+      await act(async () => {
+        result.current.setActiveProject('other-project');
+      });
+
+      expect(mockRouter.push).toHaveBeenCalledWith({
+        pathname: '/[project]/workloads',
+        query: { project: 'other-project' },
       });
     });
   });

@@ -44,13 +44,25 @@ spec:
       initContainers:
         - name: wait-for-db
           image: postgres:17-alpine
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: {{ .Values.postgresql.userSecretName }}
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: {{ .Values.postgresql.userSecretName }}
           command:
             - sh
             - -c
             - |
-              until pg_isready -h "{{ .Values.postgresql.host }}" -p {{ .Values.postgresql.port }} -U postgres; do
-                echo "Waiting for database..."
-                sleep 2
+              until psql -h "{{ .Values.postgresql.host }}" -p {{ .Values.postgresql.port }} \
+                    -U "$DATABASE_USER" -d "{{ .Values.postgresql.database }}" -c "SELECT 1" > /dev/null 2>&1; do
+                echo "Waiting for database user to be available..."
+                sleep 3
               done
               echo "Database is ready!"
         - name: init-migration-scripts
@@ -187,6 +199,10 @@ spec:
         # Prometheus configuration
         - name: PROMETHEUS_URL
           value: {{ .Values.prometheus.url | quote }}
+        - name: AI_GW_TOKEN_USAGE_METRIC
+          value: {{ .Values.prometheus.aiGwTokenUsageMetric | quote }}
+        - name: AI_GW_REQUEST_DURATION_METRIC
+          value: {{ .Values.prometheus.aiGwRequestDurationMetric | quote }}
 
         # Kubernetes configuration
         - name: USE_LOCAL_KUBE_CONTEXT
@@ -210,11 +226,13 @@ spec:
         - name: AIM_CLUSTER_RUNTIME_CONFIG_NAME
           value: {{ .Values.aim.clusterRuntimeConfigName | quote }}
         - name: AIM_GATEWAY_NAMESPACE
-          value: {{ .Values.kgateway.namespace | quote }}
+          value: {{ coalesce .Values.kgateway.namespace .Values.gateway.namespace | quote }}
         - name: AIM_GATEWAY_NAME
-          value: {{ .Values.kgateway.gatewayName | quote }}
+          value: {{ coalesce .Values.kgateway.gatewayName .Values.gateway.gatewayName | quote }}
         - name: CLUSTER_HOST
           value: {{ .Values.backend.clusterHost | default (printf "https://workloads.%s" .Values.appDomain) | quote }}
+        - name: WORKSPACES_HOST
+          value: {{ .Values.backend.workspacesHost | default (printf "https://workspaces.%s" .Values.appDomain) | quote }}
 
         # Metadata prefixes for labels and annotations
         - name: EAI_APPS_METADATA_PREFIX

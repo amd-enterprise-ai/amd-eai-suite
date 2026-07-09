@@ -51,22 +51,66 @@ async def _parse_chart_files(files: list[UploadFile | Path]) -> list[dict]:
 
 
 class ChartFile(BaseModel):
-    path: str
-    content: str
+    path: str = Field(
+        description="Relative path of the template file within the chart.",
+        examples=["templates/deployment.yaml"],
+    )
+    content: str = Field(
+        description="Raw text contents of the file (YAML / Helm template).",
+        examples=["apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: {{ .Release.Name }}\n"],
+    )
 
 
 class ChartMetadata(BaseModel):
     """Chart metadata fields."""
 
-    display_name: str | None = None
-    slug: str | None = None
-    description: str | None = None
-    long_description: str | None = None
-    category: str | None = None
-    tags: list[str] | None = None
-    featured_image: str | None = None
-    required_resources: dict | None = None
-    external_url: str | None = None
+    display_name: str | None = Field(
+        default=None,
+        description="Human-readable name shown in the AIWB UI.",
+        examples=["JupyterLab Workspace"],
+    )
+    slug: str | None = Field(
+        default=None,
+        description="URL-safe identifier for the chart.",
+        examples=["jupyterlab"],
+    )
+    description: str | None = Field(
+        default=None,
+        description="Short single-line summary of what the chart deploys.",
+        examples=["Interactive Jupyter notebook environment with GPU support"],
+    )
+    long_description: str | None = Field(
+        default=None,
+        description="Extended Markdown description rendered on the chart's detail page.",
+        examples=[
+            "# JupyterLab\n\nLaunches a JupyterLab pod with optional GPU attachment, persistent home volume, and pre-installed PyTorch."
+        ],
+    )
+    category: str | None = Field(
+        default=None,
+        description="Catalog grouping used by the UI (e.g. 'workspace', 'inference', 'fine-tuning').",
+        examples=["workspace"],
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Free-form tags for filtering and search.",
+        examples=[["jupyter", "notebook", "python"]],
+    )
+    featured_image: str | None = Field(
+        default=None,
+        description="URL of an icon/illustration shown in the catalog tile.",
+        examples=["https://assets.example.com/charts/jupyterlab.png"],
+    )
+    required_resources: dict | None = Field(
+        default=None,
+        description="Default resource hints surfaced to the user when deploying (free-form dict).",
+        examples=[{"gpu": 1, "memory_per_gpu": "32Gi", "cpu_per_gpu": 4}],
+    )
+    external_url: str | None = Field(
+        default=None,
+        description="Optional link to upstream documentation or the project homepage.",
+        examples=["https://jupyter.org"],
+    )
 
     @field_validator("required_resources", mode="before")
     @classmethod
@@ -102,8 +146,16 @@ class ChartMetadata(BaseModel):
 class ChartBase(ChartMetadata):
     """Base chart schema with core fields and metadata."""
 
-    name: str = Field(min_length=3, max_length=64)
-    type: WorkloadType
+    name: str = Field(
+        min_length=3,
+        max_length=64,
+        description="Unique chart identifier within the cluster (slug-style).",
+        examples=["jupyterlab"],
+    )
+    type: WorkloadType = Field(
+        description="Workload class the chart can be used to render.",
+        examples=["WORKSPACE"],
+    )
 
 
 class ChartCreate(ChartBase):

@@ -2,7 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { deleteModel, finetuneModel } from '@/lib/app/models';
+import {
+  cancelFineTuningJob,
+  deleteModel,
+  finetuneModel,
+} from '@/lib/app/models';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 import { getStorageItem } from '@amdenterpriseai/utils/app';
@@ -35,7 +39,7 @@ describe('Models Service - Delete Functionality', () => {
       const result = await deleteModel(mockModelId, mockProjectId);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/namespaces/${mockProjectId}/aims/models/${mockModelId}`,
+        `/api/projects/${mockProjectId}/fine-tuning/models/${mockModelId}`,
         {
           method: 'DELETE',
           headers: {
@@ -53,7 +57,7 @@ describe('Models Service - Delete Functionality', () => {
       const result = await deleteModel(mockModelId, mockProjectId);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/namespaces/${mockProjectId}/aims/models/${mockModelId}`,
+        `/api/projects/${mockProjectId}/fine-tuning/models/${mockModelId}`,
         {
           method: 'DELETE',
           headers: {
@@ -71,7 +75,7 @@ describe('Models Service - Delete Functionality', () => {
       await deleteModel(mockModelId, mockProjectId);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/namespaces/${mockProjectId}/aims/models/${mockModelId}`,
+        `/api/projects/${mockProjectId}/fine-tuning/models/${mockModelId}`,
         {
           method: 'DELETE',
           headers: {
@@ -170,7 +174,7 @@ describe('Models Service - Delete Functionality', () => {
       await deleteModel(specialModelId, mockProjectId);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/namespaces/${mockProjectId}/aims/models/${encodeURIComponent(specialModelId)}`,
+        `/api/projects/${mockProjectId}/fine-tuning/models/${encodeURIComponent(specialModelId)}`,
         expect.objectContaining({
           method: 'DELETE',
         }),
@@ -184,7 +188,7 @@ describe('Models Service - Delete Functionality', () => {
       await deleteModel(longModelId, mockProjectId);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/namespaces/${mockProjectId}/aims/models/${longModelId}`,
+        `/api/projects/${mockProjectId}/fine-tuning/models/${longModelId}`,
         expect.objectContaining({
           method: 'DELETE',
         }),
@@ -208,7 +212,7 @@ describe('Models Service - Delete Functionality', () => {
   describe('finetuneModel', () => {
     it('should successfully finetune a model without hfTokenSecretName', async () => {
       const mockParams = {
-        name: 'test-finetuned-model',
+        displayName: 'test-finetuned-model',
         datasetId: 'dataset-123',
         epochs: 10,
         learningRate: 0.001,
@@ -217,7 +221,7 @@ describe('Models Service - Delete Functionality', () => {
 
       const mockResponse = {
         id: 'model-123',
-        name: 'test-finetuned-model',
+        displayName: 'test-finetuned-model',
       };
 
       mockFetch.mockResolvedValueOnce({
@@ -232,14 +236,15 @@ describe('Models Service - Delete Functionality', () => {
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/namespaces/${mockProjectId}/models/${mockModelId}/finetune?displayName=${encodeURIComponent(mockParams.name)}`,
+        `/api/projects/${mockProjectId}/fine-tuning/jobs`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            name: mockParams.name,
+            baseModel: mockModelId,
+            displayName: mockParams.displayName,
             datasetId: mockParams.datasetId,
             epochs: mockParams.epochs,
             learningRate: mockParams.learningRate,
@@ -250,13 +255,13 @@ describe('Models Service - Delete Functionality', () => {
 
       expect(result).toEqual({
         id: 'model-123',
-        name: 'test-finetuned-model',
+        displayName: 'test-finetuned-model',
       });
     });
 
     it('should include hfTokenSecretName when provided', async () => {
       const mockParams = {
-        name: 'test-finetuned-model',
+        displayName: 'test-finetuned-model',
         datasetId: 'dataset-123',
         epochs: 10,
         learningRate: 0.001,
@@ -266,7 +271,7 @@ describe('Models Service - Delete Functionality', () => {
 
       const mockResponse = {
         id: 'model-123',
-        name: 'test-finetuned-model',
+        displayName: 'test-finetuned-model',
       };
 
       mockFetch.mockResolvedValueOnce({
@@ -277,14 +282,15 @@ describe('Models Service - Delete Functionality', () => {
       await finetuneModel(mockModelId, mockParams, mockProjectId);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/namespaces/${mockProjectId}/models/${mockModelId}/finetune?displayName=${encodeURIComponent(mockParams.name)}`,
+        `/api/projects/${mockProjectId}/fine-tuning/jobs`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            name: mockParams.name,
+            baseModel: mockModelId,
+            displayName: mockParams.displayName,
             datasetId: mockParams.datasetId,
             epochs: mockParams.epochs,
             learningRate: mockParams.learningRate,
@@ -297,7 +303,7 @@ describe('Models Service - Delete Functionality', () => {
 
     it('should not include hfTokenSecretName when not provided', async () => {
       const mockParams = {
-        name: 'test-finetuned-model',
+        displayName: 'test-finetuned-model',
         datasetId: 'dataset-123',
         epochs: 10,
         learningRate: 0.001,
@@ -306,7 +312,7 @@ describe('Models Service - Delete Functionality', () => {
 
       const mockResponse = {
         id: 'model-123',
-        name: 'test-finetuned-model',
+        displayName: 'test-finetuned-model',
       };
 
       mockFetch.mockResolvedValueOnce({
@@ -322,7 +328,7 @@ describe('Models Service - Delete Functionality', () => {
 
     it('should throw APIRequestError when finetune fails', async () => {
       const mockParams = {
-        name: 'test-finetuned-model',
+        displayName: 'test-finetuned-model',
         datasetId: 'dataset-123',
         epochs: 10,
         learningRate: 0.001,
@@ -344,6 +350,57 @@ describe('Models Service - Delete Functionality', () => {
       expect(error).toBeInstanceOf(APIRequestError);
       expect((error as APIRequestError).message).toContain(
         'Failed to finetune model',
+      );
+    });
+  });
+
+  describe('cancelFineTuningJob', () => {
+    const mockJobId = 'job-uuid-1';
+
+    it('should DELETE the fine-tuning job and resolve void on success', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true });
+
+      const result = await cancelFineTuningJob(mockJobId, mockProjectId);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `/api/projects/${mockProjectId}/fine-tuning/jobs/${mockJobId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      expect(result).toBeUndefined();
+    });
+
+    it('should encode special characters in the job ID', async () => {
+      const specialJobId = 'job/with#special';
+      mockFetch.mockResolvedValueOnce({ ok: true });
+
+      await cancelFineTuningJob(specialJobId, mockProjectId);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `/api/projects/${mockProjectId}/fine-tuning/jobs/${encodeURIComponent(specialJobId)}`,
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('should throw APIRequestError when the job is not found', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('Fine-tuning job not found'),
+      });
+
+      const error = await cancelFineTuningJob(mockJobId, mockProjectId).catch(
+        (e) => e,
+      );
+
+      expect(error).toBeInstanceOf(APIRequestError);
+      expect(error.statusCode).toBe(404);
+      expect((error as APIRequestError).message).toContain(
+        'Failed to cancel fine-tuning job',
       );
     });
   });

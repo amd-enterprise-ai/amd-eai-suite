@@ -56,6 +56,13 @@ vi.mock('@heroui/react', async () => {
     DropdownTrigger: ({ children }: any) => (
       <div data-testid="dropdown-trigger">{children}</div>
     ),
+  };
+});
+vi.mock('@amdenterpriseai/components', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@amdenterpriseai/components')>();
+  return {
+    ...actual,
     Tooltip: ({ children, content, delay, size, className }: any) => (
       <div
         data-testid="tooltip"
@@ -69,6 +76,20 @@ vi.mock('@heroui/react', async () => {
     ),
   };
 });
+
+vi.mock('../../../src/Tooltip', () => ({
+  Tooltip: ({ children, content, delay, size, className }: any) => (
+    <div
+      data-testid="tooltip"
+      data-content={content}
+      data-delay={delay}
+      data-size={size}
+      className={className}
+    >
+      {children}
+    </div>
+  ),
+}));
 
 describe('FilterButtonTrigger Component', () => {
   const defaultProps = {

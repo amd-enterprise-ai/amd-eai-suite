@@ -24,7 +24,7 @@ interface Props {
   allowDownload?: boolean;
 }
 
-export const CodeBlock: FC<Props> = memo(
+export const MarkdownCodeBlock: FC<Props> = memo(
   ({ language, value, allowDownload = true }) => {
     const { t } = useTranslation('common');
     const { theme } = useTheme();
@@ -50,7 +50,7 @@ export const CodeBlock: FC<Props> = memo(
         true,
       )}${fileExtension}`;
       const fileName = window.prompt(
-        t('Enter file name') || '',
+        (t('Enter file name' as any) as string) || '',
         suggestedFileName,
       );
 
@@ -85,7 +85,9 @@ export const CodeBlock: FC<Props> = memo(
                     stroke={2}
                     className="text-success rounded-full"
                   />
-                  <span className="text-secondary">{t('Copied!')}</span>
+                  <span className="text-secondary">
+                    {t('Copied!' as any) as string}
+                  </span>
                 </>
               ) : (
                 <>
@@ -118,4 +120,4 @@ export const CodeBlock: FC<Props> = memo(
     );
   },
 );
-CodeBlock.displayName = 'CodeBlock';
+MarkdownCodeBlock.displayName = 'MarkdownCodeBlock';

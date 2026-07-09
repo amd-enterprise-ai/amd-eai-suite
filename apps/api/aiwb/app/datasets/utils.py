@@ -44,18 +44,18 @@ def slugify(name: str) -> str:
     return slug
 
 
-def get_object_key(dataset_name: str, namespace: str) -> str:
+def get_object_key(dataset_id: str, namespace: str) -> str:
     """
     Generate the S3 object key for a dataset.
 
-    Format: {namespace}/datasets/{slugified_name}.jsonl
+    Format: {namespace}/datasets/{dataset_id}.jsonl
 
-    Note: We don't include the dataset_id in the path to make it more user-friendly.
-    Path uniqueness is enforced by project name uniqueness and dataset name uniqueness.
+    Uses the dataset UUID as the filename to decouple S3 paths from display names.
+    This prevents path collisions when display names contain special characters or
+    when two names would slugify to the same string.
     """
-    slugified_name = slugify(dataset_name)
     slugified_project = slugify(namespace)
-    return f"{slugified_project}/datasets/{slugified_name}.jsonl"
+    return f"{slugified_project}/datasets/{dataset_id}.jsonl"
 
 
 def derive_name_from_path(s3_key: str) -> str:

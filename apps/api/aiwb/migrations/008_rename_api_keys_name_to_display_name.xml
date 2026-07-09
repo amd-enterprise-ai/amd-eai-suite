@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright © Advanced Micro Devices, Inc., or its affiliates.
+
+SPDX-License-Identifier: MIT
+-->
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.0.xsd">
+
+    <changeSet id="008-rename-api-keys-name-to-display-name" author="aiwb">
+        <renameColumn
+            tableName="api_keys"
+            oldColumnName="name"
+            newColumnName="display_name"
+            columnDataType="VARCHAR(255)"/>
+
+        <!-- Drop the constraint (not the index directly — PostgreSQL rejects DROP INDEX
+             when a unique constraint of the same name backs the index). -->
+        <dropUniqueConstraint
+            tableName="api_keys"
+            constraintName="uq_api_keys_name_namespace"/>
+        <addUniqueConstraint
+            tableName="api_keys"
+            constraintName="uq_api_keys_display_name_namespace"
+            columnNames="display_name, namespace"/>
+    </changeSet>
+
+</databaseChangeLog>

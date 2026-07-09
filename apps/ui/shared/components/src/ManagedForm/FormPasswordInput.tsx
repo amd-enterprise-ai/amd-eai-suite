@@ -4,7 +4,7 @@
 
 import React, { ComponentType } from 'react';
 
-import { InputProps } from '@heroui/react';
+import type { InputProps } from '../Input/InputPrimitive';
 import { cn } from '@heroui/react';
 import type { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 

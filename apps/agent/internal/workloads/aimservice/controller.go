@@ -17,6 +17,14 @@ import (
 )
 
 // Reconciler reconciles AIMService objects for workload tracking.
+//
+// The reconciler watches and writes via the v1alpha1 typed client even though
+// v1alpha2 is the storage version. The agent is an observer — it only mutates
+// metadata.finalizers and reads Status (shared type between versions), never
+// touches spec. The v1alpha1 CRD schema is the more permissive served version
+// and accepts legacy spec.template, which v1alpha2 CEL rejects. Using v1alpha1
+// for writes keeps finalizer removal succeeding on objects stored before the
+// v1alpha2 schema tightened.
 type Reconciler struct {
 	client.Client
 	Publisher messaging.MessagePublisher

@@ -65,7 +65,7 @@ export const SidebarButton: FC<Props> = ({
             : 'block text-nowrap scale-100'
         }`}
       >
-        {t(text)}
+        {t(text as any) as string}
       </span>
     </div>
   );

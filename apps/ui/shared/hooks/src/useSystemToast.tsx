@@ -12,6 +12,8 @@ import { ToastOptions, toast } from 'react-toastify';
 
 import { APIRequestError } from '@amdenterpriseai/utils/app';
 
+import { ErrorToast } from './ErrorToast';
+
 export const useSystemToast = () => {
   const _toast = (
     toastContent: ReactNode | string,
@@ -33,17 +35,17 @@ export const useSystemToast = () => {
     toastContent: ReactNode | string,
     error?: APIRequestError | Error,
   ) => {
-    if (error && error instanceof APIRequestError) {
-      toast.error(error.message, {
-        icon: errorIcon,
-        style: errorStyle,
-      });
-    } else {
-      toast.error(toastContent as ReactNode | string, {
-        icon: errorIcon,
-        style: errorStyle,
-      });
-    }
+    const message =
+      error instanceof APIRequestError ? error.message : toastContent;
+
+    // Only a plain-text message can be placed on the clipboard; richer content
+    // (e.g. a LinkToast) is shown without a copy affordance.
+    const copyText = typeof message === 'string' ? message : undefined;
+
+    toast.error(<ErrorToast content={message} copyText={copyText} />, {
+      icon: errorIcon,
+      style: errorStyle,
+    });
   };
 
   _toast.info = (toastContent: ReactNode | string) => {

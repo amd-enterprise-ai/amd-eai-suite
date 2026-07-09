@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Tooltip } from '@heroui/react';
+import { Tooltip } from '../Tooltip';
 import {
   differenceInCalendarDays,
   format,

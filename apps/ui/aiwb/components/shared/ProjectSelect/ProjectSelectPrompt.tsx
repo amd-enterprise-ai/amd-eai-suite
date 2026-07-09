@@ -6,6 +6,10 @@ import { IconCheckupList } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 import { HeroMessage } from '@amdenterpriseai/components';
 import { ErrorCodes, Intent } from '@amdenterpriseai/types';
+import {
+  getErrorTitleTranslationKey,
+  getErrorDescriptionTranslationKey,
+} from '@/lib/app/errorMessages';
 import { ProjectSelect } from './ProjectSelect';
 
 interface ProjectSelectPromptProps {
@@ -18,16 +22,17 @@ export function ProjectSelectPrompt({ errorCode }: ProjectSelectPromptProps) {
   const isError =
     errorCode && Object.values(ErrorCodes).includes(errorCode as ErrorCodes);
 
+  const titleKey = getErrorTitleTranslationKey(errorCode);
+  const descriptionKey = getErrorDescriptionTranslationKey(errorCode);
+
   return (
     <HeroMessage
       intent={isError ? Intent.DANGER : undefined}
       icon={IconCheckupList}
-      title={
-        isError ? t(`error.${errorCode}.title`) : t('projectSelectPrompt.title')
-      }
+      title={titleKey ? t(titleKey) : t('projectSelectPrompt.title')}
       description={
-        isError
-          ? t(`error.${errorCode}.description`)
+        descriptionKey
+          ? t(descriptionKey)
           : t('projectSelectPrompt.description')
       }
       endContent={<ProjectSelect size="md" showTooltip={false} />}

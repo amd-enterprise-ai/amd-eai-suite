@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DropdownItem } from './types';
+import { DropdownActionItem } from './types';
 
 interface SectionHeaderProps {
-  action: DropdownItem;
+  action: DropdownActionItem;
 }
 
 export const SectionHeader = ({ action }: SectionHeaderProps) => {

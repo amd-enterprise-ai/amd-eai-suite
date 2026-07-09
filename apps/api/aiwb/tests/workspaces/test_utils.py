@@ -4,13 +4,64 @@
 
 """Tests for Workspaces utility functions."""
 
+from unittest.mock import patch
+
 import pytest
+import yaml
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.workloads.enums import WorkloadStatus, WorkloadType
 from app.workspaces.enums import WorkspaceType, workspace_type_chart_name_mapping
-from app.workspaces.utils import check_workspace_availability_per_namespace
+from app.workspaces.utils import (
+    check_workspace_availability_per_namespace,
+    get_workspaces_hostname,
+    pin_workspace_route_hostname,
+)
 from tests import factory
+
+_HTTPROUTE = (
+    "apiVersion: gateway.networking.k8s.io/v1\nkind: HTTPRoute\nmetadata:\n  name: r\n"
+    "spec:\n  rules:\n    - matches:\n        - path:\n            type: PathPrefix\n            value: /workbench/u/w\n"
+)
+
+
+@pytest.mark.parametrize(
+    "workspaces_host, expected",
+    [
+        ("https://workspaces.example.com", "workspaces.example.com"),
+        ("http://workspaces.example.com:8080", "workspaces.example.com"),
+        ("https://workspaces.example.com/", "workspaces.example.com"),
+        ("", None),
+        ("workspaces.example.com", None),  # no scheme -> not parseable as host
+    ],
+)
+def test_get_workspaces_hostname(workspaces_host: str, expected: str | None) -> None:
+    assert get_workspaces_hostname(workspaces_host=workspaces_host) == expected
+
+
+def test_pin_workspace_route_hostname_stamps_unpinned_route() -> None:
+    with patch("app.workspaces.utils.get_workspaces_hostname", return_value="workspaces.test.example"):
+        out = pin_workspace_route_hostname(_HTTPROUTE)
+    doc = next(d for d in yaml.safe_load_all(out) if d and d.get("kind") == "HTTPRoute")
+    assert doc["spec"]["hostnames"] == ["workspaces.test.example"]
+
+
+def test_pin_workspace_route_hostname_preserves_existing_hostnames() -> None:
+    manifest = (
+        "apiVersion: gateway.networking.k8s.io/v1\nkind: HTTPRoute\nmetadata:\n  name: r\n"
+        "spec:\n  hostnames:\n    - custom.example.com\n"
+        "  rules:\n    - matches:\n        - path:\n            type: PathPrefix\n            value: /x\n"
+    )
+    with patch("app.workspaces.utils.get_workspaces_hostname", return_value="workspaces.test.example"):
+        out = pin_workspace_route_hostname(manifest)
+    # Unchanged: existing hostnames win and the original string is returned verbatim.
+    assert out == manifest
+
+
+def test_pin_workspace_route_hostname_noop_when_host_unset() -> None:
+    with patch("app.workspaces.utils.get_workspaces_hostname", return_value=None):
+        out = pin_workspace_route_hostname(_HTTPROUTE)
+    assert out == _HTTPROUTE
 
 
 @pytest.mark.asyncio

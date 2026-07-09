@@ -3,25 +3,26 @@
 // SPDX-License-Identifier: MIT
 
 import React, { useCallback, useState } from 'react';
-import { useDisclosure } from '@heroui/react';
 import { useTranslation } from 'next-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 
-import { ActionButton, ActionsToolbar } from '@amdenterpriseai/components';
+import {
+  ActionButton,
+  ActionsToolbar,
+  AiwbDocsPage,
+  aiwbDocumentationMapping,
+  RelevantDocs,
+} from '@amdenterpriseai/components';
 import DeleteSecretModal from './DeleteSecretModal';
 import { SecretsTable } from './SecretsTable';
 
 import { fetchProjectSecrets } from '@/lib/app/secrets';
-import {
-  RelevantDocs,
-  AiwbDocsPage,
-  aiwbDocumentationMapping,
-} from '@amdenterpriseai/components';
 import { FilterComponentType, FilterValueMap } from '@amdenterpriseai/types';
 import { useProject } from '@/contexts/ProjectContext';
 import { SecretResponseData } from '@/types/secrets';
 import AddSecret from './AddSecret';
+import { useOverlayState } from '@amdenterpriseai/hooks';
 
 type ClientSideDataFilter<T> = {
   field: keyof T;
@@ -38,7 +39,7 @@ export const WorkbenchSecretsPageContent: React.FC = () => {
   );
 
   const { isOpen: isAddSecretOpen, onOpenChange: onAddSecretOpenChange } =
-    useDisclosure();
+    useOverlayState();
 
   // Get active project from context
   const { activeProject } = useProject();
@@ -93,7 +94,7 @@ export const WorkbenchSecretsPageContent: React.FC = () => {
 
   // Disclosure for delete modal
   const { isOpen: isDeleteSecretOpen, onOpenChange: onDeleteSecretOpenChange } =
-    useDisclosure();
+    useOverlayState();
 
   // Check if user can delete secrets
   const canDeleteSecrets = useCallback(

@@ -8,11 +8,14 @@ from textwrap import dedent
 
 from fastapi import APIRouter, Depends, status
 
+from api_common.schemas import ListResponse
+
 from ..dispatch.kube_client import KubernetesClient, get_kube_client
-from .schemas import ClusterResourcesResponse
+from .schemas import AimImageFamily, ClusterAccelerator, ClusterResourcesResponse
+from .service import get_aim_image_families, get_cluster_accelerators
 from .service import get_cluster_resources as get_cluster_resources_service
 
-router = APIRouter(prefix="/cluster", tags=["Cluster"])
+router = APIRouter(tags=["Cluster"])
 
 
 @router.get(
@@ -20,6 +23,7 @@ router = APIRouter(prefix="/cluster", tags=["Cluster"])
     response_model=ClusterResourcesResponse,
     status_code=status.HTTP_200_OK,
     summary="Get cluster resources",
+    response_description="Aggregated capacity across ready nodes.",
     description=dedent("""
         Get available cluster resources including CPU, memory, ephemeral storage, and GPU count.
 
@@ -40,3 +44,47 @@ async def get_cluster_resources(
 ) -> ClusterResourcesResponse:
     """Get cluster resource availability."""
     return await get_cluster_resources_service(kube_client)
+
+
+@router.get(
+    "/cluster/aim-images",
+    response_model=ListResponse[AimImageFamily],
+    status_code=status.HTTP_200_OK,
+    summary="List aim-engine container image families",
+    response_description="Supported image families and tags for runtime profile selection.",
+    description=dedent("""
+        Returns aim-engine container image families available for runtime profile
+        configuration, including an explicit **Automatic** entry.
+
+        Each family lists its container repository (when applicable) and the
+        tags/versions the workbench exposes in image dropdowns. The catalog is
+        config-driven; live registry discovery is not performed on this endpoint.
+    """),
+)
+async def list_aim_images() -> ListResponse[AimImageFamily]:
+    """List supported aim-engine image families and tags."""
+    return ListResponse(data=get_aim_image_families())
+
+
+@router.get(
+    "/cluster/accelerators",
+    response_model=ListResponse[ClusterAccelerator],
+    status_code=status.HTTP_200_OK,
+    summary="List cluster accelerators",
+    response_description="Accelerator products present on ready nodes.",
+    description=dedent("""
+        Returns each AMD accelerator product detected on ready cluster nodes.
+
+        For every distinct GPU device type id observed on those ready nodes, the response
+        includes the product display name (from node labels), the device id, and
+        the total allocatable ``amd.com/gpu`` count summed across those nodes.
+
+        Returns an empty list when no GPU-labeled ready nodes exist — never an error.
+    """),
+)
+async def list_cluster_accelerators(
+    kube_client: KubernetesClient = Depends(get_kube_client),
+) -> ListResponse[ClusterAccelerator]:
+    """List accelerator products available in the cluster."""
+    accelerators = await get_cluster_accelerators(kube_client)
+    return ListResponse(data=accelerators)

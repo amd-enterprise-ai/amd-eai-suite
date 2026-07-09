@@ -147,13 +147,13 @@ def test_make_api_request_handles_non_helm_files(mock_client_class):
 @patch("workloads_manager.core.registration.make_api_request")
 def test_get_chart_id_success(mock_api_request):
     """Test get_chart_id with successful response."""
-    # Mock API response
-    mock_api_request.return_value = (True, {"id": "chart-123", "name": "test-chart"})
+    # Mock API response - API returns {"data": [...]} envelope
+    mock_api_request.return_value = (True, {"data": [{"id": "chart-123", "name": "test-chart"}]})
 
     result = get_chart_id("test-chart", httpx.URL(httpx.URL("http://api.test")))
 
     assert result == "chart-123"
-    mock_api_request.assert_called_once_with("GET", "charts?name=test-chart", httpx.URL(httpx.URL("http://api.test")))
+    mock_api_request.assert_called_once_with("GET", "charts", httpx.URL(httpx.URL("http://api.test")))
 
 
 @patch("workloads_manager.core.registration.make_api_request")
@@ -184,13 +184,18 @@ def test_get_overlay_id_success(mock_api_request):
     # Mock API response
     mock_api_request.return_value = (
         True,
-        [{"id": "overlay-123", "canonical_name": "model/test"}, {"id": "overlay-456", "canonical_name": "model/other"}],
+        {
+            "data": [
+                {"id": "overlay-123", "canonicalName": "model/test"},
+                {"id": "overlay-456", "canonicalName": "model/other"},
+            ]
+        },
     )
 
     result = get_overlay_id("chart-123", "model/test", httpx.URL("http://api.test"))
 
     assert result == "overlay-123"
-    mock_api_request.assert_called_once_with("GET", "overlays?chart_id=chart-123", httpx.URL("http://api.test"))
+    mock_api_request.assert_called_once_with("GET", "overlays?chartId=chart-123", httpx.URL("http://api.test"))
 
 
 @patch("workloads_manager.core.registration.make_api_request")
@@ -242,8 +247,8 @@ def test_process_single_overlay_model_file_success(
     mock_api_request.assert_called_once()
     call_args = mock_api_request.call_args
     assert call_args[0][0] == "POST"  # POST for new overlay
-    assert "chart_id" in call_args[1]["data"]
-    assert "canonical_name" in call_args[1]["data"]
+    assert "chartId" in call_args[1]["data"]
+    assert "canonicalName" in call_args[1]["data"]
 
 
 @patch("workloads_manager.core.registration.temp_file_with_content")
@@ -272,7 +277,7 @@ def test_process_single_overlay_non_model_file(mock_get_overlay_id, mock_api_req
     call_args = mock_api_request.call_args
     # The canonical name should be the filename stem with underscores converted to slashes
     expected_canonical_name = test_file.stem.replace("_", "/").replace(":", "/")
-    assert call_args[1]["data"]["canonical_name"] == expected_canonical_name
+    assert call_args[1]["data"]["canonicalName"] == expected_canonical_name
 
 
 @patch("workloads_manager.core.registration.temp_file_with_content")

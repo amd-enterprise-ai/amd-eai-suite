@@ -349,63 +349,6 @@ describe('storages page', async () => {
       vi.clearAllMocks();
     });
 
-    it('redirects if session is missing', async () => {
-      (getServerSession as any).mockResolvedValue(null);
-
-      const result = await getServerSideProps(context);
-
-      expect(result).toEqual({
-        redirect: {
-          destination: '/',
-          permanent: false,
-        },
-      });
-    });
-
-    it('redirects if session.user is missing', async () => {
-      (getServerSession as any).mockResolvedValue({ user: null });
-
-      const result = await getServerSideProps(context);
-
-      expect(result).toEqual({
-        redirect: {
-          destination: '/',
-          permanent: false,
-        },
-      });
-    });
-
-    it('redirects if session.user.email is missing', async () => {
-      (getServerSession as any).mockResolvedValue({
-        user: {},
-        accessToken: 'token',
-      });
-
-      const result = await getServerSideProps(context);
-
-      expect(result).toEqual({
-        redirect: {
-          destination: '/',
-          permanent: false,
-        },
-      });
-    });
-
-    it('redirects if session.accessToken is missing', async () => {
-      (getServerSession as any).mockResolvedValue({
-        user: { email: 'test@test.com' },
-      });
-
-      const result = await getServerSideProps(context);
-
-      expect(result).toEqual({
-        redirect: {
-          destination: '/',
-          permanent: false,
-        },
-      });
-    });
-
     it('returns props with fetched data when session is valid', async () => {
       (getServerSession as any).mockResolvedValue({
         user: { email: 'test@test.com' },

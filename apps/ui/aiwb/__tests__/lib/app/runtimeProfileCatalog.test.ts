@@ -95,13 +95,13 @@ describe('runtimeProfileCatalog transforms', () => {
     );
   });
 
-  it('resolveDefaultOnboardImageRef uses aim-base catalog entry', () => {
+  it('resolveDefaultOnboardImageRef uses first selectable catalog family', () => {
     expect(resolveDefaultOnboardImageRef(imageFamilies)).toBe(
       'amdenterpriseai/aim-base:0.11',
     );
   });
 
-  it('resolveDefaultOnboardImageRef uses first catalog family when aim-base is absent', () => {
+  it('resolveDefaultOnboardImageRef preselects a radeon-only family and latest discovered tag', () => {
     expect(
       resolveDefaultOnboardImageRef([
         {
@@ -111,13 +111,13 @@ describe('runtimeProfileCatalog transforms', () => {
           tags: [],
         },
         {
-          familyId: 'vllm',
-          displayName: 'vLLM',
-          repository: 'amdenterpriseai/vllm',
-          tags: ['1.0'],
+          familyId: 'radeon-aim-base',
+          displayName: 'radeon-aim-base',
+          repository: 'docker.io/silogenai/radeon-aim-base',
+          tags: ['0.11-preview', '0.12-preview'],
         },
       ]),
-    ).toBe('amdenterpriseai/vllm:1.0');
+    ).toBe('docker.io/silogenai/radeon-aim-base:0.12-preview');
   });
 
   it('resolveDefaultOnboardImageRef falls back to unpinned aim-base when catalog is empty', () => {
@@ -158,8 +158,18 @@ describe('accelerator model resolution', () => {
     expect(canonicalAcceleratorModel('MI300X')).toBe('MI300X');
   });
 
-  it('canonicalAcceleratorModel falls back to prefix/suffix stripping for non-Instinct parts', () => {
-    expect(canonicalAcceleratorModel('AMD Radeon PRO V710')).toBe('PRO V710');
+  it('canonicalAcceleratorModel extracts the Radeon [RW]#### token, dropping the marketing suffix', () => {
+    // The GPU operator reports R9700S; aim-engine keys on R9700.
+    expect(canonicalAcceleratorModel('AMD Radeon AI PRO R9700S')).toBe('R9700');
+    expect(canonicalAcceleratorModel('AMD_Radeon_AI_PRO_R9700S')).toBe('R9700');
+    expect(canonicalAcceleratorModel('AMD Radeon PRO W7900')).toBe('W7900');
+    expect(canonicalAcceleratorModel('W7900')).toBe('W7900');
+  });
+
+  it('canonicalAcceleratorModel falls back to prefix/suffix stripping for unrecognized parts', () => {
+    expect(canonicalAcceleratorModel('AMD Radeon RX 7900 XTX')).toBe(
+      'RX 7900 XTX',
+    );
   });
 
   it('deviceIdToAcceleratorModel maps a device id to the canonical model', () => {

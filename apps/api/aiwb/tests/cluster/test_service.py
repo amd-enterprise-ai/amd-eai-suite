@@ -85,16 +85,22 @@ def test_parse_container_image_repository_and_tag_rejects_invalid(image_ref: str
         parse_container_image_repository_and_tag(image_ref)
 
 
-def test_get_aim_image_families_includes_automatic_first():
-    families = get_aim_image_families()
+@pytest.mark.asyncio
+async def test_get_aim_image_families_includes_automatic_first():
+    families = await get_aim_image_families(
+        make_kube_client([make_node("74a1", allocatable={"amd.com/gpu": "1"}, product_name="AMD_Instinct_MI300X")])
+    )
     assert len(families) == 2
     assert families[0].family_id == "automatic"
     assert families[0].repository is None
     assert families[0].tags == []
 
 
-def test_get_aim_image_families_includes_aim_base_from_default_deployment_ref():
-    families = get_aim_image_families()
+@pytest.mark.asyncio
+async def test_get_aim_image_families_includes_aim_base_from_default_deployment_ref():
+    families = await get_aim_image_families(
+        make_kube_client([make_node("74a1", allocatable={"amd.com/gpu": "1"}, product_name="AMD_Instinct_MI300X")])
+    )
     by_id = {family.family_id: family for family in families}
     assert set(by_id) == {"automatic", "aim-base"}
     repository, default_tag = parse_container_image_repository_and_tag(DEFAULT_AIM_DEPLOYMENT_IMAGE_REF)
@@ -102,24 +108,74 @@ def test_get_aim_image_families_includes_aim_base_from_default_deployment_ref():
     assert by_id["aim-base"].tags == [default_tag]
 
 
-def test_get_aim_image_families_is_idempotent():
-    first = get_aim_image_families()
-    second = get_aim_image_families()
+@pytest.mark.asyncio
+async def test_get_aim_image_families_is_idempotent():
+    kube_client = make_kube_client(
+        [make_node("74a1", allocatable={"amd.com/gpu": "1"}, product_name="AMD_Instinct_MI300X")]
+    )
+    first = await get_aim_image_families(kube_client)
+    second = await get_aim_image_families(kube_client)
     assert [f.model_dump() for f in first] == [f.model_dump() for f in second]
 
 
-def test_get_aim_image_families_stable_order():
-    ids = [family.family_id for family in get_aim_image_families()]
+@pytest.mark.asyncio
+async def test_get_aim_image_families_stable_order():
+    families = await get_aim_image_families(
+        make_kube_client([make_node("74a1", allocatable={"amd.com/gpu": "1"}, product_name="AMD_Instinct_MI300X")])
+    )
+    ids = [family.family_id for family in families]
     assert ids == ["automatic", "aim-base"]
 
 
-def test_get_aim_image_families_returns_independent_copies():
-    families = get_aim_image_families()
+@pytest.mark.asyncio
+async def test_get_aim_image_families_returns_independent_copies():
+    kube_client = make_kube_client(
+        [make_node("74a1", allocatable={"amd.com/gpu": "1"}, product_name="AMD_Instinct_MI300X")]
+    )
+    families = await get_aim_image_families(kube_client)
     families[1].tags.append("mutated-tag")
 
-    fresh = get_aim_image_families()
+    fresh = await get_aim_image_families(kube_client)
     _, default_tag = parse_container_image_repository_and_tag(DEFAULT_AIM_DEPLOYMENT_IMAGE_REF)
     assert fresh[1].tags == [default_tag]
+
+
+@pytest.mark.asyncio
+async def test_get_aim_image_families_uses_radeon_base_for_radeon_cluster():
+    families = await get_aim_image_families(
+        make_kube_client([make_node("73bf", allocatable={"amd.com/gpu": "1"}, product_name="AMD_Radeon_RX_7900_XTX")])
+    )
+    by_id = {family.family_id: family for family in families}
+    assert set(by_id) == {"automatic", "aim-radeon-base"}
+    assert by_id["aim-radeon-base"].repository == "amdenterpriseai/aim-radeon-base"
+    assert by_id["aim-radeon-base"].tags == ["0.12"]
+
+
+@pytest.mark.asyncio
+async def test_get_aim_image_families_collapses_hybrid_cluster_to_instinct_base():
+    # Hybrid Instinct + Radeon clusters resolve to a single base image;
+    # per-accelerator image selection is deferred.
+    families = await get_aim_image_families(
+        make_kube_client(
+            [
+                make_node("74a1", allocatable={"amd.com/gpu": "1"}, product_name="AMD_Instinct_MI300X"),
+                make_node("73bf", allocatable={"amd.com/gpu": "1"}, product_name="AMD_Radeon_RX_7900_XTX"),
+            ]
+        )
+    )
+    by_id = {family.family_id: family for family in families}
+    assert set(by_id) == {"automatic", "aim-base"}
+    assert by_id["aim-base"].repository == "amdenterpriseai/aim-base"
+    assert by_id["aim-base"].tags == ["0.11"]
+
+
+@pytest.mark.asyncio
+async def test_get_aim_image_families_detects_gpu_names_case_insensitively():
+    families = await get_aim_image_families(
+        make_kube_client([make_node("73bf", allocatable={"amd.com/gpu": "1"}, product_name="AMD rAdEoN RX 7900 XTX")])
+    )
+    by_id = {family.family_id: family for family in families}
+    assert set(by_id) == {"automatic", "aim-radeon-base"}
 
 
 def make_node(

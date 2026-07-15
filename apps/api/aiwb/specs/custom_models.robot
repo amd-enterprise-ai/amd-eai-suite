@@ -104,6 +104,22 @@ Onboard persists the previewed custom model into the namespace
     And custom AIMModel for source "${CUSTOM_MODELS_PUBLIC_REPO}" should exist in the namespace
     And custom AIMModel for source "${CUSTOM_MODELS_PUBLIC_REPO}" should use image "${CUSTOM_MODELS_ONBOARD_IMAGE}"
 
+Onboard derives from the cluster-discovered base image family
+    [Documentation]    Onboarding should derive profiles from the base image family the
+    ...    cluster discovery selected (the catalog's non-automatic family), while
+    ...    keeping the request's image on ``spec.profiles.overrides.image`` for the
+    ...    custom model itself.
+    [Tags]    custom-models    onboard    profile    smoke
+    Given a ready project with user access exists
+    And secret "minio-credentials-fetcher" is assigned to project
+    And the discovered cluster base image family is recorded
+    When a custom model preview is requested for "${CUSTOM_MODELS_PUBLIC_REPO}"
+    Then custom model preview response status should be "200"
+    When the previewed custom model is onboarded with image "${CUSTOM_MODELS_ONBOARD_IMAGE}"
+    Then custom model onboard response status should be "204"
+    And custom AIMModel for source "${CUSTOM_MODELS_PUBLIC_REPO}" should derive from discovered base family
+    And custom AIMModel for source "${CUSTOM_MODELS_PUBLIC_REPO}" should use image "${CUSTOM_MODELS_ONBOARD_IMAGE}"
+
 Onboard is idempotent when called twice with the same source
     [Documentation]    Re-submitting the same onboard payload must not create duplicate
     ...    AIMModel CRs and must not raise — exactly one CR remains.

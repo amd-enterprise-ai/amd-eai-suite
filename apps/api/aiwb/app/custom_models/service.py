@@ -37,6 +37,8 @@ from ..aims.crds import (
     ProfileSelectorModelRef,
 )
 from ..aims.utils import env_entries_to_map
+from ..cluster.service import get_cluster_base_image_ref
+from ..cluster.utils import parse_container_image_repository_and_tag
 from ..config import SUBMITTER_ANNOTATION
 from ..datasets.utils import slugify
 from ..dispatch.crds import K8sMetadata
@@ -236,9 +238,9 @@ async def _fetch_hub_model(repo_id: str, revision: str | None, token: str | None
     return payload
 
 
-def _build_aim_base_model_manifest(*, namespace: str, image_ref: str) -> dict:
+def _build_aim_base_model_manifest(*, namespace: str, image_ref: str, model_name: str = AIM_BASE_MODEL_NAME) -> dict:
     """Compose the namespace-scoped base-image AIMModel that emits derivable profiles."""
-    metadata = K8sMetadata(name=AIM_BASE_MODEL_NAME, namespace=namespace)
+    metadata = K8sMetadata(name=model_name, namespace=namespace)
     return {
         "apiVersion": _AIM_API_VERSION_FULL,
         "kind": _AIM_MODEL_KIND,
@@ -247,27 +249,64 @@ def _build_aim_base_model_manifest(*, namespace: str, image_ref: str) -> dict:
     }
 
 
+def _base_model_name_from_image_ref(image_ref: str) -> str:
+    """Resolve the namespace base-model name from a selected base image ref.
+
+    Use the repository tail directly as ``derivedFrom.modelRef.name``.
+    Invalid or empty refs fall back to the legacy default (``aim-base``).
+    """
+    try:
+        repository, _ = parse_container_image_repository_and_tag(image_ref)
+    except ValueError:
+        return AIM_BASE_MODEL_NAME
+    model_name = repository.rsplit("/", 1)[-1].strip()
+    if not model_name:
+        return AIM_BASE_MODEL_NAME
+    return model_name
+
+
 async def ensure_namespace_aim_base_model(
     kube_client: KubernetesClient,
     namespace: str,
-    image_ref: str = DEFAULT_AIM_DEPLOYMENT_IMAGE_REF,
-) -> None:
-    """Idempotently provision the base-image AIMModel BYOM ``derivedFrom`` needs."""
+    image_ref: str | None = None,
+    model_name: str | None = None,
+) -> str:
+    """Idempotently provision the base-image AIMModel BYOM ``derivedFrom`` needs.
+
+    When ``image_ref`` is not supplied, the base image is resolved from the
+    cluster's detected accelerators rather than a static default.
+    """
     if AIM_BASE_MODEL_SCOPE != "Namespace":
-        return
+        return AIM_BASE_MODEL_NAME
 
-    existing = await aims_gateway.get_aim_model(kube_client, namespace, AIM_BASE_MODEL_NAME)
+    if image_ref is None:
+        image_ref = await get_cluster_base_image_ref(kube_client)
+    if model_name is None:
+        model_name = _base_model_name_from_image_ref(image_ref)
+
+    existing = await aims_gateway.get_aim_model(kube_client, namespace, model_name)
     if existing is not None:
-        return
+        current_image_ref = (existing.spec.image or "").strip()
+        if current_image_ref != image_ref:
+            await aims_gateway.patch_aim_model(
+                kube_client,
+                namespace,
+                model_name,
+                {"spec": {"image": image_ref}},
+            )
+            logger.info(
+                f"Re-pointed base-image AIMModel {model_name} in namespace {namespace} "
+                f"from {current_image_ref!r} to {image_ref!r}"
+            )
+        return model_name
 
-    manifest = _build_aim_base_model_manifest(namespace=namespace, image_ref=image_ref)
+    manifest = _build_aim_base_model_manifest(namespace=namespace, image_ref=image_ref, model_name=model_name)
     try:
         await aims_gateway.create_aim_model(kube_client, namespace, manifest)
-        logger.info(f"Provisioned base-image AIMModel {AIM_BASE_MODEL_NAME} in namespace {namespace}")
+        logger.info(f"Provisioned base-image AIMModel {model_name} in namespace {namespace}")
     except ConflictException:
-        logger.debug(
-            f"Base-image AIMModel {AIM_BASE_MODEL_NAME} already exists in namespace {namespace} after create race"
-        )
+        logger.debug(f"Base-image AIMModel {model_name} already exists in namespace {namespace} after create race")
+    return model_name
 
 
 # Keys in spec.profiles.overrides that the onboard/edit flow owns and stamps
@@ -393,8 +432,9 @@ def _build_custom_aim_model_manifest(
     source_uri: str,
     submitter: str,
     component_id: str,
+    base_model_name: str = AIM_BASE_MODEL_NAME,
 ) -> dict:
-    """Build a profiles-only v1alpha2 AIMModel manifest: derive from namespace aim-base, stamp repo identity, image, weights, and customProfile overrides."""
+    """Build a profiles-only v1alpha2 AIMModel manifest with image-family base derivation and stamped repo/image/weights/customProfile overrides."""
     display_label_value = sanitize_label_value(source.display_name)
     canonical_label_value = sanitize_label_value(source.repo_id)
 
@@ -456,7 +496,7 @@ def _build_custom_aim_model_manifest(
         derived_from=AIMModelProfilesDerivedFrom(
             selector=ProfileSelector(
                 role="base",
-                model_ref=ProfileSelectorModelRef(name=AIM_BASE_MODEL_NAME, scope=AIM_BASE_MODEL_SCOPE),
+                model_ref=ProfileSelectorModelRef(name=base_model_name, scope=AIM_BASE_MODEL_SCOPE),
             ),
         ),
         version_policy="all",
@@ -624,6 +664,7 @@ async def _create_new_custom_model_from_onboard_request(
     request: OnboardRequest,
     name_suffix: str | None,
     source_uri: str | None = None,
+    base_model_name: str = AIM_BASE_MODEL_NAME,
 ) -> str:
     """Create a new custom AIMModel from an onboarding payload and sync manifest."""
     slug = slugify(request.display_name)[:_RESOURCE_NAME_SLUG_MAX_LENGTH] or "custom-model"
@@ -640,6 +681,7 @@ async def _create_new_custom_model_from_onboard_request(
         source_uri=source_uri or _custom_model_weights_uri(namespace, resource_name),
         submitter=submitter,
         component_id=str(uuid4()),
+        base_model_name=base_model_name,
     )
 
     await aims_gateway.create_aim_model(kube_client, namespace, manifest)
@@ -858,8 +900,10 @@ async def onboard_custom_model_source(
 
     await _verify_request_matches_hub(request, token)
     await _verify_minio_credentials_secret(kube_client, namespace)
-    await ensure_namespace_aim_base_model(kube_client, namespace)
-
+    base_model_name = await ensure_namespace_aim_base_model(
+        kube_client,
+        namespace,
+    )
     display_label_value = sanitize_label_value(request.display_name)
 
     selector = f"{MODEL_NAME_LABEL}={display_label_value},{MODEL_SOURCE_TYPE_LABEL}={ModelSourceType.CUSTOM}"
@@ -882,6 +926,7 @@ async def onboard_custom_model_source(
             source_uri=_custom_model_weights_uri(namespace, resource_name),
             submitter=submitter,
             component_id=component_id,
+            base_model_name=base_model_name,
         )
         patch_body = {
             "metadata": {
@@ -919,6 +964,7 @@ async def onboard_custom_model_source(
         submitter=submitter,
         request=request,
         name_suffix="import",
+        base_model_name=base_model_name,
     )
 
     schedule_import(

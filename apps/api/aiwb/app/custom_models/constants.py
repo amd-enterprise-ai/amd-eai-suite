@@ -91,6 +91,7 @@ MINIO_CREDENTIALS_SECRET_KEY_KEY = "minio-secret-key"
 AIM_DEPLOYMENT_IMAGE_REF_ANNOTATION = "aim.eai.amd.com/deployment-image-ref"
 
 DEFAULT_AIM_DEPLOYMENT_IMAGE_REF = os.getenv("AIM_DEFAULT_DEPLOYMENT_IMAGE_REF", "amdenterpriseai/aim-base:0.11")
+RADEON_AIM_DEPLOYMENT_IMAGE_REF = os.getenv("AIM_RADEON_DEPLOYMENT_IMAGE_REF", "amdenterpriseai/aim-radeon-base:0.12")
 
 # Base-image AIMModel that custom-model onboards derive their profiles from.
 # In v1alpha2 a BYOM AIMModel does not carry its own runtime profiles; it

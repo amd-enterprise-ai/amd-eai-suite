@@ -34,6 +34,7 @@ from app.custom_models.constants import (
     MINIO_CREDENTIALS_SECRET_KEY_KEY,
     MINIO_CREDENTIALS_SECRET_NAME,
     MODEL_DISPLAY_NAME_ANNOTATION,
+    RADEON_AIM_DEPLOYMENT_IMAGE_REF,
     REVISION_ANNOTATION,
     SOURCE_DESCRIPTION_ANNOTATION,
     SOURCE_SHA_ANNOTATION,
@@ -42,6 +43,7 @@ from app.custom_models.constants import (
 from app.custom_models.manifest import write_manifest_to_s3
 from app.custom_models.schemas import OnboardRequest, PreviewRequest
 from app.custom_models.service import (
+    _base_model_name_from_image_ref,
     _build_aim_base_model_manifest,
     _build_custom_aim_model_manifest,
     _verify_minio_credentials_secret,
@@ -282,13 +284,15 @@ def _make_request(**overrides: Any) -> OnboardRequest:
 
 
 def _build_manifest(source: OnboardRequest | None = None, **overrides: Any) -> dict:
+    source = source if source is not None else _make_request()
     return _build_custom_aim_model_manifest(
         namespace=overrides.pop("namespace", "test-namespace"),
         resource_name=overrides.pop("resource_name", _RESOURCE_NAME),
-        source=source if source is not None else _make_request(),
+        source=source,
         source_uri=overrides.pop("source_uri", _SOURCE_URI),
         submitter=overrides.pop("submitter", TEST_SUBMITTER),
         component_id=overrides.pop("component_id", _BUILDER_COMPONENT_ID),
+        base_model_name=_base_model_name_from_image_ref(source.image),
     )
 
 
@@ -317,7 +321,7 @@ def test_manifest_derives_from_base_image_model() -> None:
     """The custom model derives from base-role profiles emitted by the
     configured base-image AIMModel; identity filters are forbidden by CEL
     when role=base, so the selector carries only role + modelRef."""
-    manifest = _build_manifest(_make_request(description=""))
+    manifest = _build_manifest(_make_request(description="", image=DEFAULT_AIM_DEPLOYMENT_IMAGE_REF))
 
     profiles = manifest["spec"]["profiles"]
     selector = profiles["derivedFrom"]["selector"]
@@ -329,6 +333,33 @@ def test_manifest_derives_from_base_image_model() -> None:
     assert profiles["versionPolicy"] == "all"
     assert "version" not in profiles
     assert "aimId" not in selector and "modelId" not in selector
+
+
+def test_manifest_derives_from_radeon_base_when_selected_image_is_radeon() -> None:
+    manifest = _build_manifest(_make_request(description="", image=RADEON_AIM_DEPLOYMENT_IMAGE_REF))
+
+    selector = manifest["spec"]["profiles"]["derivedFrom"]["selector"]
+    assert selector["role"] == "base"
+    assert selector["modelRef"]["name"] == "aim-radeon-base"
+    assert selector["modelRef"]["scope"] == "Namespace"
+
+
+def test_manifest_derives_from_any_base_family_name() -> None:
+    manifest = _build_manifest(_make_request(description="", image="docker.io/amd/aim-mi300x-base:1.0"))
+
+    selector = manifest["spec"]["profiles"]["derivedFrom"]["selector"]
+    assert selector["modelRef"]["name"] == "aim-mi300x-base"
+
+
+def test_manifest_uses_repository_tail_for_non_base_image_name() -> None:
+    manifest = _build_manifest(_make_request(description="", image="docker.io/amd/tinyllama:1.0.0"))
+
+    selector = manifest["spec"]["profiles"]["derivedFrom"]["selector"]
+    assert selector["modelRef"]["name"] == "tinyllama"
+
+
+def test_base_model_name_from_image_ref_falls_back_for_invalid_ref() -> None:
+    assert _base_model_name_from_image_ref("not-a-valid-tagged-ref") == AIM_BASE_MODEL_NAME
 
 
 def test_manifest_overrides_stamp_identity_required_for_base_role() -> None:
@@ -584,6 +615,59 @@ async def test_ensure_namespace_aim_base_model_honors_custom_image_ref(mock_kube
 
 
 @pytest.mark.asyncio
+async def test_ensure_namespace_aim_base_model_honors_custom_model_name(mock_kube_client: AsyncMock) -> None:
+    mock_kube_client.custom_objects.get_namespaced_custom_object.side_effect = ApiException(status=404)
+
+    await ensure_namespace_aim_base_model(
+        mock_kube_client,
+        "test-namespace",
+        image_ref="docker.io/amd/tinyllama:1.0.0",
+        model_name="tinyllama",
+    )
+
+    body = mock_kube_client.custom_objects.create_namespaced_custom_object.call_args.kwargs["body"]
+    assert body["metadata"]["name"] == "tinyllama"
+    assert body["spec"]["image"] == "docker.io/amd/tinyllama:1.0.0"
+
+
+@pytest.mark.asyncio
+async def test_ensure_namespace_aim_base_model_derives_name_from_discovered_image(mock_kube_client: AsyncMock) -> None:
+    mock_kube_client.custom_objects.get_namespaced_custom_object.side_effect = ApiException(status=404)
+    discovered_image = "docker.io/silogenai/aim-radeon-base:0.12-preview"
+
+    with patch("app.custom_models.service.get_cluster_base_image_ref", AsyncMock(return_value=discovered_image)):
+        model_name = await ensure_namespace_aim_base_model(mock_kube_client, "test-namespace")
+
+    body = mock_kube_client.custom_objects.create_namespaced_custom_object.call_args.kwargs["body"]
+    assert model_name == "aim-radeon-base"
+    assert body["metadata"]["name"] == "aim-radeon-base"
+    assert body["spec"]["image"] == discovered_image
+
+
+@pytest.mark.asyncio
+async def test_ensure_namespace_aim_base_model_repoints_existing_image_mismatch(mock_kube_client: AsyncMock) -> None:
+    existing = _make_existing_aim_model(name="aim-radeon-base", source_uri=None)
+    existing.spec.image = "docker.io/amd/aim-radeon-base:old"
+
+    async def get_namespaced_custom_object(*_args: Any, name: str, **_kwargs: Any) -> dict:
+        if name == "aim-radeon-base":
+            return existing.model_dump(by_alias=True)
+        raise ApiException(status=404)
+
+    mock_kube_client.custom_objects.get_namespaced_custom_object = AsyncMock(side_effect=get_namespaced_custom_object)
+    discovered_image = "docker.io/silogenai/aim-radeon-base:0.12-preview"
+
+    with patch("app.custom_models.service.get_cluster_base_image_ref", AsyncMock(return_value=discovered_image)):
+        model_name = await ensure_namespace_aim_base_model(mock_kube_client, "test-namespace")
+
+    assert model_name == "aim-radeon-base"
+    mock_kube_client.custom_objects.create_namespaced_custom_object.assert_not_called()
+    patch_kwargs = mock_kube_client.custom_objects.patch_namespaced_custom_object.call_args.kwargs
+    assert patch_kwargs["name"] == "aim-radeon-base"
+    assert patch_kwargs["body"] == {"spec": {"image": discovered_image}}
+
+
+@pytest.mark.asyncio
 async def test_ensure_namespace_aim_base_model_tolerates_create_race_conflict(mock_kube_client: AsyncMock) -> None:
     mock_kube_client.custom_objects.get_namespaced_custom_object.side_effect = ApiException(status=404)
     mock_kube_client.custom_objects.create_namespaced_custom_object.side_effect = ApiException(status=409)
@@ -625,6 +709,71 @@ async def test_onboard_provisions_aim_base_before_custom_model_create(
     assert len(create_calls) == 2
     assert create_calls[0]["metadata"]["name"] == AIM_BASE_MODEL_NAME
     assert "profiles" in create_calls[1]["spec"]
+
+
+@pytest.mark.asyncio
+async def test_onboard_provisions_radeon_base_before_custom_model_create(
+    mock_kube_client: AsyncMock, mock_minio_client: MagicMock
+) -> None:
+    create_calls: list[dict] = []
+    mock_kube_client.custom_objects.list_namespaced_custom_object.return_value = {"items": []}
+    mock_kube_client.custom_objects.get_namespaced_custom_object.side_effect = ApiException(status=404)
+
+    def record_create(*_args: Any, body: dict, **_kwargs: Any) -> dict:
+        create_calls.append(body)
+        return body
+
+    mock_kube_client.custom_objects.create_namespaced_custom_object.side_effect = record_create
+
+    with patch(
+        "app.custom_models.service.get_cluster_base_image_ref",
+        AsyncMock(return_value=RADEON_AIM_DEPLOYMENT_IMAGE_REF),
+    ):
+        await onboard_custom_model_source(
+            mock_kube_client,
+            mock_minio_client,
+            "test-namespace",
+            TEST_SUBMITTER,
+            _make_request(repo_id="meta-llama/Llama-3-8B", image=RADEON_AIM_DEPLOYMENT_IMAGE_REF),
+        )
+
+    assert len(create_calls) == 2
+    assert create_calls[0]["metadata"]["name"] == "aim-radeon-base"
+    selector = create_calls[1]["spec"]["profiles"]["derivedFrom"]["selector"]
+    assert selector["modelRef"]["name"] == "aim-radeon-base"
+
+
+@pytest.mark.asyncio
+async def test_onboard_provisions_any_base_family_before_custom_model_create(
+    mock_kube_client: AsyncMock, mock_minio_client: MagicMock
+) -> None:
+    create_calls: list[dict] = []
+    mock_kube_client.custom_objects.list_namespaced_custom_object.return_value = {"items": []}
+    mock_kube_client.custom_objects.get_namespaced_custom_object.side_effect = ApiException(status=404)
+
+    def record_create(*_args: Any, body: dict, **_kwargs: Any) -> dict:
+        create_calls.append(body)
+        return body
+
+    mock_kube_client.custom_objects.create_namespaced_custom_object.side_effect = record_create
+
+    custom_base_image = "docker.io/amd/aim-mi300x-base:1.0"
+    with patch(
+        "app.custom_models.service.get_cluster_base_image_ref",
+        AsyncMock(return_value=custom_base_image),
+    ):
+        await onboard_custom_model_source(
+            mock_kube_client,
+            mock_minio_client,
+            "test-namespace",
+            TEST_SUBMITTER,
+            _make_request(repo_id="meta-llama/Llama-3-8B", image=custom_base_image),
+        )
+
+    assert len(create_calls) == 2
+    assert create_calls[0]["metadata"]["name"] == "aim-mi300x-base"
+    selector = create_calls[1]["spec"]["profiles"]["derivedFrom"]["selector"]
+    assert selector["modelRef"]["name"] == "aim-mi300x-base"
 
 
 @pytest.mark.asyncio

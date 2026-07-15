@@ -15,6 +15,7 @@ Resource            resources/airm_projects.resource
 Resource            aiwb_secrets.resource
 Resource            aiwb_common.resource
 Resource            aiwb_aims.resource
+Resource            api/cluster.resource
 Library             Collections
 Library             String
 Library             AIMModelHelper
@@ -258,6 +259,23 @@ The runtime profile options for the project are retrieved
     ${response}=    Get Runtime Profile Options    ${namespace}    expected_status=any
     VAR    ${TEST_RESPONSE}    ${response}    scope=TEST
 
+The discovered cluster base image family is recorded
+    [Documentation]    Reads the aim-image catalog and records the non-automatic family
+    ...    that cluster discovery selected for this environment.
+    ${response}=    List aim image families    expected_status=200
+    ${catalog}=    Get From Dictionary    ${response.json()}    data
+    VAR    ${family_id}    ${EMPTY}
+    FOR    ${family}    IN    @{catalog}
+        ${candidate}=    Get From Dictionary    ${family}    familyId
+        IF    "${candidate}" != "automatic"
+            VAR    ${family_id}    ${candidate}
+            BREAK
+        END
+    END
+    Should Not Be Empty    ${family_id}
+    ...    msg=No discovered base image family found in /cluster/aim-images response
+    VAR    ${TEST_DISCOVERED_BASE_FAMILY_ID}    ${family_id}    scope=TEST
+
 Runtime profile options response status should be "${expected_status}"
     Should Be Equal As Integers    ${TEST_RESPONSE.status_code}    ${expected_status}
 
@@ -448,6 +466,21 @@ Custom AIMModel for source "${expected_repo_id}" should use image "${expected_im
     Should Not Be Empty    ${overrides}    msg=AIMModel has no spec.profiles.overrides; image override not present
     ${image}=    Get From Dictionary    ${overrides}    image
     Should Be Equal    ${image}    ${expected_image}
+
+Custom AIMModel for source "${expected_repo_id}" should derive from discovered base family
+    [Documentation]    Asserts ``spec.profiles.derivedFrom.selector.modelRef.name`` matches
+    ...    the family id discovered from ``/cluster/aim-images``.
+    Should Not Be Empty    ${TEST_DISCOVERED_BASE_FAMILY_ID}
+    ...    msg=No discovered base family recorded; call "The discovered cluster base image family is recorded" first
+    Custom AIMModel for source "${expected_repo_id}" should exist in the namespace
+    ${spec}=    Get From Dictionary    ${CUSTOM_MODEL_AIM_CR}    spec
+    ${profiles}=    Get From Dictionary    ${spec}    profiles    default=&{EMPTY}
+    ${derived_from}=    Get From Dictionary    ${profiles}    derivedFrom    default=&{EMPTY}
+    ${selector}=    Get From Dictionary    ${derived_from}    selector    default=&{EMPTY}
+    ${model_ref}=    Get From Dictionary    ${selector}    modelRef    default=&{EMPTY}
+    ${model_name}=    Get From Dictionary    ${model_ref}    name    default=${EMPTY}
+    Should Be Equal    ${model_name}    ${TEST_DISCOVERED_BASE_FAMILY_ID}
+    ...    msg=Custom model should derive from discovered base family '${TEST_DISCOVERED_BASE_FAMILY_ID}', got '${model_name}'
 
 Custom AIMModel for source "${expected_repo_id}" should carry profile override "${field}" with value "${expected_value}"
     [Documentation]    Asserts that at least one custom AIMModel CR for the source

@@ -57,13 +57,15 @@ async def get_cluster_resources(
         configuration, including an explicit **Automatic** entry.
 
         Each family lists its container repository (when applicable) and the
-        tags/versions the workbench exposes in image dropdowns. The catalog is
-        config-driven; live registry discovery is not performed on this endpoint.
+        tags/versions the workbench exposes in image dropdowns. Default base
+        image families are selected from detected cluster accelerator labels.
     """),
 )
-async def list_aim_images() -> ListResponse[AimImageFamily]:
+async def list_aim_images(
+    kube_client: KubernetesClient = Depends(get_kube_client),
+) -> ListResponse[AimImageFamily]:
     """List supported aim-engine image families and tags."""
-    return ListResponse(data=get_aim_image_families())
+    return ListResponse(data=await get_aim_image_families(kube_client))
 
 
 @router.get(

@@ -49,8 +49,41 @@ metadata:
 spec:
   mode: daemonset
   image: {{ .Values.otelCollector.image }}
-  nodeSelector:
-    feature.node.kubernetes.io/amd-gpu: "true"
+  # Run only on nodes with an AIM inference accelerator — GPU or a supported EPYC — so the
+  # collector isn't scheduled on generic/CPU-only or control-plane nodes. aim-accelerator.CPU
+  # is written on *every* node by the CPU detector (a generic per-node label — GPU nodes carry
+  # it too), so it can't be used here. GPU nodes carry a generic aim-accelerator.GPU, but there
+  # is no generic aim-accelerator.EPYC yet, so EPYC generations/SKUs are enumerated below.
+  # TODO: collapse this list to a generic aim-accelerator.EPYC label once the detector emits one.
+  # nodeSelectorTerms are OR-ed.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/aim-accelerator.GPU
+                operator: Exists
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/aim-accelerator.EPYC_ZEN4
+                operator: Exists
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/aim-accelerator.EPYC_ZEN5
+                operator: Exists
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/aim-accelerator.EPYC_9175F
+                operator: Exists
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/aim-accelerator.EPYC_9575F
+                operator: Exists
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/aim-accelerator.EPYC_9655
+                operator: Exists
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/aim-accelerator.EPYC_9755
+                operator: Exists
+          - matchExpressions:
+              - key: feature.node.kubernetes.io/aim-accelerator.EPYC_9965
+                operator: Exists
   config:
     receivers:
       prometheus:

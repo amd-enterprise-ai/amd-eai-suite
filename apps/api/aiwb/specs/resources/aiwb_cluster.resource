@@ -36,24 +36,27 @@ The aim-engine image catalog includes automatic selection
     ${repository}=    Get From Dictionary    ${automatic}    repository
     Should Be Equal    ${repository}    ${None}
 
-The aim-engine image catalog lists the aim-base family
-    [Documentation]    Verifies aim-base is present with repository and tag metadata.
+The aim-engine image catalog lists a discovered family with repository and tags
+    [Documentation]    Verifies at least one non-automatic family is present with repository and tag metadata.
     VAR    ${body}    ${TEST_RESPONSE.json()}
     ${data}=    Get From Dictionary    ${body}    data
-    VAR    ${aim_base}    ${None}
+    VAR    ${discovered_family}    ${None}
     FOR    ${family}    IN    @{data}
         ${family_id}=    Get From Dictionary    ${family}    familyId
-        IF    '${family_id}' == 'aim-base'
-            VAR    ${aim_base}    ${family}
+        IF    '${family_id}' != 'automatic'
+            VAR    ${discovered_family}    ${family}
             BREAK
         END
     END
-    Should Not Be Equal    ${aim_base}    ${None}    msg=aim-base image family missing from catalog
-    Dictionary Should Contain Key    ${aim_base}    displayName
-    Dictionary Should Contain Key    ${aim_base}    repository
-    Dictionary Should Contain Key    ${aim_base}    tags
-    ${tags}=    Get From Dictionary    ${aim_base}    tags
-    Should Not Be Empty    ${tags}    msg=aim-base should expose at least one image tag
+    Should Not Be Equal    ${discovered_family}    ${None}
+    ...    msg=No discovered (non-automatic) image family found in catalog
+    Dictionary Should Contain Key    ${discovered_family}    displayName
+    Dictionary Should Contain Key    ${discovered_family}    repository
+    Dictionary Should Contain Key    ${discovered_family}    tags
+    ${repository}=    Get From Dictionary    ${discovered_family}    repository
+    Should Not Be Empty    ${repository}    msg=Discovered family should expose a repository
+    ${tags}=    Get From Dictionary    ${discovered_family}    tags
+    Should Not Be Empty    ${tags}    msg=Discovered family should expose at least one image tag
 
 Accelerators are returned as a list
     [Documentation]    Verifies the response uses the standard data list envelope.

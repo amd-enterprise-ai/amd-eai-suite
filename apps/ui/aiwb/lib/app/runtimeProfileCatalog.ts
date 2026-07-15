@@ -185,16 +185,7 @@ function imageRefFromFamily(family: AimImageFamily): string | undefined {
 export function resolveDefaultOnboardImageRef(
   families: AimImageFamily[],
 ): string {
-  const aimBase = families.find((family) => family.familyId === 'aim-base');
-  const aimBaseRef = aimBase ? imageRefFromFamily(aimBase) : undefined;
-  if (aimBaseRef) {
-    return aimBaseRef;
-  }
-
-  const catalogFamily = families.find(
-    (family) =>
-      family.familyId !== AUTOMATIC_IMAGE_FAMILY_ID && family.repository,
-  );
+  const catalogFamily = getFirstSelectableImageFamily(families);
   const catalogRef = catalogFamily
     ? imageRefFromFamily(catalogFamily)
     : undefined;
@@ -240,17 +231,33 @@ const ACCELERATOR_PRODUCT_PREFIXES = ['AMD Instinct ', 'AMD Radeon ', 'AMD '];
 /** Form-factor tokens the GPU operator appends to product names but aim-engine drops (e.g. `MI300X OAM` -> `MI300X`). */
 const ACCELERATOR_FORM_FACTOR_SUFFIXES = ['OAM', 'APU', 'GPU'];
 
+/** Instinct model token, e.g. `MI300X` — the trailing letter is significant and kept. */
+const INSTINCT_MODEL_PATTERN = /\bMI\d{2,}[A-Za-z]*\b/i;
+
+/**
+ * Radeon Pro / AI Pro model token, e.g. `R9700` or `W7900`. The marketing name can
+ * carry a trailing variant letter the operator reports but aim-engine drops
+ * (`R9700S` -> `R9700`), so only the `[RW]####` core is captured.
+ */
+const RADEON_MODEL_PATTERN = /\b([RW]\d{4})[A-Za-z]*\b/i;
+
 /**
  * Reduce a node `productName` (e.g. `AMD Instinct MI300X OAM`) to the bare token
- * aim-engine keys `acceleratorModel` on (`MI300X`): match the Instinct token
- * directly, else strip the vendor prefix and form-factor suffixes. Sending the
- * un-normalized name leaves a custom profile stuck `NotAvailable`.
+ * aim-engine keys `acceleratorModel` on (`MI300X`, `R9700`): match the Instinct
+ * or Radeon model token directly, else strip the vendor prefix and form-factor
+ * suffixes. Sending the un-normalized name leaves a custom profile stuck
+ * `NotAvailable` — the AIMProfile CRD also rejects the spaces a multi-word name
+ * would leave behind.
  */
 export function canonicalAcceleratorModel(productName: string): string {
   const normalized = productName.trim().replace(/_/g, ' ').replace(/\s+/g, ' ');
-  const instinctModel = normalized.match(/\bMI\d{2,}[A-Za-z]*\b/i);
+  const instinctModel = normalized.match(INSTINCT_MODEL_PATTERN);
   if (instinctModel) {
     return instinctModel[0].toUpperCase();
+  }
+  const radeonModel = normalized.match(RADEON_MODEL_PATTERN);
+  if (radeonModel) {
+    return radeonModel[1].toUpperCase();
   }
   let name = normalized;
   for (const prefix of ACCELERATOR_PRODUCT_PREFIXES) {

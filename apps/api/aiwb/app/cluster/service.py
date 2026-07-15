@@ -6,7 +6,7 @@
 
 from loguru import logger
 
-from ..custom_models.constants import DEFAULT_AIM_DEPLOYMENT_IMAGE_REF
+from ..custom_models.constants import DEFAULT_AIM_DEPLOYMENT_IMAGE_REF, RADEON_AIM_DEPLOYMENT_IMAGE_REF
 from ..dispatch.kube_client import KubernetesClient
 from .constants import (
     AMD_GPU_DEVICE_ID_LABEL,
@@ -276,15 +276,38 @@ async def get_cluster_gpu_device_ids(kube_client: KubernetesClient) -> set[str]:
         raise
 
 
-# Config-driven catalog (EAI-6466). Only list families/repos the workbench already
-# uses in this repo — not UI mockups. Additional aim-engine base images (e.g.
-# hardware-specific variants) must be added here once aim-engine documents or
-# publishes them; this endpoint does not discover images from a registry.
+def _resolve_cluster_base_image_ref(accelerators: list[ClusterAccelerator]) -> str:
+    """Pick a temporary base image ref from detected accelerator names.
+
+    Hybrid clusters (both Instinct and Radeon) collapse to the Instinct
+    image; per-accelerator image selection is deferred.
+    """
+    names = [entry.product_name.casefold() for entry in accelerators]
+    if any("instinct" in name for name in names):
+        return DEFAULT_AIM_DEPLOYMENT_IMAGE_REF
+    if any("radeon" in name for name in names):
+        return RADEON_AIM_DEPLOYMENT_IMAGE_REF
+    return DEFAULT_AIM_DEPLOYMENT_IMAGE_REF
 
 
-def get_aim_image_families() -> list[AimImageFamily]:
-    """Return supported aim-engine image families and tags for runtime profile selection."""
-    repository, tag = parse_container_image_repository_and_tag(DEFAULT_AIM_DEPLOYMENT_IMAGE_REF)
+async def get_cluster_base_image_ref(kube_client: KubernetesClient) -> str:
+    """Return the base image ref for the accelerators detected in the cluster.
+
+    Falls back to the default image ref when accelerators cannot be read.
+    """
+    try:
+        accelerators = await get_cluster_accelerators(kube_client)
+    except Exception as exc:
+        logger.warning(f"Failed to read cluster accelerators for image discovery; using default image ref: {exc}")
+        accelerators = []
+    return _resolve_cluster_base_image_ref(accelerators)
+
+
+async def get_aim_image_families(kube_client: KubernetesClient) -> list[AimImageFamily]:
+    """Return runtime-profile image families derived from cluster accelerator labels."""
+    image_ref = await get_cluster_base_image_ref(kube_client)
+    repository, tag = parse_container_image_repository_and_tag(image_ref)
+    family_name = repository.rsplit("/", 1)[-1]
     families = (
         AimImageFamily(
             family_id="automatic",
@@ -293,8 +316,8 @@ def get_aim_image_families() -> list[AimImageFamily]:
             tags=[],
         ),
         AimImageFamily(
-            family_id="aim-base",
-            display_name="aim-base",
+            family_id=family_name,
+            display_name=family_name,
             repository=repository,
             tags=[tag],
         ),

@@ -2,13 +2,39 @@
 #
 # SPDX-License-Identifier: MIT
 
-# Spectral ruleset for AIRM API OpenAPI validation
+# Spectral ruleset for API OpenAPI validation (AIRM + AIWB)
 # See: https://docs.stoplight.io/docs/spectral/
 
 extends:
   - spectral:oas
 
 rules:
+  # =============================================================================
+  # CamelCase API Convention
+  # =============================================================================
+
+  # Schema property names must be camelCase (catches accidental snake_case from wrong BaseModel)
+  properties-camelCase:
+    description: Schema property names must use camelCase
+    severity: error
+    given: $.components.schemas[*].properties[*]~
+    then:
+      function: casing
+      functionOptions:
+        type: camel
+    message: "Property '{{value}}' must use camelCase. Use api_common.schemas.BaseModel (not pydantic.BaseModel) to auto-generate camelCase aliases."
+
+  # Query parameter names must be camelCase
+  query-params-camelCase:
+    description: Query parameter names must use camelCase
+    severity: error
+    given: $.paths[*][*].parameters[?(@.in == 'query')].name
+    then:
+      function: casing
+      functionOptions:
+        type: camel
+    message: "Query parameter '{{value}}' must use camelCase. Use Annotated[MyModel, Query()] with api_common.schemas.BaseModel to auto-generate aliases."
+
   # =============================================================================
   # URL Path Naming Conventions
   # =============================================================================
